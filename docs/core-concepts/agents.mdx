@@ -18,7 +18,7 @@ This loop continues until the model stops calling tools, indicating it considers
 
 ## Backends
 
-Every agent node uses a **backend** that determines how Fabro interacts with the LLM. There are two options:
+Every agent node uses a **backend** that determines how Fabro interacts with the LLM. There are three options:
 
 ### API backend (default)
 
@@ -28,6 +28,12 @@ Fabro manages the agent loop directly — it calls the LLM provider's API, execu
 - [Sub-agents](/agents/subagents)
 - Provider failover
 - All [built-in tools](/agents/tools) and [MCP](/agents/mcp) integrations
+
+### ACP backend
+
+Fabro delegates execution to an external agent that implements the [Agent Client Protocol (ACP)](https://agentclientprotocol.com/). The ACP agent runs inside the sandbox and communicates with Fabro over stdio. Fabro intercepts tool permission requests to enforce security policies and HITL guards.
+
+See [ACP Agent Integration](/agents/acp) for details.
 
 ### CLI backend
 
@@ -54,13 +60,20 @@ implement [label="Implement", backend="cli"]
 
 ### Comparison
 
-| Capability | API backend | CLI backend |
-|---|---|---|
-| Tools | Fabro built-in tools + MCP | CLI's own tool set |
-| Session caching | Supported (`fidelity` + `thread_id`) | Not supported |
-| Sub-agents | Supported | Not supported |
-| Provider failover | Supported | Not supported |
-| File tracking | Tool call events | `git diff` before/after |
+| Capability | API backend | ACP backend | CLI backend |
+|---|---|---|---|
+| Tools | Fabro built-in tools + MCP | Agent's own tools | CLI's own tool set |
+| Session caching | Supported (`fidelity` + `thread_id`) | Not supported | Not supported |
+| Sub-agents | Supported | Not supported | Not supported |
+| Provider failover | Supported | Not supported | Not supported |
+| File tracking | Tool call events | Tool call events | `git diff` before/after |
+| Security hooks | Supported | Supported | Not supported |
+
+### When to use the ACP backend
+
+- **ACP-compatible agents** — leverage external agents that implement the Agent Client Protocol (e.g., `claude-agent-acp`, `opencode acp`)
+- **Advanced agent capabilities** — use agents with specific capabilities like LSP integration, custom skills, or rules that are not natively available in Fabro
+- **Sandboxed execution** — run external agents securely inside Fabro's execution environments with HITL guards
 
 ### When to use the CLI backend
 

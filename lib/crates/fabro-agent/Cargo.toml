@@ -37,12 +37,13 @@ async-trait.workspace = true
 jsonschema.workspace = true
 chrono.workspace = true
 reqwest.workspace = true
-tokio-util.workspace = true
+tokio-util = { workspace = true, features = ["compat"] }
 tracing.workspace = true
 dirs = "6"
 glob = "0.3"
 shell-escape = "0.1"
 htmd = "0.5"
+agent-client-protocol = "0.10.2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

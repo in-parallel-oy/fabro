@@ -4,7 +4,23 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use std::path::Path;
 use std::sync::Arc;
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::sync::CancellationToken;
+
+/// A handle to a spawned child process in a sandbox.
+#[async_trait]
+pub trait ChildProcess: Send + Sync {
+    /// Take ownership of the child's standard input stream.
+    fn take_stdin(&mut self) -> Option<Box<dyn AsyncWrite + Send + Unpin>>;
+    /// Take ownership of the child's standard output stream.
+    fn take_stdout(&mut self) -> Option<Box<dyn AsyncRead + Send + Unpin>>;
+    /// Take ownership of the child's standard error stream.
+    fn take_stderr(&mut self) -> Option<Box<dyn AsyncRead + Send + Unpin>>;
+    /// Wait for the child process to exit and return its exit code.
+    async fn wait(&mut self) -> Result<i32, String>;
+    /// Forcefully kill the child process.
+    async fn kill(&mut self) -> Result<(), String>;
+}
 
 /// Generates an `#[async_trait] impl Sandbox` block for a decorator type
 /// that wraps an `Arc<dyn Sandbox>`. The caller provides custom method
@@ -56,6 +72,15 @@ macro_rules! delegate_sandbox {
                 self.$field
                     .exec_command(command, timeout_ms, working_dir, env_vars, cancel_token)
                     .await
+            }
+
+            async fn spawn_command(
+                &self,
+                command: &str,
+                working_dir: Option<&str>,
+                env_vars: Option<&std::collections::HashMap<String, String>>,
+            ) -> Result<Box<dyn $crate::ChildProcess>, String> {
+                self.$field.spawn_command(command, working_dir, env_vars).await
             }
 
             async fn glob(&self, pattern: &str, path: Option<&str>) -> Result<Vec<String>, String> {
@@ -356,6 +381,18 @@ pub trait Sandbox: Send + Sync {
         env_vars: Option<&std::collections::HashMap<String, String>>,
         cancel_token: Option<CancellationToken>,
     ) -> Result<ExecResult, String>;
+
+    /// Spawn a command in the sandbox and return a handle to the child process.
+    /// This provides a bidirectional stdio channel to the process.
+    async fn spawn_command(
+        &self,
+        _command: &str,
+        _working_dir: Option<&str>,
+        _env_vars: Option<&std::collections::HashMap<String, String>>,
+    ) -> Result<Box<dyn ChildProcess>, String> {
+        Err("spawn_command not implemented for this sandbox".into())
+    }
+
     async fn grep(
         &self,
         pattern: &str,

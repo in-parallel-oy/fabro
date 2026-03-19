@@ -43,6 +43,9 @@ impl SshRunner for NoopSshRunner {
     async fn download_file(&self, _path: &str) -> Result<Vec<u8>, String> {
         Err("NoopSshRunner: management plane not available on reconnected sandbox".to_string())
     }
+    async fn spawn_command(&self, _command: &str) -> Result<Box<dyn crate::ChildProcess>, String> {
+        Err("NoopSshRunner: management plane not available on reconnected sandbox".to_string())
+    }
 }
 
 /// Factory function type for creating data-plane SSH runners.
@@ -388,6 +391,37 @@ impl Sandbox for ExeSandbox {
             }),
             Err(e) => Err(e),
         }
+    }
+
+    async fn spawn_command(
+        &self,
+        command: &str,
+        working_dir: Option<&str>,
+        env_vars: Option<&HashMap<String, String>>,
+    ) -> Result<Box<dyn crate::ChildProcess>, String> {
+        let ssh = self.data_ssh()?;
+
+        let mut script = String::new();
+
+        if let Some(vars) = env_vars {
+            for (key, value) in vars {
+                script.push_str(&format!(
+                    "export {}={}\n",
+                    shell_quote(key),
+                    shell_quote(value)
+                ));
+            }
+        }
+
+        let dir = match working_dir {
+            Some(dir) => self.resolve_path(dir),
+            None => WORKING_DIRECTORY.to_string(),
+        };
+        script.push_str(&format!("cd {} && {command}", shell_quote(&dir)));
+
+        let full_cmd = ssh_common::wrap_bash_command(&script);
+
+        ssh.spawn_command(&full_cmd).await
     }
 
     async fn read_file(

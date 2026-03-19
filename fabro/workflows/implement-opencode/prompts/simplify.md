@@ -1,0 +1,1 @@
+Read the code changes made in the previous step and simplify them. Make the code cleaner, more readable, and more idiomatic. Do not change the functionality.

@@ -80,6 +80,7 @@
               "agents/skills",
               "agents/tools",
               "agents/mcp",
+              "agents/acp",
               "agents/hooks",
               "agents/subagents",
               "agents/permissions",

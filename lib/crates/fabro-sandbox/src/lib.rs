@@ -27,8 +27,8 @@ pub mod daytona;
 pub mod test_support;
 
 pub use sandbox::{
-    format_lines_numbered, shell_quote, DirEntry, ExecResult, GrepOptions, Sandbox, SandboxEvent,
-    SandboxEventCallback,
+    format_lines_numbered, shell_quote, ChildProcess, DirEntry, ExecResult, GrepOptions, Sandbox,
+    SandboxEvent, SandboxEventCallback,
 };
 
 pub use read_guard::ReadBeforeWriteSandbox;

@@ -1229,13 +1229,26 @@ pub async fn run_command(
             .map(|(name, entry)| entry.into_config(name))
             .collect()
     };
+
+    let acp_command = run_cfg
+        .as_ref()
+        .and_then(|c| c.acp.as_ref())
+        .or_else(|| run_defaults.acp.as_ref())
+        .map(|acp| acp.command.clone());
+
     let registry = default_registry(interviewer.clone(), {
         let sandbox_env = sandbox_env.clone();
         let model = model.clone();
         let mcp_servers = mcp_servers.clone();
+        let acp_command = acp_command.clone();
         move || {
             if dry_run_mode {
                 None
+            } else if let Some(cmd) = &acp_command {
+                Some(Box::new(
+                    fabro_workflows::backend::acp::AcpCodergenBackend::new(cmd.clone())
+                        .with_env(sandbox_env.clone()),
+                ))
             } else {
                 let api =
                     AgentApiBackend::new(model.clone(), provider_enum, fallback_chain.clone())
@@ -2781,6 +2794,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
+            acp: None,
         };
         let (model, provider) = resolve_model_provider(
             Some("gpt-5.2"),
@@ -2826,6 +2840,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
+            acp: None,
         };
         let (model, provider) = resolve_model_provider(None, None, Some(&cfg), &defaults, &graph);
         assert_eq!(model, "toml-model");
@@ -2906,6 +2921,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
+            acp: None,
         };
         let (model, provider) = resolve_model_provider(None, None, Some(&cfg), &defaults, &graph);
         assert_eq!(model, "toml-model");
@@ -2933,6 +2949,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
+            acp: None,
         };
         let defaults = RunDefaults::default();
         assert!(resolve_preserve_sandbox(true, Some(&cfg), &defaults));
@@ -2959,6 +2976,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
+            acp: None,
         };
         let defaults = RunDefaults {
             sandbox: Some(sandbox_config::SandboxConfig {
@@ -3024,6 +3042,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
+            acp: None,
         };
         let defaults = RunDefaults::default();
         assert_eq!(
@@ -3077,6 +3096,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
+            acp: None,
         };
         let defaults = RunDefaults {
             sandbox: Some(sandbox_config::SandboxConfig {

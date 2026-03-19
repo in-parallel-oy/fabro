@@ -69,6 +69,7 @@ pub struct WorkflowRunConfig {
     #[serde(alias = "directory")]
     pub work_dir: Option<String>,
     pub llm: Option<LlmConfig>,
+    pub acp: Option<AcpConfig>,
     pub setup: Option<SetupConfig>,
     pub sandbox: Option<SandboxConfig>,
     pub vars: Option<HashMap<String, String>>,
@@ -92,6 +93,11 @@ pub struct LlmConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct AcpConfig {
+    pub command: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct SetupConfig {
     pub commands: Vec<String>,
     pub timeout_ms: Option<u64>,
@@ -105,6 +111,7 @@ pub struct RunDefaults {
     #[serde(alias = "directory")]
     pub work_dir: Option<String>,
     pub llm: Option<LlmConfig>,
+    pub acp: Option<AcpConfig>,
     pub setup: Option<SetupConfig>,
     pub sandbox: Option<SandboxConfig>,
     pub vars: Option<HashMap<String, String>>,
@@ -131,6 +138,7 @@ impl WorkflowRunConfig {
         let task_overlay = RunDefaults {
             work_dir: self.work_dir.take(),
             llm: self.llm.take(),
+            acp: self.acp.take(),
             setup: self.setup.take(),
             sandbox: self.sandbox.take(),
             vars: self.vars.take(),
@@ -146,6 +154,7 @@ impl WorkflowRunConfig {
 
         self.work_dir = merged.work_dir;
         self.llm = merged.llm;
+        self.acp = merged.acp;
         self.setup = merged.setup;
         self.sandbox = merged.sandbox;
         self.vars = merged.vars;
@@ -181,6 +190,10 @@ impl RunDefaults {
             }
             (None, Some(over)) => self.llm = Some(over),
             _ => {}
+        }
+
+        if overlay.acp.is_some() {
+            self.acp = overlay.acp;
         }
 
         match (&mut self.setup, overlay.setup) {

@@ -659,6 +659,43 @@ impl Sandbox for DockerSandbox {
         Ok(entries)
     }
 
+    async fn spawn_command(
+        &self,
+        command: &str,
+        working_dir: Option<&str>,
+        env_vars: Option<&HashMap<String, String>>,
+    ) -> Result<Box<dyn crate::ChildProcess>, String> {
+        let container_id = self.container_id()?;
+        let effective_dir = working_dir.map_or_else(
+            || self.config.container_mount_point.clone(),
+            ToString::to_string,
+        );
+
+        let mut cmd = tokio::process::Command::new("docker");
+        cmd.arg("exec").arg("-i").arg("-w").arg(&effective_dir);
+
+        if let Some(vars) = env_vars {
+            for (k, v) in vars {
+                cmd.arg("-e").arg(format!("{k}={v}"));
+            }
+        }
+
+        cmd.arg(container_id)
+            .arg("/bin/bash")
+            .arg("-c")
+            .arg(command)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true);
+
+        let child = cmd
+            .spawn()
+            .map_err(|e| format!("Failed to spawn docker exec: {e}"))?;
+
+        Ok(Box::new(crate::local::LocalChildProcess { child }))
+    }
+
     async fn grep(
         &self,
         pattern: &str,

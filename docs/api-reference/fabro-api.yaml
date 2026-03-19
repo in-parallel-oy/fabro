@@ -4013,6 +4013,8 @@ components:
           description: Working directory for the run.
         llm:
           $ref: "#/components/schemas/LlmConfiguration"
+        acp:
+          $ref: "#/components/schemas/AcpConfiguration"
         setup:
           $ref: "#/components/schemas/SetupConfiguration"
         sandbox:
@@ -4046,6 +4048,16 @@ components:
             items:
               type: string
           description: Provider fallback chains.
+
+    AcpConfiguration:
+      description: ACP agent configuration.
+      type: object
+      required:
+        - command
+      properties:
+        command:
+          type: string
+          description: Command to run the ACP agent.
 
     SetupConfiguration:
       description: Setup commands run before the workflow.
@@ -4286,6 +4298,8 @@ components:
           description: Default working directory.
         llm:
           $ref: "#/components/schemas/LlmConfiguration"
+        acp:
+          $ref: "#/components/schemas/AcpConfiguration"
         setup:
           $ref: "#/components/schemas/SetupConfiguration"
         sandbox:

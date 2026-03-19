@@ -28,6 +28,8 @@ pub trait SshRunner: Send + Sync {
     async fn upload_file(&self, path: &str, content: &[u8]) -> Result<(), String>;
 
     async fn download_file(&self, path: &str) -> Result<Vec<u8>, String>;
+
+    async fn spawn_command(&self, command: &str) -> Result<Box<dyn crate::ChildProcess>, String>;
 }
 
 /// Parameters for cloning a git repo into the sandbox during initialization.

@@ -1,12 +1,14 @@
 use async_trait::async_trait;
-use openssh::{KnownHosts, SessionBuilder};
+use openssh::{KnownHosts, Session, SessionBuilder};
 
 use super::{SshOutput, SshRunner};
 use crate::shell_quote;
 
+use std::sync::Arc;
+
 /// Real SSH implementation using the `openssh` crate (multiplexed connections).
 pub struct OpensshRunner {
-    session: openssh::Session,
+    session: Arc<Session>,
 }
 
 impl OpensshRunner {
@@ -22,7 +24,9 @@ impl OpensshRunner {
             .connect(destination)
             .await
             .map_err(|e| format!("SSH connection to {destination} failed: {e}"))?;
-        Ok(Self { session })
+        Ok(Self {
+            session: Arc::new(session),
+        })
     }
 }
 
@@ -98,5 +102,67 @@ impl SshRunner for OpensshRunner {
             return Err(format!("Download of {path} failed: {stderr}"));
         }
         Ok(output.stdout)
+    }
+
+    async fn spawn_command(&self, command: &str) -> Result<Box<dyn crate::ChildProcess>, String> {
+        let session_clone = Arc::clone(&self.session);
+        let mut child = openssh::Session::to_command(session_clone, "sh");
+        child.arg("-c").arg(command);
+
+        let spawned = child
+            .spawn()
+            .await
+            .map_err(|e| format!("SSH spawn failed: {e}"))?;
+        Ok(Box::new(OpensshChildProcess {
+            child: Some(spawned),
+        }))
+    }
+}
+
+pub struct OpensshChildProcess {
+    child: Option<openssh::Child<Arc<Session>>>,
+}
+
+#[async_trait]
+impl crate::ChildProcess for OpensshChildProcess {
+    fn take_stdin(&mut self) -> Option<Box<dyn tokio::io::AsyncWrite + Send + Unpin>> {
+        self.child.as_mut().and_then(|c| {
+            c.stdin()
+                .take()
+                .map(|s| Box::new(s) as Box<dyn tokio::io::AsyncWrite + Send + Unpin>)
+        })
+    }
+
+    fn take_stdout(&mut self) -> Option<Box<dyn tokio::io::AsyncRead + Send + Unpin>> {
+        self.child.as_mut().and_then(|c| {
+            c.stdout()
+                .take()
+                .map(|s| Box::new(s) as Box<dyn tokio::io::AsyncRead + Send + Unpin>)
+        })
+    }
+
+    fn take_stderr(&mut self) -> Option<Box<dyn tokio::io::AsyncRead + Send + Unpin>> {
+        self.child.as_mut().and_then(|c| {
+            c.stderr()
+                .take()
+                .map(|s| Box::new(s) as Box<dyn tokio::io::AsyncRead + Send + Unpin>)
+        })
+    }
+
+    async fn wait(&mut self) -> Result<i32, String> {
+        if let Some(child) = self.child.take() {
+            child
+                .wait()
+                .await
+                .map(|s| s.code().unwrap_or(-1))
+                .map_err(|e| e.to_string())
+        } else {
+            Err("Child process already waited on".to_string())
+        }
+    }
+
+    async fn kill(&mut self) -> Result<(), String> {
+        self.child.take();
+        Ok(())
     }
 }
