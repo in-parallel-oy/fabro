@@ -1,0 +1,14 @@
+digraph BuildAndPreview {
+    graph [goal="Build and preview the marketing site"]
+
+    start [shape=Mdiamond, label="Start"]
+    exit  [shape=Msquare, label="Exit"]
+
+    build [label="Build Site", prompt="Install dependencies and build the marketing site."]
+    serve [label="Start Dev Server", shape=parallelogram, script="cd site && npx serve -l 3000 &"]
+    review [shape=hexagon, label="Review Preview"]
+
+    start -> build -> serve -> review
+    review -> exit [label="[A] Approve"]
+    review -> build [label="[R] Revise"]
+}

@@ -1,0 +1,5 @@
+digraph Example {
+    graph [goal="Implement the login feature"]
+
+    plan [label="Plan", prompt="Create a plan for: $goal"]
+}

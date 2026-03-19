@@ -1,0 +1,20 @@
+digraph Example {
+    graph [
+        goal="Build and review a utility function",
+        model_stylesheet="
+            *        { model: claude-haiku-4-5;}
+            .coding  { model: claude-sonnet-4-5; reasoning_effort: high; }
+            #review  { model: gemini-3.1-pro-preview;}
+        "
+    ]
+
+    start [shape=Mdiamond, label="Start"]
+    exit  [shape=Msquare, label="Exit"]
+
+    spec      [label="Write Spec"]
+    implement [label="Implement", class="coding"]
+    test      [label="Write Tests", class="coding"]
+    review    [label="Code Review"]
+
+    start -> spec -> implement -> test -> review -> exit
+}

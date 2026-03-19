@@ -1,0 +1,6 @@
+digraph Example {
+    graph [retry_target="plan"]
+    verify [shape=box, goal_gate="true", retry_target="implement"]
+    // If verify fails, jump to implement
+    // If no node-level target existed, would jump to plan
+}

@@ -1,0 +1,6 @@
+version = 1
+goal = "Implement and simplify"
+graph = "implement.fabro.dot"
+
+[vars]
+HOME = "test-HOME"

@@ -1,0 +1,3 @@
+digraph Example {
+    graph [stall_timeout="1200"]
+}

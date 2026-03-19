@@ -1,0 +1,4 @@
+digraph Example {
+    graph [max_node_visits="20"]
+    fix [max_visits=3]
+}

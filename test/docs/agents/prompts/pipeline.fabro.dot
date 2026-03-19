@@ -1,0 +1,5 @@
+digraph Pipeline {
+    graph [goal="Add a /health endpoint to the API server"]
+
+    implement [prompt="Implement the following: $goal"]
+}

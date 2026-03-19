@@ -1,0 +1,15 @@
+digraph ImplementAndTest {
+    graph [goal="Implement the plan and make tests pass"]
+    rankdir=LR
+
+    start [shape=Mdiamond, label="Start"]
+    exit  [shape=Msquare, label="Exit"]
+
+    implement [label="Implement", prompt="Read plan.md and implement every step. Write the code and tests to disk."]
+    validate  [label="Validate", shape=parallelogram, script="python3 -m pytest -v 2>&1 || true"]
+    gate      [shape=diamond, label="Tests passing?"]
+
+    start -> implement -> validate -> gate
+    gate -> exit      [label="Pass", condition="outcome=success"]
+    gate -> implement [label="Fix", max_visits=5]
+}
