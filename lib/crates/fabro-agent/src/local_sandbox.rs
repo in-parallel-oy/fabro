@@ -1,5 +1,5 @@
 use crate::sandbox::{
-    format_lines_numbered, DirEntry, ExecResult, GrepOptions, Sandbox, SandboxEvent,
+    format_lines_numbered, ChildProcess, DirEntry, ExecResult, GrepOptions, Sandbox, SandboxEvent,
     SandboxEventCallback,
 };
 use async_trait::async_trait;
@@ -68,6 +68,33 @@ impl LocalSandbox {
         } else {
             self.working_directory.join(p)
         }
+    }
+}
+
+pub struct LocalChildProcess {
+    pub child: tokio::process::Child,
+}
+
+#[async_trait]
+impl ChildProcess for LocalChildProcess {
+    fn take_stdin(&mut self) -> Option<Box<dyn tokio::io::AsyncWrite + Send + Unpin>> {
+        self.child.stdin.take().map(|s| Box::new(s) as Box<dyn tokio::io::AsyncWrite + Send + Unpin>)
+    }
+
+    fn take_stdout(&mut self) -> Option<Box<dyn tokio::io::AsyncRead + Send + Unpin>> {
+        self.child.stdout.take().map(|s| Box::new(s) as Box<dyn tokio::io::AsyncRead + Send + Unpin>)
+    }
+
+    fn take_stderr(&mut self) -> Option<Box<dyn tokio::io::AsyncRead + Send + Unpin>> {
+        self.child.stderr.take().map(|s| Box::new(s) as Box<dyn tokio::io::AsyncRead + Send + Unpin>)
+    }
+
+    async fn wait(&mut self) -> Result<i32, String> {
+        self.child.wait().await.map(|s| s.code().unwrap_or(-1)).map_err(|e| e.to_string())
+    }
+
+    async fn kill(&mut self) -> Result<(), String> {
+        self.child.kill().await.map_err(|e| e.to_string())
     }
 }
 
@@ -259,6 +286,50 @@ impl Sandbox for LocalSandbox {
             timed_out,
             duration_ms,
         })
+    }
+
+    async fn spawn_command(
+        &self,
+        command: &str,
+        working_dir: Option<&str>,
+        env_vars: Option<&std::collections::HashMap<String, String>>,
+    ) -> Result<Box<dyn ChildProcess>, String> {
+        let mut filtered_env: Vec<(String, String)> = std::env::vars()
+            .filter(|(key, _)| !Self::should_filter_env_var(key))
+            .collect();
+
+        if let Some(extra) = env_vars {
+            for (k, v) in extra {
+                filtered_env.push((k.clone(), v.clone()));
+            }
+        }
+
+        let effective_dir =
+            working_dir.map_or_else(|| self.working_directory.clone(), std::path::PathBuf::from);
+
+        let mut cmd = Command::new("/bin/bash");
+        cmd.arg("-c")
+            .arg(command)
+            .current_dir(&effective_dir)
+            .env_clear()
+            .envs(filtered_env)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+
+        #[cfg(unix)]
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setpgid(0, 0);
+                Ok(())
+            });
+        }
+
+        let child = cmd
+            .spawn()
+            .map_err(|e| format!("Failed to spawn command: {e}"))?;
+
+        Ok(Box::new(LocalChildProcess { child }))
     }
 
     async fn grep(

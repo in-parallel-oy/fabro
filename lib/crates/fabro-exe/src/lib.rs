@@ -39,6 +39,9 @@ impl SshRunner for NoopSshRunner {
     async fn download_file(&self, _path: &str) -> Result<Vec<u8>, String> {
         Err("NoopSshRunner: management plane not available on reconnected sandbox".to_string())
     }
+    async fn spawn_command(&self, _command: &str) -> Result<Box<dyn fabro_agent::sandbox::ChildProcess>, String> {
+        Err("NoopSshRunner: management plane not available on reconnected sandbox".to_string())
+    }
 }
 
 pub(crate) fn shell_quote(s: &str) -> String {
@@ -79,6 +82,8 @@ pub trait SshRunner: Send + Sync {
     async fn upload_file(&self, path: &str, content: &[u8]) -> Result<(), String>;
 
     async fn download_file(&self, path: &str) -> Result<Vec<u8>, String>;
+
+    async fn spawn_command(&self, command: &str) -> Result<Box<dyn fabro_agent::sandbox::ChildProcess>, String>;
 }
 
 pub use fabro_config::sandbox::ExeConfig;
@@ -533,6 +538,37 @@ impl Sandbox for ExeSandbox {
         }
     }
 
+    async fn spawn_command(
+        &self,
+        command: &str,
+        working_dir: Option<&str>,
+        env_vars: Option<&HashMap<String, String>>,
+    ) -> Result<Box<dyn fabro_agent::sandbox::ChildProcess>, String> {
+        let ssh = self.data_ssh()?;
+
+        let mut script = String::new();
+
+        if let Some(vars) = env_vars {
+            for (key, value) in vars {
+                script.push_str(&format!(
+                    "export {}={}\n",
+                    shell_quote(key),
+                    shell_quote(value)
+                ));
+            }
+        }
+
+        let dir = match working_dir {
+            Some(dir) => self.resolve_path(dir),
+            None => WORKING_DIRECTORY.to_string(),
+        };
+        script.push_str(&format!("cd {} && {command}", shell_quote(&dir)));
+
+        let full_cmd = Self::wrap_bash_command(&script);
+
+        ssh.spawn_command(&full_cmd).await
+    }
+
     async fn read_file(
         &self,
         path: &str,
@@ -978,6 +1014,10 @@ mod tests {
                 Ok(downloads.remove(0).content)
             }
         }
+
+        async fn spawn_command(&self, _command: &str) -> Result<Box<dyn fabro_agent::sandbox::ChildProcess>, String> {
+            Err("MockSshRunner: spawn_command not implemented".to_string())
+        }
     }
 
     /// Extract and decode the inner command from a base64-wrapped SSH command.
@@ -1143,6 +1183,10 @@ mod tests {
 
         async fn download_file(&self, _path: &str) -> Result<Vec<u8>, String> {
             Ok(Vec::new())
+        }
+
+        async fn spawn_command(&self, _command: &str) -> Result<Box<dyn fabro_agent::sandbox::ChildProcess>, String> {
+            std::future::pending().await
         }
     }
 

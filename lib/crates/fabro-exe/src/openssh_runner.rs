@@ -3,9 +3,11 @@ use openssh::{KnownHosts, Session};
 
 use crate::{shell_quote, SshOutput, SshRunner};
 
+use std::sync::Arc;
+
 /// Real SSH implementation using the `openssh` crate (multiplexed connections).
 pub struct OpensshRunner {
-    session: Session,
+    session: Arc<Session>,
     /// When true, commands are sent via `raw_command` (no shell wrapping).
     /// Used for the exe.dev management plane which has a custom SSH command handler.
     raw_mode: bool,
@@ -19,7 +21,7 @@ impl OpensshRunner {
             .await
             .map_err(|e| format!("SSH connection to {host} failed: {e}"))?;
         Ok(Self {
-            session,
+            session: Arc::new(session),
             raw_mode: false,
         })
     }
@@ -32,7 +34,7 @@ impl OpensshRunner {
             .await
             .map_err(|e| format!("SSH connection to {host} failed: {e}"))?;
         Ok(Self {
-            session,
+            session: Arc::new(session),
             raw_mode: true,
         })
     }
@@ -115,5 +117,52 @@ impl SshRunner for OpensshRunner {
             return Err(format!("Download of {path} failed: {stderr}"));
         }
         Ok(output.stdout)
+    }
+
+    async fn spawn_command(&self, command: &str) -> Result<Box<dyn fabro_agent::sandbox::ChildProcess>, String> {
+        let session_clone = Arc::clone(&self.session);
+        let mut child = if self.raw_mode {
+            openssh::Session::to_raw_command(session_clone, command)
+        } else {
+            let mut cmd = openssh::Session::to_command(session_clone, "sh");
+            cmd.arg("-c").arg(command);
+            cmd
+        };
+        let spawned = child.spawn().await.map_err(|e| format!("SSH spawn failed: {e}"))?;
+        Ok(Box::new(OpensshChildProcess { child: Some(spawned) }))
+    }
+}
+
+pub struct OpensshChildProcess {
+    child: Option<openssh::Child<Arc<Session>>>,
+}
+
+#[async_trait]
+impl fabro_agent::sandbox::ChildProcess for OpensshChildProcess {
+    fn take_stdin(&mut self) -> Option<Box<dyn tokio::io::AsyncWrite + Send + Unpin>> {
+        self.child.as_mut().and_then(|c| c.stdin().take().map(|s| Box::new(s) as Box<dyn tokio::io::AsyncWrite + Send + Unpin>))
+    }
+
+    fn take_stdout(&mut self) -> Option<Box<dyn tokio::io::AsyncRead + Send + Unpin>> {
+        self.child.as_mut().and_then(|c| c.stdout().take().map(|s| Box::new(s) as Box<dyn tokio::io::AsyncRead + Send + Unpin>))
+    }
+
+    fn take_stderr(&mut self) -> Option<Box<dyn tokio::io::AsyncRead + Send + Unpin>> {
+        self.child.as_mut().and_then(|c| c.stderr().take().map(|s| Box::new(s) as Box<dyn tokio::io::AsyncRead + Send + Unpin>))
+    }
+
+    async fn wait(&mut self) -> Result<i32, String> {
+        if let Some(child) = self.child.take() {
+            child.wait().await.map(|s| s.code().unwrap_or(-1)).map_err(|e| e.to_string())
+        } else {
+            Err("Child process already waited on".to_string())
+        }
+    }
+
+    async fn kill(&mut self) -> Result<(), String> {
+        // openssh::Child doesn't have a kill method, but dropping it kills the process
+        // if we disconnect the session or just drop the child.
+        self.child.take();
+        Ok(())
     }
 }
