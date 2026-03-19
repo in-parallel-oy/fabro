@@ -1181,13 +1181,23 @@ pub async fn run_command(
             .map(|(name, entry)| entry.into_config(name))
             .collect()
     };
+
+    let acp_command = run_cfg
+        .as_ref()
+        .and_then(|c| c.acp.as_ref())
+        .or_else(|| run_defaults.acp.as_ref())
+        .map(|acp| acp.command.clone());
+
     let registry = default_registry(interviewer.clone(), {
         let sandbox_env = sandbox_env.clone();
         let model = model.clone();
         let mcp_servers = mcp_servers.clone();
+        let acp_command = acp_command.clone();
         move || {
             if dry_run_mode {
                 None
+            } else if let Some(cmd) = &acp_command {
+                Some(Box::new(fabro_workflows::backend::acp::AcpCodergenBackend::new(cmd.clone())))
             } else {
                 let api =
                     AgentApiBackend::new(model.clone(), provider_enum, fallback_chain.clone())
