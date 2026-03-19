@@ -16,7 +16,7 @@ use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tokio::sync::{mpsc, oneshot};
 
 pub struct FabroAcpClient {
-    pub tx: mpsc::UnboundedSender<String>,
+    pub tx: mpsc::Sender<String>,
     pub tool_hooks: Option<Arc<dyn ToolHookCallback>>,
     pub on_event: Arc<dyn Fn(AgentEvent) + Send + Sync>,
 }
@@ -72,7 +72,7 @@ impl Client for FabroAcpClient {
                 SessionUpdate::AgentMessageChunk(chunk) => {
                     if let ContentBlock::Text(text_content) = chunk.content {
                         (self.on_event)(AgentEvent::TextDelta { delta: text_content.text.clone() });
-                        let _ = self.tx.send(text_content.text);
+                        let _ = self.tx.try_send(text_content.text);
                     }
                 }
                 SessionUpdate::AgentThoughtChunk(chunk) => {
@@ -114,8 +114,8 @@ pub enum AcpCommand {
 
 pub struct AcpTransport {
     pub child: Box<dyn ChildProcess>,
-    pub cmd_tx: mpsc::UnboundedSender<AcpCommand>,
-    pub rx: mpsc::UnboundedReceiver<String>,
+    pub cmd_tx: mpsc::Sender<AcpCommand>,
+    pub rx: mpsc::Receiver<String>,
 }
 
 impl AcpTransport {
@@ -127,7 +127,7 @@ impl AcpTransport {
         let stdin = child.take_stdin().expect("Failed to take stdin").compat_write();
         let stdout = child.take_stdout().expect("Failed to take stdout").compat();
         
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel(1024);
         let client = Arc::new(FabroAcpClient { tx, tool_hooks, on_event });
         
         let (connection, io_task) = ClientSideConnection::new(
@@ -139,38 +139,31 @@ impl AcpTransport {
             },
         );
         
-        let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel::<AcpCommand>();
+        let (cmd_tx, mut cmd_rx) = mpsc::channel::<AcpCommand>(1024);
         
-        std::thread::spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap();
-            let local = tokio::task::LocalSet::new();
-            local.block_on(&rt, async move {
-                tokio::task::spawn_local(async move {
-                    if let Err(e) = io_task.await {
-                        tracing::error!("ACP IO task failed: {}", e);
-                    }
-                });
-                
-                while let Some(cmd) = cmd_rx.recv().await {
-                    match cmd {
-                        AcpCommand::Initialize(req, reply) => {
-                            let res = connection.initialize(req).await;
-                            let _ = reply.send(res);
-                        }
-                        AcpCommand::NewSession(req, reply) => {
-                            let res = connection.new_session(req).await;
-                            let _ = reply.send(res);
-                        }
-                        AcpCommand::Prompt(req, reply) => {
-                            let res = connection.prompt(req).await;
-                            let _ = reply.send(res);
-                        }
-                    }
+        tokio::task::spawn_local(async move {
+            tokio::task::spawn_local(async move {
+                if let Err(e) = io_task.await {
+                    tracing::error!("ACP IO task failed: {}", e);
                 }
             });
+            
+            while let Some(cmd) = cmd_rx.recv().await {
+                match cmd {
+                    AcpCommand::Initialize(req, reply) => {
+                        let res = connection.initialize(req).await;
+                        let _ = reply.send(res);
+                    }
+                    AcpCommand::NewSession(req, reply) => {
+                        let res = connection.new_session(req).await;
+                        let _ = reply.send(res);
+                    }
+                    AcpCommand::Prompt(req, reply) => {
+                        let res = connection.prompt(req).await;
+                        let _ = reply.send(res);
+                    }
+                }
+            }
         });
         
         Self { child, cmd_tx, rx }
@@ -178,20 +171,20 @@ impl AcpTransport {
 
     pub async fn initialize(&self, req: InitializeRequest) -> AcpResult<InitializeResponse> {
         let (tx, rx) = oneshot::channel();
-        self.cmd_tx.send(AcpCommand::Initialize(req, tx)).unwrap();
-        rx.await.unwrap()
+        self.cmd_tx.send(AcpCommand::Initialize(req, tx)).await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(60), rx).await.unwrap().unwrap()
     }
 
     pub async fn new_session(&self, req: NewSessionRequest) -> AcpResult<NewSessionResponse> {
         let (tx, rx) = oneshot::channel();
-        self.cmd_tx.send(AcpCommand::NewSession(req, tx)).unwrap();
-        rx.await.unwrap()
+        self.cmd_tx.send(AcpCommand::NewSession(req, tx)).await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(60), rx).await.unwrap().unwrap()
     }
 
     pub async fn prompt(&self, req: PromptRequest) -> AcpResult<PromptResponse> {
         let (tx, rx) = oneshot::channel();
-        self.cmd_tx.send(AcpCommand::Prompt(req, tx)).unwrap();
-        rx.await.unwrap()
+        self.cmd_tx.send(AcpCommand::Prompt(req, tx)).await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(60), rx).await.unwrap().unwrap()
     }
 }
 

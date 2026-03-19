@@ -33,6 +33,55 @@ pub struct EnvContext {
     pub git_recent_commits: Option<String>,
 }
 
+impl EnvContext {
+    pub async fn generate(sandbox: &dyn Sandbox, model: &str) -> Self {
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        
+        let (git_branch_res, git_status_res, git_commits_res) = tokio::join!(
+            sandbox.exec_command("git rev-parse --abbrev-ref HEAD", 5000, None, None, None),
+            sandbox.exec_command("git status --short", 5000, None, None, None),
+            sandbox.exec_command("git log --oneline -10", 5000, None, None, None)
+        );
+
+        let git_branch = git_branch_res
+            .ok()
+            .filter(|r| r.exit_code == 0)
+            .map(|r| r.stdout.trim().to_string());
+            
+        let is_git_repo = git_branch.is_some();
+        
+        let git_status_short = if is_git_repo {
+            git_status_res
+                .ok()
+                .filter(|r| r.exit_code == 0)
+                .map(|r| r.stdout.trim().to_string())
+                .filter(|s| !s.is_empty())
+        } else {
+            None
+        };
+        
+        let git_recent_commits = if is_git_repo {
+            git_commits_res
+                .ok()
+                .filter(|r| r.exit_code == 0)
+                .map(|r| r.stdout.trim().to_string())
+                .filter(|s| !s.is_empty())
+        } else {
+            None
+        };
+
+        Self {
+            git_branch,
+            is_git_repo,
+            current_date: today,
+            model: model.to_string(),
+            knowledge_cutoff: "".to_string(),
+            git_status_short,
+            git_recent_commits,
+        }
+    }
+}
+
 /// Assembles a complete system prompt from a core prompt template and standard sections.
 ///
 /// The `core_prompt` should contain `{env_block}` as a placeholder where the environment

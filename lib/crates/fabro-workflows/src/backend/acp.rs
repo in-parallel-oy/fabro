@@ -46,7 +46,14 @@ impl CodergenBackend for AcpCodergenBackend {
 
         let emitter_clone = Arc::clone(_emitter);
         let node_id = _node.id.clone();
+        let response_text = Arc::new(std::sync::Mutex::new(String::new()));
+        let response_text_clone = Arc::clone(&response_text);
         let on_event = Arc::new(move |event: fabro_agent::AgentEvent| {
+            if let fabro_agent::AgentEvent::TextDelta { delta } = &event {
+                if let Ok(mut text) = response_text_clone.lock() {
+                    text.push_str(delta);
+                }
+            }
             emitter_clone.emit(&crate::event::WorkflowRunEvent::Agent {
                 stage: node_id.clone(),
                 event,
@@ -75,46 +82,7 @@ impl CodergenBackend for AcpCodergenBackend {
             .map_err(|e| FabroError::handler(format!("ACP initialize failed: {}", e)))?;
 
         // Generate System Prompt
-        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let git_branch = sandbox
-            .exec_command("git rev-parse --abbrev-ref HEAD", 5000, None, None, None)
-            .await
-            .ok()
-            .filter(|r| r.exit_code == 0)
-            .map(|r| r.stdout.trim().to_string());
-        let is_git_repo = git_branch.is_some();
-        let git_status_short = if is_git_repo {
-            sandbox
-                .exec_command("git status --short", 5000, None, None, None)
-                .await
-                .ok()
-                .filter(|r| r.exit_code == 0)
-                .map(|r| r.stdout.trim().to_string())
-                .filter(|s| !s.is_empty())
-        } else {
-            None
-        };
-        let git_recent_commits = if is_git_repo {
-            sandbox
-                .exec_command("git log --oneline -10", 5000, None, None, None)
-                .await
-                .ok()
-                .filter(|r| r.exit_code == 0)
-                .map(|r| r.stdout.trim().to_string())
-                .filter(|s| !s.is_empty())
-        } else {
-            None
-        };
-
-        let env_context = EnvContext {
-            git_branch,
-            is_git_repo,
-            current_date: today,
-            model: "acp-agent".to_string(),
-            knowledge_cutoff: "".to_string(),
-            git_status_short,
-            git_recent_commits,
-        };
+        let env_context = EnvContext::generate(sandbox.as_ref(), "acp-agent").await;
 
         let core_prompt = "You are an AI coding agent running in a sandboxed environment.\n\n{env_block}";
         let system_prompt = assemble_system_prompt(
@@ -149,13 +117,12 @@ impl CodergenBackend for AcpCodergenBackend {
             .map_err(|e| FabroError::handler(format!("ACP prompt failed: {}", e)))?;
 
         // Extract text from response
-        let mut response_text = String::new();
-        while let Ok(chunk) = transport.rx.try_recv() {
-            response_text.push_str(&chunk);
-        }
+        let final_text = response_text.lock().unwrap().clone();
+
+        let _ = transport.child.kill().await;
 
         Ok(CodergenResult::Text {
-            text: response_text,
+            text: final_text,
             usage: None,
             files_touched: Vec::new(),
             last_file_touched: None,
