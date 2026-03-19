@@ -1,0 +1,53 @@
+---
+title: "ACP Agent Integration"
+description: "Run external agents inside Fabro sandboxes using the Agent Client Protocol"
+---
+
+Fabro supports running external agents that implement the [Agent Client Protocol (ACP)](https://agentclientprotocol.com/) inside its execution environments (sandboxes). This allows you to leverage the specific capabilities of external agents (such as LSP integration, skills, and rules) that are not natively available in the Fabro agent, while still benefiting from Fabro's sandboxed execution model, workflow orchestration, and human-in-the-loop (HITL) guards.
+
+## How it works
+
+When you configure an ACP agent, Fabro acts as the "Client" in the ACP relationship. It spawns the agent's runtime command inside the sandbox and communicates with it over standard input/output (stdio) using JSON-RPC.
+
+1. **Initialization**: Fabro sends an `initialize` request to the agent, providing the full system prompt (including project structure, git history, and discovered skills) in the session initialization metadata.
+2. **Execution**: The agent executes tools directly on the local OS inside the sandbox.
+3. **Security**: When the agent sends a `requestPermission` call for a tool use, Fabro intercepts it and triggers the same automated security hooks and HITL guards as the built-in agent.
+4. **Observability**: Every ACP event (text delta, reasoning, tool use) is captured and emitted as an `AgentEvent`, which the Fabro UI renders natively.
+
+## Configuration
+
+To use an ACP agent, define a custom agent runtime command in your run configuration (`run.toml`) or project defaults (`fabro.toml`):
+
+```toml title="run.toml"
+[acp]
+command = "claude-agent-acp start"
+```
+
+| Field | Description |
+|---|---|
+| `command` | The shell command to start the ACP agent inside the sandbox. |
+
+You must ensure that the suitable agent is installed in your container environment (e.g., via Daytona snapshots, custom exe.dev images, or setup commands).
+
+### Example with setup commands
+
+If the agent is not pre-installed in the sandbox image, you can install it using setup commands:
+
+```toml title="run.toml"
+[setup]
+commands = ["npm install -g claude-agent-acp"]
+
+[acp]
+command = "claude-agent-acp start"
+```
+
+## Security and Permissions
+
+Fabro integrates ACP agents directly into its existing `ToolHookCallback` system. This means that ACP agents are subject to the same security policies as the built-in agent:
+
+- **Pre-tool hooks**: When an ACP agent requests permission to use a tool, Fabro executes any `pre_tool_use` hooks defined in your workflow.
+- **Auto-approve**: If the hooks allow the tool use, Fabro checks the `--auto-approve` CLI flag or configuration.
+- **Human-in-the-loop**: If auto-approve is disabled, Fabro triggers an interactive prompt asking the user to approve or reject the tool use.
+- **Post-tool hooks**: After the agent completes the tool, Fabro executes any `post_tool_use` hooks for logging and state updates.
+
+Even if a permission is accidentally approved, the sandbox remains the primary security boundary, preventing the agent from breaking out into the host system.
