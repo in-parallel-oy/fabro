@@ -1,6 +1,7 @@
 #[cfg(feature = "docker")]
 pub mod docker_sandbox;
 
+pub mod acp;
 pub mod cli;
 pub mod compaction;
 pub mod config;
