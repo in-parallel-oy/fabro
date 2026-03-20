@@ -6,7 +6,7 @@ description: "Delegate subtasks to child agent sessions"
 An agent can spawn **sub-agents** to delegate work to independent child sessions. Each sub-agent gets its own LLM session and tool access, runs concurrently with the parent, and returns its result when finished. This is useful for parallelizing research, isolating risky operations, or breaking complex tasks into focused pieces.
 
 <Note>
-Sub-agents are only available with the [API backend](/core-concepts/agents#api-backend-default) (the default). Agents using the [CLI backend](/core-concepts/agents#cli-backend) cannot spawn sub-agents.
+Sub-agents are only available with the [API agent](/core-concepts/agents#api-agent-default) (the default). Agents using the [CLI agent](/core-concepts/agents#cli-agent) cannot spawn sub-agents.
 </Note>
 
 ## Tools

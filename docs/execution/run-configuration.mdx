@@ -124,18 +124,22 @@ anthropic = ["gemini", "openai"]
 gemini = ["anthropic", "openai"]
 ```
 
-### `[acp]`
+### `[agents]`
 
-Configure an Agent Client Protocol (ACP) agent to run inside the sandbox instead of the built-in Fabro agent.
+Configure external agents to run inside the sandbox instead of the built-in Fabro agent. Each entry in the map defines a named agent configuration.
 
 ```toml title="run.toml"
-[acp]
+[agents.claude]
+type = "acp"
 command = "claude-agent-acp start"
 ```
 
 | Field | Description |
 |---|---|
-| `command` | The shell command to start the ACP agent inside the sandbox. |
+| `type` | Agent protocol type (e.g., `"acp"` for Agent Client Protocol). |
+| `command` | The shell command to start the agent inside the sandbox. |
+
+Select the agent on a node using the `agent` attribute in DOT, or set a default via the `$agent` variable in `[vars]`.
 
 See [ACP Agent Integration](/agents/acp) for more details.
 
@@ -454,7 +458,7 @@ For model and provider specifically, the precedence is: CLI flags > TOML config 
 
 ### Project defaults (`fabro.toml`)
 
-The `fabro.toml` project config can set default values for `[llm]`, `[acp]`, `[setup]`, `[sandbox]`, `[vars]`, `[checkpoint]`, `[pull_request]`, `[github]`, `[assets]`, `[[hooks]]`, and `[mcp_servers]`. These defaults apply to all runs in the project unless the run config overrides them:
+The `fabro.toml` project config can set default values for `[llm]`, `[agents]`, `[setup]`, `[sandbox]`, `[vars]`, `[checkpoint]`, `[pull_request]`, `[github]`, `[assets]`, `[[hooks]]`, and `[mcp_servers]`. These defaults apply to all runs in the project unless the run config overrides them:
 
 ```toml title="fabro.toml"
 version = 1

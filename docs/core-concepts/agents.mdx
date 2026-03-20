@@ -16,11 +16,11 @@ Each agent turn follows the same cycle:
 
 This loop continues until the model stops calling tools, indicating it considers the task complete. Fabro also enforces guardrails: token budgets, turn limits, and loop detection to prevent runaway agents.
 
-## Backends
+## Agent Implementations
 
-Every agent node uses a **backend** that determines how Fabro interacts with the LLM. There are three options:
+Every agent node uses an **agent implementation** that determines how Fabro interacts with the LLM. There are three primary types:
 
-### API backend (default)
+### API agent (default)
 
 Fabro manages the agent loop directly — it calls the LLM provider's API, executes built-in tools in the sandbox, and tracks file changes via tool call events. This is the default and supports the full feature set:
 
@@ -29,13 +29,15 @@ Fabro manages the agent loop directly — it calls the LLM provider's API, execu
 - Provider failover
 - All [built-in tools](/agents/tools) and [MCP](/agents/mcp) integrations
 
-### ACP backend
+### Custom agents (ACP)
 
 Fabro delegates execution to an external agent that implements the [Agent Client Protocol (ACP)](https://agentclientprotocol.com/). The ACP agent runs inside the sandbox and communicates with Fabro over stdio. Fabro intercepts tool permission requests to enforce security policies and HITL guards.
 
+You can configure multiple custom agents in your `run.toml` and select them by name.
+
 See [ACP Agent Integration](/agents/acp) for details.
 
-### CLI backend
+### CLI agent
 
 Fabro delegates execution to an external coding assistant CLI. The CLI tool manages its own tool loop internally — Fabro sends the prompt, waits for the CLI to finish, and tracks file changes via `git diff` before and after execution.
 
@@ -47,20 +49,20 @@ The CLI is selected automatically based on the node's provider:
 | OpenAI | `codex` |
 | Gemini | `gemini` |
 
-Set the CLI backend on a node with `backend="cli"` or via a [model stylesheet](/workflows/stylesheets):
+Set the CLI agent on a node with `agent="cli"` or via a [model stylesheet](/workflows/stylesheets):
 
 ```dot
-implement [label="Implement", backend="cli"]
+implement [label="Implement", agent="cli"]
 ```
 
 ```
 // Stylesheet
-* { backend: cli; }
+* { agent: cli; }
 ```
 
 ### Comparison
 
-| Capability | API backend | ACP backend | CLI backend |
+| Capability | API agent | Custom agent (ACP) | CLI agent |
 |---|---|---|---|
 | Tools | Fabro built-in tools + MCP | Agent's own tools | CLI's own tool set |
 | Session caching | Supported (`fidelity` + `thread_id`) | Not supported | Not supported |
@@ -69,13 +71,13 @@ implement [label="Implement", backend="cli"]
 | File tracking | Tool call events | Tool call events | `git diff` before/after |
 | Security hooks | Supported | Supported | Not supported |
 
-### When to use the ACP backend
+### When to use custom ACP agents
 
 - **ACP-compatible agents** — leverage external agents that implement the Agent Client Protocol (e.g., `claude-agent-acp`, `opencode acp`)
 - **Advanced agent capabilities** — use agents with specific capabilities like LSP integration, custom skills, or rules that are not natively available in Fabro
 - **Sandboxed execution** — run external agents securely inside Fabro's execution environments with HITL guards
 
-### When to use the CLI backend
+### When to use the CLI agent
 
 - **CLI-specific tools** — leverage tool implementations built into a specific CLI (e.g. Claude Code's computer use, Codex's sandboxed execution)
 - **CLI-only models** — use models that are only available through a CLI tool, not via API

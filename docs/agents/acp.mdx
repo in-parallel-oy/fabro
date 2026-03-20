@@ -16,16 +16,31 @@ When you configure an ACP agent, Fabro acts as the "Client" in the ACP relations
 
 ## Configuration
 
-To use an ACP agent, define a custom agent runtime command in your run configuration (`run.toml`) or project defaults (`fabro.toml`):
+To use an ACP agent, define it in the `[agents]` map in your run configuration (`run.toml`) or project defaults (`fabro.toml`):
 
 ```toml title="run.toml"
-[acp]
+[agents.claude]
+type = "acp"
 command = "claude-agent-acp start"
 ```
 
 | Field | Description |
 |---|---|
+| `type` | Must be `"acp"`. |
 | `command` | The shell command to start the ACP agent inside the sandbox. |
+
+You can then select the agent in your workflow using the `agent` attribute on a node:
+
+```dot
+implement [label="Implement", agent="claude"]
+```
+
+Or via a variable:
+
+```toml title="run.toml"
+[vars]
+agent = "claude"
+```
 
 You must ensure that the suitable agent is installed in your container environment (e.g., via Daytona snapshots, custom exe.dev images, or setup commands).
 
@@ -37,7 +52,8 @@ If the agent is not pre-installed in the sandbox image, you can install it using
 [setup]
 commands = ["npm install -g claude-agent-acp"]
 
-[acp]
+[agents.claude]
+type = "acp"
 command = "claude-agent-acp start"
 ```
 
