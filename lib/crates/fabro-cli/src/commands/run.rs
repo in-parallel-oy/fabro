@@ -2732,6 +2732,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
+            acp: None,
         };
         let (model, provider) = resolve_model_provider(
             Some("gpt-5.2"),
@@ -2777,6 +2778,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
+            acp: None,
         };
         let (model, provider) = resolve_model_provider(None, None, Some(&cfg), &defaults, &graph);
         assert_eq!(model, "toml-model");
@@ -2857,6 +2859,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
+            acp: None,
         };
         let (model, provider) = resolve_model_provider(None, None, Some(&cfg), &defaults, &graph);
         assert_eq!(model, "toml-model");
@@ -2884,6 +2887,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
+            acp: None,
         };
         let defaults = RunDefaults::default();
         assert!(resolve_preserve_sandbox(true, Some(&cfg), &defaults));
@@ -2910,6 +2914,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
+            acp: None,
         };
         let defaults = RunDefaults {
             sandbox: Some(sandbox_config::SandboxConfig {
@@ -2975,6 +2980,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
+            acp: None,
         };
         let defaults = RunDefaults::default();
         assert_eq!(
@@ -3028,6 +3034,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
+            acp: None,
         };
         let defaults = RunDefaults {
             sandbox: Some(sandbox_config::SandboxConfig {
