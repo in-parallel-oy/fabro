@@ -724,31 +724,40 @@ impl CodergenBackend for AgentCliBackend {
 pub struct BackendRouter {
     api_backend: Box<dyn CodergenBackend>,
     cli_backend: AgentCliBackend,
+    acp_backend: Option<Box<dyn CodergenBackend>>,
+    default_agent_type: String,
 }
 
 impl BackendRouter {
     #[must_use]
-    pub fn new(api_backend: Box<dyn CodergenBackend>, cli_backend: AgentCliBackend) -> Self {
+    pub fn new(
+        api_backend: Box<dyn CodergenBackend>,
+        cli_backend: AgentCliBackend,
+        acp_backend: Option<Box<dyn CodergenBackend>>,
+        default_agent_type: String,
+    ) -> Self {
         Self {
             api_backend,
             cli_backend,
+            acp_backend,
+            default_agent_type,
         }
     }
 
-    fn should_use_cli(&self, node: &Node) -> bool {
-        // Explicit backend="cli" attribute on the node
-        if node.backend() == Some("cli") {
-            return true;
+    fn resolve_agent_type(&self, node: &Node) -> String {
+        // Explicit agent="type" attribute on the node
+        if let Some(agent) = node.agent() {
+            return agent.to_string();
         }
 
         // CLI-only model on the node
         if let Some(model) = node.model() {
             if is_cli_only_model(model) {
-                return true;
+                return "cli".to_string();
             }
         }
 
-        false
+        self.default_agent_type.clone()
     }
 }
 
@@ -765,18 +774,34 @@ impl CodergenBackend for BackendRouter {
         sandbox: &Arc<dyn Sandbox>,
         tool_hooks: Option<Arc<dyn fabro_agent::ToolHookCallback>>,
     ) -> Result<CodergenResult, FabroError> {
-        if self.should_use_cli(node) {
-            self.cli_backend
-                .run(
-                    node, prompt, context, thread_id, emitter, stage_dir, sandbox, tool_hooks,
-                )
-                .await
-        } else {
-            self.api_backend
-                .run(
-                    node, prompt, context, thread_id, emitter, stage_dir, sandbox, tool_hooks,
-                )
-                .await
+        let agent_type = self.resolve_agent_type(node);
+        match agent_type.as_str() {
+            "cli" => {
+                self.cli_backend
+                    .run(
+                        node, prompt, context, thread_id, emitter, stage_dir, sandbox, tool_hooks,
+                    )
+                    .await
+            }
+            "acp" => {
+                if let Some(acp) = &self.acp_backend {
+                    acp.run(
+                        node, prompt, context, thread_id, emitter, stage_dir, sandbox, tool_hooks,
+                    )
+                    .await
+                } else {
+                    Err(FabroError::handler(
+                        "ACP agent requested but no command configured",
+                    ))
+                }
+            }
+            _ => {
+                self.api_backend
+                    .run(
+                        node, prompt, context, thread_id, emitter, stage_dir, sandbox, tool_hooks,
+                    )
+                    .await
+            }
         }
     }
 
@@ -787,10 +812,24 @@ impl CodergenBackend for BackendRouter {
         system_prompt: Option<&str>,
         stage_dir: &Path,
     ) -> Result<CodergenResult, FabroError> {
-        // CLI backend doesn't support one_shot, always route to API
-        self.api_backend
-            .one_shot(node, prompt, system_prompt, stage_dir)
-            .await
+        let agent_type = self.resolve_agent_type(node);
+        match agent_type.as_str() {
+            "acp" => {
+                if let Some(acp) = &self.acp_backend {
+                    acp.one_shot(node, prompt, system_prompt, stage_dir).await
+                } else {
+                    Err(FabroError::handler(
+                        "ACP agent requested but no command configured",
+                    ))
+                }
+            }
+            _ => {
+                // CLI backend doesn't support one_shot, route to API
+                self.api_backend
+                    .one_shot(node, prompt, system_prompt, stage_dir)
+                    .await
+            }
+        }
     }
 }
 
@@ -1129,20 +1168,20 @@ mod tests {
         assert!(parse_cli_response(Provider::OpenAi, "not json at all").is_none());
     }
 
-    // -- Cycle 5: Node::backend() accessor (tested here since the accessor is simple) --
+    // -- Cycle 5: Node::agent() accessor (tested here since the accessor is simple) --
 
     #[test]
-    fn node_backend_returns_none_by_default() {
+    fn node_agent_returns_none_by_default() {
         let node = Node::new("test");
-        assert_eq!(node.backend(), None);
+        assert_eq!(node.agent(), None);
     }
 
     #[test]
-    fn node_backend_returns_cli_when_set() {
+    fn node_agent_returns_cli_when_set() {
         let mut node = Node::new("test");
         node.attrs
-            .insert("backend".to_string(), AttrValue::String("cli".to_string()));
-        assert_eq!(node.backend(), Some("cli"));
+            .insert("agent".to_string(), AttrValue::String("cli".to_string()));
+        assert_eq!(node.agent(), Some("cli"));
     }
 
     // -- Cycle 6: backend in stylesheet (tested in stylesheet.rs) --
@@ -1150,14 +1189,14 @@ mod tests {
     // -- Cycle 7: BackendRouter routing logic --
 
     #[test]
-    fn router_uses_cli_for_backend_attr() {
+    fn router_uses_cli_for_agent_attr() {
         let mut node = Node::new("test");
         node.attrs
-            .insert("backend".to_string(), AttrValue::String("cli".to_string()));
+            .insert("agent".to_string(), AttrValue::String("cli".to_string()));
 
         let cli_backend = AgentCliBackend::new("model".into(), Provider::Anthropic);
-        let router = BackendRouter::new(Box::new(StubBackend), cli_backend);
-        assert!(router.should_use_cli(&node));
+        let router = BackendRouter::new(Box::new(StubBackend), cli_backend, None, "api".to_string());
+        assert_eq!(router.resolve_agent_type(&node), "cli");
     }
 
     #[test]
@@ -1165,8 +1204,8 @@ mod tests {
         let node = Node::new("test");
 
         let cli_backend = AgentCliBackend::new("model".into(), Provider::Anthropic);
-        let router = BackendRouter::new(Box::new(StubBackend), cli_backend);
-        assert!(!router.should_use_cli(&node));
+        let router = BackendRouter::new(Box::new(StubBackend), cli_backend, None, "api".to_string());
+        assert_eq!(router.resolve_agent_type(&node), "api");
     }
 
     #[test]
@@ -1178,8 +1217,8 @@ mod tests {
         );
 
         let cli_backend = AgentCliBackend::new("model".into(), Provider::Anthropic);
-        let router = BackendRouter::new(Box::new(StubBackend), cli_backend);
-        assert!(!router.should_use_cli(&node));
+        let router = BackendRouter::new(Box::new(StubBackend), cli_backend, None, "api".to_string());
+        assert_eq!(router.resolve_agent_type(&node), "api");
     }
 
     /// Minimal stub backend for testing routing logic.

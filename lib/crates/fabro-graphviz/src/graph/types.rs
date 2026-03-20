@@ -231,8 +231,8 @@ impl Node {
     }
 
     #[must_use]
-    pub fn backend(&self) -> Option<&str> {
-        self.str_attr("backend")
+    pub fn agent(&self) -> Option<&str> {
+        self.str_attr("agent")
     }
 
     #[must_use]

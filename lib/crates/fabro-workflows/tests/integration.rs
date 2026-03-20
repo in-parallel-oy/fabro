@@ -10023,11 +10023,11 @@ async fn backend_router_delegates_to_cli_for_cli_node() {
     let api_backend = Box::new(MockCodergenBackend); // would return "Response for ..."
     let cli = AgentCliBackend::new("claude-opus-4-6".into(), Provider::Anthropic)
         .with_poll_interval(Duration::from_millis(10));
-    let router = BackendRouter::new(api_backend, cli);
+    let router = BackendRouter::new(api_backend, cli, None, "api".to_string());
 
     let mut node = Node::new("cli_step");
     node.attrs
-        .insert("backend".to_string(), AttrValue::String("cli".to_string()));
+        .insert("agent".to_string(), AttrValue::String("cli".to_string()));
     node.attrs.insert(
         "prompt".to_string(),
         AttrValue::String("Fix the bug".to_string()),
@@ -10069,7 +10069,7 @@ async fn backend_router_delegates_to_api_for_normal_node() {
     let api_backend = Box::new(MockCodergenBackend);
     let cli = AgentCliBackend::new("claude-opus-4-6".into(), Provider::Anthropic)
         .with_poll_interval(Duration::from_millis(10));
-    let router = BackendRouter::new(api_backend, cli);
+    let router = BackendRouter::new(api_backend, cli, None, "api".to_string());
 
     let mut node = Node::new("api_step");
     node.attrs.insert(
@@ -10114,11 +10114,11 @@ async fn backend_router_delegates_to_cli_for_backend_attr() {
     let api_backend = Box::new(MockCodergenBackend);
     let cli = AgentCliBackend::new("gpt-5.3-codex".into(), Provider::OpenAi)
         .with_poll_interval(Duration::from_millis(10));
-    let router = BackendRouter::new(api_backend, cli);
+    let router = BackendRouter::new(api_backend, cli, None, "api".to_string());
 
     let mut node = Node::new("codex_step");
     node.attrs
-        .insert("backend".to_string(), AttrValue::String("cli".to_string()));
+        .insert("agent".to_string(), AttrValue::String("cli".to_string()));
     node.attrs.insert(
         "provider".to_string(),
         AttrValue::String("openai".to_string()),
@@ -10198,7 +10198,7 @@ async fn full_pipeline_with_cli_backend_node() {
     );
     cli_work
         .attrs
-        .insert("backend".to_string(), AttrValue::String("cli".to_string()));
+        .insert("agent".to_string(), AttrValue::String("cli".to_string()));
     graph.nodes.insert("cli_work".to_string(), cli_work);
 
     graph.edges.push(Edge::new("start", "api_work"));
@@ -10209,7 +10209,7 @@ async fn full_pipeline_with_cli_backend_node() {
     let api = MockCodergenBackend;
     let cli = AgentCliBackend::new("claude-opus-4-6".into(), Provider::Anthropic)
         .with_poll_interval(Duration::from_millis(10));
-    let router = BackendRouter::new(Box::new(api), cli);
+    let router = BackendRouter::new(Box::new(api), cli, None, "api".to_string());
     let codergen_handler = AgentHandler::new(Some(Box::new(router)));
 
     let mut registry = HandlerRegistry::new(Box::new(codergen_handler));
@@ -10222,7 +10222,7 @@ async fn full_pipeline_with_cli_backend_node() {
             let api2 = MockCodergenBackend;
             let cli2 = AgentCliBackend::new("claude-opus-4-6".into(), Provider::Anthropic)
                 .with_poll_interval(Duration::from_millis(10));
-            BackendRouter::new(Box::new(api2), cli2)
+            BackendRouter::new(Box::new(api2), cli2, None, "api".to_string())
         })))),
     );
 
@@ -10304,7 +10304,7 @@ async fn stylesheet_backend_property_routes_to_cli() {
     let mut graph = Graph::new("StylesheetTest");
     graph.attrs.insert(
         "model_stylesheet".to_string(),
-        AttrValue::String(".cli-node { backend: cli; }".to_string()),
+        AttrValue::String(".cli-node { agent: cli; }".to_string()),
     );
 
     let mut start = Node::new("start");
@@ -10338,18 +10338,18 @@ async fn stylesheet_backend_property_routes_to_cli() {
     let ss = parse_stylesheet(graph.model_stylesheet()).unwrap();
     apply_stylesheet(&ss, &mut graph);
 
-    // Verify the stylesheet applied the backend property
+    // Verify the stylesheet applied the agent property
     assert_eq!(
-        graph.nodes["work"].backend(),
+        graph.nodes["work"].agent(),
         Some("cli"),
-        "stylesheet should set backend=cli on .cli-node"
+        "stylesheet should set agent=cli on .cli-node"
     );
 
     // Run the pipeline
     let api = MockCodergenBackend;
     let cli = AgentCliBackend::new("claude-opus-4-6".into(), Provider::Anthropic)
         .with_poll_interval(Duration::from_millis(10));
-    let router = BackendRouter::new(Box::new(api), cli);
+    let router = BackendRouter::new(Box::new(api), cli, None, "api".to_string());
 
     let mut registry = HandlerRegistry::new(Box::new(AgentHandler::new(Some(Box::new(router)))));
     registry.register("start", Box::new(StartHandler));
@@ -10357,7 +10357,7 @@ async fn stylesheet_backend_property_routes_to_cli() {
     let api2 = MockCodergenBackend;
     let cli2 = AgentCliBackend::new("claude-opus-4-6".into(), Provider::Anthropic)
         .with_poll_interval(Duration::from_millis(10));
-    let router2 = BackendRouter::new(Box::new(api2), cli2);
+    let router2 = BackendRouter::new(Box::new(api2), cli2, None, "api".to_string());
     registry.register(
         "agent",
         Box::new(AgentHandler::new(Some(Box::new(router2)))),

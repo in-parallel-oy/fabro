@@ -69,7 +69,7 @@ pub struct WorkflowRunConfig {
     #[serde(alias = "directory")]
     pub work_dir: Option<String>,
     pub llm: Option<LlmConfig>,
-    pub acp: Option<AcpConfig>,
+    pub agent: Option<AgentConfig>,
     pub setup: Option<SetupConfig>,
     pub sandbox: Option<SandboxConfig>,
     pub vars: Option<HashMap<String, String>>,
@@ -93,8 +93,10 @@ pub struct LlmConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct AcpConfig {
-    pub command: String,
+pub struct AgentConfig {
+    #[serde(rename = "type")]
+    pub agent_type: Option<String>,
+    pub command: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -111,7 +113,7 @@ pub struct RunDefaults {
     #[serde(alias = "directory")]
     pub work_dir: Option<String>,
     pub llm: Option<LlmConfig>,
-    pub acp: Option<AcpConfig>,
+    pub agent: Option<AgentConfig>,
     pub setup: Option<SetupConfig>,
     pub sandbox: Option<SandboxConfig>,
     pub vars: Option<HashMap<String, String>>,
@@ -138,7 +140,7 @@ impl WorkflowRunConfig {
         let task_overlay = RunDefaults {
             work_dir: self.work_dir.take(),
             llm: self.llm.take(),
-            acp: self.acp.take(),
+            agent: self.agent.take(),
             setup: self.setup.take(),
             sandbox: self.sandbox.take(),
             vars: self.vars.take(),
@@ -154,7 +156,7 @@ impl WorkflowRunConfig {
 
         self.work_dir = merged.work_dir;
         self.llm = merged.llm;
-        self.acp = merged.acp;
+        self.agent = merged.agent;
         self.setup = merged.setup;
         self.sandbox = merged.sandbox;
         self.vars = merged.vars;
@@ -192,8 +194,17 @@ impl RunDefaults {
             _ => {}
         }
 
-        if overlay.acp.is_some() {
-            self.acp = overlay.acp;
+        match (&mut self.agent, overlay.agent) {
+            (Some(base), Some(over)) => {
+                if over.agent_type.is_some() {
+                    base.agent_type = over.agent_type;
+                }
+                if over.command.is_some() {
+                    base.command = over.command;
+                }
+            }
+            (None, Some(over)) => self.agent = Some(over),
+            _ => {}
         }
 
         match (&mut self.setup, overlay.setup) {

@@ -4013,8 +4013,8 @@ components:
           description: Working directory for the run.
         llm:
           $ref: "#/components/schemas/LlmConfiguration"
-        acp:
-          $ref: "#/components/schemas/AcpConfiguration"
+        agent:
+          $ref: "#/components/schemas/AgentConfiguration"
         setup:
           $ref: "#/components/schemas/SetupConfiguration"
         sandbox:
@@ -4049,15 +4049,16 @@ components:
               type: string
           description: Provider fallback chains.
 
-    AcpConfiguration:
-      description: ACP agent configuration.
+    AgentConfiguration:
+      description: Agent configuration.
       type: object
-      required:
-        - command
       properties:
+        type:
+          type: string
+          description: Agent protocol type (e.g., acp, api, cli). Defaults to api.
         command:
           type: string
-          description: Command to run the ACP agent.
+          description: Command to run the external agent.
 
     SetupConfiguration:
       description: Setup commands run before the workflow.
@@ -4294,8 +4295,8 @@ components:
           description: Default working directory.
         llm:
           $ref: "#/components/schemas/LlmConfiguration"
-        acp:
-          $ref: "#/components/schemas/AcpConfiguration"
+        agent:
+          $ref: "#/components/schemas/AgentConfiguration"
         setup:
           $ref: "#/components/schemas/SetupConfiguration"
         sandbox:

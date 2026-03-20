@@ -1184,22 +1184,24 @@ pub async fn run_command(
             .collect()
     };
 
-    let acp_command = run_cfg
+    let agent_config = run_cfg
         .as_ref()
-        .and_then(|c| c.acp.as_ref())
-        .or_else(|| run_defaults.acp.as_ref())
-        .map(|acp| acp.command.clone());
+        .and_then(|c| c.agent.as_ref())
+        .or_else(|| run_defaults.agent.as_ref());
+    let agent_type = agent_config
+        .and_then(|a| a.agent_type.clone())
+        .unwrap_or_else(|| "api".to_string());
+    let agent_command = agent_config.and_then(|a| a.command.clone());
 
     let registry = default_registry(interviewer.clone(), {
         let sandbox_env = sandbox_env.clone();
         let model = model.clone();
         let mcp_servers = mcp_servers.clone();
-        let acp_command = acp_command.clone();
+        let agent_type = agent_type.clone();
+        let agent_command = agent_command.clone();
         move || {
             if dry_run_mode {
                 None
-            } else if let Some(cmd) = &acp_command {
-                Some(Box::new(fabro_workflows::backend::acp::AcpCodergenBackend::new(cmd.clone())))
             } else {
                 let api =
                     AgentApiBackend::new(model.clone(), provider_enum, fallback_chain.clone())
@@ -1207,7 +1209,15 @@ pub async fn run_command(
                         .with_mcp_servers(mcp_servers.clone());
                 let cli = AgentCliBackend::new(model.clone(), provider_enum)
                     .with_env(sandbox_env.clone());
-                Some(Box::new(BackendRouter::new(Box::new(api), cli)))
+                let acp = agent_command.as_ref().map(|cmd| {
+                    fabro_workflows::backend::acp::AcpCodergenBackend::new(cmd.clone())
+                });
+                Some(Box::new(BackendRouter::new(
+                    Box::new(api),
+                    cli,
+                    acp,
+                    agent_type.clone(),
+                )))
             }
         }
     });
@@ -1869,13 +1879,35 @@ async fn run_from_branch(
     // No fallback config available for branch resume; use empty chain.
     let fallback_chain = Vec::new();
 
-    let registry = fabro_workflows::handler::default_registry(interviewer.clone(), || {
-        if dry_run_mode {
-            None
-        } else {
-            let api = AgentApiBackend::new(model.clone(), provider_enum, fallback_chain.clone());
-            let cli = AgentCliBackend::new(model.clone(), provider_enum);
-            Some(Box::new(BackendRouter::new(Box::new(api), cli)))
+    let agent_config = run_cfg
+        .as_ref()
+        .and_then(|c| c.agent.as_ref())
+        .or_else(|| run_defaults.agent.as_ref());
+    let agent_type = agent_config
+        .and_then(|a| a.agent_type.clone())
+        .unwrap_or_else(|| "api".to_string());
+    let agent_command = agent_config.and_then(|a| a.command.clone());
+
+    let registry = fabro_workflows::handler::default_registry(interviewer.clone(), {
+        let model = model.clone();
+        let agent_type = agent_type.clone();
+        let agent_command = agent_command.clone();
+        move || {
+            if dry_run_mode {
+                None
+            } else {
+                let api = AgentApiBackend::new(model.clone(), provider_enum, fallback_chain.clone());
+                let cli = AgentCliBackend::new(model.clone(), provider_enum);
+                let acp = agent_command.as_ref().map(|cmd| {
+                    fabro_workflows::backend::acp::AcpCodergenBackend::new(cmd.clone())
+                });
+                Some(Box::new(BackendRouter::new(
+                    Box::new(api),
+                    cli,
+                    acp,
+                    agent_type.clone(),
+                )))
+            }
         }
     });
     let mut engine = fabro_workflows::engine::WorkflowRunEngine::with_interviewer(

@@ -2,7 +2,7 @@ use fabro_graphviz::graph::{AttrValue, Graph};
 pub use fabro_graphviz::stylesheet::{parse_stylesheet, Declaration, Rule, Selector, Stylesheet};
 
 /// Recognized stylesheet properties.
-const STYLESHEET_PROPERTIES: &[&str] = &["model", "provider", "reasoning_effort", "backend"];
+const STYLESHEET_PROPERTIES: &[&str] = &["model", "provider", "reasoning_effort", "agent"];
 
 /// Apply a stylesheet to a graph. Rules are applied by specificity order;
 /// higher specificity wins. Explicit node attributes are never overridden.
@@ -213,30 +213,30 @@ mod tests {
     }
 
     #[test]
-    fn apply_backend_property_via_stylesheet() {
-        let ss = parse_stylesheet("* { backend: cli; }").unwrap();
+    fn apply_agent_property_via_stylesheet() {
+        let ss = parse_stylesheet("* { agent: cli; }").unwrap();
         let mut graph = Graph::new("test");
         graph.nodes.insert("a".into(), Node::new("a"));
         apply_stylesheet(&ss, &mut graph);
 
         assert_eq!(
-            graph.nodes["a"].attrs.get("backend"),
+            graph.nodes["a"].attrs.get("agent"),
             Some(&AttrValue::String("cli".into()))
         );
     }
 
     #[test]
-    fn backend_property_not_overridden_by_stylesheet() {
-        let ss = parse_stylesheet("* { backend: cli; }").unwrap();
+    fn agent_property_not_overridden_by_stylesheet() {
+        let ss = parse_stylesheet("* { agent: cli; }").unwrap();
         let mut graph = Graph::new("test");
         let mut node = Node::new("a");
         node.attrs
-            .insert("backend".into(), AttrValue::String("api".into()));
+            .insert("agent".into(), AttrValue::String("api".into()));
         graph.nodes.insert("a".into(), node);
         apply_stylesheet(&ss, &mut graph);
 
         assert_eq!(
-            graph.nodes["a"].attrs.get("backend"),
+            graph.nodes["a"].attrs.get("agent"),
             Some(&AttrValue::String("api".into()))
         );
     }

@@ -7,8 +7,8 @@ use serde::Deserialize;
 use crate::hook::HookDefinition;
 use crate::mcp::McpServerEntry;
 use crate::run::{
-    AcpConfig, AssetsConfig, CheckpointConfig, GitHubConfig, LlmConfig, PullRequestConfig, RunDefaults,
-    SetupConfig,
+    AgentConfig, AssetsConfig, CheckpointConfig, GitHubConfig, LlmConfig, PullRequestConfig,
+    RunDefaults, SetupConfig,
 };
 use crate::sandbox::SandboxConfig;
 
@@ -27,7 +27,7 @@ pub struct ProjectConfig {
     #[serde(alias = "directory")]
     pub work_dir: Option<String>,
     pub llm: Option<LlmConfig>,
-    pub acp: Option<AcpConfig>,
+    pub agent: Option<AgentConfig>,
     pub setup: Option<SetupConfig>,
     pub sandbox: Option<SandboxConfig>,
     pub vars: Option<HashMap<String, String>>,
@@ -48,7 +48,7 @@ impl ProjectConfig {
         RunDefaults {
             work_dir: self.work_dir,
             llm: self.llm,
-            acp: self.acp,
+            agent: self.agent,
             setup: self.setup,
             sandbox: self.sandbox,
             vars: self.vars,
