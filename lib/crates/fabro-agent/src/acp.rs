@@ -103,7 +103,7 @@ impl Client for FabroAcpClient {
             self.sandbox
                 .write_file(&path, &args.content)
                 .await
-                .map_err(|e| agent_client_protocol::Error::internal_error())?;
+                .map_err(|_e| agent_client_protocol::Error::internal_error())?;
             Ok(WriteTextFileResponse::new())
         })
     }
@@ -122,7 +122,7 @@ impl Client for FabroAcpClient {
                 .sandbox
                 .read_file(&path, None, None)
                 .await
-                .map_err(|e| agent_client_protocol::Error::internal_error())?;
+                .map_err(|_e| agent_client_protocol::Error::internal_error())?;
             Ok(ReadTextFileResponse::new(content))
         })
     }
