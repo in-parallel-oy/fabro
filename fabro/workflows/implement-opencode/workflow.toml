@@ -1,0 +1,4 @@
+version = 1
+
+[acp]
+command = "opencode acp"
