@@ -1049,8 +1049,6 @@ pub async fn run_command(
             }));
             Arc::new(env)
         }
-        #[cfg(not(feature = "exedev"))]
-        SandboxProvider::Exe => anyhow::bail!("exe.dev support is not compiled in"),
         SandboxProvider::Ssh => {
             let config = ssh_config
                 .clone()
@@ -1806,8 +1804,6 @@ async fn run_from_branch(
                 }));
                 (Arc::new(env), None)
             }
-            #[cfg(not(feature = "exedev"))]
-            SandboxProvider::Exe => anyhow::bail!("exe.dev support is not compiled in"),
             SandboxProvider::Ssh => {
                 let config = resolve_ssh_config(None, &run_defaults).ok_or_else(|| {
                     anyhow::anyhow!("--sandbox ssh requires [sandbox.ssh] config")
@@ -2165,8 +2161,6 @@ async fn run_preflight(
             }
             Err(e) => Err(format!("exe.dev SSH connection failed: {e}")),
         },
-        #[cfg(not(feature = "exedev"))]
-        SandboxProvider::Exe => Err("exe.dev support is not compiled in".to_string()),
         SandboxProvider::Ssh => match ssh_config {
             Some(config) => {
                 let clone_params = resolve_ssh_clone_params(&original_cwd);
