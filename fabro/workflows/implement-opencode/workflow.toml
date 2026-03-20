@@ -1,5 +1,5 @@
 version = 1
 
-[agent]
+[agents.opencode]
 type = "acp"
 command = "opencode acp"

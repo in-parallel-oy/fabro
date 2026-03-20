@@ -2,7 +2,7 @@ digraph ImplementOpencode {
     graph [
         goal="Implement and simplify using opencode acp",
         model_stylesheet="
-            * { agent: acp; }
+            * { agent: opencode; }
         "
     ]
     rankdir=LR
