@@ -47,9 +47,14 @@ impl Client for FabroAcpClient {
             let tool_name = args
                 .tool_call
                 .fields
-                .title
-                .clone()
-                .unwrap_or_else(|| "unknown_tool".to_string());
+                .kind
+                .map(|k| {
+                    serde_json::to_string(&k)
+                        .unwrap_or_else(|_| "\"unknown\"".to_string())
+                        .trim_matches('"')
+                        .to_string()
+                })
+                .unwrap_or_else(|| "unknown".to_string());
             let tool_input = args
                 .tool_call
                 .fields
@@ -188,22 +193,30 @@ impl Client for FabroAcpClient {
                     }
                     if let Some(status) = update.fields.status {
                         if status == agent_client_protocol::ToolCallStatus::Completed {
+                            let tool_name = update
+                                .fields
+                                .kind
+                                .map(|k| {
+                                    serde_json::to_string(&k)
+                                        .unwrap_or_else(|_| "\"unknown\"".to_string())
+                                        .trim_matches('"')
+                                        .to_string()
+                                })
+                                .unwrap_or_else(|| "unknown".to_string());
+                            let output = update
+                                .fields
+                                .raw_output
+                                .unwrap_or_else(|| serde_json::json!({}));
+
+                            if let Some(hooks) = &self.tool_hooks {
+                                let output_str = serde_json::to_string(&output).unwrap_or_default();
+                                hooks.post_tool_use(&tool_name, &update.tool_call_id.to_string(), &output_str).await;
+                            }
+
                             (self.on_event)(AgentEvent::ToolCallCompleted {
-                                tool_name: update
-                                    .fields
-                                    .kind
-                                    .map(|k| {
-                                        serde_json::to_string(&k)
-                                            .unwrap_or_else(|_| "\"unknown\"".to_string())
-                                            .trim_matches('"')
-                                            .to_string()
-                                    })
-                                    .unwrap_or_else(|| "unknown".to_string()),
+                                tool_name,
                                 tool_call_id: update.tool_call_id.to_string(),
-                                output: update
-                                    .fields
-                                    .raw_output
-                                    .unwrap_or_else(|| serde_json::json!({})),
+                                output,
                                 is_error: false,
                             });
                         }
@@ -240,39 +253,32 @@ impl Client for FabroAcpClient {
 
             let output_buffer = Arc::new(Mutex::new(String::new()));
 
-            let out_buf_clone = output_buffer.clone();
+            let out_buf1 = output_buffer.clone();
             tokio::spawn(async move {
                 use tokio::io::AsyncReadExt;
-                let mut buf_out = [0u8; 1024];
-                let mut buf_err = [0u8; 1024];
-                loop {
-                    tokio::select! {
-                        res = stdout.read(&mut buf_out) => {
-                            match res {
-                                Ok(0) => break,
-                                Ok(n) => {
-                                    if let Ok(s) = std::str::from_utf8(&buf_out[..n]) {
-                                        if let Ok(mut locked) = out_buf_clone.lock() {
-                                            locked.push_str(s);
-                                        }
-                                    }
-                                }
-                                Err(_) => break,
-                            }
-                        }
-                        res = stderr.read(&mut buf_err) => {
-                            match res {
-                                Ok(0) => break,
-                                Ok(n) => {
-                                    if let Ok(s) = std::str::from_utf8(&buf_err[..n]) {
-                                        if let Ok(mut locked) = out_buf_clone.lock() {
-                                            locked.push_str(s);
-                                        }
-                                    }
-                                }
-                                Err(_) => break,
-                            }
-                        }
+                let mut buf = [0u8; 1024];
+                while let Ok(n) = stdout.read(&mut buf).await {
+                    if n == 0 {
+                        break;
+                    }
+                    let s = String::from_utf8_lossy(&buf[..n]);
+                    if let Ok(mut locked) = out_buf1.lock() {
+                        locked.push_str(&s);
+                    }
+                }
+            });
+
+            let out_buf2 = output_buffer.clone();
+            tokio::spawn(async move {
+                use tokio::io::AsyncReadExt;
+                let mut buf = [0u8; 1024];
+                while let Ok(n) = stderr.read(&mut buf).await {
+                    if n == 0 {
+                        break;
+                    }
+                    let s = String::from_utf8_lossy(&buf[..n]);
+                    if let Ok(mut locked) = out_buf2.lock() {
+                        locked.push_str(&s);
                     }
                 }
             });
@@ -314,9 +320,7 @@ impl Client for FabroAcpClient {
                     .output_buffer
                     .lock()
                     .map_err(|_| agent_client_protocol::Error::internal_error())?;
-                let res = out_lock.clone();
-                out_lock.clear();
-                res
+                std::mem::take(&mut *out_lock)
             };
             Ok(TerminalOutputResponse::new(output, false))
         })
@@ -416,14 +420,14 @@ impl Client for FabroAcpClient {
 
 pub enum AcpCommand {
     Initialize(
-        InitializeRequest,
+        Box<InitializeRequest>,
         oneshot::Sender<AcpResult<InitializeResponse>>,
     ),
     NewSession(
-        NewSessionRequest,
+        Box<NewSessionRequest>,
         oneshot::Sender<AcpResult<NewSessionResponse>>,
     ),
-    Prompt(PromptRequest, oneshot::Sender<AcpResult<PromptResponse>>),
+    Prompt(Box<PromptRequest>, oneshot::Sender<AcpResult<PromptResponse>>),
 }
 
 pub struct AcpTransport {
@@ -465,22 +469,22 @@ impl AcpTransport {
 
                 tokio::task::spawn_local(async move {
                     if let Err(e) = io_task.await {
-                        tracing::error!("ACP IO task failed: {}", e);
+                        tracing::error!(error = %e, "ACP IO task failed");
                     }
                 });
 
                 while let Some(cmd) = cmd_rx.recv().await {
                     match cmd {
                         AcpCommand::Initialize(req, reply) => {
-                            let res = connection.initialize(req).await;
+                            let res = connection.initialize(*req).await;
                             let _ = reply.send(res);
                         }
                         AcpCommand::NewSession(req, reply) => {
-                            let res = connection.new_session(req).await;
+                            let res = connection.new_session(*req).await;
                             let _ = reply.send(res);
                         }
                         AcpCommand::Prompt(req, reply) => {
-                            let res = connection.prompt(req).await;
+                            let res = connection.prompt(*req).await;
                             let _ = reply.send(res);
                         }
                     }
@@ -494,7 +498,7 @@ impl AcpTransport {
     pub async fn initialize(&self, req: InitializeRequest) -> anyhow::Result<InitializeResponse> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .send(AcpCommand::Initialize(req, tx))
+            .send(AcpCommand::Initialize(Box::new(req), tx))
             .await?;
         let res = rx.await??;
         Ok(res)
@@ -503,7 +507,7 @@ impl AcpTransport {
     pub async fn new_session(&self, req: NewSessionRequest) -> anyhow::Result<NewSessionResponse> {
         let (tx, rx) = oneshot::channel();
         self.cmd_tx
-            .send(AcpCommand::NewSession(req, tx))
+            .send(AcpCommand::NewSession(Box::new(req), tx))
             .await?;
         let res = rx.await??;
         Ok(res)
@@ -511,7 +515,7 @@ impl AcpTransport {
 
     pub async fn prompt(&self, req: PromptRequest) -> anyhow::Result<PromptResponse> {
         let (tx, rx) = oneshot::channel();
-        self.cmd_tx.send(AcpCommand::Prompt(req, tx)).await?;
+        self.cmd_tx.send(AcpCommand::Prompt(Box::new(req), tx)).await?;
         let res = rx.await??;
         Ok(res)
     }

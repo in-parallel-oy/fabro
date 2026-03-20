@@ -182,8 +182,10 @@ impl crate::ChildProcess for OpensshChildProcess {
     }
 
     async fn kill(&mut self) -> Result<(), String> {
-        // openssh::Child doesn't have a kill method, but dropping it kills the process
-        // if we disconnect the session or just drop the child.
+        // openssh::Child doesn't have a kill method, and dropping it only kills the local ssh process,
+        // not the remote process (it leaves it orphaned).
+        // Since we don't know the remote PID here, we just drop the connection, which is known to be incomplete.
+        // A full fix requires wrapping the remote execution to track PID or capture signals.
         self.child.take();
         Ok(())
     }

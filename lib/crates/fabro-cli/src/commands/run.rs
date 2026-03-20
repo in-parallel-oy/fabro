@@ -1233,7 +1233,7 @@ pub async fn run_command(
     let acp_command = run_cfg
         .as_ref()
         .and_then(|c| c.acp.as_ref())
-        .or_else(|| run_defaults.acp.as_ref())
+        .or(run_defaults.acp.as_ref())
         .map(|acp| acp.command.clone());
 
     let registry = default_registry(interviewer.clone(), {

@@ -717,6 +717,10 @@ mod tests {
                 Ok(downloads.remove(0).content)
             }
         }
+
+        async fn spawn_command(&self, _command: &str) -> Result<Box<dyn crate::ChildProcess>, String> {
+            Err("Not implemented in mock".into())
+        }
     }
 
     /// Extract and decode the inner command from a base64-wrapped SSH command.
@@ -900,6 +904,10 @@ mod tests {
 
         async fn download_file(&self, _path: &str) -> Result<Vec<u8>, String> {
             Ok(Vec::new())
+        }
+
+        async fn spawn_command(&self, _command: &str) -> Result<Box<dyn crate::ChildProcess>, String> {
+            Err("Not implemented in mock".into())
         }
     }
 

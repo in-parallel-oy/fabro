@@ -160,7 +160,7 @@ impl CodergenBackend for AcpCodergenBackend {
         protocol_result?;
 
         // Extract text from response
-        let final_text = response_text.lock().unwrap().clone();
+        let final_text = std::mem::take(&mut *response_text.lock().unwrap());
 
         let _ = tokio::fs::create_dir_all(stage_dir).await;
         let provider_used = serde_json::json!({
@@ -183,9 +183,10 @@ impl CodergenBackend for AcpCodergenBackend {
         let last_file_touched = if !files_touched.is_empty() {
             let quoted_files: Vec<String> = files_touched
                 .iter()
-                .filter_map(|f| shlex::try_quote(f).ok().map(|q| q.into_owned()))
+                .take(100)
+                .map(|f| fabro_sandbox::shell_quote(f))
                 .collect();
-            let cmd = format!("ls -t {} | head -1", quoted_files.join(" "));
+            let cmd = format!("ls -t {} 2>/dev/null | head -1", quoted_files.join(" "));
             if let Ok(result) = sandbox.exec_command(&cmd, 5_000, None, None, None).await {
                 let trimmed = result.stdout.trim().to_string();
                 if result.exit_code == 0 && !trimmed.is_empty() {
