@@ -27,7 +27,8 @@ pub struct ProjectConfig {
     #[serde(alias = "directory")]
     pub work_dir: Option<String>,
     pub llm: Option<LlmConfig>,
-    pub agent: Option<AgentConfig>,
+    #[serde(default)]
+    pub agents: HashMap<String, AgentConfig>,
     pub setup: Option<SetupConfig>,
     pub sandbox: Option<SandboxConfig>,
     pub vars: Option<HashMap<String, String>>,
@@ -48,7 +49,7 @@ impl ProjectConfig {
         RunDefaults {
             work_dir: self.work_dir,
             llm: self.llm,
-            agent: self.agent,
+            agents: self.agents,
             setup: self.setup,
             sandbox: self.sandbox,
             vars: self.vars,

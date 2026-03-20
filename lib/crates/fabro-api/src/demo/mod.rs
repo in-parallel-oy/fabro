@@ -1280,7 +1280,7 @@ mod runs {
                 provider: Some("anthropic".into()),
                 fallbacks: None,
             }),
-            agent: None,
+            agents: std::collections::HashMap::new(),
             setup: Some(fabro_config::run::SetupConfig {
                 commands: vec!["bun install".into(), "bun run typecheck".into()],
                 timeout_ms: Some(120_000),
@@ -1457,7 +1457,7 @@ mod workflows {
                         provider: None,
                         fallbacks: None,
                     }),
-                    agent: None,
+                    agents: std::collections::HashMap::new(),
                     setup: None,
                     sandbox: Some(fabro_config::sandbox::SandboxConfig {
                         provider: Some("daytona".into()),
@@ -1527,7 +1527,7 @@ mod workflows {
                         provider: None,
                         fallbacks: None,
                     }),
-                    agent: None,
+                    agents: std::collections::HashMap::new(),
                     setup: Some(fabro_config::run::SetupConfig {
                         commands: vec!["bun install".into(), "bun run typecheck".into()],
                         timeout_ms: Some(120_000),
@@ -1615,7 +1615,7 @@ mod workflows {
                         provider: None,
                         fallbacks: None,
                     }),
-                    agent: None,
+                    agents: std::collections::HashMap::new(),
                     setup: None,
                     sandbox: Some(fabro_config::sandbox::SandboxConfig {
                         provider: Some("daytona".into()),
@@ -1691,7 +1691,7 @@ mod workflows {
                         provider: None,
                         fallbacks: None,
                     }),
-                    agent: None,
+                    agents: std::collections::HashMap::new(),
                     setup: None,
                     sandbox: Some(fabro_config::sandbox::SandboxConfig {
                         provider: Some("daytona".into()),
@@ -3267,7 +3267,7 @@ mod settings {
                     provider: Some("anthropic".into()),
                     fallbacks: None,
                 }),
-                agent: None,
+                agents: std::collections::HashMap::new(),
                 setup: None,
                 sandbox: Some(fabro_config::sandbox::SandboxConfig {
                     provider: Some("daytona".into()),

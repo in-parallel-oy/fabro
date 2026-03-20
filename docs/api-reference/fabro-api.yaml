@@ -4013,8 +4013,11 @@ components:
           description: Working directory for the run.
         llm:
           $ref: "#/components/schemas/LlmConfiguration"
-        agent:
-          $ref: "#/components/schemas/AgentConfiguration"
+        agents:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/AgentConfiguration"
+          description: Map of agent configurations.
         setup:
           $ref: "#/components/schemas/SetupConfiguration"
         sandbox:
@@ -4295,8 +4298,11 @@ components:
           description: Default working directory.
         llm:
           $ref: "#/components/schemas/LlmConfiguration"
-        agent:
-          $ref: "#/components/schemas/AgentConfiguration"
+        agents:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/AgentConfiguration"
+          description: Map of agent configurations.
         setup:
           $ref: "#/components/schemas/SetupConfiguration"
         sandbox:

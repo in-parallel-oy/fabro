@@ -11,10 +11,12 @@ use fabro_agent::{DockerSandbox, DockerSandboxConfig, LocalSandbox, Sandbox};
 use fabro_config::run::{RunDefaults, WorkflowRunConfig};
 use fabro_config::{project as project_config, run as run_config, sandbox as sandbox_config};
 use fabro_interview::{AutoApproveInterviewer, ConsoleInterviewer, Interviewer};
+use fabro_llm::catalog::FallbackTarget;
 use fabro_llm::provider::Provider;
 use fabro_util::terminal::Styles;
 use fabro_validate::Severity;
 use fabro_workflows::backend::{AgentApiBackend, AgentCliBackend, BackendRouter};
+use fabro_workflows::handler::agent::CodergenBackend;
 use fabro_workflows::checkpoint::Checkpoint;
 use fabro_workflows::cost::{compute_stage_cost, format_cost};
 use fabro_workflows::devcontainer_bridge;
@@ -1184,21 +1186,24 @@ pub async fn run_command(
             .collect()
     };
 
-    let agent_config = run_cfg
+    let mut configured_agents = run_defaults.agents.clone();
+    if let Some(cfg) = run_cfg.as_ref() {
+        configured_agents.extend(cfg.agents.clone());
+    }
+
+    let agent_type = run_cfg
         .as_ref()
-        .and_then(|c| c.agent.as_ref())
-        .or_else(|| run_defaults.agent.as_ref());
-    let agent_type = agent_config
-        .and_then(|a| a.agent_type.clone())
+        .and_then(|c| c.vars.as_ref())
+        .and_then(|v| v.get("agent"))
+        .cloned()
         .unwrap_or_else(|| "api".to_string());
-    let agent_command = agent_config.and_then(|a| a.command.clone());
 
     let registry = default_registry(interviewer.clone(), {
         let sandbox_env = sandbox_env.clone();
         let model = model.clone();
         let mcp_servers = mcp_servers.clone();
         let agent_type = agent_type.clone();
-        let agent_command = agent_command.clone();
+        let configured_agents = configured_agents.clone();
         move || {
             if dry_run_mode {
                 None
@@ -1209,13 +1214,24 @@ pub async fn run_command(
                         .with_mcp_servers(mcp_servers.clone());
                 let cli = AgentCliBackend::new(model.clone(), provider_enum)
                     .with_env(sandbox_env.clone());
-                let acp = agent_command.as_ref().map(|cmd| {
-                    fabro_workflows::backend::acp::AcpCodergenBackend::new(cmd.clone())
-                });
+
+                let mut custom_backends: HashMap<String, Box<dyn CodergenBackend>> = HashMap::new();
+                for (name, config) in &configured_agents {
+                    let t = config.agent_type.as_deref().unwrap_or("api");
+                    if t == "acp" {
+                        if let Some(cmd) = &config.command {
+                            custom_backends.insert(
+                                name.clone(),
+                                Box::new(fabro_workflows::backend::acp::AcpCodergenBackend::new(cmd.clone()))
+                            );
+                        }
+                    }
+                }
+
                 Some(Box::new(BackendRouter::new(
                     Box::new(api),
                     cli,
-                    acp,
+                    custom_backends,
                     agent_type.clone(),
                 )))
             }
@@ -1876,35 +1892,46 @@ async fn run_from_branch(
         .map_err(|e| anyhow::anyhow!("{e}"))?
         .unwrap_or(fabro_llm::provider::Provider::Anthropic);
 
-    // No fallback config available for branch resume; use empty chain.
-    let fallback_chain = Vec::new();
-
-    let agent_config = run_cfg
+    let configured_agents = run_defaults.agents.clone();
+    let agent_type = run_defaults
+        .vars
         .as_ref()
-        .and_then(|c| c.agent.as_ref())
-        .or_else(|| run_defaults.agent.as_ref());
-    let agent_type = agent_config
-        .and_then(|a| a.agent_type.clone())
+        .and_then(|v| v.get("agent"))
+        .cloned()
         .unwrap_or_else(|| "api".to_string());
-    let agent_command = agent_config.and_then(|a| a.command.clone());
+
+    // No fallback config available for branch resume; use empty chain.
+    let fallback_chain: Vec<FallbackTarget> = Vec::new();
 
     let registry = fabro_workflows::handler::default_registry(interviewer.clone(), {
         let model = model.clone();
         let agent_type = agent_type.clone();
-        let agent_command = agent_command.clone();
+        let configured_agents = configured_agents.clone();
+        let fallback_chain = fallback_chain.clone();
         move || {
             if dry_run_mode {
                 None
             } else {
                 let api = AgentApiBackend::new(model.clone(), provider_enum, fallback_chain.clone());
                 let cli = AgentCliBackend::new(model.clone(), provider_enum);
-                let acp = agent_command.as_ref().map(|cmd| {
-                    fabro_workflows::backend::acp::AcpCodergenBackend::new(cmd.clone())
-                });
+                
+                let mut custom_backends: HashMap<String, Box<dyn CodergenBackend>> = HashMap::new();
+                for (name, config) in &configured_agents {
+                    let t = config.agent_type.as_deref().unwrap_or("api");
+                    if t == "acp" {
+                        if let Some(cmd) = &config.command {
+                            custom_backends.insert(
+                                name.clone(),
+                                Box::new(fabro_workflows::backend::acp::AcpCodergenBackend::new(cmd.clone()))
+                            );
+                        }
+                    }
+                }
+
                 Some(Box::new(BackendRouter::new(
                     Box::new(api),
                     cli,
-                    acp,
+                    custom_backends,
                     agent_type.clone(),
                 )))
             }
@@ -2770,7 +2797,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
-            acp: None,
+            agents: HashMap::new(),
         };
         let (model, provider) = resolve_model_provider(
             Some("gpt-5.2"),
@@ -2816,7 +2843,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
-            acp: None,
+            agents: HashMap::new(),
         };
         let (model, provider) = resolve_model_provider(None, None, Some(&cfg), &defaults, &graph);
         assert_eq!(model, "toml-model");
@@ -2897,7 +2924,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
-            acp: None,
+            agents: HashMap::new(),
         };
         let (model, provider) = resolve_model_provider(None, None, Some(&cfg), &defaults, &graph);
         assert_eq!(model, "toml-model");
@@ -2925,7 +2952,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
-            acp: None,
+            agents: HashMap::new(),
         };
         let defaults = RunDefaults::default();
         assert!(resolve_preserve_sandbox(true, Some(&cfg), &defaults));
@@ -2952,7 +2979,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
-            acp: None,
+            agents: HashMap::new(),
         };
         let defaults = RunDefaults {
             sandbox: Some(sandbox_config::SandboxConfig {
@@ -3018,7 +3045,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
-            acp: None,
+            agents: HashMap::new(),
         };
         let defaults = RunDefaults::default();
         assert_eq!(
@@ -3072,7 +3099,7 @@ mod tests {
             assets: None,
             mcp_servers: Default::default(),
             github: None,
-            acp: None,
+            agents: HashMap::new(),
         };
         let defaults = RunDefaults {
             sandbox: Some(sandbox_config::SandboxConfig {

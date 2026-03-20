@@ -724,7 +724,7 @@ impl CodergenBackend for AgentCliBackend {
 pub struct BackendRouter {
     api_backend: Box<dyn CodergenBackend>,
     cli_backend: AgentCliBackend,
-    acp_backend: Option<Box<dyn CodergenBackend>>,
+    custom_backends: std::collections::HashMap<String, Box<dyn CodergenBackend>>,
     default_agent_type: String,
 }
 
@@ -733,13 +733,13 @@ impl BackendRouter {
     pub fn new(
         api_backend: Box<dyn CodergenBackend>,
         cli_backend: AgentCliBackend,
-        acp_backend: Option<Box<dyn CodergenBackend>>,
+        custom_backends: std::collections::HashMap<String, Box<dyn CodergenBackend>>,
         default_agent_type: String,
     ) -> Self {
         Self {
             api_backend,
             cli_backend,
-            acp_backend,
+            custom_backends,
             default_agent_type,
         }
     }
@@ -783,24 +783,24 @@ impl CodergenBackend for BackendRouter {
                     )
                     .await
             }
-            "acp" => {
-                if let Some(acp) = &self.acp_backend {
-                    acp.run(
-                        node, prompt, context, thread_id, emitter, stage_dir, sandbox, tool_hooks,
-                    )
-                    .await
-                } else {
-                    Err(FabroError::handler(
-                        "ACP agent requested but no command configured",
-                    ))
-                }
-            }
-            _ => {
+            "api" => {
                 self.api_backend
                     .run(
                         node, prompt, context, thread_id, emitter, stage_dir, sandbox, tool_hooks,
                     )
                     .await
+            }
+            custom_name => {
+                if let Some(backend) = self.custom_backends.get(custom_name) {
+                    backend.run(
+                        node, prompt, context, thread_id, emitter, stage_dir, sandbox, tool_hooks,
+                    )
+                    .await
+                } else {
+                    Err(FabroError::handler(format!(
+                        "Unknown or unconfigured agent: {custom_name}"
+                    )))
+                }
             }
         }
     }
@@ -814,20 +814,20 @@ impl CodergenBackend for BackendRouter {
     ) -> Result<CodergenResult, FabroError> {
         let agent_type = self.resolve_agent_type(node);
         match agent_type.as_str() {
-            "acp" => {
-                if let Some(acp) = &self.acp_backend {
-                    acp.one_shot(node, prompt, system_prompt, stage_dir).await
-                } else {
-                    Err(FabroError::handler(
-                        "ACP agent requested but no command configured",
-                    ))
-                }
-            }
-            _ => {
+            "api" | "cli" => {
                 // CLI backend doesn't support one_shot, route to API
                 self.api_backend
                     .one_shot(node, prompt, system_prompt, stage_dir)
                     .await
+            }
+            custom_name => {
+                if let Some(backend) = self.custom_backends.get(custom_name) {
+                    backend.one_shot(node, prompt, system_prompt, stage_dir).await
+                } else {
+                    Err(FabroError::handler(format!(
+                        "Unknown or unconfigured agent: {custom_name}"
+                    )))
+                }
             }
         }
     }
@@ -1195,7 +1195,7 @@ mod tests {
             .insert("agent".to_string(), AttrValue::String("cli".to_string()));
 
         let cli_backend = AgentCliBackend::new("model".into(), Provider::Anthropic);
-        let router = BackendRouter::new(Box::new(StubBackend), cli_backend, None, "api".to_string());
+        let router = BackendRouter::new(Box::new(StubBackend), cli_backend, std::collections::HashMap::new(), "api".to_string());
         assert_eq!(router.resolve_agent_type(&node), "cli");
     }
 
@@ -1204,7 +1204,7 @@ mod tests {
         let node = Node::new("test");
 
         let cli_backend = AgentCliBackend::new("model".into(), Provider::Anthropic);
-        let router = BackendRouter::new(Box::new(StubBackend), cli_backend, None, "api".to_string());
+        let router = BackendRouter::new(Box::new(StubBackend), cli_backend, std::collections::HashMap::new(), "api".to_string());
         assert_eq!(router.resolve_agent_type(&node), "api");
     }
 
@@ -1217,7 +1217,7 @@ mod tests {
         );
 
         let cli_backend = AgentCliBackend::new("model".into(), Provider::Anthropic);
-        let router = BackendRouter::new(Box::new(StubBackend), cli_backend, None, "api".to_string());
+        let router = BackendRouter::new(Box::new(StubBackend), cli_backend, std::collections::HashMap::new(), "api".to_string());
         assert_eq!(router.resolve_agent_type(&node), "api");
     }
 

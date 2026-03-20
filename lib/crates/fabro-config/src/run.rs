@@ -69,7 +69,8 @@ pub struct WorkflowRunConfig {
     #[serde(alias = "directory")]
     pub work_dir: Option<String>,
     pub llm: Option<LlmConfig>,
-    pub agent: Option<AgentConfig>,
+    #[serde(default)]
+    pub agents: HashMap<String, AgentConfig>,
     pub setup: Option<SetupConfig>,
     pub sandbox: Option<SandboxConfig>,
     pub vars: Option<HashMap<String, String>>,
@@ -113,7 +114,8 @@ pub struct RunDefaults {
     #[serde(alias = "directory")]
     pub work_dir: Option<String>,
     pub llm: Option<LlmConfig>,
-    pub agent: Option<AgentConfig>,
+    #[serde(default)]
+    pub agents: HashMap<String, AgentConfig>,
     pub setup: Option<SetupConfig>,
     pub sandbox: Option<SandboxConfig>,
     pub vars: Option<HashMap<String, String>>,
@@ -140,7 +142,7 @@ impl WorkflowRunConfig {
         let task_overlay = RunDefaults {
             work_dir: self.work_dir.take(),
             llm: self.llm.take(),
-            agent: self.agent.take(),
+            agents: std::mem::take(&mut self.agents),
             setup: self.setup.take(),
             sandbox: self.sandbox.take(),
             vars: self.vars.take(),
@@ -156,7 +158,7 @@ impl WorkflowRunConfig {
 
         self.work_dir = merged.work_dir;
         self.llm = merged.llm;
-        self.agent = merged.agent;
+        self.agents = merged.agents;
         self.setup = merged.setup;
         self.sandbox = merged.sandbox;
         self.vars = merged.vars;
@@ -194,17 +196,10 @@ impl RunDefaults {
             _ => {}
         }
 
-        match (&mut self.agent, overlay.agent) {
-            (Some(base), Some(over)) => {
-                if over.agent_type.is_some() {
-                    base.agent_type = over.agent_type;
-                }
-                if over.command.is_some() {
-                    base.command = over.command;
-                }
-            }
-            (None, Some(over)) => self.agent = Some(over),
-            _ => {}
+        if !overlay.agents.is_empty() {
+            let mut merged = std::mem::take(&mut self.agents);
+            merged.extend(overlay.agents);
+            self.agents = merged;
         }
 
         match (&mut self.setup, overlay.setup) {

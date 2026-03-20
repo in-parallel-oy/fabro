@@ -10023,7 +10023,7 @@ async fn backend_router_delegates_to_cli_for_cli_node() {
     let api_backend = Box::new(MockCodergenBackend); // would return "Response for ..."
     let cli = AgentCliBackend::new("claude-opus-4-6".into(), Provider::Anthropic)
         .with_poll_interval(Duration::from_millis(10));
-    let router = BackendRouter::new(api_backend, cli, None, "api".to_string());
+    let router = BackendRouter::new(api_backend, cli, std::collections::HashMap::new(), "api".to_string());
 
     let mut node = Node::new("cli_step");
     node.attrs
@@ -10069,7 +10069,7 @@ async fn backend_router_delegates_to_api_for_normal_node() {
     let api_backend = Box::new(MockCodergenBackend);
     let cli = AgentCliBackend::new("claude-opus-4-6".into(), Provider::Anthropic)
         .with_poll_interval(Duration::from_millis(10));
-    let router = BackendRouter::new(api_backend, cli, None, "api".to_string());
+    let router = BackendRouter::new(api_backend, cli, std::collections::HashMap::new(), "api".to_string());
 
     let mut node = Node::new("api_step");
     node.attrs.insert(
@@ -10114,7 +10114,7 @@ async fn backend_router_delegates_to_cli_for_backend_attr() {
     let api_backend = Box::new(MockCodergenBackend);
     let cli = AgentCliBackend::new("gpt-5.3-codex".into(), Provider::OpenAi)
         .with_poll_interval(Duration::from_millis(10));
-    let router = BackendRouter::new(api_backend, cli, None, "api".to_string());
+    let router = BackendRouter::new(api_backend, cli, std::collections::HashMap::new(), "api".to_string());
 
     let mut node = Node::new("codex_step");
     node.attrs
@@ -10209,7 +10209,7 @@ async fn full_pipeline_with_cli_backend_node() {
     let api = MockCodergenBackend;
     let cli = AgentCliBackend::new("claude-opus-4-6".into(), Provider::Anthropic)
         .with_poll_interval(Duration::from_millis(10));
-    let router = BackendRouter::new(Box::new(api), cli, None, "api".to_string());
+    let router = BackendRouter::new(Box::new(api), cli, std::collections::HashMap::new(), "api".to_string());
     let codergen_handler = AgentHandler::new(Some(Box::new(router)));
 
     let mut registry = HandlerRegistry::new(Box::new(codergen_handler));
@@ -10222,7 +10222,7 @@ async fn full_pipeline_with_cli_backend_node() {
             let api2 = MockCodergenBackend;
             let cli2 = AgentCliBackend::new("claude-opus-4-6".into(), Provider::Anthropic)
                 .with_poll_interval(Duration::from_millis(10));
-            BackendRouter::new(Box::new(api2), cli2, None, "api".to_string())
+            BackendRouter::new(Box::new(api2), cli2, std::collections::HashMap::new(), "api".to_string())
         })))),
     );
 
@@ -10349,7 +10349,7 @@ async fn stylesheet_backend_property_routes_to_cli() {
     let api = MockCodergenBackend;
     let cli = AgentCliBackend::new("claude-opus-4-6".into(), Provider::Anthropic)
         .with_poll_interval(Duration::from_millis(10));
-    let router = BackendRouter::new(Box::new(api), cli, None, "api".to_string());
+    let router = BackendRouter::new(Box::new(api), cli, std::collections::HashMap::new(), "api".to_string());
 
     let mut registry = HandlerRegistry::new(Box::new(AgentHandler::new(Some(Box::new(router)))));
     registry.register("start", Box::new(StartHandler));
@@ -10357,7 +10357,7 @@ async fn stylesheet_backend_property_routes_to_cli() {
     let api2 = MockCodergenBackend;
     let cli2 = AgentCliBackend::new("claude-opus-4-6".into(), Provider::Anthropic)
         .with_poll_interval(Duration::from_millis(10));
-    let router2 = BackendRouter::new(Box::new(api2), cli2, None, "api".to_string());
+    let router2 = BackendRouter::new(Box::new(api2), cli2, std::collections::HashMap::new(), "api".to_string());
     registry.register(
         "agent",
         Box::new(AgentHandler::new(Some(Box::new(router2)))),
