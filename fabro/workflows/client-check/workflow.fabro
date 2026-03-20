@@ -1,0 +1,16 @@
+digraph ClientCheck {
+    graph [
+      goal="Ask 'what client are you' and then quit",
+      model_stylesheet="
+          * { backend: acp; }
+      "
+    ]
+    rankdir=LR
+
+    start [shape=Mdiamond, label="Start"]
+    exit  [shape=Msquare, label="Exit"]
+
+    ask [label="Ask Client", prompt="what client are you, and write the response to a file called 'client-response.txt'"]
+
+    start -> ask -> exit
+}
