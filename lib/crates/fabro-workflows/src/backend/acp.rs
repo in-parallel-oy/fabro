@@ -77,7 +77,7 @@ impl CodergenBackend for AcpCodergenBackend {
         });
 
         let files_touched_set = Arc::new(Mutex::new(HashSet::new()));
-        let mut transport = AcpTransport::new(child, tool_hooks, on_event, Arc::clone(&files_touched_set));
+        let mut transport = AcpTransport::new(child, Arc::clone(sandbox), tool_hooks, on_event, Arc::clone(&files_touched_set));
 
         let protocol_result = async {
             // 1. Initialize
