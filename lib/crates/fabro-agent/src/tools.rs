@@ -6,6 +6,7 @@ use fabro_llm::client::Client;
 use fabro_llm::types::{Message, Request, ToolDefinition};
 use fabro_model::ModelHandle;
 use fabro_static::EnvVars;
+use futures::future::join_all;
 
 use crate::config::SessionOptions;
 use crate::sandbox::GrepOptions;
@@ -393,16 +394,25 @@ pub(crate) fn make_read_many_files_tool() -> RegisteredTool {
         },
         executor:   Arc::new(|args, ctx| {
             Box::pin(async move {
-                let paths = args["paths"]
+                let paths: Vec<&str> = args["paths"]
                     .as_array()
-                    .ok_or_else(|| "paths must be an array".to_string())?;
+                    .ok_or_else(|| "paths must be an array".to_string())?
+                    .iter()
+                    .map(|p| {
+                        p.as_str()
+                            .ok_or_else(|| "each path must be a string".to_string())
+                    })
+                    .collect::<Result<_, _>>()?;
+
+                let reads = paths.iter().map(|path| {
+                    let env = Arc::clone(&ctx.env);
+                    async move { (*path, env.read_file(path, None, None).await) }
+                });
+                let results = join_all(reads).await;
 
                 let mut output = String::new();
-                for path_val in paths {
-                    let path = path_val
-                        .as_str()
-                        .ok_or_else(|| "each path must be a string".to_string())?;
-                    match ctx.env.read_file(path, None, None).await {
+                for (path, result) in results {
+                    match result {
                         Ok(content) => {
                             ctx.env.mark_agent_read(path);
                             let _ = write!(output, "=== {path} ===\n{content}\n\n");

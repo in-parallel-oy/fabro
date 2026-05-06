@@ -111,23 +111,21 @@ impl GitHubTokenSource {
             SourceState::StaticIat(token) => token.valid_token().map(str::to_owned),
             SourceState::Mintable { minter, cache } => {
                 let mut cache = cache.lock().await;
-                let should_refresh = cache
+                let cached_is_fresh = cache
                     .as_ref()
-                    .is_none_or(|token| token.near_expiry(REFRESH_THRESHOLD));
+                    .is_some_and(|token| !token.near_expiry(REFRESH_THRESHOLD));
 
-                if should_refresh {
+                if !cached_is_fresh {
                     match minter.mint().await {
-                        Ok(token) => {
-                            *cache = Some(token);
-                        }
+                        Ok(token) => *cache = Some(token),
                         Err(err) => {
                             if let Some(token) = cache.as_ref() {
-                                if token.valid_token().is_ok() {
+                                if let Ok(value) = token.valid_token() {
                                     warn!(
                                         error = %err,
                                         "GitHub installation token refresh failed; using cached token"
                                     );
-                                    return token.valid_token().map(str::to_owned);
+                                    return Ok(value.to_owned());
                                 }
                             }
                             return Err(err)
@@ -136,11 +134,10 @@ impl GitHubTokenSource {
                     }
                 }
 
-                cache
+                let token = cache
                     .as_ref()
-                    .expect("mintable token source should have a token after refresh")
-                    .valid_token()
-                    .map(str::to_owned)
+                    .ok_or_else(|| anyhow::anyhow!("mintable token source has no cached token"))?;
+                token.valid_token().map(str::to_owned)
             }
         }
     }

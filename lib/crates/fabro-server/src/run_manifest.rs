@@ -1234,33 +1234,19 @@ async fn mint_github_token(
     origin_url: &str,
     permissions: &HashMap<String, String>,
 ) -> Result<String> {
-    match creds {
-        fabro_github::GitHubCredentials::Pat(token) => return Ok(token.clone()),
-        fabro_github::GitHubCredentials::Installation(token) => {
-            return token.valid_token().map(str::to_owned);
-        }
-        fabro_github::GitHubCredentials::App(_) => {}
-    }
-
     let https_url = fabro_github::ssh_url_to_https(origin_url);
     let (owner, repo) = fabro_github::parse_github_owner_repo(&https_url)?;
-    let fabro_github::GitHubCredentials::App(creds) = creds else {
-        unreachable!("token credentials return early");
-    };
-    let jwt = fabro_github::sign_app_jwt(&creds.app_id, &creds.private_key_pem)?;
     let client = fabro_http::http_client()?;
     let perms_json = serde_json::to_value(permissions)?;
-    let install_url = creds.installation_url(&owner);
-    fabro_github::create_installation_access_token_with_permissions_and_install_url(
-        &client,
-        &jwt,
-        &owner,
-        &repo,
-        &fabro_github::github_api_base_url(),
-        perms_json,
-        install_url.as_deref(),
-    )
-    .await
+    creds
+        .resolve_bearer_token(
+            &client,
+            &owner,
+            &repo,
+            &fabro_github::github_api_base_url(),
+            perms_json,
+        )
+        .await
 }
 
 fn preflight_response(
