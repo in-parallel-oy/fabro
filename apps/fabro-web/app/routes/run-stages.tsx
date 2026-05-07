@@ -44,6 +44,29 @@ const EVENT_KIND_LABEL: Record<EventKind, string> = {
   command: "Command",
 };
 
+const DEBUG_CATEGORY_TONE: Record<string, string> = {
+  agent: "bg-teal-500/15 text-teal-500",
+  command: "bg-mint/15 text-mint",
+  interview: "bg-coral/15 text-coral",
+  run: "bg-overlay-strong text-fg-2",
+  stage: "bg-amber/15 text-amber",
+  tool: "bg-mint/15 text-mint",
+};
+
+function debugCategory(eventName: string): string {
+  const dot = eventName.indexOf(".");
+  return dot < 0 ? eventName : eventName.slice(0, dot);
+}
+
+function debugCategoryLabel(category: string): string {
+  if (!category) return "Other";
+  return category.charAt(0).toUpperCase() + category.slice(1);
+}
+
+function debugCategoryTone(category: string): string {
+  return DEBUG_CATEGORY_TONE[category] ?? "bg-overlay text-fg-muted";
+}
+
 const EVENTS_TABS = ["transcript", "debug"] as const;
 type EventsTab = (typeof EVENTS_TABS)[number];
 
@@ -384,6 +407,32 @@ function EventRow({
   );
 }
 
+function DebugRow({
+  event,
+  runStart,
+}: {
+  event: EventEnvelope;
+  runStart: string | undefined;
+}) {
+  const eventName = event.event ?? "";
+  const category = debugCategory(eventName);
+  return (
+    <div className="grid w-full grid-cols-[5rem_1fr_auto] items-center gap-4 px-5 py-1.5 text-left">
+      <span
+        className={`inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${debugCategoryTone(category)}`}
+      >
+        {debugCategoryLabel(category)}
+      </span>
+      <span className="min-w-0 truncate font-mono text-xs text-fg-2">
+        {eventName}
+      </span>
+      <span className="font-mono text-xs tabular-nums text-fg-muted">
+        {formatElapsed(event.ts, runStart)}
+      </span>
+    </div>
+  );
+}
+
 function DetailField({
   label,
   children,
@@ -610,23 +659,31 @@ function EventsTabToggle({
   );
 }
 
-function KindFilter({
+function MultiSelectFilter<T extends string>({
   selected,
+  options,
+  labelOf,
   onChange,
+  emptyMeansAll = false,
 }: {
-  selected: EventKind[];
-  onChange: (kinds: EventKind[]) => void;
+  selected: T[];
+  options: readonly T[];
+  labelOf: (item: T) => string;
+  onChange: (next: T[]) => void;
+  emptyMeansAll?: boolean;
 }) {
+  const allSelected = selected.length === options.length;
   const summary = useMemo(() => {
-    if (selected.length === EVENT_KINDS.length) return "All types";
+    if (allSelected || (emptyMeansAll && selected.length === 0)) return "All types";
     if (selected.length === 0) return "No types";
     if (selected.length <= 2) {
-      return EVENT_KINDS.filter((k) => selected.includes(k))
-        .map((k) => EVENT_KIND_LABEL[k])
+      return options
+        .filter((o) => selected.includes(o))
+        .map(labelOf)
         .join(", ");
     }
     return `${selected.length} types`;
-  }, [selected]);
+  }, [allSelected, emptyMeansAll, selected, options, labelOf]);
 
   return (
     <Listbox value={selected} onChange={onChange} multiple>
@@ -640,10 +697,10 @@ function KindFilter({
         anchor={{ to: "bottom start", gap: 4 }}
         className="z-20 w-44 rounded-md bg-panel py-1 outline-1 -outline-offset-1 outline-line-strong transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
       >
-        {EVENT_KINDS.map((kind) => (
+        {options.map((option) => (
           <ListboxOption
-            key={kind}
-            value={kind}
+            key={option}
+            value={option}
             className="group flex cursor-pointer items-center gap-2.5 px-3 py-1.5 text-xs text-fg-3 data-focus:bg-overlay data-focus:text-fg data-focus:outline-hidden"
           >
             <span className="flex size-3.5 items-center justify-center rounded-sm border border-line-strong bg-panel-alt group-data-selected:border-teal-500 group-data-selected:bg-teal-500">
@@ -652,7 +709,7 @@ function KindFilter({
                 aria-hidden="true"
               />
             </span>
-            <span>{EVENT_KIND_LABEL[kind]}</span>
+            <span>{labelOf(option)}</span>
           </ListboxOption>
         ))}
       </ListboxOptions>
@@ -693,6 +750,9 @@ function EventsToolbar({
   onTabChange,
   selectedKinds,
   onKindsChange,
+  selectedDebugCategories,
+  onDebugCategoriesChange,
+  availableDebugCategories,
   search,
   onSearchChange,
   filteredCount,
@@ -702,41 +762,60 @@ function EventsToolbar({
   onTabChange: (tab: EventsTab) => void;
   selectedKinds: EventKind[];
   onKindsChange: (kinds: EventKind[]) => void;
+  selectedDebugCategories: string[];
+  onDebugCategoriesChange: (categories: string[]) => void;
+  availableDebugCategories: readonly string[];
   search: string;
   onSearchChange: (value: string) => void;
   filteredCount: number;
   totalCount: number;
 }) {
-  const allKindsSelected = selectedKinds.length === EVENT_KINDS.length;
-  const isFiltering = !allKindsSelected || search.length > 0;
-  const showTranscriptControls = tab === "transcript";
+  const transcriptAllSelected = selectedKinds.length === EVENT_KINDS.length;
+  const debugAllSelected =
+    selectedDebugCategories.length === 0 ||
+    selectedDebugCategories.length === availableDebugCategories.length;
+  const isFiltering = tab === "transcript"
+    ? !transcriptAllSelected || search.length > 0
+    : !debugAllSelected || search.length > 0;
 
   function clearFilters() {
-    onKindsChange([...EVENT_KINDS]);
+    if (tab === "transcript") onKindsChange([...EVENT_KINDS]);
+    else onDebugCategoriesChange([]);
     onSearchChange("");
   }
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pb-3">
       <EventsTabToggle tab={tab} onTabChange={onTabChange} />
-      {showTranscriptControls ? (
-        <div className="flex flex-1 flex-wrap items-center gap-2">
-          <KindFilter selected={selectedKinds} onChange={onKindsChange} />
-          <SearchInput value={search} onChange={onSearchChange} />
-          {isFiltering && (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="rounded px-2 py-1 text-xs text-fg-muted transition-colors hover:bg-overlay hover:text-fg-2 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal-500"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="flex-1" />
-      )}
-      {showTranscriptControls && isFiltering && totalCount > 0 && (
+      <div className="flex flex-1 flex-wrap items-center gap-2">
+        {tab === "transcript" ? (
+          <MultiSelectFilter<EventKind>
+            selected={selectedKinds}
+            options={EVENT_KINDS}
+            labelOf={(k) => EVENT_KIND_LABEL[k]}
+            onChange={onKindsChange}
+          />
+        ) : (
+          <MultiSelectFilter<string>
+            selected={selectedDebugCategories}
+            options={availableDebugCategories}
+            labelOf={debugCategoryLabel}
+            onChange={onDebugCategoriesChange}
+            emptyMeansAll
+          />
+        )}
+        <SearchInput value={search} onChange={onSearchChange} />
+        {isFiltering && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="rounded px-2 py-1 text-xs text-fg-muted transition-colors hover:bg-overlay hover:text-fg-2 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal-500"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      {isFiltering && totalCount > 0 && (
         <span className="text-xs tabular-nums text-fg-muted">
           {filteredCount.toLocaleString()} of {totalCount.toLocaleString()} events
         </span>
@@ -775,6 +854,7 @@ export default function RunStages() {
   const [selectedKinds, setSelectedKinds] = useState<EventKind[]>([
     ...EVENT_KINDS,
   ]);
+  const [selectedDebugCategories, setSelectedDebugCategories] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const filteredTurns = useMemo<{ turn: TurnType; index: number }[]>(() => {
     const kindSet = new Set(selectedKinds);
@@ -787,6 +867,34 @@ export default function RunStages() {
     });
     return out;
   }, [turns, selectedKinds, search]);
+
+  const debugEvents = useMemo<EventEnvelope[]>(() => {
+    if (!selectedStageId) return [];
+    return (stageEventsQuery.data ?? []).filter(
+      (e) => activityEventStageId(e) === selectedStageId,
+    );
+  }, [stageEventsQuery.data, selectedStageId]);
+  const availableDebugCategories = useMemo<string[]>(() => {
+    const set = new Set<string>();
+    for (const event of debugEvents) {
+      if (event.event) set.add(debugCategory(event.event));
+    }
+    return Array.from(set).sort();
+  }, [debugEvents]);
+  const filteredDebugEvents = useMemo<EventEnvelope[]>(() => {
+    const useCategoryFilter = selectedDebugCategories.length > 0;
+    const cats = new Set(selectedDebugCategories);
+    const needle = search.toLowerCase();
+    return debugEvents.filter((event) => {
+      const name = event.event ?? "";
+      if (useCategoryFilter && !cats.has(debugCategory(name))) return false;
+      if (needle) {
+        const blob = `${name} ${JSON.stringify(event.properties ?? {})}`.toLowerCase();
+        if (!blob.includes(needle)) return false;
+      }
+      return true;
+    });
+  }, [debugEvents, selectedDebugCategories, search]);
 
   if (!id || !stages.length) {
     return (
@@ -822,10 +930,13 @@ export default function RunStages() {
               onTabChange={setTab}
               selectedKinds={selectedKinds}
               onKindsChange={setSelectedKinds}
+              selectedDebugCategories={selectedDebugCategories}
+              onDebugCategoriesChange={setSelectedDebugCategories}
+              availableDebugCategories={availableDebugCategories}
               search={search}
               onSearchChange={setSearch}
-              filteredCount={filteredTurns.length}
-              totalCount={turns.length}
+              filteredCount={tab === "transcript" ? filteredTurns.length : filteredDebugEvents.length}
+              totalCount={tab === "transcript" ? turns.length : debugEvents.length}
             />
           </div>
         </div>
@@ -846,7 +957,19 @@ export default function RunStages() {
                 />
               ))
             )
-          ) : null}
+          ) : debugEvents.length > 0 && filteredDebugEvents.length === 0 ? (
+            <div className="px-2 py-6 text-sm text-fg-muted">
+              No events match these filters.
+            </div>
+          ) : (
+            filteredDebugEvents.map((event) => (
+              <DebugRow
+                key={`debug-${event.seq}`}
+                event={event}
+                runStart={runStart}
+              />
+            ))
+          )}
         </div>
       </div>
 
