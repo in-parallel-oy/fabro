@@ -14,6 +14,7 @@ import {
   FunnelIcon,
   MagnifyingGlassIcon,
 } from "@heroicons/react/16/solid";
+import { CircleStackIcon, ClockIcon } from "@heroicons/react/20/solid";
 import { Marked } from "marked";
 
 import { StageSidebar } from "../components/stage-sidebar";
@@ -401,6 +402,7 @@ function EventRow({
   onSelect: () => void;
 }) {
   const metric = turnMetric(turn);
+  const MetricIcon = metric == null ? null : turn.kind === "assistant" ? CircleStackIcon : ClockIcon;
   return (
     <button
       type="button"
@@ -418,10 +420,11 @@ function EventRow({
       <span className="min-w-0 truncate text-sm text-fg-3">
         {turnSummary(turn)}
       </span>
-      <span className="text-right font-mono text-xs tabular-nums text-fg-muted">
+      <span className="inline-flex items-center justify-end gap-1.5 font-mono text-xs tabular-nums text-fg-muted">
+        {MetricIcon && <MetricIcon className="size-3" aria-hidden="true" />}
         {metric ?? ""}
       </span>
-      <span className="font-mono text-xs tabular-nums text-fg-muted">
+      <span className="pl-3 font-mono text-xs tabular-nums text-fg-muted">
         {formatElapsed(turn.ts, runStart)}
       </span>
     </button>
