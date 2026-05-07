@@ -301,7 +301,10 @@ export default function RunDetail({ params }: { params: { id: string } }) {
       </div>
 
       <div
-        className={classNames("border-b border-line", fullHeight && "shrink-0")}
+        className={classNames(
+          "relative before:pointer-events-none before:absolute before:bottom-0 before:left-1/2 before:h-px before:w-screen before:-translate-x-1/2 before:bg-line",
+          fullHeight && "shrink-0",
+        )}
       >
         <nav className="-mb-px flex gap-6">
           {tabs.map((tab) => {
