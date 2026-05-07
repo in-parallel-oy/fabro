@@ -359,26 +359,28 @@ function EventDetailsPanel({
 
   return (
     <div
-      className={`fixed inset-y-0 right-0 z-30 flex w-full max-w-xl flex-col bg-panel shadow-2xl transition-transform duration-200 ease-out ${
-        turn ? "translate-x-0" : "translate-x-full"
+      className={`relative shrink-0 self-stretch overflow-hidden transition-[width] duration-200 ease-out ${
+        turn ? "w-[28rem]" : "w-0"
       }`}
       aria-hidden={turn ? undefined : true}
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-line px-6 py-4">
-        <h2 className="text-sm font-medium text-fg">
-          {turn ? `${turnLabel(turn)} event` : ""}
-        </h2>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close details"
-          className="rounded-md p-1 text-fg-muted transition-colors hover:bg-overlay hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500"
-        >
-          <XMarkIcon className="size-5" />
-        </button>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-        {turn ? <EventDetails turn={turn} runStart={runStart} /> : null}
+      <div className="absolute inset-y-0 right-0 flex w-[28rem] flex-col border-l border-line bg-panel">
+        <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3">
+          <h2 className="text-sm font-medium text-fg">
+            {turn ? `${turnLabel(turn)} event` : ""}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close details"
+            className="rounded-md p-1 text-fg-muted transition-colors hover:bg-overlay hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500"
+          >
+            <XMarkIcon className="size-5" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          {turn ? <EventDetails turn={turn} runStart={runStart} /> : null}
+        </div>
       </div>
     </div>
   );
