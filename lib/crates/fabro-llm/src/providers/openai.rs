@@ -462,11 +462,7 @@ async fn build_api_request(request: &Request, stream: bool, codex_mode: bool) ->
         .as_ref()
         .and_then(translate_response_format);
 
-    let include = if reasoning.is_some() {
-        vec!["reasoning.encrypted_content".to_string()]
-    } else {
-        Vec::new()
-    };
+    let include = vec!["reasoning.encrypted_content".to_string()];
 
     let instructions = if codex_mode {
         Some(instructions.unwrap_or_default())
@@ -491,10 +487,9 @@ async fn build_api_request(request: &Request, stream: bool, codex_mode: bool) ->
         text,
         stop: request.stop_sequences.clone(),
         metadata: request.metadata.clone(),
-        // store: false is required for non-Azure OpenAI endpoints. Reasoning
-        // items still round-trip correctly because we request encrypted_content
-        // via the `include` field, which embeds them in the response payload
-        // rather than relying on server-side storage.
+        // store: false means output items are not persisted server-side.
+        // Request encrypted reasoning content on every turn so reasoning items
+        // from models that emit them by default can round-trip statelessly.
         store: false,
         include,
         stream,
@@ -1262,6 +1257,18 @@ mod tests {
         assert_eq!(body["model"], "gpt-4o");
         // stream field is omitted when false (skip_serializing_if)
         assert!(body.get("stream").is_none());
+    }
+
+    #[tokio::test]
+    async fn build_request_body_includes_encrypted_reasoning_for_stateless_requests() {
+        let request = minimal_request();
+
+        let body = build_request_body(&request, false, false).await;
+
+        assert_eq!(
+            body["include"],
+            serde_json::json!(["reasoning.encrypted_content"])
+        );
     }
 
     #[tokio::test]
