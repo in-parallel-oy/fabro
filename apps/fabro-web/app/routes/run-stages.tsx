@@ -697,7 +697,15 @@ function JsonBlock({ value }: { value: string }) {
   );
 }
 
-function EventDetails({ turn, runStart }: { turn: TurnType; runStart: string | undefined }) {
+function EventDetails({
+  turn,
+  runStart,
+  hideMeta = false,
+}: {
+  turn: TurnType;
+  runStart: string | undefined;
+  hideMeta?: boolean;
+}) {
   const elapsed = formatElapsed(turn.ts, runStart);
   const absolute = (() => {
     const ms = Date.parse(turn.ts);
@@ -707,9 +715,11 @@ function EventDetails({ turn, runStart }: { turn: TurnType; runStart: string | u
 
   return (
     <div className="space-y-5">
-      <DetailField label="When" mono>
-        {elapsed ? `${elapsed} · ${absolute}` : absolute}
-      </DetailField>
+      {!hideMeta && (
+        <DetailField label="When" mono>
+          {elapsed ? `${elapsed} · ${absolute}` : absolute}
+        </DetailField>
+      )}
 
       {(turn.kind === "system" || turn.kind === "assistant") && (
         <DetailField label="Content">
@@ -719,10 +729,12 @@ function EventDetails({ turn, runStart }: { turn: TurnType; runStart: string | u
 
       {turn.kind === "tool" && (
         <>
-          <DetailField label="Tool" mono>
-            {humanizeToolName(turn.toolName)}{" "}
-            <span className="text-fg-muted">({turn.toolName})</span>
-          </DetailField>
+          {!hideMeta && (
+            <DetailField label="Tool" mono>
+              {humanizeToolName(turn.toolName)}{" "}
+              <span className="text-fg-muted">({turn.toolName})</span>
+            </DetailField>
+          )}
           <DetailField label="Input">
             <JsonBlock value={turn.input} />
           </DetailField>
@@ -1058,7 +1070,7 @@ function ToolGroupDetails({
             />
             {expandedIndex === i && (
               <div className="bg-overlay/50 px-5 py-4">
-                <EventDetails turn={child.turn} runStart={runStart} />
+                <EventDetails turn={child.turn} runStart={runStart} hideMeta />
               </div>
             )}
           </li>
