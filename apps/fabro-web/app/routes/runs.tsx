@@ -39,21 +39,20 @@ export function meta({}: any) {
 }
 
 interface ColumnStyle {
-  iconType: "branch" | "pr";
   actions: string[];
 }
 
 const columnStyles: Record<ColumnStatus, ColumnStyle> = {
-  queued:       { iconType: "branch", actions: [] },
-  initializing: { iconType: "branch", actions: [] },
-  running:      { iconType: "branch", actions: [] },
-  blocked:      { iconType: "branch", actions: ["Answer Question"] },
-  succeeded:    { iconType: "pr",     actions: [] },
-  failed:       { iconType: "branch", actions: [] },
-  archived:     { iconType: "branch", actions: [] },
+  queued:       { actions: [] },
+  initializing: { actions: [] },
+  running:      { actions: [] },
+  blocked:      { actions: ["Answer Question"] },
+  succeeded:    { actions: [] },
+  failed:       { actions: [] },
+  archived:     { actions: [] },
 };
 
-const defaultColumnStyle: ColumnStyle = { iconType: "branch", actions: [] };
+const defaultColumnStyle: ColumnStyle = { actions: [] };
 const defaultColumnColors = { dot: "bg-fg-muted", text: "text-fg-muted" };
 
 interface BoardRunsResponse {
@@ -67,7 +66,6 @@ type Column = {
   name: string;
   dot: string;
   text: string;
-  iconType: "branch" | "pr";
   actions: string[];
   items: RunItem[];
 };
@@ -130,19 +128,6 @@ function listLifecycleStatusLabel(run: Pick<RunWithStatus, "statusLabel" | "life
 }
 
 
-function GitBranchIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="currentColor"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z" />
-    </svg>
-  );
-}
-
 function GitPullRequestIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -155,11 +140,6 @@ function GitPullRequestIcon({ className }: { className?: string }) {
     </svg>
   );
 }
-
-const iconMap = {
-  branch: GitBranchIcon,
-  pr: GitPullRequestIcon,
-};
 
 function CheckStatusIcon({ status }: { status: CheckStatus }) {
   switch (status) {
@@ -297,12 +277,10 @@ export const handle = {
 
 function PrCard({
   pr,
-  icon: Icon,
   iconColor,
   actions,
 }: {
   pr: RunItem;
-  icon: React.ComponentType<{ className?: string }>;
   iconColor: string;
   actions?: string[];
 }) {
@@ -311,38 +289,28 @@ function PrCard({
   return (
     <Link to={`/runs/${pr.id}`} className="group block rounded-md border border-line bg-panel p-4 transition-all duration-200 hover:border-line-strong hover:shadow-lg hover:shadow-black/20">
       <div className="mb-2 flex items-center gap-1.5">
-        <Icon className={`size-3.5 shrink-0 ${iconColor}`} />
         <span className="font-mono text-xs font-medium text-teal-500">
           {pr.repo}
         </span>
-        {pr.number != null && (
-          <span className="font-mono text-xs text-fg-muted">
-            #{pr.number}
-          </span>
-        )}
         {lifecycleLabel != null && (
           <span className="rounded-full border border-line px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wide text-fg-muted">
             {lifecycleLabel}
+          </span>
+        )}
+        {pr.number != null && (
+          <span className={`ml-auto inline-flex items-center gap-1 font-mono text-xs ${iconColor}`}>
+            <GitPullRequestIcon className="size-3.5 shrink-0" />
+            #{pr.number}
           </span>
         )}
       </div>
 
       <p className="text-sm leading-snug text-fg-2">{pr.title}</p>
 
-      {(pr.additions != null || pr.resources != null || pr.elapsed != null) && (
+      {(pr.resources != null || pr.comments != null || pr.elapsed != null) && (
         <div className="mt-3 flex items-center gap-3 font-mono text-xs">
           {pr.resources != null && (
             <span className="text-fg-3">{pr.resources}</span>
-          )}
-          {pr.additions != null && pr.deletions != null && (
-            <>
-              <span className="tabular-nums text-mint">
-                +{pr.additions.toLocaleString()}
-              </span>
-              <span className="tabular-nums text-coral">
-                -{pr.deletions.toLocaleString()}
-              </span>
-            </>
           )}
           {pr.comments != null && (
             <span className="inline-flex items-center gap-1 text-fg-muted">
@@ -401,18 +369,32 @@ function PrCard({
           ))}
         </div>
       )}
+
+      {((pr.additions != null && pr.additions !== 0) ||
+        (pr.deletions != null && pr.deletions !== 0)) && (
+        <div className="mt-3 flex items-center gap-3 font-mono text-xs">
+          {pr.additions != null && (
+            <span className="tabular-nums text-mint">
+              +{pr.additions.toLocaleString()}
+            </span>
+          )}
+          {pr.deletions != null && (
+            <span className="tabular-nums text-coral">
+              -{pr.deletions.toLocaleString()}
+            </span>
+          )}
+        </div>
+      )}
     </Link>
   );
 }
 
 function SortablePrCard({
   pr,
-  icon,
   iconColor,
   actions,
 }: {
   pr: RunItem;
-  icon: React.ComponentType<{ className?: string }>;
   iconColor: string;
   actions?: string[];
 }) {
@@ -440,7 +422,7 @@ function SortablePrCard({
         }
       }}
     >
-      <PrCard pr={pr} icon={icon} iconColor={iconColor} actions={actions} />
+      <PrCard pr={pr} iconColor={iconColor} actions={actions} />
     </div>
   );
 }
@@ -524,7 +506,6 @@ function ColumnActionsMenu({ column }: { column: Column }) {
 }
 
 function BoardColumn({ column }: { column: Column }) {
-  const Icon = iconMap[column.iconType];
   const actions = column.actions;
   return (
     <div className="flex min-w-0 flex-col">
@@ -545,7 +526,6 @@ function BoardColumn({ column }: { column: Column }) {
             <SortablePrCard
               key={pr.id}
               pr={pr}
-              icon={Icon}
               iconColor={column.text}
               actions={actions}
             />
