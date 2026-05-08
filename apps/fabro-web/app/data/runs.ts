@@ -72,6 +72,11 @@ function displayRunTitle(title: string | null | undefined): string {
   return title?.trim() ? title : "Untitled run";
 }
 
+function displayRepoName(name: string): string {
+  const slash = name.lastIndexOf("/");
+  return slash >= 0 ? name.slice(slash + 1) : name;
+}
+
 function runStatusKind(status: ApiRunStatus | null | undefined): RunStatus | null {
   return status?.kind ?? null;
 }
@@ -80,7 +85,7 @@ export function mapRunListItem(item: RunListItem): RunItem {
   const lifecycleStatus = runStatusKind(item.status);
   return {
     id: item.run_id,
-    repo: item.repository.name,
+    repo: displayRepoName(item.repository.name),
     title: displayRunTitle(item.title),
     workflow: item.workflow_slug ?? item.workflow_name ?? "unknown",
     column: item.column,
@@ -112,7 +117,7 @@ export function mapRunSummaryToRunItem(summary: RunSummary): RunItem {
   const lifecycleStatus = runStatusKind(summary.status);
   return {
     id: summary.run_id,
-    repo: summary.repository.name,
+    repo: displayRepoName(summary.repository.name),
     title: displayRunTitle(summary.title),
     workflow: summary.workflow_slug ?? summary.workflow_name ?? "unknown",
     lifecycleStatus,
