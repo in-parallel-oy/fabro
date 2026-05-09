@@ -66,6 +66,7 @@ const {
   handleLifecycleToastResult,
   lifecycleActionVisibility,
 } = await import("./run-detail");
+mock.restore();
 type LifecycleToastState = import("./run-detail").LifecycleToastState;
 type RunDetailActionResult = import("./run-detail").RunDetailActionResult;
 
