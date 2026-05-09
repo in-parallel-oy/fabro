@@ -20,8 +20,6 @@ pub struct RunSummary {
     #[serde(default)]
     pub source_directory: Option<String>,
     #[serde(default)]
-    pub in_place:         bool,
-    #[serde(default)]
     pub repo_origin_url:  Option<String>,
     pub repository:       RepositoryReference,
     #[serde(default)]
@@ -59,7 +57,6 @@ impl RunSummary {
         title: String,
         labels: HashMap<String, String>,
         source_directory: Option<String>,
-        in_place: bool,
         repo_origin_url: Option<String>,
         start_time: Option<DateTime<Utc>>,
         last_event_at: Option<DateTime<Utc>>,
@@ -85,7 +82,6 @@ impl RunSummary {
             title,
             labels,
             source_directory,
-            in_place,
             repo_origin_url,
             repository,
             start_time,
@@ -172,7 +168,6 @@ mod tests {
             "Production title".to_string(),
             HashMap::from([("team".to_string(), "core".to_string())]),
             Some("/Users/client/local-checkout".to_string()),
-            false,
             Some("https://github.com/fabro-sh/fabro.git".to_string()),
             Some(Utc.with_ymd_and_hms(2026, 4, 20, 12, 0, 0).unwrap()),
             Some(Utc.with_ymd_and_hms(2026, 4, 20, 12, 5, 0).unwrap()),
@@ -290,7 +285,6 @@ mod tests {
             "ship it".to_string(),
             HashMap::new(),
             Some("/Users/client/local-checkout".to_string()),
-            false,
             None,
             None,
             None,
@@ -313,7 +307,6 @@ mod tests {
             "ship it".to_string(),
             HashMap::new(),
             None,
-            false,
             None,
             None,
             None,

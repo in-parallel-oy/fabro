@@ -68,10 +68,6 @@ impl ServerRunSummaryInfo {
         self.summary.repo_origin_url.as_deref()
     }
 
-    pub(crate) fn in_place(&self) -> bool {
-        self.summary.in_place
-    }
-
     pub(crate) fn goal(&self) -> String {
         self.summary.goal.clone()
     }

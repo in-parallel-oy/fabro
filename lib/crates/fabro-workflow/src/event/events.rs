@@ -43,8 +43,6 @@ pub enum Event {
         git:              Option<GitContext>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         fork_source_ref:  Option<ForkSourceRef>,
-        #[serde(default)]
-        in_place:         bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         web_url:          Option<String>,
     },

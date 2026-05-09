@@ -150,7 +150,6 @@ fn help() {
           --provider <PROVIDER>    Override default LLM provider
       -v, --verbose                Enable verbose output
           --sandbox <SANDBOX>      Sandbox for agent tools [possible values: local, docker, daytona]
-          --in-place               Run directly in the source checkout without git checkpoints
           --label <KEY=VALUE>      Attach a label to this run (repeatable, format: KEY=VALUE)
           --preserve-sandbox       Keep the sandbox alive after the run finishes (for debugging)
       -d, --detach                 Run the workflow in the background and print the run ID
@@ -670,9 +669,6 @@ goal = "Show stored artifacts"
 provider = "local"
 preserve = true
 
-[run.sandbox.local]
-worktree_mode = "never"
-
 [run.artifacts]
 include = ["assets/**"]
 "#,
@@ -728,7 +724,6 @@ fn dry_run_simple() {
 
         Run: [ULID]
         Web UI: http://localhost:3000/runs/[ULID]
-        Warning: Worktree mode `always` requested but no Git repository was found; running without a worktree. [worktree_skipped_no_git]
         Sandbox: local (ready in [TIME])
         ✓ Start  [TIME]
         ✓ Run Tests  [TIME]

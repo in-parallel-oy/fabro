@@ -108,7 +108,7 @@ The new design must optimize for:
 - R62. Sandbox config must remain provider-specific because provider differences are too large to hide behind one flat abstraction.
 - R63. Model config must remain intentionally provider-neutral. It should not grow provider-specific subtables. `run.model.fallbacks` is a single ordered array of model references. Each entry may be a bare provider token such as `openai`, a bare model alias or model id such as `gpt-5.4`, or a qualified reference such as `gemini/gemini-flash`. Bare references are allowed only when unambiguous. Ambiguous bare references must hard-error and require qualification. A bare provider token means “choose the best matching model from that provider.”
 - R64. SCM config must be provider-neutral at the core (`[run.scm]`) with room for provider-specific nested tables such as `[run.scm.github]` only where necessary.
-- R65. Chat platforms such as Slack, Discord, and Teams are integrations. Their server-owned setup lives under `[server.integrations.<provider>]`; run behavior lives under `[run.notifications.*]` and `[run.interviews]`.
+- R65. Slack is the chat integration. Its server-owned setup lives under `[server.integrations.slack]`; run behavior lives under `[run.notifications.*]` and `[run.interviews]`.
 - R66. Object-store-backed domains must use a shared pattern: a small provider-neutral envelope plus provider-specific nested tables.
 - R67. For local object-store providers, default to `server.storage.root`, but allow explicit local override roots when needed.
 

@@ -22,19 +22,18 @@ pub use project::ProjectLayer;
 pub use run::{
     DaytonaDockerfileLayer, DaytonaSandboxLayer, DaytonaSnapshotLayer, DockerSandboxLayer,
     GitAuthorLayer, HookAgentMarker, HookEntry, HookTlsMode, InterviewProviderLayer,
-    InterviewsLayer, LocalSandboxLayer, McpEntryLayer, ModelRefOrSplice, NotificationProviderLayer,
+    InterviewsLayer, McpEntryLayer, ModelRefOrSplice, NotificationProviderLayer,
     NotificationRouteLayer, PrepareStep, RunAgentLayer, RunArtifactsLayer, RunCheckpointLayer,
     RunExecutionLayer, RunGitLayer, RunGoalLayer, RunIntegrationsGithubLayer, RunIntegrationsLayer,
     RunLayer, RunModelLayer, RunPrepareLayer, RunPullRequestLayer, RunSandboxLayer, RunScmLayer,
     ScmGitHubLayer, StringOrSplice,
 };
 pub use server::{
-    DiscordIntegrationLayer, GithubIntegrationLayer, IntegrationWebhooksLayer,
-    ObjectStoreLocalLayer, ObjectStoreS3Layer, ServerApiLayer, ServerArtifactsLayer,
-    ServerAuthGithubLayer, ServerAuthLayer, ServerIntegrationsLayer, ServerIpAllowlistLayer,
-    ServerIpAllowlistOverrideLayer, ServerLayer, ServerListenLayer, ServerLoggingLayer,
-    ServerSchedulerLayer, ServerSlateDbLayer, ServerStorageLayer, ServerWebLayer,
-    SlackIntegrationLayer, TeamsIntegrationLayer,
+    GithubIntegrationLayer, IntegrationWebhooksLayer, ObjectStoreLocalLayer, ObjectStoreS3Layer,
+    ServerApiLayer, ServerArtifactsLayer, ServerAuthGithubLayer, ServerAuthLayer,
+    ServerIntegrationsLayer, ServerIpAllowlistLayer, ServerIpAllowlistOverrideLayer, ServerLayer,
+    ServerListenLayer, ServerLoggingLayer, ServerSchedulerLayer, ServerSlateDbLayer,
+    ServerStorageLayer, ServerWebLayer, SlackIntegrationLayer,
 };
 pub(crate) use settings::SettingsLayer;
 pub use workflow::WorkflowLayer;

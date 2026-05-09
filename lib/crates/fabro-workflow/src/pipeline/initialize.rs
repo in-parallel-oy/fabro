@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -8,13 +8,11 @@ use fabro_auth::{
     CredentialResolver, CredentialSource, EnvCredentialSource, VaultCredentialSource,
     auth_issue_message,
 };
-use fabro_config::RunScratch;
 use fabro_graphviz::graph;
 use fabro_hooks::{HookContext, HookDecision, HookEvent, HookRunner};
-use fabro_sandbox::config::WorktreeMode;
 use fabro_sandbox::{
-    GitSetupIntent, ReadBeforeWriteSandbox, SandboxEventCallback, SandboxSpec, WorktreeOptions,
-    WorktreeSandbox, reconnect_for_run_with_callback,
+    GitSetupIntent, ReadBeforeWriteSandbox, SandboxEventCallback, SandboxSpec,
+    reconnect_for_run_with_callback,
 };
 use fabro_static::EnvVars;
 use fabro_vault::Vault;
@@ -29,71 +27,16 @@ use super::types::{InitOptions, Initialized, LlmSpec, Persisted, SandboxEnvSpec}
 use crate::devcontainer_bridge::{devcontainer_to_snapshot_config, run_devcontainer_lifecycle};
 use crate::error::Error;
 use crate::event::{Event, RunNoticeCode, RunNoticeLevel};
-use crate::git::RUN_BRANCH_PREFIX;
 use crate::github_token_source::{AppIatMinter, GitHubTokenSource};
 use crate::handler::llm::{AgentApiBackend, AgentCliBackend, BackendRouter};
 use crate::handler::{HandlerRegistry, default_registry};
 use crate::run_metadata::{RunMetadataRuntime, build_metadata_writer, metadata_branch_name};
 use crate::run_options::{GitCheckpointOptions, RunOptions};
-use crate::sandbox_git::GIT_REMOTE;
 use crate::sandbox_git_runtime::SandboxGitRuntime;
 use crate::services::{EngineServices, RunServices, WorkflowToolEnvProvider};
 use crate::steering_hub::SteeringHub;
 
-struct WorktreePlan {
-    branch_name:          String,
-    base_sha:             Option<String>,
-    worktree_path:        PathBuf,
-    skip_branch_creation: bool,
-}
-
 type BuiltSandboxEnv = (HashMap<String, String>, Option<Arc<GitHubTokenSource>>);
-
-async fn resolve_worktree_base_sha(
-    sandbox: &dyn Sandbox,
-    plan: &WorktreePlan,
-) -> Result<Option<String>, Error> {
-    if let Some(base_sha) = plan.base_sha.as_ref() {
-        return Ok(Some(base_sha.clone()));
-    }
-
-    let result = sandbox
-        .exec_command(
-            &format!("{GIT_REMOTE} rev-parse HEAD"),
-            10_000,
-            None,
-            None,
-            None,
-        )
-        .await
-        .map_err(|err| Error::engine_with_source("git rev-parse HEAD failed", &err))?;
-    if !result.is_success() {
-        let output = result.stderr.trim();
-        let output = if output.is_empty() {
-            result.stdout.trim()
-        } else {
-            output
-        };
-        if is_not_git_repository(output) {
-            return Ok(None);
-        }
-        return Err(Error::engine(format!(
-            "git rev-parse HEAD failed (exit {}): {}",
-            result.display_exit_code(),
-            output
-        )));
-    }
-
-    let base_sha = result.stdout.trim();
-    if base_sha.is_empty() {
-        return Err(Error::engine("git rev-parse HEAD returned no commit sha"));
-    }
-    Ok(Some(base_sha.to_string()))
-}
-
-fn is_not_git_repository(output: &str) -> bool {
-    output.contains("not a git repository") || output.contains("ambiguous argument 'HEAD'")
-}
 
 async fn run_hooks(
     hook_runner: Option<&HookRunner>,
@@ -105,110 +48,6 @@ async fn run_hooks(
         return HookDecision::Proceed;
     };
     runner.run(hook_context, sandbox, work_dir).await
-}
-
-fn resolve_worktree_plan(options: &mut InitOptions) -> Option<WorktreePlan> {
-    let Some(worktree_mode) = options.worktree_mode else {
-        options.run_options.display_base_sha = None;
-        return None;
-    };
-
-    let is_local = matches!(options.sandbox, SandboxSpec::Local { .. });
-
-    if options.checkpoint.is_some() && is_local {
-        if let Some(fork_source) = options.run_options.fork_source_ref.as_ref() {
-            let base_sha = fork_source.checkpoint_sha.clone();
-            options.run_options.display_base_sha = Some(base_sha.clone());
-            return Some(WorktreePlan {
-                branch_name:          format!("{RUN_BRANCH_PREFIX}{}", options.run_id),
-                base_sha:             Some(base_sha),
-                worktree_path:        RunScratch::new(&options.run_options.run_dir).worktree_dir(),
-                skip_branch_creation: false,
-            });
-        }
-
-        if let Some(git) = options.run_options.git.as_ref() {
-            if let (Some(run_branch), Some(base_sha)) = (&git.run_branch, &git.base_sha) {
-                options.run_options.display_base_sha = Some(base_sha.clone());
-                return Some(WorktreePlan {
-                    branch_name:          run_branch.clone(),
-                    base_sha:             Some(base_sha.clone()),
-                    worktree_path:        RunScratch::new(&options.run_options.run_dir)
-                        .worktree_dir(),
-                    skip_branch_creation: true,
-                });
-            }
-        }
-    }
-
-    let local_dirty = options
-        .run_options
-        .pre_run_git
-        .as_ref()
-        .map(|git| git.dirty);
-
-    if matches!(local_dirty, Some(fabro_types::DirtyStatus::Dirty)) {
-        let env_name = if !is_local {
-            Some("remote sandbox")
-        } else if worktree_mode == WorktreeMode::Never {
-            None
-        } else {
-            Some("worktree")
-        };
-        if let Some(env_name) = env_name {
-            options.emitter.notice(
-                RunNoticeLevel::Warn,
-                RunNoticeCode::DirtyWorktree,
-                format!("Uncommitted changes will not be included in the {env_name}."),
-            );
-        }
-    }
-
-    if !is_local {
-        options.run_options.display_base_sha = options
-            .run_options
-            .pre_run_git
-            .as_ref()
-            .and_then(|git| git.sha.clone());
-        return None;
-    }
-
-    if worktree_mode == WorktreeMode::Never {
-        options.run_options.display_base_sha = None;
-        return None;
-    }
-
-    let (branch_name, base_sha) =
-        if let Some(fork_source) = options.run_options.fork_source_ref.as_ref() {
-            (
-                format!("{RUN_BRANCH_PREFIX}{}", options.run_id),
-                Some(fork_source.checkpoint_sha.clone()),
-            )
-        } else {
-            (
-                format!("{RUN_BRANCH_PREFIX}{}", options.run_id),
-                options
-                    .run_options
-                    .pre_run_git
-                    .as_ref()
-                    .and_then(|git| git.sha.clone()),
-            )
-        };
-    options.run_options.display_base_sha.clone_from(&base_sha);
-    Some(WorktreePlan {
-        branch_name,
-        base_sha,
-        worktree_path: RunScratch::new(&options.run_options.run_dir).worktree_dir(),
-        skip_branch_creation: false,
-    })
-}
-
-fn worktree_skipped_notice(mode: Option<WorktreeMode>) -> Option<(RunNoticeCode, &'static str)> {
-    matches!(mode, Some(WorktreeMode::Always)).then_some((
-        RunNoticeCode::WorktreeSkippedNoGit,
-        "Worktree mode `always` requested but no Git repository was found; running without a \
-         worktree.",
-    ))
 }
 
 fn git_setup_intent(run_options: &RunOptions) -> GitSetupIntent {
@@ -489,11 +328,28 @@ pub async fn initialize(
     resolve_devcontainer(&mut options).await?;
 
     let attach_existing = options.checkpoint.is_some();
-    let worktree_plan = if attach_existing {
-        None
-    } else {
-        resolve_worktree_plan(&mut options)
-    };
+    options.run_options.display_base_sha = options
+        .run_options
+        .pre_run_git
+        .as_ref()
+        .and_then(|git| git.sha.clone());
+    if !attach_existing
+        && !matches!(options.sandbox, SandboxSpec::Local { .. })
+        && matches!(
+            options
+                .run_options
+                .pre_run_git
+                .as_ref()
+                .map(|git| git.dirty),
+            Some(fabro_types::DirtyStatus::Dirty)
+        )
+    {
+        options.emitter.notice(
+            RunNoticeLevel::Warn,
+            RunNoticeCode::DirtyWorktree,
+            "Uncommitted changes will not be included in the remote sandbox.",
+        );
+    }
 
     let sandbox_event_callback: SandboxEventCallback = {
         let emitter = Arc::clone(&options.emitter);
@@ -501,7 +357,6 @@ pub async fn initialize(
             emitter.emit(&Event::Sandbox { event });
         })
     };
-    let mut worktree_created = false;
     let mut sandbox_initialized = true;
     let sandbox: Arc<dyn Sandbox> = if attach_existing {
         let run_state = options
@@ -530,43 +385,6 @@ pub async fn initialize(
         .map_err(|err| Error::engine_with_anyhow("Failed to reconnect sandbox for resume", &err))?;
         sandbox_initialized = false;
         Arc::new(ReadBeforeWriteSandbox::new(Arc::from(sandbox)))
-    } else if let Some(plan) = worktree_plan.as_ref() {
-        let inner = options
-            .sandbox
-            .build(Some(Arc::clone(&sandbox_event_callback)))
-            .await
-            .map_err(|e| Error::engine_with_anyhow("Failed to build sandbox", &e))?;
-        if let Some(base_sha) = resolve_worktree_base_sha(&*inner, plan).await? {
-            sandbox_git
-                .ensure_git_available(&*inner)
-                .await
-                .map_err(|err| Error::engine_with_source("sandbox git unavailable", &err))?;
-            options.run_options.display_base_sha = Some(base_sha.clone());
-            options.run_options.git = Some(GitCheckpointOptions {
-                base_sha:    Some(base_sha.clone()),
-                run_branch:  Some(plan.branch_name.clone()),
-                meta_branch: Some(metadata_branch_name(&options.run_id.to_string())),
-            });
-            let mut worktree = WorktreeSandbox::new(inner, WorktreeOptions {
-                branch_name: plan.branch_name.clone(),
-                base_sha,
-                worktree_path: plan.worktree_path.to_string_lossy().into_owned(),
-                skip_branch_creation: plan.skip_branch_creation,
-                setup_intent: Some(git_setup_intent(&options.run_options)),
-            });
-            worktree.set_event_callback(Arc::clone(&options.emitter).worktree_callback());
-            match worktree.initialize().await {
-                Ok(()) => {
-                    worktree_created = true;
-                    Arc::new(ReadBeforeWriteSandbox::new(Arc::new(worktree)))
-                }
-                Err(e) => {
-                    return Err(Error::engine_with_source("Git worktree setup failed", &e));
-                }
-            }
-        } else {
-            Arc::new(ReadBeforeWriteSandbox::new(inner))
-        }
     } else {
         Arc::new(ReadBeforeWriteSandbox::new(
             options
@@ -576,16 +394,6 @@ pub async fn initialize(
                 .map_err(|e| Error::engine_with_anyhow("Failed to build sandbox", &e))?,
         ))
     };
-    if worktree_plan.is_some() && !worktree_created {
-        if let Some((code, message)) = worktree_skipped_notice(options.worktree_mode) {
-            tracing::warn!(
-                worktree_mode = ?options.worktree_mode,
-                "worktree skipped: cwd is not a git repository"
-            );
-            options.emitter.notice(RunNoticeLevel::Warn, code, message);
-        }
-        options.run_options.git = None;
-    }
     let cleanup_guard = (!attach_existing).then(|| {
         scopeguard::guard(Arc::clone(&sandbox), |sandbox| {
             if let Ok(handle) = Handle::try_current() {
@@ -856,7 +664,6 @@ mod tests {
     use fabro_graphviz::graph::{AttrValue, Edge, Graph, Node};
     use fabro_interview::AutoApproveInterviewer;
     use fabro_sandbox::SandboxSpec;
-    use fabro_sandbox::config::WorktreeMode;
     use fabro_store::Database;
     use fabro_types::{EventBody, RunEvent, RunId, WorkflowSettings, fixtures};
     use fabro_vault::{SecretType, Vault};
@@ -979,7 +786,6 @@ mod tests {
                 manifest_blob: None,
                 definition_blob: None,
                 fork_source_ref: None,
-                in_place: false,
             },
         )
     }
@@ -1038,7 +844,6 @@ mod tests {
             vault:             None,
             devcontainer:      None,
             git:               None,
-            worktree_mode:     None,
             run_control:       None,
             registry_override: None,
             artifact_sink:     None,
@@ -1048,77 +853,6 @@ mod tests {
         .await;
         let events = seen.lock().unwrap().clone();
         (result, events)
-    }
-
-    #[tokio::test]
-    async fn resolve_worktree_plan_uses_local_worktree_without_pre_run_git_context() {
-        let temp = tempfile::tempdir().unwrap();
-        let run_dir = temp.path().join("run");
-        std::fs::create_dir_all(&run_dir).unwrap();
-        let store = memory_store();
-        let emitter = Arc::new(crate::event::Emitter::new(test_run_id()));
-        let mut options = InitOptions {
-            run_id:            test_run_id(),
-            run_store:         {
-                let inner = store.create_run(&test_run_id()).await.unwrap();
-                inner.into()
-            },
-            dry_run:           false,
-            emitter:           emitter.clone(),
-            sandbox:           SandboxSpec::Local {
-                working_directory: std::env::current_dir().unwrap(),
-            },
-            llm:               LlmSpec {
-                model:          "test-model".to_string(),
-                provider:       fabro_llm::Provider::Anthropic,
-                fallback_chain: Vec::new(),
-                mcp_servers:    Vec::new(),
-                dry_run:        true,
-            },
-            interviewer:       Arc::new(AutoApproveInterviewer::engine()),
-            steering_hub:      Arc::new(crate::steering_hub::SteeringHub::new(emitter.clone())),
-            lifecycle:         crate::run_options::LifecycleOptions {
-                setup_commands:           vec![],
-                setup_command_timeout_ms: 1_000,
-                devcontainer_phases:      vec![],
-            },
-            run_options:       test_settings(&run_dir),
-            workflow_path:     None,
-            workflow_bundle:   None,
-            hooks:             fabro_hooks::HookSettings { hooks: vec![] },
-            sandbox_env:       SandboxEnvSpec {
-                devcontainer_env:   HashMap::new(),
-                toml_env:           HashMap::new(),
-                github_permissions: None,
-                origin_url:         None,
-            },
-            vault:             None,
-            devcontainer:      None,
-            git:               None,
-            worktree_mode:     Some(WorktreeMode::Always),
-            run_control:       None,
-            registry_override: None,
-            artifact_sink:     None,
-            checkpoint:        None,
-            seed_context:      None,
-        };
-
-        let plan = resolve_worktree_plan(&mut options);
-
-        assert!(plan.is_some());
-        assert!(options.run_options.display_base_sha.is_none());
-        assert!(options.run_options.git.is_none());
-    }
-
-    #[test]
-    fn worktree_skipped_notice_only_warns_for_always() {
-        assert!(worktree_skipped_notice(None).is_none());
-        assert!(worktree_skipped_notice(Some(WorktreeMode::Clean)).is_none());
-        assert!(worktree_skipped_notice(Some(WorktreeMode::Dirty)).is_none());
-        assert!(worktree_skipped_notice(Some(WorktreeMode::Never)).is_none());
-
-        let (code, _) = worktree_skipped_notice(Some(WorktreeMode::Always)).unwrap();
-        assert_eq!(code, RunNoticeCode::WorktreeSkippedNoGit);
     }
 
     #[tokio::test]
@@ -1169,7 +903,6 @@ mod tests {
             vault:             None,
             devcontainer:      None,
             git:               None,
-            worktree_mode:     None,
             run_control:       None,
             registry_override: None,
             artifact_sink:     None,
@@ -1310,7 +1043,6 @@ mod tests {
             vault:             None,
             devcontainer:      None,
             git:               None,
-            worktree_mode:     None,
             run_control:       None,
             registry_override: None,
             artifact_sink:     None,
@@ -1425,7 +1157,6 @@ mod tests {
             vault: None,
             devcontainer: None,
             git: None,
-            worktree_mode: None,
             run_control: None,
             registry_override: None,
             artifact_sink: None,
@@ -1491,7 +1222,6 @@ mod tests {
             vault: None,
             devcontainer: None,
             git: None,
-            worktree_mode: None,
             run_control: None,
             registry_override: None,
             artifact_sink: None,

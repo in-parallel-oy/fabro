@@ -157,7 +157,6 @@ fn persisted_workflow(graph: Graph, source: String, run_dir: &Path, run_id: RunI
             manifest_blob: None,
             definition_blob: None,
             fork_source_ref: None,
-            in_place: false,
         },
     )
 }
@@ -232,7 +231,6 @@ async fn execute_test_run_with_options(
             vault: None,
             devcontainer: None,
             git: git_options,
-            worktree_mode: None,
             run_control: None,
             registry_override,
             artifact_sink: None,
@@ -293,7 +291,6 @@ async fn execute_runs_start_to_exit_and_returns_final_context() {
             vault:             None,
             devcontainer:      None,
             git:               None,
-            worktree_mode:     None,
             run_control:       None,
             registry_override: None,
             artifact_sink:     None,
@@ -362,7 +359,6 @@ async fn run_with_lifecycle(
             vault: None,
             devcontainer: None,
             git: None,
-            worktree_mode: None,
             run_control: None,
             registry_override: Some(Arc::new(registry)),
             artifact_sink: None,

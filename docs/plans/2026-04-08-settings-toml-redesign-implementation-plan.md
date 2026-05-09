@@ -75,7 +75,7 @@ This refactor is centered on four seams:
 - notification route surface first pass:
   - route envelope fields are `enabled`, `provider`, and `events`
   - provider-specific destination fields live under `[run.notifications.<name>.<provider>]`
-  - first-pass chat destinations for Slack, Discord, and Teams use `channel`
+  - first-pass Slack destinations use `channel`
 - duration parser first pass:
   - one shared parser accepts a single unit suffix per value: `ms`, `s`, `m`, `h`, or `d`
   - composed values like `1h30m` are not supported in first pass; use the smallest needed unit instead

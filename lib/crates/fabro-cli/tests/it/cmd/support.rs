@@ -349,8 +349,6 @@ goal = "Exercise sandbox commands"
 provider = "local"
 preserve = true
 
-[run.sandbox.local]
-worktree_mode = "never"
 "#,
     );
 

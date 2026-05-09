@@ -77,7 +77,6 @@ models/diff-file.ts
 models/diff-stats.ts
 models/diff-summary.ts
 models/dirty-status.ts
-models/discord-integration-settings.ts
 models/disk-usage-response.ts
 models/disk-usage-run-row.ts
 models/disk-usage-summary-row.ts
@@ -139,7 +138,6 @@ models/interview-provider-settings.ts
 models/interview-question-record.ts
 models/ip-allow-entry.ts
 models/literal-ip-allow-entry.ts
-models/local-sandbox-settings.ts
 models/log-destination.ts
 models/manifest-args.ts
 models/manifest-config.ts
@@ -328,7 +326,6 @@ models/system-info-response.ts
 models/system-repair-run-issue.ts
 models/system-repair-runs-response.ts
 models/system-run-counts.ts
-models/teams-integration-settings.ts
 models/terminal-status.ts
 models/timeline-entry-response.ts
 models/tls-mode.ts
@@ -344,5 +341,4 @@ models/workflow-namespace.ts
 models/workflow-reference.ts
 models/workflow-schedule-summary.ts
 models/workflow-settings.ts
-models/worktree-mode.ts
 models/write-blob-response.ts

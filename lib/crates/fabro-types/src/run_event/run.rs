@@ -36,8 +36,6 @@ pub struct RunCreatedProps {
     pub git:              Option<GitContext>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fork_source_ref:  Option<ForkSourceRef>,
-    #[serde(default)]
-    pub in_place:         bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub web_url:          Option<String>,
 }

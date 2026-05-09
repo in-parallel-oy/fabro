@@ -20,7 +20,5 @@ import type { InterviewProviderSettings } from './interview-provider-settings';
 export interface RunInterviewsSettings {
     'provider': string | null;
     'slack': InterviewProviderSettings | null;
-    'discord': InterviewProviderSettings | null;
-    'teams': InterviewProviderSettings | null;
 }
 

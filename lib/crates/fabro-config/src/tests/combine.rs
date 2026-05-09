@@ -103,7 +103,7 @@ fallbacks = ["anthropic", "..."]
 }
 
 #[test]
-fn hooks_replace_by_id_in_place() {
+fn hooks_replace_by_id() {
     let lower = parse(
         r#"
 [[run.hooks]]

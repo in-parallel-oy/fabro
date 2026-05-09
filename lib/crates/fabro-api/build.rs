@@ -316,16 +316,6 @@ fn main() {
             &[],
         ),
         (
-            "DiscordIntegrationSettings",
-            "fabro_types::settings::server::DiscordIntegrationSettings",
-            &[],
-        ),
-        (
-            "TeamsIntegrationSettings",
-            "fabro_types::settings::server::TeamsIntegrationSettings",
-            &[],
-        ),
-        (
             "IntegrationWebhooksSettings",
             "fabro_types::settings::server::IntegrationWebhooksSettings",
             &[],

@@ -41,6 +41,5 @@ export interface RunSpec {
     'definition_blob'?: string | null;
     'git'?: GitContext | null;
     'fork_source_ref'?: ForkSourceRef | null;
-    'in_place': boolean;
 }
 

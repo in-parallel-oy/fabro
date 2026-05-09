@@ -246,10 +246,6 @@ pub(crate) struct RunArgs {
     #[arg(long, value_enum)]
     pub(crate) sandbox: Option<CliSandboxProvider>,
 
-    /// Run directly in the source checkout without git checkpoints
-    #[arg(long, conflicts_with = "sandbox")]
-    pub(crate) in_place: bool,
-
     /// Attach a label to this run (repeatable, format: KEY=VALUE)
     #[arg(long = "label", value_name = "KEY=VALUE")]
     pub(crate) label: Vec<String>,

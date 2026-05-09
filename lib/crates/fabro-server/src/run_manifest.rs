@@ -9,9 +9,9 @@ use fabro_api::types;
 use fabro_auth::auth_issue_message;
 use fabro_config::run::parse_run_layer_from_settings_toml;
 use fabro_config::{
-    CliLayer, CliOutputLayer, DaytonaDockerfileLayer, DockerSandboxLayer, LocalSandboxLayer,
-    ReplaceMap, RunExecutionLayer, RunLayer, RunModelLayer, RunSandboxLayer,
-    WorkflowSettingsBuilder, parse_input_overrides,
+    CliLayer, CliOutputLayer, DaytonaDockerfileLayer, DockerSandboxLayer, ReplaceMap,
+    RunExecutionLayer, RunLayer, RunModelLayer, RunSandboxLayer, WorkflowSettingsBuilder,
+    parse_input_overrides,
 };
 use fabro_graphviz::graph::{Graph, is_llm_handler_type};
 use fabro_graphviz::render::apply_direction;
@@ -29,7 +29,7 @@ use fabro_types::settings::cli::OutputVerbosity;
 use fabro_types::settings::interp::InterpString;
 use fabro_types::settings::run::{
     ApprovalMode, DaytonaNetworkLayer, DaytonaSettings, DockerSettings, DockerfileSource, RunGoal,
-    RunMode, RunNamespace, WorktreeMode,
+    RunMode, RunNamespace,
 };
 use fabro_types::{RunId, WorkflowSettings};
 use fabro_util::check_report::{CheckDetail, CheckReport, CheckResult, CheckSection, CheckStatus};
@@ -57,7 +57,6 @@ pub(crate) struct PreparedManifest {
     pub workflow_bundle:  WorkflowBundle,
     pub workflow_input:   BundledWorkflow,
     pub source_directory: PathBuf,
-    pub in_place:         bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -136,9 +135,6 @@ pub(crate) fn prepare_manifest(
         .map(|title| fabro_types::normalize_explicit_run_title(title.as_str()))
         .transpose()?;
 
-    let in_place = settings.run.sandbox.provider == "local"
-        && settings.run.sandbox.local.worktree_mode == WorktreeMode::Never;
-
     Ok(PreparedManifest {
         cwd: cwd.clone(),
         git: manifest.git.clone(),
@@ -155,7 +151,6 @@ pub(crate) fn prepare_manifest(
         workflow_bundle,
         workflow_input,
         source_directory: resolve_working_directory(&settings, &cwd),
-        in_place,
     })
 }
 
@@ -187,7 +182,6 @@ pub(crate) fn create_run_input(
         title: prepared.title,
         git: prepared.git,
         fork_source_ref: None,
-        in_place: prepared.in_place,
         provenance: None,
         configured_providers,
         web_url,
@@ -327,27 +321,17 @@ fn manifest_args_overrides(
         name:      args.model.as_deref().map(InterpString::parse),
         fallbacks: Vec::new(),
     });
-    let local_worktree = args
-        .worktree_mode
-        .as_deref()
-        .and_then(parse_worktree_mode_arg)
-        .map(|mode| LocalSandboxLayer {
-            worktree_mode: Some(mode),
-        });
-    let sandbox = (args.sandbox.is_some()
-        || args.preserve_sandbox.is_some()
-        || args.docker_image.is_some()
-        || local_worktree.is_some())
-    .then(|| RunSandboxLayer {
-        provider: args.sandbox.clone(),
-        preserve: args.preserve_sandbox,
-        local: local_worktree,
-        docker: args.docker_image.as_ref().map(|image| DockerSandboxLayer {
-            image: Some(image.clone()),
-            ..DockerSandboxLayer::default()
-        }),
-        ..RunSandboxLayer::default()
-    });
+    let sandbox =
+        (args.sandbox.is_some() || args.preserve_sandbox.is_some() || args.docker_image.is_some())
+            .then(|| RunSandboxLayer {
+                provider: args.sandbox.clone(),
+                preserve: args.preserve_sandbox,
+                docker: args.docker_image.as_ref().map(|image| DockerSandboxLayer {
+                    image: Some(image.clone()),
+                    ..DockerSandboxLayer::default()
+                }),
+                ..RunSandboxLayer::default()
+            });
 
     let execution_has_any = args.dry_run.is_some() || args.auto_approve.is_some();
     let execution = execution_has_any.then(|| RunExecutionLayer {
@@ -390,16 +374,6 @@ fn manifest_args_overrides(
         cli,
         input_overrides: parse_input_overrides(&args.input)?,
     })
-}
-
-fn parse_worktree_mode_arg(value: &str) -> Option<WorktreeMode> {
-    match value {
-        "always" => Some(WorktreeMode::Always),
-        "clean" => Some(WorktreeMode::Clean),
-        "dirty" => Some(WorktreeMode::Dirty),
-        "never" => Some(WorktreeMode::Never),
-        _ => None,
-    }
 }
 
 fn parse_labels(labels: &[String]) -> HashMap<String, String> {
@@ -1724,7 +1698,6 @@ root = "/srv/fabro"
             docker_image:     None,
             input:            Vec::new(),
             verbose:          None,
-            worktree_mode:    None,
         });
 
         let prepared = prepare_manifest(&server_settings, &manifest).unwrap();
@@ -1758,7 +1731,6 @@ override = "server"
             docker_image:     None,
             input:            vec!["override=cli".to_string()],
             verbose:          None,
-            worktree_mode:    None,
         });
 
         let prepared = prepare_manifest(&server_settings, &manifest).unwrap();

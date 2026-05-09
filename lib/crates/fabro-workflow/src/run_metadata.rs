@@ -629,7 +629,6 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
-            in_place:         false,
         });
 
         let mut dump = RunDump::from_projection(&projection).unwrap();

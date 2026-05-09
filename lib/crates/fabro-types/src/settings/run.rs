@@ -201,7 +201,6 @@ pub struct RunSandboxSettings {
     pub stop_on_terminal: bool,
     pub devcontainer:     bool,
     pub env:              HashMap<String, InterpString>,
-    pub local:            LocalSandboxSettings,
     pub docker:           Option<DockerSettings>,
     pub daytona:          Option<DaytonaSettings>,
 }
@@ -218,16 +217,10 @@ impl Default for RunSandboxSettings {
             stop_on_terminal: true,
             devcontainer:     false,
             env:              HashMap::new(),
-            local:            LocalSandboxSettings::default(),
             docker:           None,
             daytona:          None,
         }
     }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct LocalSandboxSettings {
-    pub worktree_mode: WorktreeMode,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -309,8 +302,6 @@ pub struct NotificationRouteSettings {
     pub provider: Option<String>,
     pub events:   Vec<String>,
     pub slack:    Option<NotificationProviderSettings>,
-    pub discord:  Option<NotificationProviderSettings>,
-    pub teams:    Option<NotificationProviderSettings>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -322,8 +313,6 @@ pub struct NotificationProviderSettings {
 pub struct RunInterviewsSettings {
     pub provider: Option<String>,
     pub slack:    Option<InterviewProviderSettings>,
-    pub discord:  Option<InterviewProviderSettings>,
-    pub teams:    Option<InterviewProviderSettings>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -583,16 +572,6 @@ pub enum RunMode {
 pub enum ApprovalMode {
     Prompt,
     Auto,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WorktreeMode {
-    Always,
-    #[default]
-    Clean,
-    Dirty,
-    Never,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

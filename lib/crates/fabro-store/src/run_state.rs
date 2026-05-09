@@ -67,7 +67,6 @@ impl RunProjectionReducer for RunProjection {
                     definition_blob: None,
                     git: props.git.clone(),
                     fork_source_ref: props.fork_source_ref.clone(),
-                    in_place: props.in_place,
                 });
                 self.graph_source.clone_from(&props.workflow_source);
             }
@@ -538,7 +537,6 @@ pub(crate) fn build_summary(state: &RunProjection, run_id: &RunId) -> RunSummary
             .spec
             .as_ref()
             .and_then(|spec| spec.source_directory.clone()),
-        state.spec.as_ref().is_some_and(|spec| spec.in_place),
         state
             .spec
             .as_ref()
@@ -1675,7 +1673,6 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
-            in_place:         false,
         });
 
         let summary_json = serde_json::to_value(build_summary(&state, &fixtures::RUN_1)).unwrap();

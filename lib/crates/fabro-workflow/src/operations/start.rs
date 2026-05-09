@@ -8,8 +8,7 @@ use fabro_interview::{AutoApproveInterviewer, Interviewer};
 use fabro_mcp::config::{McpServerSettings, McpTransport};
 use fabro_model::{Catalog, FallbackTarget, Provider};
 use fabro_sandbox::config::{
-    self as sandbox_config, DaytonaNetwork, DaytonaSnapshotSettings,
-    DockerfileSource as SandboxDockerfileSource, WorktreeMode, bridge_worktree_mode,
+    DaytonaNetwork, DaytonaSnapshotSettings, DockerfileSource as SandboxDockerfileSource,
 };
 use fabro_sandbox::daytona::DaytonaConfig;
 use fabro_sandbox::{DockerSandboxOptions, SandboxProvider, SandboxSpec};
@@ -69,7 +68,6 @@ struct RunSession {
     artifact_sink:     Option<ArtifactSink>,
     git:               Option<GitCheckpointOptions>,
     github_app:        Option<fabro_github::GitHubCredentials>,
-    worktree_mode:     Option<WorktreeMode>,
     registry_override: Option<Arc<HandlerRegistry>>,
     preserve_sandbox:  bool,
     stop_on_terminal:  bool,
@@ -442,7 +440,6 @@ impl RunSession {
             artifact_sink: services.artifact_sink,
             git,
             github_app: services.github_app.clone(),
-            worktree_mode: Some(resolve_worktree_mode(resolved)),
             registry_override: services.registry_override,
             preserve_sandbox: resolved.sandbox.preserve,
             stop_on_terminal: resolved.sandbox.stop_on_terminal,
@@ -494,10 +491,6 @@ fn resolve_sandbox_provider(settings: &ResolvedRunSettings) -> Result<SandboxPro
     .transpose()
     .map_err(|err| Error::Precondition(format!("Invalid sandbox provider: {err}")))?
     .map_or_else(|| Ok(SandboxProvider::default()), Ok)
-}
-
-fn resolve_worktree_mode(settings: &ResolvedRunSettings) -> sandbox_config::WorktreeMode {
-    bridge_worktree_mode(settings.sandbox.local.worktree_mode)
 }
 
 fn resolve_daytona_config(settings: &ResolvedRunSettings) -> Option<DaytonaConfig> {
@@ -753,7 +746,6 @@ impl RunSession {
             vault: self.vault,
             devcontainer: self.devcontainer,
             git: self.git,
-            worktree_mode: self.worktree_mode,
             registry_override: self.registry_override,
             artifact_sink: self.artifact_sink,
             run_control: self.run_control,
@@ -1078,7 +1070,6 @@ mod tests {
                 title: None,
                 git: None,
                 fork_source_ref: None,
-                in_place: false,
                 provenance: None,
                 configured_providers: Vec::new(),
                 web_url: None,
@@ -1268,7 +1259,6 @@ mod tests {
                 title: None,
                 git: None,
                 fork_source_ref: None,
-                in_place: false,
                 provenance: None,
                 configured_providers: Vec::new(),
                 web_url: None,

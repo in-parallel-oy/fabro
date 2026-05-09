@@ -2,9 +2,6 @@
 # Dynamic and presence-gated defaults remain in Rust.
 _version = 1
 
-[project]
-directory = "."
-
 [workflow]
 graph = "workflow.fabro"
 
@@ -20,9 +17,6 @@ provider = "docker"
 preserve = false
 stop_on_terminal = true
 devcontainer = false
-
-[run.sandbox.local]
-worktree_mode = "always"
 
 [run.sandbox.docker]
 image = "buildpack-deps:noble"

@@ -140,8 +140,6 @@ function SandboxPanel({ snapshot }: { snapshot: Snapshot }) {
   const provider = getString(sandbox, "provider");
   const docker = getObject(sandbox, "docker");
   const dockerImage = getString(docker, "image");
-  const local = getObject(sandbox, "local");
-  const worktreeMode = getString(local, "worktree_mode");
   return (
     <Panel title="Sandbox">
       <Row title="Provider" help="Execution environment for this run.">
@@ -150,11 +148,6 @@ function SandboxPanel({ snapshot }: { snapshot: Snapshot }) {
       {provider === "docker" && dockerImage ? (
         <Row title="Image" help="Docker image used for the sandbox.">
           <Mono>{dockerImage}</Mono>
-        </Row>
-      ) : null}
-      {provider === "local" && worktreeMode ? (
-        <Row title="Worktree mode" help="How the local provider materializes the workspace.">
-          <Badge>{worktreeMode}</Badge>
         </Row>
       ) : null}
       <Row title="Devcontainer" help="Whether .devcontainer setup is honored.">

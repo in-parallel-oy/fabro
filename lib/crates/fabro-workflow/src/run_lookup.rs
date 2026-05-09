@@ -451,7 +451,6 @@ mod tests {
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
-            in_place:         false,
         }
     }
 
@@ -480,7 +479,6 @@ mod tests {
             manifest_blob:    None,
             git:              run_spec.git.clone(),
             fork_source_ref:  run_spec.fork_source_ref.clone(),
-            in_place:         run_spec.in_place,
             web_url:          None,
         })
         .await

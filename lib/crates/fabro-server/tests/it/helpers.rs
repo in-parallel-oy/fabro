@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
-use fabro_config::{LocalSandboxLayer, RunLayer, RunSandboxLayer, ServerSettingsBuilder};
+use fabro_config::{RunLayer, RunSandboxLayer, ServerSettingsBuilder};
 use fabro_server::server::{AppState, spawn_scheduler};
 use fabro_server::test_support::{
     build_test_router, test_app_state as server_test_app_state,
@@ -16,7 +16,6 @@ use fabro_test::{
     expect_axum_status_in, expect_axum_text,
 };
 use fabro_types::ServerSettings;
-use fabro_types::settings::run::WorktreeMode;
 use tokio::time::sleep;
 use tower::ServiceExt;
 
@@ -97,9 +96,6 @@ pub(crate) fn test_settings() -> TestAppSettings {
         manifest_run_defaults: RunLayer {
             sandbox: Some(RunSandboxLayer {
                 provider: Some("local".to_string()),
-                local: Some(LocalSandboxLayer {
-                    worktree_mode: Some(WorktreeMode::Never),
-                }),
                 ..RunSandboxLayer::default()
             }),
             ..RunLayer::default()

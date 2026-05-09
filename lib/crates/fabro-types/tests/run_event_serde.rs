@@ -39,7 +39,6 @@ fn run_created_props_round_trip_templated_settings() {
             source_run_id:  fixtures::RUN_2,
             checkpoint_sha: "def456".to_string(),
         }),
-        in_place:         true,
         web_url:          Some("http://localhost:3000/runs/01JNQVR7M0EJ5GKAT2SC4ERS1Z".to_string()),
     };
 
@@ -54,7 +53,6 @@ fn run_created_props_round_trip_templated_settings() {
     assert_eq!(json["git"]["branch"], "main");
     assert_eq!(json["git"]["dirty"], "unknown");
     assert_eq!(json["git"]["push_outcome"]["type"], "skipped_no_remote");
-    assert_eq!(json["in_place"], true);
     assert_eq!(
         json["web_url"],
         "http://localhost:3000/runs/01JNQVR7M0EJ5GKAT2SC4ERS1Z"
@@ -90,7 +88,6 @@ fn run_created_props_omits_web_url_when_absent() {
         manifest_blob:    None,
         git:              None,
         fork_source_ref:  None,
-        in_place:         false,
         web_url:          None,
     };
 

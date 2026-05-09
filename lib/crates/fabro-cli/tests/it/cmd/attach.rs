@@ -353,7 +353,6 @@ fn attach_replays_completed_detached_run() {
     ----- stdout -----
     ----- stderr -----
         Web UI: http://localhost:3000/runs/[ULID]
-        Warning: Worktree mode `always` requested but no Git repository was found; running without a worktree. [worktree_skipped_no_git]
         Sandbox: local (ready in [TIME])
         ✓ Start  [TIME]
         ✓ Run Tests  [TIME]
@@ -598,7 +597,6 @@ fn attach_before_completion_streams_to_finished_state() {
     ----- stdout -----
     ----- stderr -----
         Web UI: http://localhost:3000/runs/[ULID]
-        Warning: Worktree mode `always` requested but no Git repository was found; running without a worktree. [worktree_skipped_no_git]
         Sandbox: local (ready in [TIME])
         ✓ start  [DURATION]
         ✓ wait  [DURATION]
@@ -890,7 +888,6 @@ fn attach_json_errors_without_prompting_for_human_input() {
               }
             }
           },
-          "in_place": false,
           "manifest_blob": "[BLOB_ID]",
           "provenance": {
             "client": {
@@ -915,7 +912,6 @@ fn attach_json_errors_without_prompting_for_human_input() {
           "settings": {
             "project": {
               "description": null,
-              "directory": ".",
               "metadata": {},
               "name": null
             },
@@ -949,10 +945,8 @@ fn attach_json_errors_without_prompting_for_human_input() {
                 }
               },
               "interviews": {
-                "discord": null,
                 "provider": null,
-                "slack": null,
-                "teams": null
+                "slack": null
               },
               "metadata": {},
               "model": {
@@ -978,9 +972,6 @@ fn attach_json_errors_without_prompting_for_human_input() {
                   "skip_clone": false
                 },
                 "env": {},
-                "local": {
-                  "worktree_mode": "always"
-                },
                 "preserve": false,
                 "provider": "local",
                 "stop_on_terminal": true
@@ -1033,21 +1024,6 @@ fn attach_json_errors_without_prompting_for_human_input() {
         "event": "run.starting",
         "id": "[EVENT_ID]",
         "properties": {},
-        "run_id": "[ULID]",
-        "ts": "[TIMESTAMP]"
-      },
-      {
-        "actor": {
-          "kind": "worker",
-          "run_id": "[ULID]"
-        },
-        "event": "run.notice",
-        "id": "[EVENT_ID]",
-        "properties": {
-          "code": "worktree_skipped_no_git",
-          "level": "warn",
-          "message": "Worktree mode `always` requested but no Git repository was found; running without a worktree."
-        },
         "run_id": "[ULID]",
         "ts": "[TIMESTAMP]"
       },

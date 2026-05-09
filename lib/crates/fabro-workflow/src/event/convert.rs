@@ -52,7 +52,6 @@ fn event_body_from_event(event: &Event) -> EventBody {
             manifest_blob,
             git,
             fork_source_ref,
-            in_place,
             web_url,
             ..
         } => EventBody::RunCreated(fabro_types::RunCreatedProps {
@@ -71,7 +70,6 @@ fn event_body_from_event(event: &Event) -> EventBody {
             manifest_blob:    *manifest_blob,
             git:              git.clone(),
             fork_source_ref:  fork_source_ref.clone(),
-            in_place:         *in_place,
             web_url:          web_url.clone(),
         }),
         Event::WorkflowRunStarted {
@@ -2051,7 +2049,6 @@ mod tests {
             manifest_blob:    None,
             git:              None,
             fork_source_ref:  None,
-            in_place:         false,
             web_url:          None,
         });
         let actor = stored.actor.as_ref().expect("actor set");

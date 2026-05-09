@@ -1,5 +1,5 @@
 use fabro_types::settings::cli::OutputFormat;
-use fabro_types::settings::run::{ApprovalMode, RunMode, WorktreeMode};
+use fabro_types::settings::run::{ApprovalMode, RunMode};
 use fabro_types::settings::server::ObjectStoreProvider;
 
 use crate::{Combine, ServerSettingsBuilder, SettingsLayer, WorkflowSettingsBuilder};
@@ -18,12 +18,13 @@ fn embedded_defaults() -> SettingsLayer {
 fn embedded_defaults_parse_successfully() {
     let defaults = embedded_defaults();
 
-    assert_eq!(
+    assert!(
         defaults
             .project
             .as_ref()
-            .and_then(|project| project.directory.as_deref()),
-        Some(".")
+            .and_then(|project| project.directory.as_deref())
+            .is_none(),
+        "built-in defaults should not materialize deprecated project.directory"
     );
     assert_eq!(
         defaults
@@ -38,12 +39,13 @@ fn embedded_defaults_parse_successfully() {
 fn apply_builtin_defaults_materializes_expected_layer() {
     let layer = SettingsLayer::default().combine(embedded_defaults());
 
-    assert_eq!(
+    assert!(
         layer
             .project
             .as_ref()
-            .and_then(|project| project.directory.as_deref()),
-        Some(".")
+            .and_then(|project| project.directory.as_deref())
+            .is_none(),
+        "built-in defaults should not materialize deprecated project.directory"
     );
     assert_eq!(
         layer
@@ -75,15 +77,6 @@ fn apply_builtin_defaults_materializes_expected_layer() {
             .and_then(|run| run.execution.as_ref())
             .and_then(|execution| execution.approval),
         Some(ApprovalMode::Prompt)
-    );
-    assert_eq!(
-        layer
-            .run
-            .as_ref()
-            .and_then(|run| run.sandbox.as_ref())
-            .and_then(|sandbox| sandbox.local.as_ref())
-            .and_then(|local| local.worktree_mode),
-        Some(WorktreeMode::Always)
     );
     assert_eq!(
         layer

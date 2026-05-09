@@ -110,6 +110,51 @@ fn resolves_server_defaults_from_empty_settings() {
 }
 
 #[test]
+fn resolved_server_integrations_are_slack_only_for_chat() {
+    let settings = resolve_server(&empty_settings_with_auth_methods());
+
+    let integrations =
+        serde_json::to_value(&settings.integrations).expect("integrations should serialize");
+
+    assert_eq!(
+        integrations,
+        serde_json::json!({
+            "github": {
+                "enabled": false,
+                "strategy": "token",
+                "app_id": null,
+                "client_id": null,
+                "slug": null,
+                "webhooks": null,
+            },
+            "slack": {
+                "enabled": false,
+                "default_channel": null,
+            },
+        })
+    );
+}
+
+#[test]
+fn parsing_rejects_unknown_server_integrations() {
+    let source = r#"
+_version = 1
+
+[server.integrations.chatapp]
+enabled = true
+"#;
+
+    let err = source
+        .parse::<SettingsLayer>()
+        .expect_err("unknown chat integration should be rejected");
+    let message = err.to_string();
+    assert!(
+        message.contains("chatapp") || message.contains("unknown field"),
+        "expected parse error for unknown chat provider, got: {message}"
+    );
+}
+
+#[test]
 fn resolves_server_logging_destination_from_settings() {
     let file = parse(
         r#"

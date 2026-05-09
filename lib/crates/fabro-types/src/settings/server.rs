@@ -258,10 +258,8 @@ pub struct ServerLoggingSettings {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ServerIntegrationsSettings {
-    pub github:  GithubIntegrationSettings,
-    pub slack:   SlackIntegrationSettings,
-    pub discord: DiscordIntegrationSettings,
-    pub teams:   TeamsIntegrationSettings,
+    pub github: GithubIntegrationSettings,
+    pub slack:  SlackIntegrationSettings,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -278,16 +276,6 @@ pub struct GithubIntegrationSettings {
 pub struct SlackIntegrationSettings {
     pub enabled:         bool,
     pub default_channel: Option<InterpString>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DiscordIntegrationSettings {
-    pub enabled: bool,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TeamsIntegrationSettings {
-    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

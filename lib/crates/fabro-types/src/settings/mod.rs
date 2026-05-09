@@ -45,12 +45,12 @@ pub use run::{
     ScmGitHubSettings, TlsMode,
 };
 pub use server::{
-    DiscordIntegrationSettings, GithubIntegrationSettings, IntegrationWebhooksSettings,
-    IpAllowEntry, LogDestination, ObjectStoreSettings, ServerApiSettings, ServerArtifactsSettings,
-    ServerAuthGithubSettings, ServerAuthMethod, ServerAuthSettings, ServerIntegrationsSettings,
+    GithubIntegrationSettings, IntegrationWebhooksSettings, IpAllowEntry, LogDestination,
+    ObjectStoreSettings, ServerApiSettings, ServerArtifactsSettings, ServerAuthGithubSettings,
+    ServerAuthMethod, ServerAuthSettings, ServerIntegrationsSettings,
     ServerIpAllowlistOverrideSettings, ServerIpAllowlistSettings, ServerListenSettings,
     ServerLoggingSettings, ServerNamespace, ServerSchedulerSettings, ServerSlateDbSettings,
-    ServerStorageSettings, ServerWebSettings, SlackIntegrationSettings, TeamsIntegrationSettings,
+    ServerStorageSettings, ServerWebSettings, SlackIntegrationSettings,
 };
 pub use size::{ParseSizeError, Size};
 pub use workflow::WorkflowNamespace;

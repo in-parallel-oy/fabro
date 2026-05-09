@@ -8,7 +8,6 @@ use fabro_llm::Provider;
 use fabro_mcp::config::McpServerSettings;
 use fabro_model::FallbackTarget;
 use fabro_sandbox::SandboxSpec;
-use fabro_sandbox::config::WorktreeMode;
 use fabro_types::RunId;
 use fabro_types::settings::run::PullRequestSettings;
 use fabro_validate::{Diagnostic, Severity};
@@ -250,7 +249,6 @@ pub struct InitOptions {
     pub vault:             Option<Arc<AsyncRwLock<Vault>>>,
     pub devcontainer:      Option<DevcontainerSpec>,
     pub git:               Option<GitCheckpointOptions>,
-    pub worktree_mode:     Option<WorktreeMode>,
     pub registry_override: Option<Arc<HandlerRegistry>>,
     pub artifact_sink:     Option<ArtifactSink>,
     pub run_control:       Option<Arc<RunControlState>>,

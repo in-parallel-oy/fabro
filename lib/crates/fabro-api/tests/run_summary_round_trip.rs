@@ -29,7 +29,6 @@ fn run_summary_json_matches_openapi_shape() {
         "API title".to_string(),
         HashMap::from([("team".to_string(), "core".to_string())]),
         Some("/tmp/fabro".to_string()),
-        false,
         None,
         Some(created_at),
         Some(last_event_at),
@@ -70,7 +69,6 @@ fn run_summary_json_matches_openapi_shape() {
                 "team": "core"
             },
             "source_directory": "/tmp/fabro",
-            "in_place": false,
             "repo_origin_url": null,
             "repository": {
                 "name": "fabro"

@@ -560,7 +560,7 @@ These are lessons learned during Stages 1–5. Save yourself the pain.
    enumerated list of known-provider subfields instead (that's why
    `RunSandboxLayer`, `NotificationRouteLayer`, `InterviewsLayer`,
    `RunScmLayer`, `ServerIntegrationsLayer`, etc. have explicit
-   `github`/`slack`/`discord`/`teams`/`local`/`s3` fields). Adding a new
+   `github`/`slack`/`local`/`s3` fields). Adding a new
    provider means adding a new field.
 
 ## Repo conventions you'll hit

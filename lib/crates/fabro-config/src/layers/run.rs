@@ -4,7 +4,6 @@ use std::collections::HashMap;
 
 use fabro_types::settings::run::{
     AgentPermissions, ApprovalMode, DaytonaNetworkLayer, HookEvent, MergeStrategy, RunMode,
-    WorktreeMode,
 };
 use fabro_types::settings::{Duration, InterpString, ModelRef, Size};
 use serde::{Deserialize, Serialize};
@@ -264,18 +263,9 @@ pub struct RunSandboxLayer {
     #[serde(default, skip_serializing_if = "StickyMap::is_empty")]
     pub env:              StickyMap<InterpString>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub local:            Option<LocalSandboxLayer>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub docker:           Option<DockerSandboxLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub daytona:          Option<DaytonaSandboxLayer>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct LocalSandboxLayer {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub worktree_mode: Option<WorktreeMode>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
@@ -344,13 +334,9 @@ pub struct NotificationRouteLayer {
     /// Raw Fabro event names. Splice marker supported at layering time.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub events:   Vec<StringOrSplice>,
-    /// Provider-specific destination subtables. First-pass chat providers.
+    /// Provider-specific destination subtables.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slack:    Option<NotificationProviderLayer>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub discord:  Option<NotificationProviderLayer>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub teams:    Option<NotificationProviderLayer>,
 }
 
 /// A single string array entry that may be the splice marker.
@@ -396,10 +382,6 @@ pub struct InterviewsLayer {
     pub provider: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slack:    Option<InterviewProviderLayer>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub discord:  Option<InterviewProviderLayer>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub teams:    Option<InterviewProviderLayer>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

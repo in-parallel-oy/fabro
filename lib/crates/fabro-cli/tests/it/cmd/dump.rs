@@ -181,9 +181,6 @@ goal = "Generate oversized command output and artifacts"
 provider = "local"
 preserve = true
 
-[run.sandbox.local]
-worktree_mode = "never"
-
 [run.artifacts]
 include = ["assets/**"]
 "#,
@@ -271,9 +268,9 @@ fn dump_exports_completed_run_snapshot() {
     ");
 
     assert_snapshot!(dump_file_summary(&output_dir), @"
-    checkpoints/0014.json
-    checkpoints/0018.json
-    checkpoints/0022.json
+    checkpoints/0013.json
+    checkpoints/0017.json
+    checkpoints/0021.json
     events.jsonl
     graph.fabro
     run.json

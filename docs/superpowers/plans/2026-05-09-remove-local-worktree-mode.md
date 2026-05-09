@@ -48,14 +48,14 @@ Out of scope: new explicit branching/committing settings. Local direct runs shou
 - Modify: `lib/crates/fabro-cli/src/args.rs`
 - Modify: `lib/crates/fabro-cli/src/manifest_builder.rs`
 
-- [ ] Remove `WorktreeMode`, `LocalSandboxSettings`, and the `RunSandboxSettings.local` field.
-- [ ] Remove the `[run.sandbox.local] worktree_mode = "always"` default.
-- [ ] Remove config-layer parsing/resolution for `[run.sandbox.local]` entirely.
-- [ ] Remove `RunArgs::in_place`.
-- [ ] Make `run_manifest_args` set `sandbox` only from `--sandbox`; do not synthesize local sandbox or `worktree_mode`.
-- [ ] Make `preflight_manifest_args` stop carrying `worktree_mode`.
-- [ ] Update compile errors in config tests and CLI tests by removing assertions that mention `WorktreeMode`, `worktree_mode`, or `--in-place`.
-- [ ] Run `rg -n "worktree_mode|WorktreeMode|--in-place|in_place" lib apps/fabro-web/app docs/public -g '!lib/packages/fabro-api-client/src/**' -g '!lib/crates/fabro-spa/assets/**'` and remove newly exposed non-historical matches related to config and CLI knobs.
+- [x] Remove `WorktreeMode`, `LocalSandboxSettings`, and the `RunSandboxSettings.local` field.
+- [x] Remove the `[run.sandbox.local] worktree_mode = "always"` default.
+- [x] Remove config-layer parsing/resolution for `[run.sandbox.local]` entirely.
+- [x] Remove `RunArgs::in_place`.
+- [x] Make `run_manifest_args` set `sandbox` only from `--sandbox`; do not synthesize local sandbox or `worktree_mode`.
+- [x] Make `preflight_manifest_args` stop carrying `worktree_mode`.
+- [x] Update compile errors in config tests and CLI tests by removing assertions that mention `WorktreeMode`, `worktree_mode`, or `--in-place`.
+- [x] Run `rg -n "worktree_mode|WorktreeMode|--in-place|in_place" lib apps/fabro-web/app docs/public -g '!lib/packages/fabro-api-client/src/**' -g '!lib/crates/fabro-spa/assets/**'` and remove newly exposed non-historical matches related to config and CLI knobs.
 
 ### Task 2: Remove `in_place` From Run State and API Surfaces
 
@@ -68,14 +68,14 @@ Out of scope: new explicit branching/committing settings. Local direct runs shou
 - Modify: `lib/crates/fabro-server/src/run_manifest.rs`
 - Modify: `docs/public/api-reference/fabro-api.yaml`
 
-- [ ] Remove `in_place` from `RunSpec` and all run-created/run-summary event props.
-- [ ] Remove `PreparedManifest.in_place`; local/direct behavior is now implied by `settings.run.sandbox.provider == "local"`.
-- [ ] Remove `CreateRunInput.in_place` and `PersistCreateOptions.in_place`.
-- [ ] Remove server and CLI code that serializes, displays, or filters by `in_place`.
-- [ ] Remove `in_place` from the OpenAPI schema.
-- [ ] Regenerate Rust API types with `cargo build -p fabro-api`.
-- [ ] Regenerate TypeScript client with `cd lib/packages/fabro-api-client && bun run generate`.
-- [ ] Run `rg -n "worktree_mode|WorktreeMode|--in-place|in_place" lib apps/fabro-web/app docs/public -g '!lib/packages/fabro-api-client/src/**' -g '!lib/crates/fabro-spa/assets/**'` and remove newly exposed non-historical matches in event conversion, persistence, runtime store/test fixtures, run metadata, billing rollups, CLI run listing/server run wrappers, server demo data, and generated-schema call sites.
+- [x] Remove `in_place` from `RunSpec` and all run-created/run-summary event props.
+- [x] Remove `PreparedManifest.in_place`; local/direct behavior is now implied by `settings.run.sandbox.provider == "local"`.
+- [x] Remove `CreateRunInput.in_place` and `PersistCreateOptions.in_place`.
+- [x] Remove server and CLI code that serializes, displays, or filters by `in_place`.
+- [x] Remove `in_place` from the OpenAPI schema.
+- [x] Regenerate Rust API types with `cargo build -p fabro-api`.
+- [x] Regenerate TypeScript client with `cd lib/packages/fabro-api-client && bun run generate`.
+- [x] Run `rg -n "worktree_mode|WorktreeMode|--in-place|in_place" lib apps/fabro-web/app docs/public -g '!lib/packages/fabro-api-client/src/**' -g '!lib/crates/fabro-spa/assets/**'` and remove newly exposed non-historical matches in event conversion, persistence, runtime store/test fixtures, run metadata, billing rollups, CLI run listing/server run wrappers, server demo data, and generated-schema call sites.
 
 ### Task 3: Simplify Workflow Initialization
 
@@ -85,16 +85,16 @@ Out of scope: new explicit branching/committing settings. Local direct runs shou
 - Modify: `lib/crates/fabro-workflow/src/operations/start.rs`
 - Modify: `lib/crates/fabro-workflow/src/operations/fork.rs`
 
-- [ ] Extract provider-specific dirty-worktree warning logic before deleting worktree planning: Docker/Daytona warn that uncommitted local changes are not included in the remote sandbox; local direct runs do not warn.
-- [ ] Remove `worktree_mode` from initialization options.
-- [ ] Delete `WorktreePlan`, `resolve_worktree_plan`, `resolve_worktree_base_sha`, and `worktree_skipped_notice`.
-- [ ] Remove local `WorktreeSandbox` wrapping from `initialize`.
-- [ ] Keep existing generic wrappers such as `ReadBeforeWriteSandbox`; this change only removes Fabro-managed git worktree materialization for local runs.
-- [ ] Keep attach/resume reconnection for existing sandboxes.
-- [ ] Keep normal sandbox build/initialize flow for new runs.
-- [ ] Keep the generic `sandbox.setup_git(...)` block after sandbox initialization. This will continue to work for Docker/Daytona and continue to no-op for local.
-- [ ] Remove fork validation that rejects `spec.in_place`; fork should now fail based on real missing prerequisites such as empty/missing checkpoint git SHA or missing repo origin.
-- [ ] Run `rg -n "worktree_mode|WorktreeMode|--in-place|in_place" lib apps/fabro-web/app docs/public -g '!lib/packages/fabro-api-client/src/**' -g '!lib/crates/fabro-spa/assets/**'` and remove newly exposed non-historical matches related to initialize, fork, and resume.
+- [x] Extract provider-specific dirty-worktree warning logic before deleting worktree planning: Docker/Daytona warn that uncommitted local changes are not included in the remote sandbox; local direct runs do not warn.
+- [x] Remove `worktree_mode` from initialization options.
+- [x] Delete `WorktreePlan`, `resolve_worktree_plan`, `resolve_worktree_base_sha`, and `worktree_skipped_notice`.
+- [x] Remove local `WorktreeSandbox` wrapping from `initialize`.
+- [x] Keep existing generic wrappers such as `ReadBeforeWriteSandbox`; this change only removes Fabro-managed git worktree materialization for local runs.
+- [x] Keep attach/resume reconnection for existing sandboxes.
+- [x] Keep normal sandbox build/initialize flow for new runs.
+- [x] Keep the generic `sandbox.setup_git(...)` block after sandbox initialization. This will continue to work for Docker/Daytona and continue to no-op for local.
+- [x] Remove fork validation that rejects `spec.in_place`; fork should now fail based on real missing prerequisites such as empty/missing checkpoint git SHA or missing repo origin.
+- [x] Run `rg -n "worktree_mode|WorktreeMode|--in-place|in_place" lib apps/fabro-web/app docs/public -g '!lib/packages/fabro-api-client/src/**' -g '!lib/crates/fabro-spa/assets/**'` and remove newly exposed non-historical matches related to initialize, fork, and resume.
 
 ### Task 4: Keep Parallel Worktrees Intact
 
@@ -102,10 +102,10 @@ Out of scope: new explicit branching/committing settings. Local direct runs shou
 - Modify only if compile errors require it: `lib/crates/fabro-workflow/src/handler/parallel.rs`
 - Do not delete: `lib/crates/fabro-sandbox/src/worktree.rs`
 
-- [ ] Verify `WorktreeSandbox` remains available to parallel-node code.
-- [ ] Remove only imports that were used exclusively by local-run worktree setup.
-- [ ] Ensure parallel branch tests still create isolated branch worktrees and fan back in as before.
-- [ ] Run `rg -n "worktree_mode|WorktreeMode|--in-place|in_place" lib apps/fabro-web/app docs/public -g '!lib/packages/fabro-api-client/src/**' -g '!lib/crates/fabro-spa/assets/**'` and confirm remaining worktree references are only parallel-node internals or historical docs intentionally kept.
+- [x] Verify `WorktreeSandbox` remains available to parallel-node code.
+- [x] Remove only imports that were used exclusively by local-run worktree setup.
+- [x] Ensure parallel branch tests still create isolated branch worktrees and fan back in as before.
+- [x] Run `rg -n "worktree_mode|WorktreeMode|--in-place|in_place" lib apps/fabro-web/app docs/public -g '!lib/packages/fabro-api-client/src/**' -g '!lib/crates/fabro-spa/assets/**'` and confirm remaining worktree references are only parallel-node internals or historical docs intentionally kept.
 
 ### Task 5: Update Docs and UI
 
@@ -115,53 +115,53 @@ Out of scope: new explicit branching/committing settings. Local direct runs shou
 - Modify: `apps/fabro-web/app/routes/run-settings.tsx`
 - Modify: `apps/fabro-web/app/routes/workflow-detail.tsx`
 
-- [ ] Document local sandbox semantics as direct execution in the resolved working directory.
-- [ ] Remove `--in-place` from CLI reference docs.
-- [ ] Remove `[run.sandbox.local] worktree_mode` docs.
-- [ ] Remove UI rendering/seed data references to `worktree_mode`.
-- [ ] Keep docs clear that user-managed local isolation is done by entering a separate clone/worktree and running with `--sandbox local`.
-- [ ] Run `rg -n "worktree_mode|WorktreeMode|--in-place|in_place" lib apps/fabro-web/app docs/public -g '!lib/packages/fabro-api-client/src/**' -g '!lib/crates/fabro-spa/assets/**'` and remove newly exposed non-historical docs/UI matches.
+- [x] Document local sandbox semantics as direct execution in the resolved working directory.
+- [x] Remove `--in-place` from CLI reference docs.
+- [x] Remove `[run.sandbox.local] worktree_mode` docs.
+- [x] Remove UI rendering/seed data references to `worktree_mode`.
+- [x] Keep docs clear that user-managed local isolation is done by entering a separate clone/worktree and running with `--sandbox local`.
+- [x] Run `rg -n "worktree_mode|WorktreeMode|--in-place|in_place" lib apps/fabro-web/app docs/public -g '!lib/packages/fabro-api-client/src/**' -g '!lib/crates/fabro-spa/assets/**'` and remove newly exposed non-historical docs/UI matches.
 
 ## Test Plan
 
-- [ ] Run config/default tests:
+- [x] Run config/default tests:
 
 ```bash
 cargo nextest run -p fabro-config
 ```
 
-- [ ] Run CLI manifest and command help tests:
+- [x] Run CLI manifest and command help tests:
 
 ```bash
 cargo nextest run -p fabro-cli
 ```
 
-- [ ] Run workflow tests covering initialize, fork, checkpointing, parallel worktrees, and PR prerequisites:
+- [x] Run workflow tests covering initialize, fork, checkpointing, parallel worktrees, and PR prerequisites:
 
 ```bash
 cargo nextest run -p fabro-workflow
 ```
 
-- [ ] Run server API tests for manifests, run summaries, PR endpoints, and OpenAPI conformance:
+- [x] Run server API tests for manifests, run summaries, PR endpoints, and OpenAPI conformance:
 
 ```bash
 cargo nextest run -p fabro-server
 ```
 
-- [ ] Regenerate and verify API clients:
+- [x] Regenerate and verify API clients:
 
 ```bash
 cargo build -p fabro-api
 cd lib/packages/fabro-api-client && bun run generate
 ```
 
-- [ ] Typecheck web UI after generated-client and settings-shape changes:
+- [x] Typecheck web UI after generated-client and settings-shape changes:
 
 ```bash
 cd apps/fabro-web && bun run typecheck
 ```
 
-- [ ] Run formatting and lint checks:
+- [x] Run formatting and lint checks:
 
 ```bash
 cargo +nightly-2026-04-14 fmt --check --all

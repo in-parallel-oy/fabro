@@ -16,13 +16,13 @@ mod generated {
 pub mod types {
     pub use fabro_model::{Model, ModelCosts, ModelFeatures, ModelLimits, ModelTestMode, Provider};
     pub use fabro_types::settings::server::{
-        DiscordIntegrationSettings, GithubIntegrationSettings, GithubIntegrationStrategy,
-        IntegrationWebhooksSettings, IpAllowEntry, LogDestination, ObjectStoreSettings,
-        ServerApiSettings, ServerArtifactsSettings, ServerAuthGithubSettings, ServerAuthMethod,
-        ServerAuthSettings, ServerIntegrationsSettings, ServerIpAllowlistOverrideSettings,
-        ServerIpAllowlistSettings, ServerListenSettings, ServerLoggingSettings,
-        ServerSchedulerSettings, ServerSlateDbSettings, ServerStorageSettings, ServerWebSettings,
-        SlackIntegrationSettings, TeamsIntegrationSettings, WebhookStrategy,
+        GithubIntegrationSettings, GithubIntegrationStrategy, IntegrationWebhooksSettings,
+        IpAllowEntry, LogDestination, ObjectStoreSettings, ServerApiSettings,
+        ServerArtifactsSettings, ServerAuthGithubSettings, ServerAuthMethod, ServerAuthSettings,
+        ServerIntegrationsSettings, ServerIpAllowlistOverrideSettings, ServerIpAllowlistSettings,
+        ServerListenSettings, ServerLoggingSettings, ServerSchedulerSettings,
+        ServerSlateDbSettings, ServerStorageSettings, ServerWebSettings, SlackIntegrationSettings,
+        WebhookStrategy,
     };
     pub use fabro_types::settings::{FeaturesNamespace, ServerNamespace};
     pub use fabro_types::status::{

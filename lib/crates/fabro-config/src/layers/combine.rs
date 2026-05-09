@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use fabro_types::settings::cli::{CliAuthStrategy, OutputFormat, OutputVerbosity};
 use fabro_types::settings::run::{
-    AgentPermissions, ApprovalMode, DaytonaNetworkLayer, MergeStrategy, RunMode, WorktreeMode,
+    AgentPermissions, ApprovalMode, DaytonaNetworkLayer, MergeStrategy, RunMode,
 };
 use fabro_types::settings::server::{
     GithubIntegrationStrategy, LogDestination, ObjectStoreProvider, ServerAuthMethod,
@@ -15,8 +15,8 @@ use super::cli::{CliAuthLayer, CliLoggingLayer, CliTargetLayer};
 use super::features::FeaturesLayer;
 use super::run::{
     DaytonaSnapshotLayer, HookAgentMarker, HookEntry, HookTlsMode, InterviewProviderLayer,
-    LocalSandboxLayer, ModelRefOrSplice, NotificationProviderLayer, RunArtifactsLayer,
-    RunCheckpointLayer, RunGoalLayer, RunPrepareLayer, ScmGitHubLayer, StringOrSplice,
+    ModelRefOrSplice, NotificationProviderLayer, RunArtifactsLayer, RunCheckpointLayer,
+    RunGoalLayer, RunPrepareLayer, ScmGitHubLayer, StringOrSplice,
 };
 use super::server::{
     ObjectStoreLocalLayer, ObjectStoreS3Layer, ServerApiLayer, ServerAuthGithubLayer,
@@ -75,7 +75,6 @@ impl_combine_or_option!(
     HookTlsMode,
     MergeStrategy,
     RunMode,
-    WorktreeMode,
     GithubIntegrationStrategy,
     LogDestination,
     ObjectStoreProvider,
@@ -122,7 +121,6 @@ impl_combine_self!(
     DaytonaNetworkLayer,
     DaytonaSnapshotLayer,
     InterviewProviderLayer,
-    LocalSandboxLayer,
     NotificationProviderLayer,
     RunArtifactsLayer,
     RunGoalLayer,
@@ -282,7 +280,6 @@ mod tests {
         assert_option_leaf(HookTlsMode::NoVerify, HookTlsMode::Verify);
         assert_option_leaf(MergeStrategy::Rebase, MergeStrategy::Squash);
         assert_option_leaf(RunMode::DryRun, RunMode::Normal);
-        assert_option_leaf(WorktreeMode::Always, WorktreeMode::Never);
         assert_option_leaf(
             GithubIntegrationStrategy::App,
             GithubIntegrationStrategy::Token,

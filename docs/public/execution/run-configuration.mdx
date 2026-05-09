@@ -232,18 +232,9 @@ dockerfile = "FROM rust:1.85-slim-bookworm\nRUN apt-get update"
 | `network` | Network access mode: `"allow_all"` (default), `"block"`, or `{ allow_list = ["..."] }`. See [Sandboxing](/administration/sandboxing#network-access-control). |
 | `skip_clone` | When `true`, start with an empty Daytona workspace instead of cloning the run's GitHub origin. |
 
-#### `[run.sandbox.local]`
+#### Local sandbox
 
-Additional settings when using the local sandbox:
-
-```toml title="run.toml"
-[run.sandbox.local]
-worktree_mode = "always"
-```
-
-| Field | Description |
-|---|---|
-| `worktree_mode` | Legacy compatibility setting. Local Git runs use a run-scoped worktree by default; the explicit in-place/no-checkpoints path is the supported opt-out. |
+When `run.sandbox.provider = "local"`, Fabro runs directly in the resolved working directory. If you want local isolation, create or enter a separate clone or Git worktree yourself, then run with `--sandbox local`.
 
 #### `[run.sandbox.env]`
 

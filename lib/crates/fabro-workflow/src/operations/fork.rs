@@ -109,12 +109,6 @@ fn validate_source_spec(
     checkpoint_sha: &str,
 ) -> std::result::Result<(), Error> {
     let spec = spec.ok_or_else(|| Error::engine("source run projection has no spec"))?;
-    if spec.in_place {
-        return Err(Error::Validation(
-            "source run was created with --in-place; cannot fork (no git checkpoint history)"
-                .to_string(),
-        ));
-    }
     if checkpoint_sha.trim().is_empty() {
         return Err(Error::Validation(
             "target checkpoint has an empty git_commit_sha; cannot fork".to_string(),
@@ -184,7 +178,6 @@ async fn persist_forked_run(
         manifest_blob:    spec.manifest_blob,
         git:              spec.git.clone(),
         fork_source_ref:  spec.fork_source_ref.clone(),
-        in_place:         spec.in_place,
         web_url:          None,
     })
     .await
@@ -365,7 +358,6 @@ mod tests {
                 push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
             }),
             fork_source_ref:  None,
-            in_place:         false,
             web_url:          None,
         })
         .await

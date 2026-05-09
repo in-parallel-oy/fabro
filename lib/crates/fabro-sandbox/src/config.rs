@@ -9,7 +9,6 @@
 
 use std::collections::HashMap;
 
-use fabro_types::settings::run::WorktreeMode as V2WorktreeMode;
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 
@@ -122,25 +121,4 @@ pub struct DaytonaSnapshotSettings {
     pub memory:     Option<i32>,
     pub disk:       Option<i32>,
     pub dockerfile: Option<DockerfileSource>,
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WorktreeMode {
-    Always,
-    #[default]
-    Clean,
-    Dirty,
-    Never,
-}
-
-/// Convert a v2 [`V2WorktreeMode`] into the runtime [`WorktreeMode`].
-#[must_use]
-pub fn bridge_worktree_mode(m: V2WorktreeMode) -> WorktreeMode {
-    match m {
-        V2WorktreeMode::Always => WorktreeMode::Always,
-        V2WorktreeMode::Clean => WorktreeMode::Clean,
-        V2WorktreeMode::Dirty => WorktreeMode::Dirty,
-        V2WorktreeMode::Never => WorktreeMode::Never,
-    }
 }

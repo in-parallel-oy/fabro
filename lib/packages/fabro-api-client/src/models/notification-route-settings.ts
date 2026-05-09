@@ -22,7 +22,5 @@ export interface NotificationRouteSettings {
     'provider': string | null;
     'events': Array<string>;
     'slack': NotificationProviderSettings | null;
-    'discord': NotificationProviderSettings | null;
-    'teams': NotificationProviderSettings | null;
 }
 

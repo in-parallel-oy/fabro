@@ -182,15 +182,10 @@ pub(crate) fn run_manifest_args(args: &RunArgs) -> Option<types::ManifestArgs> {
         provider:         args.provider.clone(),
         sandbox:          args
             .sandbox
-            .map(|provider| fabro_sandbox::SandboxProvider::from(provider).to_string())
-            .or_else(|| {
-                args.in_place
-                    .then(|| fabro_sandbox::SandboxProvider::Local.to_string())
-            }),
+            .map(|provider| fabro_sandbox::SandboxProvider::from(provider).to_string()),
         docker_image:     None,
         input:            args.inputs.values.clone(),
         verbose:          args.verbose.then_some(true),
-        worktree_mode:    args.in_place.then(|| "never".to_string()),
     };
     (!manifest_args_is_empty(&payload)).then_some(payload)
 }
@@ -209,7 +204,6 @@ pub(crate) fn preflight_manifest_args(args: &PreflightArgs) -> Option<types::Man
         docker_image:     None,
         input:            args.inputs.values.clone(),
         verbose:          args.verbose.then_some(true),
-        worktree_mode:    None,
     };
     (!manifest_args_is_empty(&payload)).then_some(payload)
 }
@@ -667,7 +661,6 @@ fn manifest_args_is_empty(args: &types::ManifestArgs) -> bool {
         && args.docker_image.is_none()
         && args.input.is_empty()
         && args.verbose.is_none()
-        && args.worktree_mode.is_none()
 }
 
 #[cfg(test)]

@@ -71,19 +71,19 @@ fn collect_replacements(v: &Value) -> Vec<(String, String)> {
     repls
 }
 
-fn redact_value_in_place(value: &mut Value, skip_field: bool) {
+fn redact_json_tree(value: &mut Value, skip_field: bool) {
     match value {
         Value::Object(obj) => {
             if should_skip_object(obj) {
                 return;
             }
             for (key, child) in obj {
-                redact_value_in_place(child, should_skip_field(key));
+                redact_json_tree(child, should_skip_field(key));
             }
         }
         Value::Array(arr) => {
             for child in arr {
-                redact_value_in_place(child, false);
+                redact_json_tree(child, false);
             }
         }
         Value::String(text) if !skip_field => {
@@ -97,7 +97,7 @@ fn redact_value_in_place(value: &mut Value, skip_field: bool) {
 }
 
 pub fn redact_json_value(mut value: Value) -> Value {
-    redact_value_in_place(&mut value, false);
+    redact_json_tree(&mut value, false);
     value
 }
 

@@ -44,7 +44,6 @@ function sampleSettings({
     project: {
       name: null,
       description: null,
-      directory: ".",
       metadata: {},
     },
     workflow: {
@@ -69,7 +68,6 @@ function sampleSettings({
         stop_on_terminal: true,
         devcontainer: true,
         env: {},
-        local: { worktree_mode: "dirty" },
         docker: null,
         daytona: {
           auto_stop_interval: autoStopInterval,
@@ -86,7 +84,7 @@ function sampleSettings({
         },
       },
       notifications: {},
-      interviews: { provider: null, slack: null, discord: null, teams: null },
+      interviews: { provider: null, slack: null },
       agent: { permissions: null, mcps: {} },
       hooks: [],
       scm: { provider: null, owner: null, repository: null, github: null },
