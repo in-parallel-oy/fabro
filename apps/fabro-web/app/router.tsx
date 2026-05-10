@@ -22,6 +22,7 @@ import * as RunEvents from "./routes/run-events";
 import * as RunArtifacts from "./routes/run-artifacts";
 import * as RunFiles from "./routes/run-files";
 import * as RunSandbox from "./routes/run-sandbox";
+import * as RunTerminal from "./routes/run-terminal";
 import * as RunBilling from "./routes/run-billing";
 import * as Insights from "./routes/insights";
 import * as InsightsEditor from "./routes/insights-editor";
@@ -75,6 +76,7 @@ export const routes: RouteObject[] = [
       indexRoute(RedirectHome),
       route("setup", Setup),
       route("login", AuthLogin),
+      route("runs/:id/terminal", RunTerminal),
       {
         Component: withRouteModule({
           default: AppShellModule,

@@ -188,9 +188,11 @@ function StatusPill({
 export default function TerminalView({
   runId,
   leading,
+  chromeless = false,
 }: {
   runId: string;
   leading?: React.ReactNode;
+  chromeless?: boolean;
 }) {
   const { push } = useToast();
   const stateQuery = useRunState(runId);
@@ -349,35 +351,38 @@ export default function TerminalView({
     <section
       className="flex h-full min-h-0 flex-col"
       aria-labelledby={headingId}
+      style={chromeless ? { backgroundColor: TERMINAL_BACKGROUND } : undefined}
     >
       <h2 id={headingId} className="sr-only">Terminal</h2>
-      <div className="mb-2 flex shrink-0 flex-wrap items-center gap-3">
-        {leading}
-        <StatusPill status={status} detail={sandboxDetail} />
-        <div className="ml-auto flex items-center gap-2">
-          <Tooltip label="Reconnect">
-            <button
-              type="button"
-              className={ICON_BUTTON_CLASS}
-              onClick={reconnect}
-              aria-label="Reconnect terminal"
-            >
-              <ArrowPathIcon className="size-4" aria-hidden="true" />
-            </button>
-          </Tooltip>
-          {accessCommandLabel && (
-            <button
-              type="button"
-              className={SECONDARY_BUTTON_CLASS}
-              onClick={() => void copyAccessCommand()}
-              aria-label={`Copy ${accessCommandLabel} command`}
-            >
-              <ClipboardDocumentIcon className="size-4" aria-hidden="true" />
-              {accessCommandLabel}
-            </button>
-          )}
+      {!chromeless && (
+        <div className="mb-2 flex shrink-0 flex-wrap items-center gap-3">
+          {leading}
+          <StatusPill status={status} detail={sandboxDetail} />
+          <div className="ml-auto flex items-center gap-2">
+            <Tooltip label="Reconnect">
+              <button
+                type="button"
+                className={ICON_BUTTON_CLASS}
+                onClick={reconnect}
+                aria-label="Reconnect terminal"
+              >
+                <ArrowPathIcon className="size-4" aria-hidden="true" />
+              </button>
+            </Tooltip>
+            {accessCommandLabel && (
+              <button
+                type="button"
+                className={SECONDARY_BUTTON_CLASS}
+                onClick={() => void copyAccessCommand()}
+                aria-label={`Copy ${accessCommandLabel} command`}
+              >
+                <ClipboardDocumentIcon className="size-4" aria-hidden="true" />
+                {accessCommandLabel}
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
       {error ? (
         <div className="flex min-h-0 flex-1 items-center justify-center" role="alert">
           <ErrorState
@@ -386,6 +391,8 @@ export default function TerminalView({
             onRetry={error.recoverable ? reconnect : undefined}
           />
         </div>
+      ) : chromeless ? (
+        <div ref={terminalEl} className="h-full min-h-0 p-3" />
       ) : (
         <div
           className="min-h-0 flex-1 overflow-hidden rounded border border-line pb-3"
