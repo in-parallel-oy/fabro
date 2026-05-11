@@ -2322,6 +2322,15 @@ async fn load_pending_control(
         .and_then(|summary| summary.lifecycle.pending_control))
 }
 
+async fn durable_run_status(state: &AppState, run_id: RunId) -> anyhow::Result<Option<RunStatus>> {
+    Ok(state
+        .store
+        .runs()
+        .find(&run_id)
+        .await?
+        .map(|summary| summary.lifecycle.status))
+}
+
 fn fail_managed_run(state: &Arc<AppState>, run_id: RunId, reason: FailureReason, message: String) {
     let mut runs = state.runs.lock().expect("runs lock poisoned");
     if let Some(managed_run) = runs.get_mut(&run_id) {

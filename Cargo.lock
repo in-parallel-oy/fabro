@@ -1678,7 +1678,9 @@ dependencies = [
  "fabro-interview",
  "fabro-llm",
  "fabro-macros",
+ "fabro-manifest",
  "fabro-mcp",
+ "fabro-mcp-server",
  "fabro-model",
  "fabro-oauth",
  "fabro-proc",
@@ -2004,6 +2006,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "fabro-manifest"
+version = "0.230.0-nightly.0"
+dependencies = [
+ "anyhow",
+ "fabro-api",
+ "fabro-config",
+ "fabro-github",
+ "fabro-graphviz",
+ "fabro-template",
+ "fabro-types",
+ "fabro-workflow",
+ "git2",
+ "temp-env",
+ "tempfile",
+ "toml 0.8.23",
+]
+
+[[package]]
 name = "fabro-mcp"
 version = "0.230.0-nightly.0"
 dependencies = [
@@ -2017,6 +2037,28 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "fabro-mcp-server"
+version = "0.230.0-nightly.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "fabro-api",
+ "fabro-client",
+ "fabro-config",
+ "fabro-manifest",
+ "fabro-server",
+ "fabro-types",
+ "fabro-util",
+ "futures",
+ "rmcp",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml 0.8.23",
 ]
 
 [[package]]
@@ -2155,6 +2197,7 @@ dependencies = [
  "fabro-interview",
  "fabro-llm",
  "fabro-macros",
+ "fabro-manifest",
  "fabro-model",
  "fabro-proc",
  "fabro-redact",

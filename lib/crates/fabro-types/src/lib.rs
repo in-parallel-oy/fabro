@@ -102,5 +102,6 @@ pub use stage_id::{InvalidStageVisit, ParallelBranchId, StageId};
 pub use start::StartRecord;
 pub use status::{
     BlockedReason, FailureReason, InvalidTransition, ParseFailureReasonError,
-    ParseSuccessReasonError, RunControlAction, RunStatus, SuccessReason, TerminalStatus,
+    ParseSuccessReasonError, RunControlAction, RunStatus, RunStatusKind, SuccessReason,
+    TerminalStatus,
 };

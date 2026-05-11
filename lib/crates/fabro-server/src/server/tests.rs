@@ -6878,6 +6878,40 @@ async fn cancel_nonexistent_run_returns_not_found() {
 }
 
 #[tokio::test]
+async fn cancel_terminal_durable_run_returns_conflict() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = fixtures::RUN_1;
+    create_durable_run_with_events(&state, run_id, &[
+        workflow_event::Event::WorkflowRunCompleted {
+            duration_ms:          1000,
+            artifact_count:       0,
+            status:               "succeeded".to_string(),
+            reason:               SuccessReason::Completed,
+            total_usd_micros:     None,
+            final_git_commit_sha: None,
+            final_patch:          None,
+            diff_summary:         None,
+            billing:              None,
+        },
+    ])
+    .await;
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(api(&format!("/runs/{run_id}/cancel")))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::CONFLICT).await;
+    assert_eq!(
+        body["errors"][0]["detail"],
+        "Run is already terminal and cannot be cancelled."
+    );
+}
+
+#[tokio::test]
 async fn steer_nonexistent_run_returns_not_found() {
     let app = test_app_with();
     let missing_run_id = fixtures::RUN_64;
@@ -6891,6 +6925,39 @@ async fn steer_nonexistent_run_returns_not_found() {
 
     let response = app.oneshot(req).await.unwrap();
     assert_status!(response, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn steer_terminal_durable_run_returns_run_not_steerable() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = fixtures::RUN_1;
+    create_durable_run_with_events(&state, run_id, &[
+        workflow_event::Event::WorkflowRunCompleted {
+            duration_ms:          1000,
+            artifact_count:       0,
+            status:               "succeeded".to_string(),
+            reason:               SuccessReason::Completed,
+            total_usd_micros:     None,
+            final_git_commit_sha: None,
+            final_patch:          None,
+            diff_summary:         None,
+            billing:              None,
+        },
+    ])
+    .await;
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(api(&format!("/runs/{run_id}/steer")))
+        .header("content-type", "application/json")
+        .body(Body::from(r#"{"text":"try again"}"#))
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::CONFLICT).await;
+    assert_eq!(body["errors"][0]["code"], "run_not_steerable");
+    assert_eq!(body["errors"][0]["detail"], "Run is no longer steerable.");
 }
 
 #[tokio::test]
