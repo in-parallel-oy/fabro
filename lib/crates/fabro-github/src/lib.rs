@@ -540,8 +540,18 @@ async fn mint_installation_token_with_jwt(
         "{base_url}/app/installations/{}/access_tokens",
         installation.id
     );
+    // Omit `repositories` so the minted token spans every repo the App is
+    // installed on (within `owner`). Hardcoding `[repo]` is too narrow for
+    // private cross-repo deps (e.g. mix.exs pulling a private library from
+    // a sibling repo) — the token then 404s on those even when the App is
+    // installed there. Operators control scope by choosing which repos to
+    // install the App on, not via this code path.
+    //
+    // `owner` and `repo` are still used in Step 1 above to *locate* the
+    // installation (the lookup endpoint is repo-scoped), so they remain in
+    // the function signature.
+    let _ = repo;
     let body = serde_json::json!({
-        "repositories": [repo],
         "permissions": permissions,
     });
 
