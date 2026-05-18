@@ -102,6 +102,12 @@ impl Combine for Option<Vec<String>> {
     }
 }
 
+impl Combine for Option<Vec<InterpString>> {
+    fn combine(self, other: Self) -> Self {
+        self.or(other)
+    }
+}
+
 impl Combine for Option<Vec<CredentialRef>> {
     fn combine(self, other: Self) -> Self {
         self.or(other)

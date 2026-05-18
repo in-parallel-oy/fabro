@@ -346,6 +346,11 @@ pub struct DockerSandboxLayer {
     pub cpu_quota:    Option<i64>,
     #[serde(default, skip_serializing_if = "StickyMap::is_empty")]
     pub env_vars:     StickyMap<InterpString>,
+    /// Host-path:container-path[:mode] bind mounts. Interpolated host-side
+    /// at run-start time against the fabro-server process env (e.g.
+    /// `{{ env.HOME }}/.claude:/home/dev/.claude:rw`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binds:        Option<Vec<InterpString>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]

@@ -724,12 +724,22 @@ fn runtime_docker_config(settings: &DockerSettings, skip_clone: bool) -> DockerS
         .collect::<Vec<_>>();
     env_vars.sort();
 
+    // Host-side InterpString resolution (runs in the fabro-server process,
+    // not inside the container). E.g. `{{ env.HOME }}/.claude:/home/dev/.claude:rw`
+    // becomes `/Users/max/.claude:/home/dev/.claude:rw`.
+    let binds = settings
+        .binds
+        .iter()
+        .map(resolve_interp)
+        .collect::<Vec<_>>();
+
     DockerSandboxOptions {
         image: settings.image.clone(),
         network_mode: settings.network_mode.clone(),
         memory_limit: settings.memory_limit,
         cpu_quota: settings.cpu_quota,
         env_vars,
+        binds,
         skip_clone,
         ..DockerSandboxOptions::default()
     }

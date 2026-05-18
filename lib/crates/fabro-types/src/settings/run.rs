@@ -318,6 +318,8 @@ pub struct DockerSettings {
     pub memory_limit: Option<i64>,
     pub cpu_quota:    Option<i64>,
     pub env_vars:     HashMap<String, InterpString>,
+    #[serde(default)]
+    pub binds:        Vec<InterpString>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

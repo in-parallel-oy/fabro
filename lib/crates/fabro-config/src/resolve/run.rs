@@ -262,6 +262,7 @@ fn resolve_docker(docker: &crate::DockerSandboxLayer) -> DockerSettings {
             .and_then(|size| i64::try_from(size.as_bytes()).ok()),
         cpu_quota:    docker.cpu_quota,
         env_vars:     docker.env_vars.clone().into_inner(),
+        binds:        docker.binds.clone().unwrap_or_default(),
     }
 }
 

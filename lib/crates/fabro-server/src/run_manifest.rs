@@ -1173,12 +1173,19 @@ fn runtime_docker_config(settings: &DockerSettings, skip_clone: bool) -> DockerS
         .collect::<Vec<_>>();
     env_vars.sort();
 
+    let binds = settings
+        .binds
+        .iter()
+        .map(resolve_interp)
+        .collect::<Vec<_>>();
+
     DockerSandboxOptions {
         image: settings.image.clone(),
         network_mode: settings.network_mode.clone(),
         memory_limit: settings.memory_limit,
         cpu_quota: settings.cpu_quota,
         env_vars,
+        binds,
         skip_clone,
         ..DockerSandboxOptions::default()
     }

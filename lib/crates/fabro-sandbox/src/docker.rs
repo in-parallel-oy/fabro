@@ -73,6 +73,11 @@ pub struct DockerSandboxOptions {
     pub auto_pull:    bool,
     /// Additional `KEY=VALUE` environment variables for the container.
     pub env_vars:     Vec<String>,
+    /// Bollard bind specifiers (`host:container[:mode]`). Forwarded to
+    /// `HostConfig.binds`. Host-side `InterpString` resolution is performed
+    /// upstream (`runtime_docker_config`); only fully-resolved strings
+    /// reach this struct.
+    pub binds:        Vec<String>,
     /// Create an empty workspace instead of cloning even when an origin exists.
     pub skip_clone:   bool,
 }
@@ -86,6 +91,7 @@ impl Default for DockerSandboxOptions {
             cpu_quota:    None,
             auto_pull:    true,
             env_vars:     Vec::new(),
+            binds:        Vec::new(),
             skip_clone:   false,
         }
     }
@@ -1070,7 +1076,11 @@ fn container_labels(run_id: Option<&RunId>) -> HashMap<String, String> {
 
 fn host_config(config: &DockerSandboxOptions) -> HostConfig {
     HostConfig {
-        binds: None,
+        binds: if config.binds.is_empty() {
+            None
+        } else {
+            Some(config.binds.clone())
+        },
         network_mode: config.network_mode.clone(),
         memory: config.memory_limit,
         cpu_quota: config.cpu_quota,
@@ -2069,6 +2079,32 @@ mod tests {
                 .unwrap()
                 .iter()
                 .all(|value| !value.starts_with("DOCKER_HOST="))
+        );
+    }
+
+    #[test]
+    fn host_config_forwards_non_empty_binds_to_bollard() {
+        let options = DockerSandboxOptions {
+            binds: vec![
+                "/Users/me/.claude:/home/dev/.claude:rw".to_string(),
+                "/tmp/cache:/tmp/cache:ro".to_string(),
+            ],
+            ..DockerSandboxOptions::default()
+        };
+        let host = host_config(&options);
+        let binds = host.binds.expect("non-empty binds become Some(vec)");
+        assert_eq!(binds.len(), 2);
+        assert_eq!(binds[0], "/Users/me/.claude:/home/dev/.claude:rw");
+        assert_eq!(binds[1], "/tmp/cache:/tmp/cache:ro");
+    }
+
+    #[test]
+    fn host_config_emits_none_binds_when_empty() {
+        let options = DockerSandboxOptions::default();
+        let host = host_config(&options);
+        assert!(
+            host.binds.is_none(),
+            "empty binds Vec should serialize as None for bollard"
         );
     }
 

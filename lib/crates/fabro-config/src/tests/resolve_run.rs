@@ -92,6 +92,67 @@ subpath = "agents"
 }
 
 #[test]
+fn resolves_docker_binds() {
+    let settings = WorkflowSettingsBuilder::from_toml(
+        r#"
+_version = 1
+
+[run.sandbox]
+provider = "docker"
+
+[run.sandbox.docker]
+binds = [
+  "{{ env.HOME }}/.claude:/home/dev/.claude:rw",
+  "/tmp/cache:/tmp/cache:ro",
+]
+"#,
+    )
+    .expect("docker binds should resolve")
+    .run;
+
+    let docker = settings
+        .sandbox
+        .docker
+        .as_ref()
+        .expect("docker settings should resolve");
+
+    assert_eq!(docker.binds.len(), 2);
+    assert_eq!(
+        docker.binds[0],
+        InterpString::parse("{{ env.HOME }}/.claude:/home/dev/.claude:rw")
+    );
+    assert_eq!(
+        docker.binds[1],
+        InterpString::parse("/tmp/cache:/tmp/cache:ro")
+    );
+}
+
+#[test]
+fn docker_binds_default_to_empty_when_omitted() {
+    let settings = WorkflowSettingsBuilder::from_toml(
+        r#"
+_version = 1
+
+[run.sandbox]
+provider = "docker"
+
+[run.sandbox.docker]
+image = "buildpack-deps:noble"
+"#,
+    )
+    .expect("docker without binds should resolve")
+    .run;
+
+    let docker = settings
+        .sandbox
+        .docker
+        .as_ref()
+        .expect("docker settings should resolve");
+
+    assert!(docker.binds.is_empty());
+}
+
+#[test]
 fn resolves_run_level_clone_branch_controls() {
     let settings = WorkflowSettingsBuilder::from_toml(
         r"
