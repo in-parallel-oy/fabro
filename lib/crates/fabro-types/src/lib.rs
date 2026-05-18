@@ -1,5 +1,6 @@
 extern crate self as fabro_types;
 
+pub mod acp_auth_mode;
 pub mod artifact;
 pub mod auth;
 pub mod billing;
@@ -38,6 +39,7 @@ pub mod stage_id;
 pub mod start;
 pub mod status;
 
+pub use acp_auth_mode::AcpAuthMode;
 pub use artifact::ArtifactUpload;
 pub use auth::{IdpIdentity, IdpIdentityError};
 pub use billing::{

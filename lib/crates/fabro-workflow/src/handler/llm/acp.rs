@@ -12,6 +12,7 @@ use fabro_auth::CredentialResolver;
 use fabro_graphviz::graph::Node;
 use fabro_model::catalog::LlmCatalogSettings;
 use fabro_model::{Catalog, Provider};
+use fabro_types::AcpAuthMode;
 use fabro_util::time::elapsed_ms;
 use tokio_util::sync::CancellationToken;
 
@@ -20,7 +21,7 @@ use super::changed_files;
 use super::cli::AgentCli;
 use super::launch_env::{AgentLaunchEnvRequest, resolve_agent_launch_env};
 use crate::error::Error;
-use crate::event::{Emitter, Event, StageScope};
+use crate::event::{Emitter, Event, RunNoticeCode, RunNoticeLevel, StageScope};
 
 pub struct AgentAcpBackend {
     model: String,
@@ -94,22 +95,48 @@ impl AgentAcpBackend {
             .provider()
             .and_then(|value| value.parse::<Provider>().ok())
             .unwrap_or(self.provider);
-        let command =
+        let auth_mode = node.acp_auth().map_err(|_| {
+            Error::handler(format!(
+                "unsupported acp_auth value \"{}\"; expected one of: {}",
+                node.acp_auth_raw().unwrap_or_default(),
+                AcpAuthMode::expected_values()
+            ))
+        })?;
+        let mut command =
             resolve_acp_command(node.acp_command()).map_err(acp_command_error_to_workflow)?;
 
-        let launch_env = resolve_agent_launch_env(AgentLaunchEnvRequest {
-            provider,
-            cli: AgentCli::for_provider(provider),
-            catalog: self.catalog.as_ref(),
-            resolver: self.resolver.as_ref(),
-            tool_env: self.tool_env.as_ref(),
-            github_token_refresh_managed: self.github_token_refresh_managed,
-            stage_label: "ACP",
-            emitter,
-            sandbox,
-            cancel_token: &cancel_token,
-        })
-        .await?;
+        let launch_env = match auth_mode {
+            AcpAuthMode::Fabro => {
+                resolve_agent_launch_env(AgentLaunchEnvRequest {
+                    provider,
+                    cli: AgentCli::for_provider(provider),
+                    catalog: self.catalog.as_ref(),
+                    resolver: self.resolver.as_ref(),
+                    tool_env: self.tool_env.as_ref(),
+                    github_token_refresh_managed: self.github_token_refresh_managed,
+                    stage_label: "ACP",
+                    emitter,
+                    sandbox,
+                    cancel_token: &cancel_token,
+                })
+                .await?
+            }
+            AcpAuthMode::Host => {
+                let stripped = strip_auth_env(command.env());
+                if !stripped.is_empty() {
+                    emitter.notice(
+                        RunNoticeLevel::Warn,
+                        RunNoticeCode::AcpHostAuthOverride,
+                        format!(
+                            "Stripping auth-shaped env vars from acp_command under acp_auth=\"host\": {}",
+                            stripped.join(", ")
+                        ),
+                    );
+                    command = command.with_env_stripped(&stripped);
+                }
+                resolve_host_auth_launch_env(self.tool_env.as_ref()).await?
+            }
+        };
         let on_activity = {
             let emitter = Arc::clone(emitter);
             Arc::new(move || emitter.touch()) as Arc<dyn Fn() + Send + Sync>
@@ -118,12 +145,13 @@ impl AgentAcpBackend {
         let command_display = command.to_string();
         emitter.emit_scoped(
             &Event::AgentAcpStarted {
-                node_id:  node.id.clone(),
-                visit:    stage_scope.visit,
-                mode:     "acp".to_string(),
-                provider: provider.to_string(),
-                model:    model.to_string(),
-                command:  command_display,
+                node_id:   node.id.clone(),
+                visit:     stage_scope.visit,
+                mode:      "acp".to_string(),
+                provider:  provider.to_string(),
+                model:     model.to_string(),
+                command:   command_display,
+                auth_mode: auth_mode.to_string(),
             },
             stage_scope,
         );
@@ -207,6 +235,46 @@ impl AgentAcpBackend {
             last_file_touched,
         })
     }
+}
+
+/// Names of env vars that should never be forwarded under
+/// `acp_auth = "host"`: an injected API key flips the ACP child into
+/// API-key mode and bills against the key rather than the subscription
+/// session the host CLI is logged into.
+fn is_auth_env_var(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.ends_with("_api_key")
+        || lower.ends_with("_auth_token")
+        || lower == "openai_session_id"
+        || lower == "chatgpt_account_id"
+}
+
+fn strip_auth_env(env: &HashMap<String, String>) -> Vec<String> {
+    let mut stripped: Vec<String> = env
+        .keys()
+        .filter(|name| is_auth_env_var(name))
+        .cloned()
+        .collect();
+    stripped.sort();
+    stripped
+}
+
+async fn resolve_host_auth_launch_env(
+    tool_env: Option<&Arc<dyn ToolEnvProvider>>,
+) -> Result<HashMap<String, String>, Error> {
+    let Some(provider) = tool_env else {
+        return Ok(HashMap::new());
+    };
+    let resolved = provider
+        .resolve()
+        .await
+        .map_err(|err| Error::handler_with_anyhow("Failed to resolve ACP agent env", err))?;
+    // Defense-in-depth: even tool_env should never carry API-key style vars
+    // into a host-auth ACP child.
+    Ok(resolved
+        .into_iter()
+        .filter(|(name, _)| !is_auth_env_var(name))
+        .collect())
 }
 
 fn default_catalog() -> Arc<Catalog> {
@@ -638,6 +706,156 @@ mod tests {
         assert_eq!(
             err.failure_category(),
             crate::error::FailureCategory::Deterministic
+        );
+    }
+
+    #[tokio::test]
+    async fn acp_backend_host_auth_skips_credential_injection() {
+        let mut sandbox = MockSandbox::linux();
+        sandbox.stdio_process_error = Some("captured-env-only".to_string());
+        let sandbox = Arc::new(sandbox);
+        let sandbox_dyn: Arc<dyn Sandbox> = sandbox.clone();
+
+        let mut node = Node::new("work");
+        node.attrs.insert(
+            "provider".to_string(),
+            AttrValue::String("openai".to_string()),
+        );
+        node.attrs
+            .insert("backend".to_string(), AttrValue::String("acp".to_string()));
+        node.attrs.insert(
+            "acp_command".to_string(),
+            AttrValue::String("codex-acp".to_string()),
+        );
+        node.attrs.insert(
+            "acp_auth".to_string(),
+            AttrValue::String("host".to_string()),
+        );
+
+        // Even if a tool_env hands in an OPENAI_API_KEY, host-auth must strip
+        // it; otherwise the spawned ACP child would bill against the key
+        // instead of the host's subscription session.
+        let backend = AgentAcpBackend::new_from_env("fake-acp".to_string(), Provider::OpenAi)
+            .with_env(HashMap::from([
+                ("OPENAI_API_KEY".to_string(), "leaked-key".to_string()),
+                ("GH_TOKEN".to_string(), "gh-token-value".to_string()),
+            ]));
+        let emitter = Arc::new(Emitter::default());
+        let events = Arc::new(Mutex::new(Vec::new()));
+        emitter.on_event({
+            let events = Arc::clone(&events);
+            move |event| events.lock().unwrap().push(event.clone())
+        });
+        let context = Context::new();
+        let _ = backend
+            .run(CodergenRunRequest {
+                node:         &node,
+                prompt:       "hello",
+                context:      &context,
+                thread_id:    None,
+                emitter:      &emitter,
+                sandbox:      &sandbox_dyn,
+                tool_hooks:   None,
+                cancel_token: CancellationToken::new(),
+            })
+            .await;
+
+        let captured = sandbox
+            .captured_env_vars
+            .lock()
+            .expect("captured env lock poisoned")
+            .clone()
+            .expect("ACP host-auth path should still spawn the stdio child");
+        assert!(
+            !captured.contains_key("OPENAI_API_KEY"),
+            "host-auth must not inject OPENAI_API_KEY into the ACP child env, got: {captured:?}"
+        );
+        assert!(
+            !captured.contains_key("ANTHROPIC_API_KEY"),
+            "host-auth must not inject ANTHROPIC_API_KEY into the ACP child env"
+        );
+        assert_eq!(
+            captured.get("GH_TOKEN").map(String::as_str),
+            Some("gh-token-value"),
+            "non-auth tool env should still be forwarded under host-auth"
+        );
+
+        let events = events.lock().unwrap();
+        let auth_mode = events
+            .iter()
+            .find_map(|event| match &event.body {
+                EventBody::AgentAcpStarted(props) => Some(props.auth_mode.as_str()),
+                _ => None,
+            })
+            .expect("AgentAcpStarted should be emitted");
+        assert_eq!(auth_mode, "host");
+    }
+
+    #[tokio::test]
+    async fn acp_backend_host_auth_strips_api_key_from_parsed_command_env() {
+        let mut sandbox = MockSandbox::linux();
+        sandbox.stdio_process_error = Some("captured-env-only".to_string());
+        let sandbox = Arc::new(sandbox);
+        let sandbox_dyn: Arc<dyn Sandbox> = sandbox.clone();
+
+        // JSON acp_command with OPENAI_API_KEY in env — host-auth must strip it
+        // out before launching the child.
+        let raw_command = serde_json::json!({
+            "type": "stdio",
+            "name": "codex",
+            "command": "codex-acp",
+            "args": [],
+            "env": [
+                {"name": "OPENAI_API_KEY", "value": "leaked-key"},
+                {"name": "FOO", "value": "bar"},
+            ],
+        })
+        .to_string();
+
+        let mut node = Node::new("work");
+        node.attrs.insert(
+            "provider".to_string(),
+            AttrValue::String("openai".to_string()),
+        );
+        node.attrs
+            .insert("backend".to_string(), AttrValue::String("acp".to_string()));
+        node.attrs
+            .insert("acp_command".to_string(), AttrValue::String(raw_command));
+        node.attrs.insert(
+            "acp_auth".to_string(),
+            AttrValue::String("host".to_string()),
+        );
+
+        let backend = AgentAcpBackend::new_from_env("fake-acp".to_string(), Provider::OpenAi);
+        let emitter = Arc::new(Emitter::default());
+        let context = Context::new();
+        let _ = backend
+            .run(CodergenRunRequest {
+                node:         &node,
+                prompt:       "hello",
+                context:      &context,
+                thread_id:    None,
+                emitter:      &emitter,
+                sandbox:      &sandbox_dyn,
+                tool_hooks:   None,
+                cancel_token: CancellationToken::new(),
+            })
+            .await;
+
+        let captured = sandbox
+            .captured_env_vars
+            .lock()
+            .expect("captured env lock poisoned")
+            .clone()
+            .expect("ACP host-auth path should still spawn the stdio child");
+        assert!(
+            !captured.contains_key("OPENAI_API_KEY"),
+            "host-auth must strip OPENAI_API_KEY from acp_command env, got: {captured:?}"
+        );
+        assert_eq!(
+            captured.get("FOO").map(String::as_str),
+            Some("bar"),
+            "non-auth env vars from acp_command should still be forwarded"
         );
     }
 

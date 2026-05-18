@@ -38,6 +38,19 @@ impl AcpCommand {
     pub fn to_shell_command(&self) -> String {
         render_command(&self.program, &self.args)
     }
+
+    /// Returns a copy of this command with the named env vars removed.
+    ///
+    /// Used by the host-auth ACP path to drop API-key style env vars that the
+    /// user may have pasted into a JSON ACP command spec, since those would
+    /// override the host's subscription session.
+    #[must_use]
+    pub fn with_env_stripped(mut self, names: &[String]) -> Self {
+        for name in names {
+            self.env.remove(name);
+        }
+        self
+    }
 }
 
 impl std::fmt::Display for AcpCommand {

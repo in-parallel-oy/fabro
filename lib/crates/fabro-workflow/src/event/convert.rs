@@ -1109,13 +1109,15 @@ fn event_body_from_event(event: &Event) -> EventBody {
             provider,
             model,
             command,
+            auth_mode,
             ..
         } => EventBody::AgentAcpStarted(fabro_types::AgentAcpStartedProps {
-            visit:    *visit,
-            mode:     mode.clone(),
-            provider: provider.clone(),
-            model:    model.clone(),
-            command:  command.clone(),
+            visit:     *visit,
+            mode:      mode.clone(),
+            provider:  provider.clone(),
+            model:     model.clone(),
+            command:   command.clone(),
+            auth_mode: auth_mode.clone(),
         }),
         Event::AgentAcpCompleted {
             stdout,
@@ -2107,12 +2109,13 @@ mod tests {
         let started = to_run_event_at(
             &fixtures::RUN_1,
             &Event::AgentAcpStarted {
-                node_id:  "code".to_string(),
-                visit:    2,
-                mode:     "acp".to_string(),
-                provider: "openai".to_string(),
-                model:    "fake-acp".to_string(),
-                command:  "python fake_agent.py".to_string(),
+                node_id:   "code".to_string(),
+                visit:     2,
+                mode:      "acp".to_string(),
+                provider:  "openai".to_string(),
+                model:     "fake-acp".to_string(),
+                command:   "python fake_agent.py".to_string(),
+                auth_mode: "fabro".to_string(),
             },
             Utc::now(),
             Some(&scope),
@@ -2129,6 +2132,7 @@ mod tests {
                 assert_eq!(props.provider, "openai");
                 assert_eq!(props.model, "fake-acp");
                 assert_eq!(props.command, "python fake_agent.py");
+                assert_eq!(props.auth_mode, "fabro");
             }
             other => panic!("expected AgentAcpStarted, got {other:?}"),
         }

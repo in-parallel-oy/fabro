@@ -7478,12 +7478,13 @@ async fn steer_with_active_acp_stage_returns_non_steerable_conflict() {
     );
 
     let started = acp_event_for_stage(&run_id, &workflow_event::Event::AgentAcpStarted {
-        node_id:  "agent".to_string(),
-        visit:    1,
-        mode:     "acp".to_string(),
-        provider: "openai".to_string(),
-        model:    "fake-acp".to_string(),
-        command:  "python fake_agent.py".to_string(),
+        node_id:   "agent".to_string(),
+        visit:     1,
+        mode:      "acp".to_string(),
+        provider:  "openai".to_string(),
+        model:     "fake-acp".to_string(),
+        command:   "python fake_agent.py".to_string(),
+        auth_mode: "fabro".to_string(),
     });
     update_live_run_from_event(&state, run_id, &started);
 
@@ -7567,12 +7568,13 @@ async fn active_acp_stage_marker_clears_on_terminal_paths() {
             Some(RunAnswerTransport::Subprocess { control_tx }),
         );
         let started = acp_event_for_stage(&run_id, &workflow_event::Event::AgentAcpStarted {
-            node_id:  "agent".to_string(),
-            visit:    1,
-            mode:     "acp".to_string(),
-            provider: "openai".to_string(),
-            model:    "fake-acp".to_string(),
-            command:  "python fake_agent.py".to_string(),
+            node_id:   "agent".to_string(),
+            visit:     1,
+            mode:      "acp".to_string(),
+            provider:  "openai".to_string(),
+            model:     "fake-acp".to_string(),
+            command:   "python fake_agent.py".to_string(),
+            auth_mode: "fabro".to_string(),
         });
         update_live_run_from_event(&state, run_id, &started);
         let terminal = acp_event_for_stage(&run_id, &terminal_event);

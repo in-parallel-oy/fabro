@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use crate::LlmBackend;
+use crate::{AcpAuthMode, LlmBackend};
 
 /// Typed attribute values for nodes, edges, and graph-level attributes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -276,6 +276,19 @@ impl Node {
     #[must_use]
     pub fn acp_command(&self) -> Option<&str> {
         self.str_attr("acp_command")
+    }
+
+    #[must_use]
+    pub fn acp_auth_raw(&self) -> Option<&str> {
+        self.str_attr("acp_auth")
+    }
+
+    /// Parsed `acp_auth` attribute. Returns `Ok(AcpAuthMode::Fabro)` when the
+    /// attribute is absent. Returns `Err` when the attribute is set but does
+    /// not parse — callers (validation, handler) decide how to surface it.
+    pub fn acp_auth(&self) -> Result<AcpAuthMode, strum::ParseError> {
+        self.acp_auth_raw()
+            .map_or(Ok(AcpAuthMode::default()), str::parse)
     }
 
     #[must_use]

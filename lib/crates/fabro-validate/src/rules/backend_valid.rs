@@ -1,5 +1,5 @@
 use fabro_graphviz::graph::{Graph, Node};
-use fabro_types::LlmBackend;
+use fabro_types::{AcpAuthMode, LlmBackend};
 
 use crate::{Diagnostic, LintRule, Severity};
 
@@ -17,7 +17,8 @@ impl LintRule for Rule {
     fn apply(&self, graph: &Graph) -> Vec<Diagnostic> {
         let mut diagnostics = Vec::new();
         for node in graph.nodes.values() {
-            if let Some(backend) = node.backend() {
+            let backend = node.backend();
+            if let Some(backend) = backend {
                 match node.llm_backend() {
                     Some(Err(_)) => {
                         let expected = LlmBackend::expected_values();
@@ -50,9 +51,42 @@ impl LintRule for Rule {
                     Some(Ok(_)) | None => {}
                 }
             }
+            diagnostics.extend(check_acp_auth(node, backend));
         }
         diagnostics
     }
+}
+
+fn check_acp_auth(node: &Node, backend: Option<&str>) -> Vec<Diagnostic> {
+    let Some(raw) = node.acp_auth_raw() else {
+        return Vec::new();
+    };
+    let mut diagnostics = Vec::new();
+    let is_acp_backend = backend.is_some_and(|name| name == "acp");
+    if !is_acp_backend {
+        diagnostics.push(Diagnostic {
+            rule:     "backend_valid".to_string(),
+            severity: Severity::Error,
+            message:  format!("acp_auth=\"{raw}\" is only valid when backend=\"acp\""),
+            node_id:  Some(node.id.clone()),
+            edge:     None,
+            fix:      Some(
+                "Either set backend=\"acp\" on this node or remove acp_auth".to_string(),
+            ),
+        });
+    }
+    if node.acp_auth().is_err() {
+        let expected = AcpAuthMode::expected_values();
+        diagnostics.push(Diagnostic {
+            rule:     "backend_valid".to_string(),
+            severity: Severity::Error,
+            message:  format!("unsupported acp_auth value \"{raw}\"; expected one of: {expected}"),
+            node_id:  Some(node.id.clone()),
+            edge:     None,
+            fix:      Some(format!("Use one of: {expected}")),
+        });
+    }
+    diagnostics
 }
 
 fn acp_command_missing(node: &Node) -> bool {
@@ -136,5 +170,72 @@ mod tests {
         graph.nodes.insert("work".to_string(), node);
 
         assert!(Rule.apply(&graph).is_empty());
+    }
+
+    #[test]
+    fn backend_valid_accepts_acp_auth_host_on_acp_backend() {
+        let mut graph = minimal_graph();
+        let mut node = Node::new("work");
+        node.attrs
+            .insert("backend".to_string(), AttrValue::String("acp".to_string()));
+        node.attrs.insert(
+            "acp_command".to_string(),
+            AttrValue::String("agent-acp".to_string()),
+        );
+        node.attrs.insert(
+            "acp_auth".to_string(),
+            AttrValue::String("host".to_string()),
+        );
+        graph.nodes.insert("work".to_string(), node);
+
+        assert!(Rule.apply(&graph).is_empty());
+    }
+
+    #[test]
+    fn backend_valid_rejects_acp_auth_on_non_acp_backend() {
+        let mut graph = minimal_graph();
+        let mut node = Node::new("work");
+        node.attrs
+            .insert("backend".to_string(), AttrValue::String("cli".to_string()));
+        node.attrs.insert(
+            "acp_auth".to_string(),
+            AttrValue::String("host".to_string()),
+        );
+        graph.nodes.insert("work".to_string(), node);
+
+        let diagnostics = Rule.apply(&graph);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].severity, Severity::Error);
+        assert!(
+            diagnostics[0]
+                .message
+                .contains("acp_auth=\"host\" is only valid when backend=\"acp\"")
+        );
+    }
+
+    #[test]
+    fn backend_valid_rejects_unknown_acp_auth_value() {
+        let mut graph = minimal_graph();
+        let mut node = Node::new("work");
+        node.attrs
+            .insert("backend".to_string(), AttrValue::String("acp".to_string()));
+        node.attrs.insert(
+            "acp_command".to_string(),
+            AttrValue::String("agent-acp".to_string()),
+        );
+        node.attrs.insert(
+            "acp_auth".to_string(),
+            AttrValue::String("subscription".to_string()),
+        );
+        graph.nodes.insert("work".to_string(), node);
+
+        let diagnostics = Rule.apply(&graph);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].severity, Severity::Error);
+        assert!(
+            diagnostics[0].message.contains(
+                "unsupported acp_auth value \"subscription\"; expected one of: fabro, host"
+            )
+        );
     }
 }
