@@ -42,6 +42,33 @@ impl ServerSecrets {
             .cloned()
             .or_else(|| self.file_entries.get(name).cloned())
     }
+
+    /// Expose file-loaded entries (from `~/.fabro/storage/server.env`) to
+    /// the process env, so callers of `std::env::var` — notably
+    /// `InterpString::resolve` in `runtime_docker_config` for sandbox
+    /// env_vars like `OBAN_PRO_LICENSE_KEY = "{{ env.OBAN_PRO_LICENSE_KEY }}"`
+    /// — can find them. Process-env entries (set by operator launch env)
+    /// already take precedence and are left untouched.
+    ///
+    /// Call once at server startup before any worker spawns, so the
+    /// `set_var` calls happen single-threaded.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "Bridging server.env to process env is the documented startup behavior."
+    )]
+    #[allow(unsafe_code, reason = "set_var requires unsafe; called single-threaded at startup")]
+    pub(crate) fn expose_file_entries_to_process_env(&self) {
+        for (key, value) in &self.file_entries {
+            if std::env::var(key).is_err() {
+                // SAFETY: documented to be called once at startup, before
+                // any worker threads spawn. set_var's thread-safety
+                // contract is satisfied in that startup window.
+                unsafe {
+                    std::env::set_var(key, value);
+                }
+            }
+        }
+    }
 }
 
 impl std::fmt::Debug for ServerSecrets {
