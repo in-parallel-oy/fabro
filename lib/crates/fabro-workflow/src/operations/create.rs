@@ -14,12 +14,13 @@ use fabro_model::{Catalog, ProviderId};
 use fabro_sandbox::SandboxProvider;
 use fabro_store::Database;
 use fabro_types::settings::run::{RunMode, RunNamespace};
-use fabro_types::{ForkSourceRef, GitContext, RunId, RunProvenance, WorkflowSettings};
+use fabro_types::{
+    ForkSourceRef, GitContext, ManifestPath, RunId, RunProvenance, WorkflowSettings,
+};
 use fabro_util::json::normalize_json_value;
 use tokio::task::spawn_blocking;
 
 use super::source::{ResolveWorkflowInput, WorkflowInput, resolve_workflow};
-use crate::ManifestPath;
 use crate::error::Error;
 use crate::event::{Event, append_event, to_run_event_at};
 use crate::file_resolver::FileResolver;
@@ -937,6 +938,55 @@ mod tests {
     }
 
     #[test]
+    fn validate_from_file_resolves_minijinja_includes_relative_to_prompt_and_goal_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let prompt_dir = dir.path().join("prompts");
+        let goal_dir = dir.path().join("goals");
+        std::fs::create_dir_all(&prompt_dir).unwrap();
+        std::fs::create_dir_all(&goal_dir).unwrap();
+        std::fs::write(
+            prompt_dir.join("prompt.md"),
+            r#"{% include "prompt.tpl.md" %}"#,
+        )
+        .unwrap();
+        std::fs::write(prompt_dir.join("prompt.tpl.md"), "included prompt").unwrap();
+        std::fs::write(goal_dir.join("goal.md"), r#"{% include "goal.tpl.md" %}"#).unwrap();
+        std::fs::write(goal_dir.join("goal.tpl.md"), "included goal").unwrap();
+
+        let dot_path = dir.path().join("workflow.fabro");
+        std::fs::write(
+            &dot_path,
+            r#"digraph Test {
+                graph [goal="@goals/goal.md"]
+                start [shape=Mdiamond]
+                work [prompt="@prompts/prompt.md"]
+                exit [shape=Msquare]
+                start -> work -> exit
+            }"#,
+        )
+        .unwrap();
+
+        let validated = validate(ValidateInput {
+            workflow:          WorkflowInput::Path(dot_path),
+            settings:          WorkflowSettings::default(),
+            cwd:               dir.path().to_path_buf(),
+            custom_transforms: Vec::new(),
+            catalog:           test_catalog(),
+        })
+        .unwrap();
+
+        validated.raise_on_errors().unwrap();
+        assert_eq!(validated.graph().goal(), "included goal");
+        assert_eq!(
+            validated.graph().nodes["work"]
+                .attrs
+                .get("prompt")
+                .and_then(AttrValue::as_str),
+            Some("included prompt")
+        );
+    }
+
+    #[test]
     fn validate_from_bundle_resolves_nested_import_files_relative_to_imported_graph() {
         let validated = validate(ValidateInput {
             workflow:          WorkflowInput::Bundled(BundledWorkflow {
@@ -981,6 +1031,57 @@ mod tests {
                 .get("prompt")
                 .and_then(AttrValue::as_str),
             Some("Lint Ship")
+        );
+    }
+
+    #[test]
+    fn validate_from_bundle_resolves_minijinja_includes_in_prompt_and_goal_files() {
+        let validated = validate(ValidateInput {
+            workflow:          WorkflowInput::Bundled(BundledWorkflow {
+                path:   ManifestPath::from_wire("workflow.fabro").unwrap(),
+                source: r#"digraph Test {
+                    graph [goal="@goals/goal.md"]
+                    start [shape=Mdiamond]
+                    work [prompt="@prompts/work.md"]
+                    exit [shape=Msquare]
+                    start -> work -> exit
+                }"#
+                .to_string(),
+                config: None,
+                files:  HashMap::from([
+                    (
+                        ManifestPath::from_wire("goals/goal.md").unwrap(),
+                        r#"{% include "goal.tpl.md" %}"#.to_string(),
+                    ),
+                    (
+                        ManifestPath::from_wire("goals/goal.tpl.md").unwrap(),
+                        "Bundled goal".to_string(),
+                    ),
+                    (
+                        ManifestPath::from_wire("prompts/work.md").unwrap(),
+                        r#"{% include "work.tpl.md" %}"#.to_string(),
+                    ),
+                    (
+                        ManifestPath::from_wire("prompts/work.tpl.md").unwrap(),
+                        "Bundled prompt".to_string(),
+                    ),
+                ]),
+            }),
+            settings:          WorkflowSettings::default(),
+            cwd:               PathBuf::from("."),
+            custom_transforms: Vec::new(),
+            catalog:           test_catalog(),
+        })
+        .unwrap();
+
+        validated.raise_on_errors().unwrap();
+        assert_eq!(validated.graph().goal(), "Bundled goal");
+        assert_eq!(
+            validated.graph().nodes["work"]
+                .attrs
+                .get("prompt")
+                .and_then(AttrValue::as_str),
+            Some("Bundled prompt")
         );
     }
 

@@ -15,7 +15,6 @@ use fabro_sandbox::config::{
 use fabro_sandbox::daytona::DaytonaConfig;
 use fabro_sandbox::{DockerSandboxOptions, SandboxProvider, SandboxSpec};
 use fabro_static::EnvVars;
-use fabro_types::RunId;
 use fabro_types::settings::run::{
     ApprovalMode, DaytonaNetworkLayer, DaytonaSettings, DockerSettings,
     DockerfileSource as ResolvedDockerfileSource, HookDefinition as ResolvedHookDefinition,
@@ -25,12 +24,12 @@ use fabro_types::settings::run::{
     RunNamespace as ResolvedRunSettings, TlsMode as ResolvedTlsMode,
 };
 use fabro_types::settings::{InterpString, ModelRegistry, ResolvedModelRef};
+use fabro_types::{ManifestPath, RunId};
 use fabro_vault::Vault;
 use tokio::runtime::Handle;
 use tokio::sync::RwLock as AsyncRwLock;
 use tokio_util::sync::CancellationToken;
 
-use crate::ManifestPath;
 use crate::artifact_upload::ArtifactSink;
 use crate::context::Context;
 use crate::error::Error;
@@ -1130,11 +1129,10 @@ mod tests {
     use fabro_store::Database;
     use fabro_types::settings::ModelRef;
     use fabro_types::settings::run::RunMode;
-    use fabro_types::{WorkflowSettings, fixtures};
+    use fabro_types::{ManifestPath, WorkflowSettings, fixtures};
     use object_store::memory::InMemory;
 
     use super::*;
-    use crate::ManifestPath;
     use crate::context::Context;
     use crate::event::{Emitter, EventBody};
     use crate::handler::HandlerRegistry;

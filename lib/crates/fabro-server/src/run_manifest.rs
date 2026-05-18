@@ -30,14 +30,14 @@ use fabro_types::settings::run::{
     DaytonaNetworkLayer, DaytonaSettings, DockerSettings, DockerfileSource, RunGoal, RunMode,
     RunNamespace,
 };
-use fabro_types::{RunId, WorkflowSettings};
+use fabro_types::{ManifestPath, RunId, WorkflowSettings};
 use fabro_util::check_report::{CheckDetail, CheckReport, CheckResult, CheckSection, CheckStatus};
 use fabro_validate::Severity;
+use fabro_workflow::Error as WorkflowError;
 use fabro_workflow::operations::{CreateRunInput, ValidateInput, WorkflowInput, validate};
 use fabro_workflow::pipeline::Validated;
 use fabro_workflow::run_materialization::materialize_run;
 use fabro_workflow::workflow_bundle::{BundledWorkflow, ParsedWorkflowConfig, WorkflowBundle};
-use fabro_workflow::{Error as WorkflowError, ManifestPath};
 use futures_util::stream::{self, StreamExt};
 use tokio::process::Command;
 use tokio::time;
@@ -137,7 +137,11 @@ pub(crate) fn prepare_manifest(
         .build()
         .context("failed to resolve manifest settings")?;
     settings.run.inputs.extend(args_overrides.input_overrides);
-    if let Some(goal) = manifest.goal.as_ref() {
+    if let Some(goal) = manifest
+        .goal
+        .as_ref()
+        .filter(|goal| goal.type_ != types::ManifestGoalType::Graph)
+    {
         settings.run.goal = Some(RunGoal::Inline(InterpString::parse(&goal.text)));
     }
     let title = manifest
@@ -2311,7 +2315,7 @@ digraph Demo {
         //! the strict `SettingsLayer` schema, so unknown fields anywhere in
         //! the document trip `deny_unknown_fields`.
 
-        use fabro_workflow::ManifestPath;
+        use fabro_types::ManifestPath;
         use fabro_workflow::workflow_bundle::{BundledWorkflow, ParsedWorkflowConfig};
 
         use super::super::root_workflow_run_layer;

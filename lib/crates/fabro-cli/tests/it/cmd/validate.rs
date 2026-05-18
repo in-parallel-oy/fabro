@@ -207,6 +207,41 @@ fn bare_fabro_picks_up_sibling_workflow_toml_inputs() {
 }
 
 #[test]
+fn validate_accepts_static_template_dependencies() {
+    let context = test_context!();
+    let mut cmd = context.validate();
+    cmd.arg(fixture("templates/static_dependencies/workflow.fabro"));
+    fabro_snapshot!(context.filters(), cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ----- stderr -----
+    Workflow: TemplateIncludes (4 nodes, 3 edges)
+    Graph: [FIXTURES]/templates/static_dependencies/workflow.fabro
+    Validation: OK
+    ");
+}
+
+#[test]
+fn validate_reports_missing_template_dependency() {
+    let context = test_context!();
+    let mut cmd = context.validate();
+    cmd.arg(fixture("templates/missing_dependency/workflow.fabro"));
+    let mut filters = context.filters();
+    filters.push((
+        r"(?:\.\./)*\.\.\[FIXTURES\]/".to_string(),
+        "[FIXTURES]/".to_string(),
+    ));
+    fabro_snapshot!(filters, cmd, @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    ----- stderr -----
+      × failed to discover template dependencies: missing template dependency `missing.tpl.md` from `[FIXTURES]/templates/missing_dependency/workflow.fabro`
+    ");
+}
+
+#[test]
 fn invalid() {
     let context = test_context!();
     let mut cmd = context.validate();
