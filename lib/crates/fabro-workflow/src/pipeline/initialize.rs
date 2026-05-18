@@ -589,6 +589,21 @@ pub async fn initialize(
             command_count: options.lifecycle.setup_commands.len(),
         });
         let setup_start = Instant::now();
+        // Resolve setup-command env once: base sandbox env + auto-minted
+        // GITHUB_TOKEN if [run.integrations.github.permissions] is set
+        // (mirrors WorkflowToolEnvProvider::resolve in services.rs at the
+        // agent-backend layer). Without this, prepare-step commands run
+        // with `None` env and can't see the per-run token — breaking
+        // `mix deps.get` against private repos in container providers
+        // (docker, daytona) where the host env doesn't bleed through.
+        let mut setup_env = base_env.clone();
+        if let Some(source) = github_token.as_ref() {
+            let token = source.current_token().await.map_err(|err| {
+                Error::engine_with_anyhow("Failed to mint GITHUB_TOKEN for setup commands", err)
+            })?;
+            setup_env.insert("GITHUB_TOKEN".to_string(), token);
+        }
+        let setup_env_ref = Some(&setup_env);
         for (index, command) in options.lifecycle.setup_commands.iter().enumerate() {
             options.emitter.emit(&Event::SetupCommandStarted {
                 command: command.clone(),
@@ -601,7 +616,7 @@ pub async fn initialize(
                     command,
                     options.lifecycle.setup_command_timeout_ms,
                     None,
-                    None,
+                    setup_env_ref,
                     Some(cancel_token.clone()),
                 )
                 .await
