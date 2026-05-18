@@ -1,25 +1,18 @@
-//! Adapter factory registry keyed by stable adapter strings.
+//! Adapter factory registry keyed by [`fabro_model::AdapterKind`].
 //!
-//! Mirrors the static [`fabro_model::adapter`] metadata: every metadata key
-//! ships with a matching factory in this module. Tests in this file enforce
-//! that the registry covers every metadata key and never adds keys that have
-//! no metadata.
+//! Every adapter kind ships with a matching factory in this module. Tests in
+//! this file enforce that the registry covers every adapter kind.
 //!
 //! Factories take a pre-built [`AdapterConfig`] derived from resolved
 //! credentials + provider settings, and produce a boxed
 //! [`ProviderAdapter`] ready to register with the [`crate::Client`].
-//!
-//! This is the seam the rest of the workspace will eventually use to retire
-//! the per-`Provider`-variant match in [`crate::Client::from_credentials`].
-
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use fabro_auth::ApiKeyHeader;
-use fabro_model::Catalog;
-use fabro_model::adapter::{self as model_adapter, AdapterMetadata};
+use fabro_model::{AdapterKind, Catalog};
 
-use crate::client::auth_value;
+use crate::error::Error;
 use crate::provider::ProviderAdapter;
 use crate::providers;
 
@@ -31,11 +24,11 @@ pub struct AdapterConfig {
     /// Provider ID this adapter will register under (used as the registry
     /// name on the resulting adapter).
     pub provider_id:   String,
-    /// Authentication header constructed by `fabro-auth` from the resolved
-    /// credential and the adapter's [`fabro_model::ApiKeyHeaderPolicy`].
+    /// Authentication header constructed by `fabro-auth` from the provider's
+    /// catalog auth policy and resolved credential.
     pub auth_header:   Option<ApiKeyHeader>,
-    /// Provider base URL override. `None` means use the adapter's built-in
-    /// default.
+    /// Provider base URL. Native adapters can use their direct-constructor
+    /// defaults when this is `None`; OpenAI-compatible providers require it.
     pub base_url:      Option<String>,
     /// Extra HTTP headers attached to every outgoing request.
     pub extra_headers: HashMap<String, String>,
@@ -67,20 +60,28 @@ impl AdapterConfig {
 /// Factory function signature. Takes a fully-resolved [`AdapterConfig`] and
 /// returns a registered-ready [`ProviderAdapter`].
 ///
-/// Adapter constructors are infallible today; if a future adapter needs to
-/// fail at construction time, add a separate fallible factory variant
-/// rather than re-shaping every existing factory.
-pub type AdapterFactory = fn(AdapterConfig) -> Arc<dyn ProviderAdapter>;
+/// Adapter constructors validate provider-specific construction requirements
+/// before a provider is registered with the client.
+pub type AdapterFactory = fn(AdapterConfig) -> Result<Arc<dyn ProviderAdapter>, Error>;
 
-fn auth_value_optional(auth_header: Option<&ApiKeyHeader>) -> Option<String> {
-    auth_header.map(auth_value)
+fn apply_primary_auth_header(
+    auth_header: Option<ApiKeyHeader>,
+    extra_headers: &mut HashMap<String, String>,
+) -> Option<String> {
+    match auth_header {
+        Some(ApiKeyHeader::Bearer(value)) => Some(value),
+        Some(ApiKeyHeader::Custom { name, value }) => {
+            extra_headers.insert(name, value);
+            None
+        }
+        None => None,
+    }
 }
 
-fn build_anthropic_adapter(config: AdapterConfig) -> providers::AnthropicAdapter {
-    let mut adapter = providers::AnthropicAdapter::new_optional_auth(auth_value_optional(
-        config.auth_header.as_ref(),
-    ))
-    .with_name(config.provider_id.clone());
+fn build_anthropic_adapter(mut config: AdapterConfig) -> providers::AnthropicAdapter {
+    let api_key = apply_primary_auth_header(config.auth_header.take(), &mut config.extra_headers);
+    let mut adapter = providers::AnthropicAdapter::new_optional_auth(api_key)
+        .with_name(config.provider_id.clone());
     if let Some(base_url) = config.base_url {
         adapter = adapter.with_base_url(base_url);
     }
@@ -93,15 +94,18 @@ fn build_anthropic_adapter(config: AdapterConfig) -> providers::AnthropicAdapter
     adapter
 }
 
-fn build_anthropic(config: AdapterConfig) -> Arc<dyn ProviderAdapter> {
-    Arc::new(build_anthropic_adapter(config))
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "Adapter factories share a fallible signature; openai_compatible validates base_url."
+)]
+fn build_anthropic(config: AdapterConfig) -> Result<Arc<dyn ProviderAdapter>, Error> {
+    Ok(Arc::new(build_anthropic_adapter(config)))
 }
 
-fn build_openai_adapter(config: AdapterConfig) -> providers::OpenAiAdapter {
-    let mut adapter = providers::OpenAiAdapter::new_optional_auth(auth_value_optional(
-        config.auth_header.as_ref(),
-    ))
-    .with_name(config.provider_id.clone());
+fn build_openai_adapter(mut config: AdapterConfig) -> providers::OpenAiAdapter {
+    let api_key = apply_primary_auth_header(config.auth_header.take(), &mut config.extra_headers);
+    let mut adapter =
+        providers::OpenAiAdapter::new_optional_auth(api_key).with_name(config.provider_id.clone());
     if let Some(base_url) = config.base_url {
         adapter = adapter.with_base_url(base_url);
     }
@@ -123,15 +127,18 @@ fn build_openai_adapter(config: AdapterConfig) -> providers::OpenAiAdapter {
     adapter
 }
 
-fn build_openai(config: AdapterConfig) -> Arc<dyn ProviderAdapter> {
-    Arc::new(build_openai_adapter(config))
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "Adapter factories share a fallible signature; openai_compatible validates base_url."
+)]
+fn build_openai(config: AdapterConfig) -> Result<Arc<dyn ProviderAdapter>, Error> {
+    Ok(Arc::new(build_openai_adapter(config)))
 }
 
-fn build_gemini_adapter(config: AdapterConfig) -> providers::GeminiAdapter {
-    let mut adapter = providers::GeminiAdapter::new_optional_auth(auth_value_optional(
-        config.auth_header.as_ref(),
-    ))
-    .with_name(config.provider_id.clone());
+fn build_gemini_adapter(mut config: AdapterConfig) -> providers::GeminiAdapter {
+    let api_key = apply_primary_auth_header(config.auth_header.take(), &mut config.extra_headers);
+    let mut adapter =
+        providers::GeminiAdapter::new_optional_auth(api_key).with_name(config.provider_id.clone());
     if let Some(base_url) = config.base_url {
         adapter = adapter.with_base_url(base_url);
     }
@@ -144,68 +151,49 @@ fn build_gemini_adapter(config: AdapterConfig) -> providers::GeminiAdapter {
     adapter
 }
 
-fn build_gemini(config: AdapterConfig) -> Arc<dyn ProviderAdapter> {
-    Arc::new(build_gemini_adapter(config))
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "Adapter factories share a fallible signature; openai_compatible validates base_url."
+)]
+fn build_gemini(config: AdapterConfig) -> Result<Arc<dyn ProviderAdapter>, Error> {
+    Ok(Arc::new(build_gemini_adapter(config)))
 }
 
-fn build_openai_compatible_adapter(config: AdapterConfig) -> providers::OpenAiCompatibleAdapter {
-    // `openai_compatible` providers vary widely in base URL; the catalog must
-    // pre-resolve `[llm.providers.<id>].base_url` before constructing
-    // `AdapterConfig`. There is no sensible default — silently routing to one
-    // provider's host would produce wrong-host requests for every other.
-    let base_url = config.base_url.expect(
-        "openai_compatible adapter requires a base_url; resolve it from provider settings before \
-         building AdapterConfig",
-    );
-    let mut adapter = providers::OpenAiCompatibleAdapter::new_optional_auth(
-        auth_value_optional(config.auth_header.as_ref()),
-        base_url,
-    )
-    .with_name(config.provider_id);
+fn build_openai_compatible_adapter(
+    mut config: AdapterConfig,
+) -> Result<providers::OpenAiCompatibleAdapter, Error> {
+    let base_url = config.base_url.ok_or_else(|| Error::Configuration {
+        message: format!(
+            "provider '{}' uses openai_compatible adapter but does not configure base_url",
+            config.provider_id
+        ),
+        source:  None,
+    })?;
+    let api_key = apply_primary_auth_header(config.auth_header.take(), &mut config.extra_headers);
+    let mut adapter = providers::OpenAiCompatibleAdapter::new_optional_auth(api_key, base_url)
+        .with_name(config.provider_id);
     if !config.extra_headers.is_empty() {
         adapter = adapter.with_default_headers(config.extra_headers);
     }
     if let Some(catalog) = config.catalog {
         adapter = adapter.with_catalog(catalog);
     }
-    adapter
+    Ok(adapter)
 }
 
-fn build_openai_compatible(config: AdapterConfig) -> Arc<dyn ProviderAdapter> {
-    Arc::new(build_openai_compatible_adapter(config))
+fn build_openai_compatible(config: AdapterConfig) -> Result<Arc<dyn ProviderAdapter>, Error> {
+    Ok(Arc::new(build_openai_compatible_adapter(config)?))
 }
 
-/// Single source of truth pairing every adapter key with its factory. Both
-/// `factory_for` and `registered_keys` derive from this table.
-const FACTORIES: &[(&str, AdapterFactory)] = &[
-    (model_adapter::ANTHROPIC.key, build_anthropic),
-    (model_adapter::OPENAI.key, build_openai),
-    (model_adapter::GEMINI.key, build_gemini),
-    (
-        model_adapter::OPENAI_COMPATIBLE.key,
-        build_openai_compatible,
-    ),
-];
-
-/// Look up a factory by adapter key. Returns `None` if the key has no factory
-/// registered.
+/// Return the factory for a known adapter kind.
 #[must_use]
-pub fn factory_for(adapter_key: &str) -> Option<AdapterFactory> {
-    FACTORIES
-        .iter()
-        .find_map(|(key, factory)| (*key == adapter_key).then_some(*factory))
-}
-
-/// Iterate every adapter key with a factory registered.
-pub fn registered_keys() -> impl Iterator<Item = &'static str> {
-    FACTORIES.iter().map(|(key, _)| *key)
-}
-
-/// Look up adapter metadata by key, ensuring the metadata + factory pair
-/// remains in sync.
-#[must_use]
-pub fn metadata_for(adapter_key: &str) -> Option<&'static AdapterMetadata> {
-    model_adapter::get(adapter_key)
+pub fn factory_for(adapter_kind: AdapterKind) -> AdapterFactory {
+    match adapter_kind {
+        AdapterKind::Anthropic => build_anthropic,
+        AdapterKind::OpenAi => build_openai,
+        AdapterKind::Gemini => build_gemini,
+        AdapterKind::OpenAiCompatible => build_openai_compatible,
+    }
 }
 
 #[cfg(test)]
@@ -213,45 +201,54 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_metadata_key_has_a_factory() {
-        for key in model_adapter::keys() {
-            assert!(
-                factory_for(key).is_some(),
-                "adapter metadata key `{key}` has no matching factory in fabro-llm",
-            );
-        }
-    }
-
-    #[test]
-    fn every_factory_has_metadata() {
-        for key in registered_keys() {
-            assert!(
-                metadata_for(key).is_some(),
-                "fabro-llm factory `{key}` has no matching metadata in fabro-model",
-            );
-        }
-    }
-
-    #[test]
-    fn registered_factory_set_matches_metadata_set() {
-        let metadata: std::collections::BTreeSet<&str> = model_adapter::keys().collect();
-        let factories: std::collections::BTreeSet<&str> = registered_keys().collect();
-        assert_eq!(metadata, factories);
-    }
-
-    #[test]
-    fn unknown_key_returns_none_factory() {
-        assert!(factory_for("does_not_exist").is_none());
-    }
-
-    #[test]
     fn anthropic_factory_builds_anthropic_adapter() {
         let config = AdapterConfig::new("anthropic", ApiKeyHeader::Custom {
             name:  "x-api-key".to_string(),
             value: "test-key".to_string(),
         });
-        let adapter = factory_for("anthropic").unwrap()(config);
+        let adapter = factory_for(AdapterKind::Anthropic)(config).unwrap();
         assert_eq!(adapter.name(), "anthropic");
+    }
+
+    #[test]
+    fn custom_primary_auth_header_is_preserved() {
+        let config = AdapterConfig::new("anthropic", ApiKeyHeader::Custom {
+            name:  "x-api-key".to_string(),
+            value: "test-key".to_string(),
+        });
+
+        let adapter = build_anthropic_adapter(config);
+
+        assert!(adapter.http.api_key.is_none());
+        assert_eq!(
+            adapter.http.default_headers.get("x-api-key"),
+            Some(&"test-key".to_string())
+        );
+    }
+
+    #[test]
+    fn custom_primary_auth_header_overrides_extra_header() {
+        let config = AdapterConfig {
+            provider_id:   "custom".to_string(),
+            auth_header:   Some(ApiKeyHeader::Custom {
+                name:  "x-api-key".to_string(),
+                value: "primary-key".to_string(),
+            }),
+            base_url:      Some("https://api.custom.test/v1".to_string()),
+            extra_headers: HashMap::from([("x-api-key".to_string(), "secondary-key".to_string())]),
+            codex_mode:    false,
+            org_id:        None,
+            project_id:    None,
+            catalog:       None,
+        };
+
+        let adapter = build_openai_compatible_adapter(config).unwrap();
+
+        assert!(adapter.http.api_key.is_none());
+        assert_eq!(
+            adapter.http.default_headers.get("x-api-key"),
+            Some(&"primary-key".to_string())
+        );
     }
 
     #[test]
@@ -266,7 +263,7 @@ mod tests {
             project_id:    None,
             catalog:       None,
         };
-        let adapter = factory_for("openai_compatible").unwrap()(config);
+        let adapter = factory_for(AdapterKind::OpenAiCompatible)(config).unwrap();
         assert_eq!(adapter.name(), "kimi");
     }
 
@@ -292,7 +289,7 @@ mod tests {
             catalog:       None,
         };
 
-        let adapter = build_openai_compatible_adapter(config);
+        let adapter = build_openai_compatible_adapter(config).unwrap();
 
         assert_eq!(adapter.name(), "portkey");
         assert_eq!(
@@ -334,9 +331,14 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "openai_compatible adapter requires a base_url")]
-    fn openai_compatible_factory_panics_without_base_url() {
+    fn openai_compatible_factory_errors_without_base_url() {
         let config = AdapterConfig::new("kimi", ApiKeyHeader::Bearer("k".to_string()));
-        let _ = factory_for("openai_compatible").unwrap()(config);
+        let Err(err) = factory_for(AdapterKind::OpenAiCompatible)(config) else {
+            panic!("expected missing base_url error");
+        };
+        assert!(
+            err.to_string()
+                .contains("uses openai_compatible adapter but does not configure base_url")
+        );
     }
 }

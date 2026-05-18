@@ -1,11 +1,9 @@
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use fabro_agent::Sandbox;
 use fabro_graphviz::graph::{Graph, Node};
-use fabro_template::{TemplateContext, render as render_template};
 use fabro_types::RunId;
 use tokio_util::sync::CancellationToken;
 
@@ -25,7 +23,7 @@ pub enum CodergenResult {
         files_touched:     Vec<String>,
         last_file_touched: Option<String>,
     },
-    Full(Outcome),
+    Full(Box<Outcome>),
 }
 
 pub struct CodergenRunRequest<'a> {
@@ -75,18 +73,6 @@ impl AgentHandler {
     pub fn new(backend: Option<Box<dyn CodergenBackend>>) -> Self {
         Self { backend }
     }
-}
-
-/// Expand `{{ goal }}` / `{{ inputs.* }}` placeholders in handler prompts.
-pub(crate) fn expand_variables(
-    text: &str,
-    graph: &Graph,
-    inputs: &HashMap<String, toml::Value>,
-) -> Result<String, Error> {
-    let ctx = TemplateContext::new()
-        .with_goal(graph.goal())
-        .with_inputs(inputs.clone());
-    Ok(render_template(text, &ctx)?)
 }
 
 /// Status fields that indicate a JSON object contains routing directives.
@@ -255,18 +241,17 @@ impl Handler for AgentHandler {
             .prompt()
             .filter(|p| !p.is_empty())
             .unwrap_or_else(|| node.label());
-        let expanded = expand_variables(raw_prompt, graph, &services.inputs)?;
         let preamble = context.preamble();
         let prompt = if preamble.is_empty() {
-            expanded
+            raw_prompt.to_string()
         } else {
-            format!("{preamble}\n\n{expanded}")
+            format!("{preamble}\n\n{raw_prompt}")
         };
 
         let prompt_provider = node
             .provider()
             .map(String::from)
-            .or_else(|| Some(services.run.provider.to_string()));
+            .or_else(|| Some(services.run.provider_id.to_string()));
         let prompt_model = node.model().map(String::from);
         let stage_scope = StageScope::for_handler(context, &node.id);
         services.run.emitter.emit_scoped(
@@ -313,7 +298,7 @@ impl Handler for AgentHandler {
                     })
                     .await;
                 match result {
-                    Ok(CodergenResult::Full(outcome)) => return Ok(outcome),
+                    Ok(CodergenResult::Full(outcome)) => return Ok(*outcome),
                     Ok(CodergenResult::Text {
                         text,
                         usage,
@@ -345,7 +330,7 @@ impl Handler for AgentHandler {
         let response_provider = node
             .provider()
             .map(String::from)
-            .or_else(|| Some(services.run.provider.to_string()))
+            .or_else(|| Some(services.run.provider_id.to_string()))
             .unwrap_or_default();
         services.run.emitter.emit_scoped(
             &Event::PromptCompleted {
@@ -482,6 +467,7 @@ mod tests {
                 manifest_blob:    None,
                 git:              None,
                 fork_source_ref:  None,
+                parent_id:        None,
                 web_url:          None,
             },
         )
@@ -524,12 +510,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn codergen_handler_variable_expansion() {
+    async fn codergen_handler_uses_already_rendered_prompt() {
         let handler = AgentHandler::new(None);
         let mut node = Node::new("plan");
         node.attrs.insert(
             "prompt".to_string(),
-            AttrValue::String("Achieve: {{ goal }}".to_string()),
+            AttrValue::String("Achieve: Build a feature".to_string()),
         );
         let context = test_context();
         let mut graph = Graph::new("test");
@@ -789,42 +775,6 @@ mod tests {
             node_state.provider_used.as_ref().unwrap()["provider"],
             "openai"
         );
-    }
-
-    #[test]
-    fn expand_variables_replaces_goal() {
-        let mut graph = Graph::new("test");
-        graph.attrs.insert(
-            "goal".to_string(),
-            AttrValue::String("Fix bugs".to_string()),
-        );
-        let result =
-            expand_variables("Goal is: {{ goal }}, do it", &graph, &HashMap::new()).unwrap();
-        assert_eq!(result, "Goal is: Fix bugs, do it");
-    }
-
-    #[test]
-    fn expand_variables_errors_on_unknown_variable() {
-        let graph = Graph::new("test");
-        let err = expand_variables("Do {{ inputs.foo }} now", &graph, &HashMap::new()).unwrap_err();
-        assert!(
-            err.to_string().contains("undefined"),
-            "unexpected error: {err}"
-        );
-    }
-
-    #[test]
-    fn expand_variables_allows_bare_dollar() {
-        let graph = Graph::new("test");
-        let result = expand_variables("costs $5", &graph, &HashMap::new()).unwrap();
-        assert_eq!(result, "costs $5");
-    }
-
-    #[test]
-    fn expand_variables_allows_dollar_alone() {
-        let graph = Graph::new("test");
-        let result = expand_variables("just a $ sign", &graph, &HashMap::new()).unwrap();
-        assert_eq!(result, "just a $ sign");
     }
 
     #[test]

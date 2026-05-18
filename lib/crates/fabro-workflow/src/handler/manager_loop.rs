@@ -16,11 +16,12 @@ use crate::artifact_upload::ArtifactSink;
 use crate::condition::evaluate_condition;
 use crate::context::{Context, WorkflowContext, keys};
 use crate::error::Error;
-use crate::operations::{RenderMode, ValidateInput, WorkflowInput, validate};
+use crate::operations::{ValidateInput, WorkflowInput, validate};
 use crate::outcome::{Outcome, OutcomeExt, StageOutcome};
 use crate::pipeline::types::Initialized;
 use crate::run_dir::visit_from_context;
 use crate::run_options::RunOptions;
+use crate::static_reference::{ReferenceKind, validate_static_reference};
 use crate::{ManifestPath, pipeline};
 
 /// Orchestrates a child workflow engine, polling for completion or stop
@@ -56,9 +57,7 @@ fn parse_duration_str(s: &str) -> Duration {
 
 /// Parse a child workflow graph from node attributes: inline
 /// `stack.child_dot_source` (no file inlining), or file path
-/// `stack.child_workflow` / `stack.child_dotfile` (with file inlining).
-/// `stack.child_workflow` is preferred; `stack.child_dotfile` is kept for
-/// backward compatibility.
+/// `stack.child_workflow` (with file inlining).
 fn parse_child_graph(node: &Node, services: &EngineServices) -> Result<ParsedChildWorkflow, Error> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
@@ -67,7 +66,7 @@ fn parse_child_graph(node: &Node, services: &EngineServices) -> Result<ParsedChi
         .get("stack.child_dot_source")
         .and_then(|v| v.as_str())
     {
-        let validated = validate(ValidateInput {
+        let mut validated = validate(ValidateInput {
             workflow:          WorkflowInput::DotSource {
                 source:   dot.to_string(),
                 base_dir: None,
@@ -76,8 +75,8 @@ fn parse_child_graph(node: &Node, services: &EngineServices) -> Result<ParsedChi
             cwd:               cwd.clone(),
             custom_transforms: Vec::new(),
             catalog:           Arc::clone(&services.run.catalog),
-            mode:              RenderMode::Strict,
         })?;
+        validated.promote_template_undefined_variables_to_errors();
         validated.raise_on_errors()?;
         let (graph, _, _) = validated.into_parts();
         return Ok(ParsedChildWorkflow {
@@ -88,9 +87,10 @@ fn parse_child_graph(node: &Node, services: &EngineServices) -> Result<ParsedChi
     if let Some(path) = node
         .attrs
         .get("stack.child_workflow")
-        .or_else(|| node.attrs.get("stack.child_dotfile"))
         .and_then(|v| v.as_str())
     {
+        validate_static_reference(path, ReferenceKind::ChildWorkflow)
+            .map_err(|error| Error::Validation(error.to_string()))?;
         let workflow = match (&services.workflow_bundle, &services.workflow_path) {
             (Some(bundle), Some(current_workflow_path)) => WorkflowInput::Bundled(
                 bundle
@@ -113,14 +113,14 @@ fn parse_child_graph(node: &Node, services: &EngineServices) -> Result<ParsedChi
             WorkflowInput::Bundled(workflow) => Some(workflow.path.clone()),
             WorkflowInput::Path(_) | WorkflowInput::DotSource { .. } => None,
         };
-        let validated = validate(ValidateInput {
+        let mut validated = validate(ValidateInput {
             workflow,
             settings: WorkflowSettings::default(),
             cwd,
             custom_transforms: Vec::new(),
             catalog: Arc::clone(&services.run.catalog),
-            mode: RenderMode::Strict,
         })?;
+        validated.promote_template_undefined_variables_to_errors();
         validated.raise_on_errors()?;
         let (graph, _, _) = validated.into_parts();
         return Ok(ParsedChildWorkflow {
@@ -558,7 +558,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn child_dotfile_reads_from_file() {
+    async fn child_workflow_reads_from_file() {
         let dir = tempfile::tempdir().unwrap();
         let dot_path = dir.path().join("child.dot");
         std::fs::write(&dot_path, child_dot_succeeds()).unwrap();
@@ -566,7 +566,7 @@ mod tests {
         let handler = SubWorkflowHandler;
         let mut node = Node::new("manager");
         node.attrs.insert(
-            "stack.child_dotfile".to_string(),
+            "stack.child_workflow".to_string(),
             AttrValue::String(dot_path.to_string_lossy().to_string()),
         );
         node.attrs

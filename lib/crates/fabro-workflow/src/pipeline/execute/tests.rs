@@ -211,6 +211,7 @@ async fn seed_created_and_starting(
         manifest_blob:    None,
         git:              run_options.pre_run_git.clone(),
         fork_source_ref:  run_options.fork_source_ref.clone(),
+        parent_id:        None,
         web_url:          None,
     })
     .await
@@ -248,9 +249,7 @@ async fn execute_test_run_with_options(
             },
             llm: LlmSpec {
                 model:          "test-model".to_string(),
-                provider:       fabro_llm::Provider::Anthropic,
-                provider_id:    fabro_llm::Provider::Anthropic.id(),
-                profile_kind:   fabro_model::AgentProfileKind::Anthropic,
+                provider_id:    fabro_model::ProviderId::anthropic(),
                 fallback_chain: Vec::new(),
                 mcp_servers:    Vec::new(),
                 model_controls: RunModelControls::default(),
@@ -313,9 +312,7 @@ async fn execute_runs_start_to_exit_and_returns_final_context() {
             },
             llm: LlmSpec {
                 model:          "test-model".to_string(),
-                provider:       fabro_llm::Provider::Anthropic,
-                provider_id:    fabro_llm::Provider::Anthropic.id(),
-                profile_kind:   fabro_model::AgentProfileKind::Anthropic,
+                provider_id:    fabro_model::ProviderId::anthropic(),
                 fallback_chain: Vec::new(),
                 mcp_servers:    Vec::new(),
                 model_controls: RunModelControls::default(),
@@ -393,9 +390,7 @@ async fn run_with_lifecycle(
             },
             llm: LlmSpec {
                 model:          "test-model".to_string(),
-                provider:       fabro_llm::Provider::Anthropic,
-                provider_id:    fabro_llm::Provider::Anthropic.id(),
-                profile_kind:   fabro_model::AgentProfileKind::Anthropic,
+                provider_id:    fabro_model::ProviderId::anthropic(),
                 fallback_chain: Vec::new(),
                 mcp_servers:    Vec::new(),
                 model_controls: RunModelControls::default(),

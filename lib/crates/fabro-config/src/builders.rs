@@ -305,14 +305,17 @@ fn provider_settings_to_catalog(
     settings: ProviderSettings,
 ) -> model_catalog::ProviderCatalogSettings {
     model_catalog::ProviderCatalogSettings {
-        display_name:  settings.display_name,
-        adapter:       settings.adapter,
-        base_url:      settings.base_url,
-        credentials:   settings.credentials,
-        extra_headers: settings.extra_headers,
-        priority:      settings.priority,
-        enabled:       settings.enabled,
-        aliases:       settings.aliases,
+        display_name:   settings.display_name,
+        adapter:        settings.adapter,
+        agent_profile:  settings.agent_profile,
+        auth:           settings.auth,
+        billing_policy: settings.billing_policy,
+        api_key_url:    settings.api_key_url,
+        base_url:       settings.base_url,
+        extra_headers:  settings.extra_headers,
+        priority:       settings.priority,
+        enabled:        settings.enabled,
+        aliases:        settings.aliases,
     }
 }
 
@@ -320,11 +323,13 @@ fn model_settings_to_catalog(settings: ModelSettings) -> model_catalog::ModelCat
     let ModelSettings {
         provider,
         api_id,
+        agent_profile,
         display_name,
         family,
         training,
         knowledge_cutoff,
         default,
+        probe,
         enabled,
         aliases,
         estimated_output_tps,
@@ -336,11 +341,13 @@ fn model_settings_to_catalog(settings: ModelSettings) -> model_catalog::ModelCat
     model_catalog::ModelCatalogSettings {
         provider,
         api_id,
+        agent_profile,
         display_name,
         family,
         training,
         knowledge_cutoff,
         default,
+        probe,
         enabled,
         aliases,
         estimated_output_tps,
@@ -365,7 +372,6 @@ fn model_features_to_catalog(features: &LlmModelFeatures) -> model_catalog::Sett
         reasoning:        features.reasoning,
         reasoning_effort: features.reasoning_effort,
         prompt_cache:     features.prompt_cache,
-        effort:           features.effort,
     }
 }
 
@@ -690,6 +696,9 @@ methods = ["dev-token"]
 display_name = "Acme"
 adapter = "openai_compatible"
 base_url = "https://api.acme.test/v1"
+agent_profile = "anthropic"
+
+[llm.providers.acme.auth]
 credentials = ["env:ACME_API_KEY"]
 
 [llm.models."acme-large"]
@@ -697,6 +706,7 @@ provider = "acme"
 display_name = "Acme Large"
 family = "acme"
 default = true
+agent_profile = "gemini"
 
 [llm.models."acme-large".limits]
 context_window = 128000
@@ -705,7 +715,6 @@ context_window = 128000
 tools = true
 vision = false
 reasoning = false
-effort = false
 "#,
             None,
             None,
@@ -721,6 +730,11 @@ effort = false
                 .get("acme-large")
                 .map(|model| model.provider.clone()),
             Some(fabro_model::ProviderId::new("acme"))
+        );
+        assert_eq!(
+            catalog
+                .effective_agent_profile(&fabro_model::ProviderId::new("acme"), Some("acme-large")),
+            Some(fabro_model::AgentProfileKind::Gemini)
         );
     }
 }

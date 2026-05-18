@@ -6,7 +6,9 @@ use fabro_model::Catalog;
 use futures::{StreamExt, stream};
 
 use crate::error::{Error, ProviderErrorDetail, ProviderErrorKind, error_from_status_code};
-use crate::provider::{ProviderAdapter, StreamEventStream, validate_tool_choice};
+use crate::provider::{
+    ProviderAdapter, StreamEventStream, validate_standard_speed, validate_tool_choice,
+};
 use crate::providers::common::{
     self as common, parse_error_body, parse_rate_limit_headers, parse_retry_after,
     send_and_read_response,
@@ -1069,15 +1071,22 @@ impl ProviderAdapter for Adapter {
         &self.provider_name
     }
 
+    fn validate_request(&self, request: &Request) -> Result<(), Error> {
+        validate_standard_speed(self, request)?;
+        if let Some(tc) = &request.tool_choice {
+            validate_tool_choice(self, tc)?;
+        }
+        Ok(())
+    }
+
     async fn complete(&self, request: &Request) -> Result<Response, Error> {
+        self.validate_request(request)?;
+
         // Codex endpoint requires streaming; collect the stream into a response.
         if self.codex_mode {
             return self.complete_via_stream(request).await;
         }
 
-        if let Some(tc) = &request.tool_choice {
-            validate_tool_choice(self, tc)?;
-        }
         let request_body =
             build_request_body_with_catalog(request, false, false, self.catalog.as_deref()).await;
         let url = format!("{}/responses", self.http.base_url);
@@ -1115,9 +1124,7 @@ impl ProviderAdapter for Adapter {
     }
 
     async fn stream(&self, request: &Request) -> Result<StreamEventStream, Error> {
-        if let Some(tc) = &request.tool_choice {
-            validate_tool_choice(self, tc)?;
-        }
+        self.validate_request(request)?;
         let request_body = build_request_body_with_catalog(
             request,
             true,

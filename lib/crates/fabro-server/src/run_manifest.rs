@@ -30,21 +30,21 @@ use fabro_types::settings::run::{
     DaytonaNetworkLayer, DaytonaSettings, DockerSettings, DockerfileSource, RunGoal, RunMode,
     RunNamespace,
 };
-use fabro_types::{RunId, WorkflowSettings};
+use fabro_types::{ManifestPath, RunId, WorkflowSettings};
 use fabro_util::check_report::{CheckDetail, CheckReport, CheckResult, CheckSection, CheckStatus};
 use fabro_validate::Severity;
-use fabro_workflow::operations::{
-    CreateRunInput, RenderMode, ValidateInput, WorkflowInput, validate,
-};
+use fabro_workflow::Error as WorkflowError;
+use fabro_workflow::operations::{CreateRunInput, ValidateInput, WorkflowInput, validate};
 use fabro_workflow::pipeline::Validated;
 use fabro_workflow::run_materialization::materialize_run;
 use fabro_workflow::workflow_bundle::{BundledWorkflow, ParsedWorkflowConfig, WorkflowBundle};
-use fabro_workflow::{Error as WorkflowError, ManifestPath};
 use futures_util::stream::{self, StreamExt};
 use tokio::process::Command;
 use tokio::time;
+use tracing::warn;
 
 use crate::server::AppState;
+use crate::server_secrets::LlmClientResult;
 
 #[derive(Clone)]
 pub(crate) struct PreparedManifest {
@@ -52,6 +52,7 @@ pub(crate) struct PreparedManifest {
     pub git:              Option<types::GitContext>,
     pub root_source:      String,
     pub run_id:           Option<RunId>,
+    pub parent_id:        Option<RunId>,
     pub title:            Option<String>,
     pub settings:         WorkflowSettings,
     pub target_path:      ManifestPath,
@@ -136,7 +137,11 @@ pub(crate) fn prepare_manifest(
         .build()
         .context("failed to resolve manifest settings")?;
     settings.run.inputs.extend(args_overrides.input_overrides);
-    if let Some(goal) = manifest.goal.as_ref() {
+    if let Some(goal) = manifest
+        .goal
+        .as_ref()
+        .filter(|goal| goal.type_ != types::ManifestGoalType::Graph)
+    {
         settings.run.goal = Some(RunGoal::Inline(InterpString::parse(&goal.text)));
     }
     let title = manifest
@@ -155,6 +160,12 @@ pub(crate) fn prepare_manifest(
             .map(str::parse::<RunId>)
             .transpose()
             .context("invalid run ID")?,
+        parent_id: manifest
+            .parent_id
+            .as_deref()
+            .map(str::parse::<RunId>)
+            .transpose()
+            .context("invalid parent run ID")?,
         title,
         settings: settings.clone(),
         target_path,
@@ -166,7 +177,6 @@ pub(crate) fn prepare_manifest(
 
 pub(crate) fn validate_prepared_manifest(
     prepared: &PreparedManifest,
-    mode: RenderMode,
     catalog: Arc<Catalog>,
 ) -> Result<Validated, WorkflowError> {
     validate(ValidateInput {
@@ -175,7 +185,6 @@ pub(crate) fn validate_prepared_manifest(
         cwd: prepared.cwd.clone(),
         custom_transforms: Vec::new(),
         catalog,
-        mode,
     })
 }
 
@@ -196,6 +205,7 @@ pub(crate) fn create_run_input(
         title: prepared.title,
         git: prepared.git,
         fork_source_ref: None,
+        parent_id: prepared.parent_id,
         provenance: None,
         configured_providers,
         web_url,
@@ -468,10 +478,14 @@ async fn build_preflight_report(
     }
 
     let catalog = state.catalog();
-    let configured_providers = state
-        .llm_source
-        .configured_providers(catalog.as_ref())
-        .await;
+    let llm_result = state.resolve_llm_client().await;
+    let configured_providers = match &llm_result {
+        Ok(result) => result.provider_ids(),
+        Err(err) => {
+            warn!(error = ?err, "Failed to resolve LLM client while checking ready providers");
+            Vec::new()
+        }
+    };
     let materialized = materialize_run(
         prepared.settings.clone(),
         graph,
@@ -517,12 +531,12 @@ async fn build_preflight_report(
     )
     .await;
     let llm_ok = run_llm_check(
-        state,
         &mut checks,
         graph,
         &resolved_run,
         &configured_providers,
         catalog.as_ref(),
+        llm_result,
     )
     .await;
     run_github_token_check(&mut checks, prepared, &resolved_run, github_app).await;
@@ -919,12 +933,12 @@ struct PendingModelProbe {
 }
 
 async fn run_llm_check(
-    state: &AppState,
     checks: &mut Vec<CheckResult>,
     graph: &Graph,
     settings: &RunNamespace,
     configured_providers: &[ProviderId],
     catalog: &Catalog,
+    llm_result: Result<LlmClientResult>,
 ) -> bool {
     let (model, provider) = resolve_model_provider(settings, graph, configured_providers, catalog);
     let default_provider = provider.as_deref().unwrap_or("anthropic");
@@ -955,9 +969,10 @@ async fn run_llm_check(
         return true;
     }
 
-    match state.resolve_llm_client().await {
+    match llm_result {
         Ok(result) => {
             let auth_issues = result.auth_issues;
+            let registration_issues = result.registration_issues;
             let client = Arc::new(result.client);
 
             let mut all_ok = true;
@@ -976,6 +991,18 @@ async fn run_llm_check(
                         summary:     model_id.clone(),
                         details:     vec![CheckDetail::new(format!("Provider: {provider_name}"))],
                         remediation: Some(auth_issue_message(&provider_id, issue)),
+                    }));
+                } else if let Some(issue) = registration_issues
+                    .iter()
+                    .find(|issue| issue.provider == provider_id)
+                {
+                    all_ok = false;
+                    completed_checks.push((index, CheckResult {
+                        name:        "LLM".into(),
+                        status:      CheckStatus::Warning,
+                        summary:     model_id.clone(),
+                        details:     vec![CheckDetail::new(format!("Provider: {provider_name}"))],
+                        remediation: Some(issue.error.to_string()),
                     }));
                 } else if !client.has_provider(provider_name) {
                     all_ok = false;
@@ -1259,19 +1286,40 @@ fn diagnostics_to_api(
     diagnostics
         .iter()
         .map(|diagnostic| types::WorkflowDiagnostic {
-            edge:     diagnostic
+            column:      diagnostic
+                .column
+                .and_then(|value| i32::try_from(value).ok()),
+            edge:        diagnostic
                 .edge
                 .as_ref()
                 .map(|edge: &(String, String)| [edge.0.clone(), edge.1.clone()]),
-            fix:      diagnostic.fix.clone(),
-            message:  diagnostic.message.clone(),
-            node_id:  diagnostic.node_id.clone(),
-            rule:     diagnostic.rule.clone(),
-            severity: match diagnostic.severity {
+            fix:         diagnostic.fix.clone(),
+            line:        diagnostic.line.and_then(|value| i32::try_from(value).ok()),
+            message:     diagnostic.message.clone(),
+            node_id:     diagnostic.node_id.clone(),
+            related:     diagnostic
+                .related
+                .iter()
+                .map(|related| types::RelatedWorkflowDiagnostic {
+                    column:      related.column.and_then(|value| i32::try_from(value).ok()),
+                    line:        related.line.and_then(|value| i32::try_from(value).ok()),
+                    message:     related.message.clone(),
+                    source_path: related.source_path.clone(),
+                })
+                .collect(),
+            rule:        diagnostic.rule.clone(),
+            severity:    match diagnostic.severity {
                 Severity::Error => types::WorkflowDiagnosticSeverity::Error,
                 Severity::Warning => types::WorkflowDiagnosticSeverity::Warning,
                 Severity::Info => types::WorkflowDiagnosticSeverity::Info,
             },
+            source_path: diagnostic.source_path.clone(),
+            span_len:    diagnostic
+                .span_len
+                .and_then(|value| i64::try_from(value).ok()),
+            span_start:  diagnostic
+                .span_start
+                .and_then(|value| i64::try_from(value).ok()),
         })
         .collect()
 }
@@ -1313,7 +1361,7 @@ fn report_to_api(report: &CheckReport) -> types::PreflightCheckReport {
 
 #[cfg(test)]
 mod tests {
-    use fabro_model::Provider;
+    use fabro_model::ProviderId;
     use fabro_model::catalog::LlmCatalogSettings;
 
     use super::*;
@@ -1325,6 +1373,7 @@ mod tests {
             cwd:       "/tmp/project".to_string(),
             git:       None,
             goal:      None,
+            parent_id: None,
             run_id:    None,
             title:     None,
             target:    types::ManifestTarget {
@@ -1369,7 +1418,7 @@ mod tests {
     }
 
     fn test_catalog() -> Arc<Catalog> {
-        Arc::new(Catalog::from_builtin_with_overrides(&LlmCatalogSettings::default()).unwrap())
+        Arc::new(Catalog::from_builtin().unwrap())
     }
 
     fn manifest_workflow() -> types::ManifestWorkflow {
@@ -1430,13 +1479,12 @@ enabled = {clone_enabled}
             &manifest,
         )
         .unwrap();
-        let validated =
-            validate_prepared_manifest(&prepared, RenderMode::Strict, test_catalog()).unwrap();
+        let validated = validate_prepared_manifest(&prepared, test_catalog()).unwrap();
         let resolved = materialize_run(
             prepared.settings.clone(),
             validated.graph(),
             Catalog::builtin(),
-            &[Provider::Anthropic.id()],
+            &[ProviderId::anthropic()],
         )
         .run;
 
@@ -1915,8 +1963,7 @@ app_id = "fixture-app-id"
             &invalid_manifest(),
         )
         .unwrap();
-        let validated =
-            validate_prepared_manifest(&prepared, RenderMode::Strict, test_catalog()).unwrap();
+        let validated = validate_prepared_manifest(&prepared, test_catalog()).unwrap();
 
         assert!(validated.has_errors());
 
@@ -1961,8 +2008,7 @@ issues = "read"
             &manifest,
         )
         .unwrap();
-        let validated =
-            validate_prepared_manifest(&prepared, RenderMode::Strict, test_catalog()).unwrap();
+        let validated = validate_prepared_manifest(&prepared, test_catalog()).unwrap();
         assert!(!validated.has_errors());
 
         let (response, _ok) = run_preflight(state.as_ref(), &prepared, &validated)
@@ -2010,8 +2056,7 @@ provider = "local"
             &manifest,
         )
         .unwrap();
-        let validated =
-            validate_prepared_manifest(&prepared, RenderMode::Strict, test_catalog()).unwrap();
+        let validated = validate_prepared_manifest(&prepared, test_catalog()).unwrap();
 
         assert!(!validated.has_errors());
 
@@ -2052,8 +2097,7 @@ provider = "daytona"
             &manifest,
         )
         .unwrap();
-        let validated =
-            validate_prepared_manifest(&prepared, RenderMode::Strict, test_catalog()).unwrap();
+        let validated = validate_prepared_manifest(&prepared, test_catalog()).unwrap();
 
         let (response, _ok) = run_preflight(state.as_ref(), &prepared, &validated)
             .await
@@ -2086,13 +2130,14 @@ provider = "daytona"
                     }));
             })
             .await;
-        let base_url = server.url("/v1");
-        let state = crate::test_support::test_app_state_with_env_lookup(
-            crate::test_support::default_test_server_settings(),
-            RunLayer::default(),
-            5,
-            move |name| (name == "OPENAI_BASE_URL").then(|| base_url.clone()),
-        );
+        let state = crate::test_support::TestAppStateBuilder::new()
+            .runtime_settings(
+                crate::test_support::default_test_server_settings(),
+                RunLayer::default(),
+            )
+            .max_concurrent_runs(5)
+            .provider_base_url("openai", server.url("/v1"))
+            .build();
         state
             .vault
             .write()
@@ -2100,7 +2145,7 @@ provider = "daytona"
             .set(
                 "openai",
                 &serde_json::to_string(&fabro_auth::AuthCredential {
-                    provider: Provider::OpenAi.id(),
+                    provider: ProviderId::openai(),
                     details:  fabro_auth::AuthDetails::ApiKey {
                         key: "test-openai-key".to_string(),
                     },
@@ -2126,8 +2171,7 @@ digraph Demo {
             &manifest,
         )
         .unwrap();
-        let validated =
-            validate_prepared_manifest(&prepared, RenderMode::Strict, test_catalog()).unwrap();
+        let validated = validate_prepared_manifest(&prepared, test_catalog()).unwrap();
 
         let (response, ok) = run_preflight(state.as_ref(), &prepared, &validated)
             .await
@@ -2168,8 +2212,7 @@ digraph Demo {
             &manifest,
         )
         .unwrap();
-        let validated =
-            validate_prepared_manifest(&prepared, RenderMode::Strict, test_catalog()).unwrap();
+        let validated = validate_prepared_manifest(&prepared, test_catalog()).unwrap();
 
         let (response, ok) = run_preflight(state.as_ref(), &prepared, &validated)
             .await
@@ -2196,12 +2239,15 @@ digraph Demo {
 
     #[tokio::test]
     async fn preflight_resolves_model_aliases_from_app_state_catalog() {
-        let llm_catalog_settings: fabro_model::catalog::LlmCatalogSettings = toml::from_str(
+        let llm_catalog_settings: LlmCatalogSettings = toml::from_str(
             r#"
 [providers.acme]
 display_name = "Acme"
 adapter = "openai_compatible"
+agent_profile = "openai"
 base_url = "https://api.acme.test/v1"
+
+[providers.acme.auth]
 credentials = ["env:ACME_API_KEY"]
 
 [models."acme-large"]
@@ -2218,7 +2264,6 @@ context_window = 128000
 tools = true
 vision = false
 reasoning = false
-effort = false
 "#,
         )
         .expect("catalog fixture should parse");
@@ -2240,8 +2285,7 @@ digraph Demo {
             &manifest,
         )
         .unwrap();
-        let validated =
-            validate_prepared_manifest(&prepared, RenderMode::Strict, test_catalog()).unwrap();
+        let validated = validate_prepared_manifest(&prepared, test_catalog()).unwrap();
 
         let (response, ok) = run_preflight(state.as_ref(), &prepared, &validated)
             .await
@@ -2271,7 +2315,7 @@ digraph Demo {
         //! the strict `SettingsLayer` schema, so unknown fields anywhere in
         //! the document trip `deny_unknown_fields`.
 
-        use fabro_workflow::ManifestPath;
+        use fabro_types::ManifestPath;
         use fabro_workflow::workflow_bundle::{BundledWorkflow, ParsedWorkflowConfig};
 
         use super::super::root_workflow_run_layer;

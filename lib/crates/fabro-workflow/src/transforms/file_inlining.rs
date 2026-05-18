@@ -1,30 +1,76 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use fabro_graphviz::graph::{AttrValue, Graph};
+use fabro_template::{TemplateContext, TemplateLoader};
+use fabro_validate::Diagnostic;
 
 use super::Transform;
 use crate::error::Error;
-use crate::file_resolver::FileResolver;
+use crate::file_resolver::{FileResolver, ResolvedFile};
+use crate::static_reference::{ReferenceKind, validate_static_reference};
+use crate::transforms::variable_expansion::{
+    RenderMode, TemplateRenderTarget, TemplateTransform, render_template_for_target,
+};
 
 /// Resolve a potential `@path` file reference.
 ///
 /// If `value` starts with `@` and the referenced file exists locally, the file
 /// contents are returned (inlined). Otherwise the original value is returned
 /// unchanged.
-pub fn resolve_file_ref(value: &str, current_dir: &Path, resolver: &dyn FileResolver) -> String {
+pub fn resolve_file_ref(
+    value: &str,
+    current_dir: &Path,
+    resolver: &dyn FileResolver,
+) -> Result<String, Error> {
     let Some(path_str) = value.strip_prefix('@') else {
-        return value.to_string();
+        return Ok(value.to_string());
     };
-    resolver
+    validate_static_reference(path_str, ReferenceKind::FileInline)
+        .map_err(|error| Error::Validation(error.to_string()))?;
+    Ok(resolver
         .resolve(current_dir, path_str)
-        .map_or_else(|| value.to_string(), |resolved| resolved.content)
+        .map_or_else(|| value.to_string(), |resolved| resolved.content))
+}
+
+pub(crate) fn template_include_loader(
+    current_dir: PathBuf,
+    resolver: Arc<dyn FileResolver>,
+) -> TemplateLoader {
+    Arc::new(move |name| {
+        if !is_safe_include_name(name) {
+            return None;
+        }
+        resolver
+            .resolve(&current_dir, name)
+            .map(|resolved| resolved.content)
+    })
+}
+
+fn is_safe_include_name(name: &str) -> bool {
+    if name.is_empty() || name.starts_with('~') || Path::new(name).is_absolute() {
+        return false;
+    }
+    name.split('/')
+        .all(|segment| !segment.starts_with('.') && !segment.contains('\\'))
+}
+
+fn parent_dir_or_dot(path: &Path) -> PathBuf {
+    path.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf)
 }
 
 /// Inlines `@file` references in node prompts and the graph-level goal.
 pub struct FileInliningTransform {
-    current_dir: PathBuf,
-    resolver:    Arc<dyn FileResolver>,
+    current_dir:   PathBuf,
+    resolver:      Arc<dyn FileResolver>,
+    inputs:        HashMap<String, toml::Value>,
+    source_name:   Option<String>,
+    source_text:   Option<String>,
+    goal_override: Option<String>,
+    render_mode:   RenderMode,
 }
 
 impl FileInliningTransform {
@@ -33,37 +79,164 @@ impl FileInliningTransform {
         Self {
             current_dir,
             resolver,
+            inputs: HashMap::new(),
+            source_name: None,
+            source_text: None,
+            goal_override: None,
+            render_mode: RenderMode::Strict,
         }
+    }
+
+    #[must_use]
+    pub fn with_template_options(
+        mut self,
+        inputs: HashMap<String, toml::Value>,
+        source_name: Option<String>,
+        source_text: Option<String>,
+        render_mode: RenderMode,
+    ) -> Self {
+        self.inputs = inputs;
+        self.source_name = source_name;
+        self.source_text = source_text;
+        self.render_mode = render_mode;
+        self
+    }
+
+    #[must_use]
+    pub fn with_goal_override(mut self, goal: Option<String>) -> Self {
+        self.goal_override = goal;
+        self
+    }
+
+    pub(crate) fn apply_with_diagnostics(
+        &self,
+        graph: Graph,
+    ) -> Result<(Graph, Vec<Diagnostic>), Error> {
+        let mut graph = graph;
+        let mut diagnostics = Vec::new();
+        self.inline_graph_goal(&mut graph, &mut diagnostics)?;
+
+        let resolved_goal = match &self.goal_override {
+            Some(goal) => goal.clone(),
+            None => TemplateTransform {
+                inputs:      self.inputs.clone(),
+                source_name: self.source_name.clone(),
+                source_text: self.source_text.clone(),
+                render_mode: self.render_mode,
+            }
+            .resolved_goal(&graph, &mut diagnostics)?,
+        };
+        let ctx = TemplateContext::new()
+            .with_goal(resolved_goal)
+            .with_inputs(self.inputs.clone());
+
+        for (node_id, node) in &mut graph.nodes {
+            let Some(AttrValue::String(prompt)) = node.attrs.get("prompt") else {
+                continue;
+            };
+            let target = TemplateRenderTarget::node_attr(
+                self.source_name.clone(),
+                node_id.clone(),
+                "prompt",
+            )
+            .with_source_text(self.source_text.as_deref(), prompt)
+            .with_include_loader(Some(template_include_loader(
+                self.current_dir.clone(),
+                Arc::clone(&self.resolver),
+            )));
+            let rendered = render_template_for_target(
+                prompt,
+                &ctx,
+                self.render_mode,
+                &target,
+                &mut diagnostics,
+            )?;
+            let value = self
+                .render_resolved_file_ref(&rendered, &ctx, target, &mut diagnostics)?
+                .unwrap_or(rendered);
+            node.attrs
+                .insert("prompt".to_string(), AttrValue::String(value));
+        }
+
+        Ok((graph, diagnostics))
+    }
+
+    fn inline_graph_goal(
+        &self,
+        graph: &mut Graph,
+        diagnostics: &mut Vec<Diagnostic>,
+    ) -> Result<(), Error> {
+        let Some(AttrValue::String(goal)) = graph.attrs.get("goal") else {
+            return Ok(());
+        };
+        let ctx = TemplateContext::for_input_scan(self.inputs.clone());
+        let target = TemplateRenderTarget::graph_attr(self.source_name.clone(), "goal")
+            .with_source_text(self.source_text.as_deref(), goal)
+            .with_include_loader(Some(template_include_loader(
+                self.current_dir.clone(),
+                Arc::clone(&self.resolver),
+            )));
+        let rendered =
+            render_template_for_target(goal, &ctx, self.render_mode, &target, diagnostics)?;
+        let value = self
+            .render_resolved_file_ref(&rendered, &ctx, target, diagnostics)?
+            .unwrap_or(rendered);
+        graph
+            .attrs
+            .insert("goal".to_string(), AttrValue::String(value));
+        Ok(())
+    }
+
+    fn render_resolved_file_ref(
+        &self,
+        value: &str,
+        ctx: &TemplateContext,
+        owner_target: TemplateRenderTarget,
+        diagnostics: &mut Vec<Diagnostic>,
+    ) -> Result<Option<String>, Error> {
+        let Some(path_str) = value.strip_prefix('@') else {
+            return Ok(None);
+        };
+        validate_static_reference(path_str, ReferenceKind::FileInline)
+            .map_err(|error| Error::Validation(error.to_string()))?;
+        let Some(resolved) = self.resolver.resolve(&self.current_dir, path_str) else {
+            return Ok(None);
+        };
+        let target = owner_target
+            .with_source_name(resolved.path.display().to_string())
+            .with_source_text(Some(&resolved.content), &resolved.content)
+            .with_include_loader(Some(template_include_loader(
+                parent_dir_or_dot(&resolved.path),
+                Arc::clone(&self.resolver),
+            )));
+        Ok(Some(render_file_contents(
+            &resolved,
+            ctx,
+            self.render_mode,
+            &target,
+            diagnostics,
+        )?))
     }
 }
 
 impl Transform for FileInliningTransform {
     fn apply(&self, graph: Graph) -> Result<Graph, Error> {
-        let mut graph = graph;
-
-        // Inline @file refs in node prompts
-        for node in graph.nodes.values_mut() {
-            if let Some(AttrValue::String(prompt)) = node.attrs.get("prompt") {
-                let resolved = resolve_file_ref(prompt, &self.current_dir, self.resolver.as_ref());
-                if resolved != *prompt {
-                    node.attrs
-                        .insert("prompt".to_string(), AttrValue::String(resolved));
-                }
-            }
+        let (graph, diagnostics) = self.apply_with_diagnostics(graph)?;
+        if !diagnostics.is_empty() {
+            return Err(Error::ValidationFailed { diagnostics });
         }
-
-        // Inline @file refs in graph-level goal
-        if let Some(AttrValue::String(goal)) = graph.attrs.get("goal") {
-            let resolved = resolve_file_ref(goal, &self.current_dir, self.resolver.as_ref());
-            if resolved != *goal {
-                graph
-                    .attrs
-                    .insert("goal".to_string(), AttrValue::String(resolved));
-            }
-        }
-
         Ok(graph)
     }
+}
+
+pub(crate) fn render_file_contents(
+    resolved: &ResolvedFile,
+    ctx: &TemplateContext,
+    render_mode: RenderMode,
+    target: &TemplateRenderTarget,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Result<String, Error> {
+    render_template_for_target(&resolved.content, ctx, render_mode, target, diagnostics)
 }
 
 #[cfg(test)]
@@ -88,7 +261,8 @@ mod tests {
                 "hello world",
                 dir.path(),
                 &FilesystemFileResolver::new(None),
-            ),
+            )
+            .unwrap(),
             "hello world"
         );
     }
@@ -101,7 +275,8 @@ mod tests {
                 "@nonexistent.md",
                 dir.path(),
                 &FilesystemFileResolver::new(None),
-            ),
+            )
+            .unwrap(),
             "@nonexistent.md"
         );
     }
@@ -112,7 +287,7 @@ mod tests {
         std::fs::write(dir.path().join("prompt.md"), "inlined content").unwrap();
 
         assert_eq!(
-            resolve_file_ref("@prompt.md", dir.path(), &FilesystemFileResolver::new(None)),
+            resolve_file_ref("@prompt.md", dir.path(), &FilesystemFileResolver::new(None)).unwrap(),
             "inlined content"
         );
     }
@@ -176,6 +351,71 @@ mod tests {
     }
 
     #[test]
+    fn file_inlining_transform_resolves_minijinja_includes_for_prompts_and_goal() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("prompts")).unwrap();
+        std::fs::create_dir_all(dir.path().join("goals")).unwrap();
+        std::fs::write(
+            dir.path().join("prompts/work.md"),
+            r#"{% include "work.tpl.md" %}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("prompts/work.tpl.md"), "file prompt").unwrap();
+        std::fs::write(dir.path().join("inline.tpl.md"), "inline prompt").unwrap();
+        std::fs::write(
+            dir.path().join("goals/goal.md"),
+            r#"{% include "goal.tpl.md" %}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("goals/goal.tpl.md"), "included goal").unwrap();
+
+        let mut graph = Graph::new("test");
+        graph.attrs.insert(
+            "goal".to_string(),
+            AttrValue::String("@goals/goal.md".to_string()),
+        );
+        let mut file_prompt = Node::new("file_prompt");
+        file_prompt.attrs.insert(
+            "prompt".to_string(),
+            AttrValue::String("@prompts/work.md".to_string()),
+        );
+        graph.nodes.insert("file_prompt".to_string(), file_prompt);
+        let mut inline_prompt = Node::new("inline_prompt");
+        inline_prompt.attrs.insert(
+            "prompt".to_string(),
+            AttrValue::String(r#"{% include "inline.tpl.md" %}"#.to_string()),
+        );
+        graph
+            .nodes
+            .insert("inline_prompt".to_string(), inline_prompt);
+
+        let transform = FileInliningTransform::new(
+            dir.path().to_path_buf(),
+            Arc::new(FilesystemFileResolver::new(None)),
+        );
+        let graph = transform.apply(graph).unwrap();
+
+        assert_eq!(
+            graph.nodes["file_prompt"]
+                .attrs
+                .get("prompt")
+                .and_then(AttrValue::as_str),
+            Some("file prompt")
+        );
+        assert_eq!(
+            graph.nodes["inline_prompt"]
+                .attrs
+                .get("prompt")
+                .and_then(AttrValue::as_str),
+            Some("inline prompt")
+        );
+        assert_eq!(
+            graph.attrs.get("goal").and_then(AttrValue::as_str),
+            Some("included goal")
+        );
+    }
+
+    #[test]
     fn resolve_file_ref_expands_tilde() {
         let home = dirs::home_dir().expect("home dir must exist");
         let test_file = home.join(".fabro_test_tilde_tmp");
@@ -191,7 +431,8 @@ mod tests {
                 "@~/.fabro_test_tilde_tmp",
                 dir.path(),
                 &FilesystemFileResolver::new(None),
-            ),
+            )
+            .unwrap(),
             "tilde content"
         );
     }
@@ -207,7 +448,8 @@ mod tests {
                 "@subdir/../file.md",
                 dir.path(),
                 &FilesystemFileResolver::new(None),
-            ),
+            )
+            .unwrap(),
             "dotdot content"
         );
     }
@@ -223,7 +465,8 @@ mod tests {
                 "@shared.md",
                 base.path(),
                 &FilesystemFileResolver::new(Some(fallback.path().to_path_buf())),
-            ),
+            )
+            .unwrap(),
             "shared content"
         );
     }
@@ -240,7 +483,8 @@ mod tests {
                 "@prompt.md",
                 base.path(),
                 &FilesystemFileResolver::new(Some(fallback.path().to_path_buf())),
-            ),
+            )
+            .unwrap(),
             "base content"
         );
     }
@@ -256,7 +500,8 @@ mod tests {
             "@~/nonexistent_fabro_test.md",
             base.path(),
             &FilesystemFileResolver::new(Some(fallback.path().to_path_buf())),
-        );
+        )
+        .unwrap();
         assert_eq!(result, "@~/nonexistent_fabro_test.md");
     }
 
@@ -268,8 +513,26 @@ mod tests {
                 "@missing.md",
                 base.path(),
                 &FilesystemFileResolver::new(None)
-            ),
+            )
+            .unwrap(),
             "@missing.md"
+        );
+    }
+
+    #[test]
+    fn resolve_file_ref_rejects_template_path() {
+        let base = tempfile::tempdir().unwrap();
+        let err = resolve_file_ref(
+            "@prompts/{{ inputs.prompt_file }}",
+            base.path(),
+            &FilesystemFileResolver::new(None),
+        )
+        .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("templates are not supported in file inline references"),
+            "unexpected error: {err}"
         );
     }
 

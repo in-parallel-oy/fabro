@@ -12,15 +12,22 @@ pub fn validate(
     catalog: &Catalog,
     extra_rules: &[&dyn LintRule],
 ) -> Validated {
-    let Transformed { graph, source } = transformed;
-    let diagnostics = fabro_validate::validate_with_catalog(&graph, catalog, extra_rules);
+    let Transformed {
+        graph,
+        source,
+        mut diagnostics,
+    } = transformed;
+    diagnostics.extend(fabro_validate::validate_with_catalog(
+        &graph,
+        catalog,
+        extra_rules,
+    ));
     Validated::new(graph, source, diagnostics)
 }
 
 #[cfg(test)]
 mod tests {
     use fabro_model::Catalog;
-    use fabro_model::catalog::LlmCatalogSettings;
 
     use super::*;
     use crate::pipeline::parse::parse;
@@ -28,9 +35,7 @@ mod tests {
     use crate::pipeline::types::TransformOptions;
 
     fn test_catalog() -> std::sync::Arc<Catalog> {
-        std::sync::Arc::new(
-            Catalog::from_builtin_with_overrides(&LlmCatalogSettings::default()).unwrap(),
-        )
+        std::sync::Arc::new(Catalog::from_builtin().unwrap())
     }
 
     fn run_pipeline(dot: &str) -> Validated {
@@ -40,6 +45,8 @@ mod tests {
             current_dir:       None,
             file_resolver:     None,
             inputs:            std::collections::HashMap::new(),
+            source_name:       None,
+            render_mode:       crate::operations::RenderMode::Strict,
             custom_transforms: vec![],
             catalog:           std::sync::Arc::clone(&catalog),
         })

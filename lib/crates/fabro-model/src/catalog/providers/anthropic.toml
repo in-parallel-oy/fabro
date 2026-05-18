@@ -1,8 +1,13 @@
 [providers.anthropic]
 display_name = "Anthropic"
 adapter = "anthropic"
-credentials = ["credential:anthropic", "env:ANTHROPIC_API_KEY"]
+api_key_url = "https://console.anthropic.com/settings/keys"
+base_url = "https://api.anthropic.com/v1"
 priority = 100
+
+[providers.anthropic.auth]
+credentials = ["credential:anthropic", "env:ANTHROPIC_API_KEY"]
+header = { custom = "x-api-key" }
 
 [models."claude-opus-4-7"]
 provider = "anthropic"
@@ -90,6 +95,9 @@ vision = true
 reasoning = true
 prompt_cache = true
 
+[models."claude-sonnet-4-5".controls]
+reasoning_effort = ["low", "medium", "high", "xhigh", "max"]
+
 [models."claude-sonnet-4-5".costs]
 input_cost_per_mtok = 3.0
 output_cost_per_mtok = 15.0
@@ -131,6 +139,7 @@ training = "2025-08-01"
 knowledge_cutoff = "May 2025"
 estimated_output_tps = 100
 aliases = ["haiku", "claude-haiku"]
+probe = true
 
 [models."claude-haiku-4-5".limits]
 context_window = 200000

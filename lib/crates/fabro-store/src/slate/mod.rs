@@ -14,7 +14,7 @@ pub use auth_codes::{AuthCode, AuthCodeStore};
 pub use auth_tokens::{ConsumeOutcome, RefreshToken, RefreshTokenStore};
 pub use blob_store::{Blob, BlobStore};
 use chrono::{DateTime, Utc};
-use fabro_types::{RunId, RunSummary};
+use fabro_types::{Run, RunId};
 use object_store::ObjectStore;
 pub use projection_cache::CachedRunProjection;
 use projection_cache::RunProjectionCache;
@@ -191,7 +191,7 @@ impl Database {
         RunDatabase::open_reader(*run_id, db, Arc::clone(&self.projection_cache)).await
     }
 
-    pub async fn list_runs(&self, query: &ListRunsQuery) -> Result<Vec<RunSummary>> {
+    pub async fn list_runs(&self, query: &ListRunsQuery) -> Result<Vec<Run>> {
         Ok(self
             .list_cached_runs(query)
             .await?
@@ -203,7 +203,7 @@ impl Database {
     pub async fn list_runs_with_projection(
         &self,
         query: &ListRunsQuery,
-    ) -> Result<Vec<(RunSummary, RunProjection)>> {
+    ) -> Result<Vec<(Run, RunProjection)>> {
         Ok(self
             .list_cached_runs(query)
             .await?
@@ -287,7 +287,7 @@ impl Database {
         Ok(self.projection_cache.get(run_id).await)
     }
 
-    pub async fn get_cached_summary(&self, run_id: &RunId) -> Result<Option<RunSummary>> {
+    pub async fn get_cached_summary(&self, run_id: &RunId) -> Result<Option<Run>> {
         self.warm_projection_cache().await?;
         Ok(self.projection_cache.get_summary(run_id).await)
     }
@@ -380,11 +380,11 @@ impl Runs {
         self.db.open_run(run_id).await
     }
 
-    pub async fn find(&self, run_id: &RunId) -> Result<Option<RunSummary>> {
+    pub async fn find(&self, run_id: &RunId) -> Result<Option<Run>> {
         self.db.get_cached_summary(run_id).await
     }
 
-    pub async fn list(&self, query: &ListRunsQuery) -> Result<Vec<RunSummary>> {
+    pub async fn list(&self, query: &ListRunsQuery) -> Result<Vec<Run>> {
         self.db.list_runs(query).await
     }
 }
@@ -437,6 +437,12 @@ mod tests {
                     .timestamp_millis()
                     .cast_unsigned(),
                 3,
+            ),
+            "run-4" => (
+                dt("2026-03-27T12:00:30Z")
+                    .timestamp_millis()
+                    .cast_unsigned(),
+                4,
             ),
             _ => panic!("unknown test run id: {label}"),
         };
@@ -527,6 +533,32 @@ mod tests {
                 "run_dir": format!("/tmp/{label}"),
                 "git": run_spec.git,
                 "labels": run_spec.labels,
+            }),
+        ))
+        .await
+        .unwrap();
+    }
+
+    async fn append_created_with_parent(
+        run: &RunDatabase,
+        label: &str,
+        created_at: DateTime<Utc>,
+        parent_id: RunId,
+    ) {
+        let run_spec = sample_run_spec(label);
+        run.append_event(&event_payload(
+            label,
+            &created_at.to_rfc3339(),
+            "run.created",
+            &serde_json::json!({
+                "settings": run_spec.settings,
+                "graph": run_spec.graph,
+                "workflow_slug": run_spec.workflow_slug,
+                "source_directory": run_spec.source_directory,
+                "run_dir": format!("/tmp/{label}"),
+                "git": run_spec.git,
+                "labels": run_spec.labels,
+                "parent_id": parent_id,
             }),
         ))
         .await
@@ -674,6 +706,188 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn parent_id_is_projected_from_created_and_parent_events() {
+        let (_object_store, store) = make_store();
+        let parent_1 = store.create_run(&test_run_id("run-1")).await.unwrap();
+        let parent_2 = store.create_run(&test_run_id("run-2")).await.unwrap();
+        let child = store.create_run(&test_run_id("run-3")).await.unwrap();
+        append_created(&parent_1, "run-1", dt("2026-03-27T12:00:00Z")).await;
+        append_created(&parent_2, "run-2", dt("2026-03-27T12:00:10Z")).await;
+        append_created_with_parent(
+            &child,
+            "run-3",
+            dt("2026-03-27T12:00:20Z"),
+            test_run_id("run-1"),
+        )
+        .await;
+
+        let initial = store.open_run(&test_run_id("run-3")).await.unwrap();
+        assert_eq!(
+            initial.state().await.unwrap().parent_id,
+            Some(test_run_id("run-1"))
+        );
+        assert_eq!(
+            store
+                .get_cached_summary(&test_run_id("run-3"))
+                .await
+                .unwrap()
+                .unwrap()
+                .parent_id,
+            Some(test_run_id("run-1"))
+        );
+
+        child
+            .append_event(&event_payload(
+                "run-3",
+                "2026-03-27T12:00:21Z",
+                "run.parent.linked",
+                &serde_json::json!({
+                    "previous_parent_id": test_run_id("run-1"),
+                    "parent_id": test_run_id("run-2"),
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .get_cached_summary(&test_run_id("run-3"))
+                .await
+                .unwrap()
+                .unwrap()
+                .parent_id,
+            Some(test_run_id("run-2"))
+        );
+        assert!(
+            store
+                .list_runs(&ListRunsQuery {
+                    parent_id: Some(test_run_id("run-1")),
+                    ..ListRunsQuery::default()
+                })
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            store
+                .list_runs(&ListRunsQuery {
+                    parent_id: Some(test_run_id("run-2")),
+                    ..ListRunsQuery::default()
+                })
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|summary| summary.id)
+                .collect::<Vec<_>>(),
+            vec![test_run_id("run-3")]
+        );
+
+        child
+            .append_event(&event_payload(
+                "run-3",
+                "2026-03-27T12:00:22Z",
+                "run.parent.unlinked",
+                &serde_json::json!({
+                    "previous_parent_id": test_run_id("run-2"),
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .get_cached_summary(&test_run_id("run-3"))
+                .await
+                .unwrap()
+                .unwrap()
+                .parent_id,
+            None
+        );
+        assert!(
+            store
+                .list_runs(&ListRunsQuery {
+                    parent_id: Some(test_run_id("run-2")),
+                    ..ListRunsQuery::default()
+                })
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn list_runs_filters_by_parent_id() {
+        let (_object_store, store) = make_store();
+        let parent = store.create_run(&test_run_id("run-1")).await.unwrap();
+        let child = store.create_run(&test_run_id("run-2")).await.unwrap();
+        let unrelated = store.create_run(&test_run_id("run-3")).await.unwrap();
+        append_created(&parent, "run-1", dt("2026-03-27T12:00:00Z")).await;
+        append_created_with_parent(
+            &child,
+            "run-2",
+            dt("2026-03-27T12:00:10Z"),
+            test_run_id("run-1"),
+        )
+        .await;
+        append_created(&unrelated, "run-3", dt("2026-03-27T12:00:20Z")).await;
+
+        let summaries = store
+            .list_runs(&ListRunsQuery {
+                parent_id: Some(test_run_id("run-1")),
+                ..ListRunsQuery::default()
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].id, test_run_id("run-2"));
+        assert_eq!(summaries[0].parent_id, Some(test_run_id("run-1")));
+    }
+
+    #[tokio::test]
+    async fn run_summary_includes_children_count() {
+        let (_object_store, store) = make_store();
+        let parent = store.create_run(&test_run_id("run-1")).await.unwrap();
+        let child_a = store.create_run(&test_run_id("run-2")).await.unwrap();
+        let child_b = store.create_run(&test_run_id("run-3")).await.unwrap();
+        let unrelated = store.create_run(&test_run_id("run-4")).await.unwrap();
+        append_created(&parent, "run-1", dt("2026-03-27T12:00:00Z")).await;
+        append_created_with_parent(
+            &child_a,
+            "run-2",
+            dt("2026-03-27T12:00:10Z"),
+            test_run_id("run-1"),
+        )
+        .await;
+        append_created_with_parent(
+            &child_b,
+            "run-3",
+            dt("2026-03-27T12:00:20Z"),
+            test_run_id("run-1"),
+        )
+        .await;
+        append_created(&unrelated, "run-4", dt("2026-03-27T12:00:30Z")).await;
+
+        let summaries = store.list_runs(&ListRunsQuery::default()).await.unwrap();
+
+        let parent_summary = summaries
+            .iter()
+            .find(|r| r.id == test_run_id("run-1"))
+            .expect("parent summary should be present");
+        assert_eq!(parent_summary.children_count, 2);
+
+        let child_summary = summaries
+            .iter()
+            .find(|r| r.id == test_run_id("run-2"))
+            .expect("child summary should be present");
+        assert_eq!(child_summary.children_count, 0);
+
+        let unrelated_summary = summaries
+            .iter()
+            .find(|r| r.id == test_run_id("run-4"))
+            .expect("unrelated summary should be present");
+        assert_eq!(unrelated_summary.children_count, 0);
+    }
+
+    #[tokio::test]
     async fn control_effect_events_clear_pending_control_and_update_status() {
         let (_object_store, store) = make_store();
         let run = store.create_run(&test_run_id("run-1")).await.unwrap();
@@ -725,9 +939,11 @@ mod tests {
             "run.failed",
             &serde_json::json!({
                 "failure": {
-                    "message": "cancelled",
                     "reason": "cancelled",
-                    "category": "canceled"
+                    "detail": {
+                        "message": "cancelled",
+                        "category": "canceled"
+                    }
                 },
                 "duration_ms": 1,
             }),
@@ -829,8 +1045,9 @@ mod tests {
 
         let filtered = reopened
             .list_cached_runs(&ListRunsQuery {
-                start: Some(test_run_id("run-2").created_at()),
-                end:   Some(test_run_id("run-2").created_at() + chrono::Duration::seconds(1)),
+                start:     Some(test_run_id("run-2").created_at()),
+                end:       Some(test_run_id("run-2").created_at() + chrono::Duration::seconds(1)),
+                parent_id: None,
             })
             .await
             .unwrap();
@@ -1126,9 +1343,11 @@ mod tests {
             "run.failed",
             &serde_json::json!({
                 "failure": {
-                    "message": "workflow failed",
                     "reason": "workflow_error",
-                    "category": "deterministic"
+                    "detail": {
+                        "message": "workflow failed",
+                        "category": "deterministic"
+                    }
                 },
                 "duration_ms": 1,
             }),

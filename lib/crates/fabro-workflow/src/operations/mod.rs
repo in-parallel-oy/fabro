@@ -13,7 +13,7 @@ pub use archive::{
     ArchiveOutcome, UnarchiveOutcome, archive, archived_rejection_message, ensure_not_archived,
     unarchive,
 };
-pub use create::{CreateRunInput, CreatedRun, RenderMode, create, make_run_dir};
+pub use create::{CreateRunInput, CreatedRun, create, make_run_dir};
 pub use fork::{ForkOutcome, ForkRunInput, ResolvedForkTarget, fork_run};
 pub use resume::resume;
 pub use rewind::{RewindInput, RewindOutcome, rewind};
@@ -23,3 +23,4 @@ pub use timeline::{ForkTarget, RunTimeline, TimelineEntry, build_timeline, timel
 pub use validate::{ValidateInput, validate};
 
 pub use crate::pipeline::{DevcontainerSpec, LlmSpec, SandboxEnvSpec};
+pub use crate::transforms::RenderMode;

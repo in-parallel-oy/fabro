@@ -105,7 +105,7 @@ function makeRunSummary(
     },
     billing:          null,
     diff:             diffSummary,
-    pull_request:     pullRequest ? { provider: "github", ...pullRequest } : null,
+    pull_request:     pullRequest,
     current_question: null,
     superseded_by:    null,
     links:            { web: null },
@@ -445,17 +445,14 @@ describe("RunDetail full-height child routes", () => {
     expect(tabCountBadges(renderer)).toHaveLength(0);
   });
 
-  test("shows a linked pull request chip in the run header", async () => {
+  test("shows a linked pull request pill in the run header", async () => {
     const renderer = await renderRunDetail({
       initialEntry: "/runs/run_1",
       pullRequest: {
-        html_url: "https://github.com/fabro-sh/fabro/pull/123",
-        number: 123,
         owner: "fabro-sh",
         repo: "fabro",
-        base_branch: "main",
-        head_branch: "fabro/run/demo",
-        title: "Add run PR chip",
+        number: 123,
+        html_url: "https://github.com/fabro-sh/fabro/pull/123",
       },
     });
 
@@ -467,7 +464,10 @@ describe("RunDetail full-height child routes", () => {
 
     expect(links).toHaveLength(1);
     expect(links[0].props.target).toBe("_blank");
-    expect(links[0].children.filter((child) => typeof child !== "object").join("")).toBe("#123");
+    const numberSpan = links[0].findByType("span");
+    expect(
+      numberSpan.children.filter((child) => typeof child !== "object").join(""),
+    ).toBe("#123");
   });
 
   test("keeps blocked full-height children clear of the interview dock without an h-72 sibling", async () => {

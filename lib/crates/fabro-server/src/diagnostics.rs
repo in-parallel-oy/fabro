@@ -5,7 +5,7 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use fabro_auth::auth_issue_message;
 use fabro_llm::client::Client as LlmClient;
 use fabro_llm::types::{Message, Request};
-use fabro_model::{Catalog, Provider};
+use fabro_model::{Catalog, ProviderId};
 use fabro_sandbox::daytona;
 use fabro_static::EnvVars;
 use fabro_types::settings::server::GithubIntegrationStrategy;
@@ -91,7 +91,10 @@ async fn check_llm_providers(state: &AppState) -> CheckResult {
             };
         }
     };
-    if result.client.provider_names().is_empty() && result.auth_issues.is_empty() {
+    if result.client.provider_names().is_empty()
+        && result.auth_issues.is_empty()
+        && result.registration_issues.is_empty()
+    {
         return CheckResult {
             name:        "LLM Providers".to_string(),
             status:      CheckStatus::Error,
@@ -111,21 +114,30 @@ async fn check_llm_providers(state: &AppState) -> CheckResult {
         });
         details.push(CheckDetail::new(message));
     }
+    for issue in &result.registration_issues {
+        let message = issue.error.to_string();
+        failures.push(ProviderFailure {
+            provider:     issue.provider.to_string(),
+            summary_line: short_error_line(&message),
+        });
+        details.push(CheckDetail::new(format!("{}: {message}", issue.provider)));
+    }
 
-    let providers: Vec<Provider> = result
+    let providers: Vec<ProviderId> = result
         .client
         .provider_names()
         .iter()
-        .filter_map(|name| name.parse::<Provider>().ok())
+        .map(|name| ProviderId::new(*name))
         .collect();
     let client = &result.client;
     let catalog = state.catalog();
-    let probe_outcomes = join_all(providers.iter().map(|&provider| {
+    let probe_outcomes = join_all(providers.iter().map(|provider| {
         let catalog = catalog.clone();
+        let provider = provider.clone();
         async move {
             let outcome = timeout(
                 Duration::from_secs(30),
-                probe_llm_provider(client, provider, catalog.as_ref()),
+                probe_llm_provider(client, &provider, catalog.as_ref()),
             )
             .await;
             (provider, outcome)
@@ -204,7 +216,7 @@ fn short_error_line(rendered: &str) -> String {
     }
 }
 
-fn probe_model(provider: Provider, catalog: &Catalog) -> String {
+fn probe_model(provider: &ProviderId, catalog: &Catalog) -> String {
     catalog
         .probe_for_provider(provider)
         .map_or_else(|| format!("unknown-{provider}"), |m| m.id.clone())
@@ -212,7 +224,7 @@ fn probe_model(provider: Provider, catalog: &Catalog) -> String {
 
 async fn probe_llm_provider(
     client: &LlmClient,
-    provider: Provider,
+    provider: &ProviderId,
     catalog: &Catalog,
 ) -> fabro_llm::Result<()> {
     let request = Request {
@@ -677,7 +689,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::test_support::{default_test_server_settings, test_app_state_with_env_lookup};
+    use crate::test_support::{TestAppStateBuilder, default_test_server_settings};
 
     #[test]
     fn short_error_line_returns_fallback_for_empty_input() {
@@ -714,18 +726,13 @@ mod tests {
                     }));
             })
             .await;
-        let base_url = server.url("/v1");
-        let state = test_app_state_with_env_lookup(
-            default_test_server_settings(),
-            RunLayer::default(),
-            5,
-            move |name| match name {
-                "OPENAI_BASE_URL" => Some(base_url.clone()),
-                _ => None,
-            },
-        );
+        let state = TestAppStateBuilder::new()
+            .runtime_settings(default_test_server_settings(), RunLayer::default())
+            .max_concurrent_runs(5)
+            .provider_base_url("openai", server.url("/v1"))
+            .build();
         let credential = AuthCredential {
-            provider: Provider::OpenAi.id(),
+            provider: ProviderId::openai(),
             details:  AuthDetails::ApiKey {
                 key: "vault-openai-key".to_string(),
             },

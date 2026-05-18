@@ -5,7 +5,7 @@ import {
   columnStatusDisplay,
   isRunStatus,
   mapRunListItem,
-  mapRunSummaryToRunItem,
+  mapRunToRunItem,
   runStatusDisplay,
 } from "./runs";
 
@@ -68,14 +68,10 @@ describe("mapRunListItem", () => {
       title:         "Server supplied title",
       ...withStatus({ kind: "paused", prior_block: null }),
       pull_request: {
-        number: 123,
-        html_url: "https://github.com/fabro-sh/fabro/pull/123",
-        provider: "github",
         owner: "fabro-sh",
         repo: "fabro",
-        base_branch: "main",
-        head_branch: "fabro/run/demo",
-        title: "Add run PR chip",
+        number: 123,
+        html_url: "https://github.com/fabro-sh/fabro/pull/123",
       },
     });
     const item = mapRunListItem(summary);
@@ -98,21 +94,17 @@ describe("mapRunListItem", () => {
   });
 });
 
-describe("mapRunSummaryToRunItem", () => {
+describe("mapRunToRunItem", () => {
   test("maps canonical run summary to RunItem", () => {
     const summary = makeRun({
       pull_request: {
-        html_url: "https://github.com/fabro-sh/fabro/pull/456",
-        number: 456,
-        provider: "github",
         owner: "fabro-sh",
         repo: "fabro",
-        base_branch: "main",
-        head_branch: "fabro/run/demo",
-        title: "Add run PR chip",
+        number: 456,
+        html_url: "https://github.com/fabro-sh/fabro/pull/456",
       },
     });
-    const item = mapRunSummaryToRunItem(summary);
+    const item = mapRunToRunItem(summary);
     expect(item.id).toBe("01ABC");
     expect(item.title).toBe("Fix the build");
     expect(item.workflow).toBe("fix_build");
@@ -143,7 +135,7 @@ describe("mapRunSummaryToRunItem", () => {
       },
       billing:          null,
     });
-    const item = mapRunSummaryToRunItem(summary);
+    const item = mapRunToRunItem(summary);
     expect(item.id).toBe("01DEF");
     expect(item.title).toBe("Untitled run");
     expect(item.workflow).toBe("unknown");

@@ -6,6 +6,9 @@ import * as RedirectHome from "./routes/redirect-home";
 import * as Setup from "./routes/setup";
 import * as AuthLogin from "./routes/auth-login";
 import * as Start from "./routes/start";
+import * as ChatsLayout from "./routes/chats-layout";
+import * as ChatsNew from "./routes/chats-new";
+import * as ChatsDetail from "./routes/chats-detail";
 import * as Automations from "./routes/automations";
 import * as AutomationDetail from "./routes/automation-detail";
 import * as AutomationDefinition from "./routes/automation-definition";
@@ -20,6 +23,7 @@ import * as RunSource from "./routes/run-source";
 import * as RunLogs from "./routes/run-logs";
 import * as RunEvents from "./routes/run-events";
 import * as RunArtifacts from "./routes/run-artifacts";
+import * as RunChildren from "./routes/run-children";
 import * as RunFiles from "./routes/run-files";
 import * as RunSandbox from "./routes/run-sandbox";
 import * as RunTerminal from "./routes/run-terminal";
@@ -87,6 +91,12 @@ export const routes: RouteObject[] = [
         }),
         children: [
           route("start", Start),
+          route("chats", ChatsLayout, {
+            children: [
+              route("new", ChatsNew),
+              route(":chatId", ChatsDetail),
+            ],
+          }),
           route("automations", Automations),
           route("automations/:name", AutomationDetail, {
             children: [
@@ -107,6 +117,7 @@ export const routes: RouteObject[] = [
               route("events", RunEvents),
               route("artifacts", RunArtifacts),
               route("files", RunFiles),
+              route("children", RunChildren),
               route("sandbox", RunSandbox),
               route("billing", RunBilling),
             ],

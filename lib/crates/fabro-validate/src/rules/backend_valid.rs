@@ -23,29 +23,33 @@ impl LintRule for Rule {
                     Some(Err(_)) => {
                         let expected = LlmBackend::expected_values();
                         diagnostics.push(Diagnostic {
-                            rule:     self.name().to_string(),
+                            rule: self.name().to_string(),
                             severity: Severity::Error,
-                            message:  format!(
+                            message: format!(
                                 "unsupported LLM backend \"{backend}\"; expected one of: {expected}"
                             ),
-                            node_id:  Some(node.id.clone()),
-                            edge:     None,
-                            fix:      Some(format!("Use one of: {expected}")),
+                            node_id: Some(node.id.clone()),
+                            edge: None,
+                            fix: Some(format!("Use one of: {expected}")),
+
+                            ..Diagnostic::default()
                         });
                     }
                     Some(Ok(LlmBackend::Acp)) if acp_command_missing(node) => {
                         diagnostics.push(Diagnostic {
-                            rule:     self.name().to_string(),
+                            rule: self.name().to_string(),
                             severity: Severity::Error,
-                            message:  "backend=\"acp\" requires acp_command because Fabro does \
+                            message: "backend=\"acp\" requires acp_command because Fabro does \
                                        not install ACP agents"
                                 .to_string(),
-                            node_id:  Some(node.id.clone()),
-                            edge:     None,
-                            fix:      Some(
+                            node_id: Some(node.id.clone()),
+                            edge: None,
+                            fix: Some(
                                 "Set acp_command to a stdio ACP command available in the sandbox"
                                     .to_string(),
                             ),
+
+                            ..Diagnostic::default()
                         });
                     }
                     Some(Ok(_)) | None => {}
@@ -65,25 +69,23 @@ fn check_acp_auth(node: &Node, backend: Option<&str>) -> Vec<Diagnostic> {
     let is_acp_backend = backend.is_some_and(|name| name == "acp");
     if !is_acp_backend {
         diagnostics.push(Diagnostic {
-            rule:     "backend_valid".to_string(),
+            rule: "backend_valid".to_string(),
             severity: Severity::Error,
-            message:  format!("acp_auth=\"{raw}\" is only valid when backend=\"acp\""),
-            node_id:  Some(node.id.clone()),
-            edge:     None,
-            fix:      Some(
-                "Either set backend=\"acp\" on this node or remove acp_auth".to_string(),
-            ),
+            message: format!("acp_auth=\"{raw}\" is only valid when backend=\"acp\""),
+            node_id: Some(node.id.clone()),
+            fix: Some("Either set backend=\"acp\" on this node or remove acp_auth".to_string()),
+            ..Default::default()
         });
     }
     if node.acp_auth().is_err() {
         let expected = AcpAuthMode::expected_values();
         diagnostics.push(Diagnostic {
-            rule:     "backend_valid".to_string(),
+            rule: "backend_valid".to_string(),
             severity: Severity::Error,
-            message:  format!("unsupported acp_auth value \"{raw}\"; expected one of: {expected}"),
-            node_id:  Some(node.id.clone()),
-            edge:     None,
-            fix:      Some(format!("Use one of: {expected}")),
+            message: format!("unsupported acp_auth value \"{raw}\"; expected one of: {expected}"),
+            node_id: Some(node.id.clone()),
+            fix: Some(format!("Use one of: {expected}")),
+            ..Default::default()
         });
     }
     diagnostics

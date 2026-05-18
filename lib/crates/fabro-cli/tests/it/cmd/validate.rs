@@ -162,7 +162,30 @@ fn bare_fabro_with_unbound_inputs_validates_structurally_with_warning() {
     ----- stderr -----
     Workflow: TemplatedUnbound (3 nodes, 2 edges)
     Graph: [FIXTURES]/templated_unbound.fabro
-    warning: undefined template variable `inputs.app_dir` at line 2 (template_undefined_variable)
+    warning: [FIXTURES]/templated_unbound.fabro:2:26: undefined template variable `inputs.app_dir` in graph attribute `goal` (template_undefined_variable)
+    warning: [FIXTURES]/templated_unbound.fabro:7:44: undefined template variable `inputs.app_dir` in node `work` attribute `prompt` [node: work] (template_undefined_variable)
+    Validation: OK
+    ");
+}
+
+/// Regression: https://github.com/fabro-sh/fabro/issues/286
+///
+/// Undefined template variables in a prompt loaded via `@file` reference must
+/// surface as the same warning diagnostic as an inline prompt — not a hard
+/// validation error.
+#[test]
+fn bare_fabro_with_unbound_inputs_in_imported_prompt_validates_structurally_with_warning() {
+    let context = test_context!();
+    let mut cmd = context.validate();
+    cmd.arg(fixture("templated_unbound_imported/workflow.fabro"));
+    fabro_snapshot!(context.filters(), cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ----- stderr -----
+    Workflow: TemplatedUnboundImported (3 nodes, 2 edges)
+    Graph: [FIXTURES]/templated_unbound_imported/workflow.fabro
+    warning: [FIXTURES]/templated_unbound_imported/work.md:1:12: undefined template variable `inputs.app_dir` in node `work` attribute `prompt` [node: work] (template_undefined_variable)
     Validation: OK
     ");
 }
@@ -180,6 +203,41 @@ fn bare_fabro_picks_up_sibling_workflow_toml_inputs() {
     Workflow: TemplatedInputs (3 nodes, 2 edges)
     Graph: [FIXTURES]/templated_inputs/workflow.fabro
     Validation: OK
+    ");
+}
+
+#[test]
+fn validate_accepts_static_template_dependencies() {
+    let context = test_context!();
+    let mut cmd = context.validate();
+    cmd.arg(fixture("templates/static_dependencies/workflow.fabro"));
+    fabro_snapshot!(context.filters(), cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ----- stderr -----
+    Workflow: TemplateIncludes (4 nodes, 3 edges)
+    Graph: [FIXTURES]/templates/static_dependencies/workflow.fabro
+    Validation: OK
+    ");
+}
+
+#[test]
+fn validate_reports_missing_template_dependency() {
+    let context = test_context!();
+    let mut cmd = context.validate();
+    cmd.arg(fixture("templates/missing_dependency/workflow.fabro"));
+    let mut filters = context.filters();
+    filters.push((
+        r"(?:\.\./)*\.\.\[FIXTURES\]/".to_string(),
+        "[FIXTURES]/".to_string(),
+    ));
+    fabro_snapshot!(filters, cmd, @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    ----- stderr -----
+      × failed to discover template dependencies: missing template dependency `missing.tpl.md` from `[FIXTURES]/templates/missing_dependency/workflow.fabro`
     ");
 }
 

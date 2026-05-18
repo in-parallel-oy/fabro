@@ -4,17 +4,15 @@ use std::sync::Arc;
 
 use fabro_graphviz::graph::Graph;
 use fabro_interview::Interviewer;
-use fabro_llm::Provider;
 use fabro_mcp::config::McpServerSettings;
-use fabro_model::{AgentProfileKind, Catalog, FallbackTarget, ProviderId};
+use fabro_model::{Catalog, FallbackTarget, ProviderId};
 use fabro_sandbox::SandboxSpec;
-use fabro_types::RunId;
 use fabro_types::settings::run::{PullRequestSettings, RunModelControls};
+use fabro_types::{ManifestPath, RunId};
 use fabro_validate::{Diagnostic, Severity};
 use fabro_vault::Vault;
 use tokio::sync::RwLock as AsyncRwLock;
 
-use crate::ManifestPath;
 use crate::artifact_upload::ArtifactSink;
 use crate::context::Context;
 use crate::error::Error;
@@ -28,7 +26,7 @@ use crate::run_options::{GitCheckpointOptions, LifecycleOptions, RunOptions};
 use crate::runtime_store::RunStoreHandle;
 use crate::services::{EngineServices, RunServices};
 use crate::steering_hub::SteeringHub;
-use crate::transforms::Transform;
+use crate::transforms::{RenderMode, Transform};
 use crate::workflow_bundle::WorkflowBundle;
 
 /// Output of the PARSE phase.
@@ -42,9 +40,15 @@ pub struct Parsed {
 /// post-transform adjustments (e.g. goal override) before validation.
 #[non_exhaustive]
 pub struct Transformed {
-    pub graph:  Graph,
-    pub source: String,
+    pub graph:       Graph,
+    pub source:      String,
+    /// Diagnostics produced during the transform pass. Prepended to the
+    /// validation diagnostics so users see them before lint output.
+    pub diagnostics: Vec<Diagnostic>,
 }
+
+/// Lint rule name attached to diagnostics for undefined template variables.
+pub const TEMPLATE_UNDEFINED_VARIABLE_RULE: &str = "template_undefined_variable";
 
 /// Output of the VALIDATE phase. Always produced (even with errors).
 /// Caller inspects diagnostics and decides whether to proceed.
@@ -78,12 +82,19 @@ impl Validated {
         &self.diagnostics
     }
 
-    /// Insert diagnostics at the front of the list. Used to surface
-    /// pre-structural-validation issues (e.g. template expansion warnings)
-    /// before the lint-rule output.
-    pub(crate) fn prepend_diagnostics(&mut self, mut diagnostics: Vec<Diagnostic>) {
-        diagnostics.append(&mut self.diagnostics);
-        self.diagnostics = diagnostics;
+    /// Promote diagnostics for one rule from warnings to errors. Rendering is
+    /// intentionally lenient; callers decide whether a diagnostic should block
+    /// the operation they are about to perform.
+    pub fn promote_rule_to_error(&mut self, rule: &str) {
+        for diagnostic in &mut self.diagnostics {
+            if diagnostic.rule == rule {
+                diagnostic.severity = Severity::Error;
+            }
+        }
+    }
+
+    pub fn promote_template_undefined_variables_to_errors(&mut self) {
+        self.promote_rule_to_error(TEMPLATE_UNDEFINED_VARIABLE_RULE);
     }
 
     /// True if any diagnostic has Error severity.
@@ -219,9 +230,7 @@ impl Persisted {
 #[derive(Clone)]
 pub struct LlmSpec {
     pub model:          String,
-    pub provider:       Provider,
     pub provider_id:    ProviderId,
-    pub profile_kind:   AgentProfileKind,
     pub fallback_chain: Vec<FallbackTarget>,
     pub mcp_servers:    Vec<McpServerSettings>,
     pub model_controls: RunModelControls,
@@ -320,6 +329,8 @@ pub struct TransformOptions {
     pub current_dir:       Option<PathBuf>,
     pub file_resolver:     Option<Arc<dyn FileResolver>>,
     pub inputs:            HashMap<String, toml::Value>,
+    pub source_name:       Option<String>,
+    pub render_mode:       RenderMode,
     pub custom_transforms: Vec<Box<dyn Transform>>,
     pub catalog:           Arc<fabro_model::Catalog>,
 }

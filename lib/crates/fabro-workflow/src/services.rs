@@ -10,14 +10,10 @@ use fabro_auth::CredentialSource;
 #[cfg(test)]
 use fabro_auth::ResolvedCredentials;
 use fabro_hooks::{HookContext, HookDecision, HookRunner};
-#[cfg(test)]
-use fabro_model::ProviderId;
-#[cfg(test)]
-use fabro_model::catalog::LlmCatalogSettings;
-use fabro_model::{Catalog, Provider};
+use fabro_model::{Catalog, ProviderId};
+use fabro_types::ManifestPath;
 use tokio_util::sync::CancellationToken;
 
-use crate::ManifestPath;
 use crate::event::Emitter;
 use crate::github_token_source::GitHubTokenSource;
 use crate::handler::HandlerRegistry;
@@ -42,7 +38,8 @@ pub struct RunServices {
     pub sandbox:                 Arc<dyn Sandbox>,
     pub hook_runner:             Option<Arc<HookRunner>>,
     pub(crate) cancel_token:     CancellationToken,
-    pub provider:                Provider,
+    pub provider_id:             ProviderId,
+    pub model:                   String,
     pub llm_source:              Arc<dyn CredentialSource>,
     pub catalog:                 Arc<Catalog>,
     pub(crate) sandbox_git:      Arc<SandboxGitRuntime>,
@@ -58,7 +55,8 @@ impl RunServices {
         sandbox: Arc<dyn Sandbox>,
         hook_runner: Option<Arc<HookRunner>>,
         cancel_token: CancellationToken,
-        provider: Provider,
+        provider_id: ProviderId,
+        model: String,
         llm_source: Arc<dyn CredentialSource>,
         catalog: Arc<Catalog>,
         sandbox_git: Arc<SandboxGitRuntime>,
@@ -71,7 +69,8 @@ impl RunServices {
             sandbox,
             hook_runner,
             cancel_token,
-            provider,
+            provider_id,
+            model,
             llm_source,
             catalog,
             sandbox_git,
@@ -131,6 +130,22 @@ impl RunServices {
     ) -> Arc<Self> {
         Arc::new(Self {
             cancel_token,
+            ..self.as_ref().clone()
+        })
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_catalog_context(
+        self: &Arc<Self>,
+        catalog: Arc<Catalog>,
+        provider_id: ProviderId,
+        model: String,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            provider_id,
+            model,
+            catalog,
             ..self.as_ref().clone()
         })
     }
@@ -234,12 +249,10 @@ impl EngineServices {
                 )),
                 None,
                 CancellationToken::new(),
-                Provider::Anthropic,
+                ProviderId::anthropic(),
+                "claude-sonnet-4-6".to_string(),
                 Arc::new(StubCredentialSource),
-                Arc::new(
-                    Catalog::from_builtin_with_overrides(&LlmCatalogSettings::default())
-                        .expect("default catalog should build"),
-                ),
+                Arc::new(Catalog::from_builtin().expect("default catalog should build")),
                 Arc::new(SandboxGitRuntime::new()),
                 Arc::new(RunMetadataRuntime::new()),
                 None,

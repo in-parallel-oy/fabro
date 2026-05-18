@@ -13,7 +13,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use fabro_config::{ServerSettingsBuilder, Storage};
 use fabro_install::OBJECT_STORE_MANAGED_COMMENT;
-use fabro_model::Provider;
+use fabro_model::ProviderId;
 use fabro_server::install::{
     InstallAppState, InstallFinishHook, InstallFinishInfo, build_install_router,
 };
@@ -72,6 +72,50 @@ async fn mock_daytona_current_key<'a>(
                     "lastUsedAt": null,
                     "expiresAt": null,
                     "userId": "user_123"
+                }));
+        })
+        .await
+}
+
+async fn mock_anthropic_install_validation(server: &MockServer) -> httpmock::Mock<'_> {
+    server
+        .mock_async(|when, then| {
+            when.method("POST")
+                .path("/v1/messages")
+                .header("x-api-key", "anthropic-test-key");
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(serde_json::json!({
+                    "id": "msg_test_123",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "claude-sonnet-4-5",
+                    "content": [{"type": "text", "text": "OK"}],
+                    "stop_reason": "end_turn",
+                    "usage": {"input_tokens": 10, "output_tokens": 1}
+                }));
+        })
+        .await
+}
+
+async fn mock_kimi_install_validation(server: &MockServer) -> httpmock::Mock<'_> {
+    server
+        .mock_async(|when, then| {
+            when.method("POST")
+                .path("/v1/chat/completions")
+                .header("authorization", "Bearer kimi-test-key");
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(serde_json::json!({
+                    "id": "chatcmpl_test_123",
+                    "model": "kimi-k2.5",
+                    "choices": [
+                        {
+                            "message": {"content": "OK"},
+                            "finish_reason": "stop"
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 1}
                 }));
         })
         .await
@@ -1247,26 +1291,54 @@ async fn token_install_finish_invokes_shutdown_callback_after_accepting() {
 }
 
 #[tokio::test]
+async fn install_llm_accepts_catalog_openai_compatible_provider() {
+    let llm_mock = MockServer::start_async().await;
+    mock_kimi_install_validation(&llm_mock).await;
+
+    let app = build_install_router(
+        InstallAppState::for_test("test-install-token")
+            .with_provider_base_url(ProviderId::new("kimi"), format!("{}/v1", llm_mock.url(""))),
+    );
+
+    let test_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/install/llm/test")
+                .header("authorization", "Bearer test-install-token")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"provider":"kimi","api_key":"kimi-test-key"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = response_json(test_response, StatusCode::OK, "POST /install/llm/test").await;
+    assert_eq!(body["ok"], true);
+
+    let put_response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/install/llm")
+                .header("authorization", "Bearer test-install-token")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"providers":[{"provider":"kimi","api_key":"kimi-test-key"}]}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    response_status(put_response, StatusCode::NO_CONTENT, "PUT /install/llm").await;
+}
+
+#[tokio::test]
 async fn install_validation_endpoints_validate_credentials_and_github_token() {
     let llm_mock = MockServer::start_async().await;
-    llm_mock
-        .mock_async(|when, then| {
-            when.method("GET").path("/v1/models");
-            then.status(200)
-                .header("content-type", "application/json")
-                .body(
-                    serde_json::to_string(&serde_json::json!({
-                        "data": [
-                            {
-                                "id": "claude-sonnet-4-5",
-                                "type": "model"
-                            }
-                        ]
-                    }))
-                    .unwrap(),
-                );
-        })
-        .await;
+    mock_anthropic_install_validation(&llm_mock).await;
     let github_mock = MockServer::start_async().await;
     github_mock
         .mock_async(|when, then| {
@@ -1279,7 +1351,7 @@ async fn install_validation_endpoints_validate_credentials_and_github_token() {
 
     let app = build_install_router(
         InstallAppState::for_test("test-install-token")
-            .with_provider_base_url(Provider::Anthropic, format!("{}/v1", llm_mock.url("")))
+            .with_provider_base_url(ProviderId::anthropic(), format!("{}/v1", llm_mock.url("")))
             .with_github_api_base_url(github_mock.url("")),
     );
 

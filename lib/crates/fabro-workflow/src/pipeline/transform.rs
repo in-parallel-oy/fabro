@@ -13,17 +13,25 @@ use crate::transforms::{
 /// (e.g. goal override) before validation.
 pub fn transform(parsed: Parsed, options: &TransformOptions) -> Result<Transformed, Error> {
     let Parsed { graph, source } = parsed;
+    let mut diagnostics = Vec::new();
 
     // Built-in transforms (PreambleTransform moved to engine execution time)
     let graph = if let (Some(current_dir), Some(file_resolver)) =
         (&options.current_dir, &options.file_resolver)
     {
-        ImportTransform::new(
+        let (graph, transform_diagnostics) = ImportTransform::new(
             current_dir.clone(),
             Arc::clone(file_resolver),
             options.inputs.clone(),
         )
-        .apply(graph)?
+        .with_template_options(
+            options.source_name.clone(),
+            Some(source.clone()),
+            options.render_mode,
+        )
+        .apply_with_diagnostics(graph)?;
+        diagnostics.extend(transform_diagnostics);
+        graph
     } else {
         graph
     };
@@ -31,15 +39,29 @@ pub fn transform(parsed: Parsed, options: &TransformOptions) -> Result<Transform
     let graph = if let (Some(current_dir), Some(file_resolver)) =
         (&options.current_dir, &options.file_resolver)
     {
-        FileInliningTransform::new(current_dir.clone(), Arc::clone(file_resolver)).apply(graph)?
+        let (graph, transform_diagnostics) =
+            FileInliningTransform::new(current_dir.clone(), Arc::clone(file_resolver))
+                .with_template_options(
+                    options.inputs.clone(),
+                    options.source_name.clone(),
+                    Some(source.clone()),
+                    options.render_mode,
+                )
+                .apply_with_diagnostics(graph)?;
+        diagnostics.extend(transform_diagnostics);
+        graph
     } else {
         graph
     };
 
-    let graph = TemplateTransform {
-        inputs: options.inputs.clone(),
+    let (graph, transform_diagnostics) = TemplateTransform {
+        inputs:      options.inputs.clone(),
+        source_name: options.source_name.clone(),
+        source_text: Some(source.clone()),
+        render_mode: options.render_mode,
     }
-    .apply(graph)?;
+    .apply_with_diagnostics(graph)?;
+    diagnostics.extend(transform_diagnostics);
     let graph = StylesheetApplicationTransform.apply(graph)?;
     let graph = ModelResolutionTransform::new(Arc::clone(&options.catalog)).apply(graph)?;
 
@@ -49,7 +71,11 @@ pub fn transform(parsed: Parsed, options: &TransformOptions) -> Result<Transform
         .iter()
         .try_fold(graph, |graph, transform| transform.apply(graph))?;
 
-    Ok(Transformed { graph, source })
+    Ok(Transformed {
+        graph,
+        source,
+        diagnostics,
+    })
 }
 
 #[cfg(test)]
@@ -61,7 +87,6 @@ mod tests {
 
     use fabro_graphviz::graph::AttrValue;
     use fabro_model::Catalog;
-    use fabro_model::catalog::LlmCatalogSettings;
 
     use super::*;
     use crate::file_resolver::FilesystemFileResolver;
@@ -75,7 +100,7 @@ mod tests {
     }
 
     fn test_catalog() -> Arc<Catalog> {
-        Arc::new(Catalog::from_builtin_with_overrides(&LlmCatalogSettings::default()).unwrap())
+        Arc::new(Catalog::from_builtin().unwrap())
     }
 
     fn transform_options() -> TransformOptions {
@@ -83,6 +108,8 @@ mod tests {
             current_dir:       None,
             file_resolver:     None,
             inputs:            HashMap::new(),
+            source_name:       None,
+            render_mode:       crate::operations::RenderMode::Strict,
             custom_transforms: vec![],
             catalog:           test_catalog(),
         }
@@ -143,6 +170,8 @@ mod tests {
             current_dir:       Some(dir.path().to_path_buf()),
             file_resolver:     Some(Arc::new(FilesystemFileResolver::new(None))),
             inputs:            HashMap::new(),
+            source_name:       None,
+            render_mode:       crate::operations::RenderMode::Strict,
             custom_transforms: vec![],
             catalog:           test_catalog(),
         })
@@ -191,6 +220,8 @@ mod tests {
                 "task".to_string(),
                 toml::Value::String("Launch".to_string()),
             )]),
+            source_name:       None,
+            render_mode:       crate::operations::RenderMode::Strict,
             custom_transforms: vec![],
             catalog:           test_catalog(),
         })

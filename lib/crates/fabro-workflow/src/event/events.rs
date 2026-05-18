@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use ::fabro_types::{
     BilledTokenCounts, BlockedReason, CommandTermination, DiffSummary, FailureReason,
-    ForkSourceRef, GitContext, ParallelBranchId, Principal, PullRequestRecord, RunBlobId,
-    RunFailure, RunId, RunNoticeLevel, RunProvenance, SandboxProvider, StageId, SuccessReason,
+    ForkSourceRef, GitContext, ParallelBranchId, Principal, PullRequestLink, RunBlobId, RunFailure,
+    RunId, RunNoticeLevel, RunProvenance, SandboxProvider, StageId, SuccessReason,
     run_event as fabro_types,
 };
 use fabro_agent::{AgentEvent, SandboxEvent};
@@ -44,6 +44,8 @@ pub enum Event {
         git:              Option<GitContext>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         fork_source_ref:  Option<ForkSourceRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent_id:        Option<RunId>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         web_url:          Option<String>,
     },
@@ -114,6 +116,18 @@ pub enum Event {
         title: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         actor: Option<Principal>,
+    },
+    RunParentLinked {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        previous_parent_id: Option<RunId>,
+        parent_id:          RunId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actor:              Option<Principal>,
+    },
+    RunParentUnlinked {
+        previous_parent_id: RunId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actor:              Option<Principal>,
     },
     WorkflowRunCompleted {
         duration_ms:          u64,
@@ -649,6 +663,12 @@ pub enum Event {
         title:       String,
         draft:       bool,
     },
+    PullRequestLinked {
+        pull_request: PullRequestLink,
+    },
+    PullRequestUnlinked {
+        pull_request: PullRequestLink,
+    },
     PullRequestFailed {
         error: String,
     },
@@ -710,15 +730,21 @@ impl Event {
         }
     }
 
-    pub fn pull_request_created(record: &PullRequestRecord, draft: bool) -> Self {
+    pub fn pull_request_created(
+        record: &PullRequestLink,
+        base_branch: &str,
+        head_branch: &str,
+        title: &str,
+        draft: bool,
+    ) -> Self {
         Self::PullRequestCreated {
-            pr_url: record.html_url.clone(),
+            pr_url: record.html_url(),
             pr_number: record.number,
             owner: record.owner.clone(),
             repo: record.repo.clone(),
-            base_branch: record.base_branch.clone(),
-            head_branch: record.head_branch.clone(),
-            title: record.title.clone(),
+            base_branch: base_branch.to_string(),
+            head_branch: head_branch.to_string(),
+            title: title.to_string(),
             draft,
         }
     }
@@ -799,6 +825,19 @@ impl Event {
             Self::RunTitleUpdated { title, actor } => {
                 info!(title, ?actor, "Run title updated");
             }
+            Self::RunParentLinked {
+                previous_parent_id,
+                parent_id,
+                actor,
+            } => {
+                info!(?previous_parent_id, %parent_id, ?actor, "Run parent linked");
+            }
+            Self::RunParentUnlinked {
+                previous_parent_id,
+                actor,
+            } => {
+                info!(%previous_parent_id, ?actor, "Run parent unlinked");
+            }
             Self::WorkflowRunCompleted {
                 duration_ms,
                 artifact_count,
@@ -815,15 +854,16 @@ impl Event {
                 duration_ms,
                 ..
             } => {
+                let detail = &failure.detail;
                 let tail =
-                    fabro_types::ExecOutputTail::trace_summary(failure.exec_output_tail.as_ref());
+                    fabro_types::ExecOutputTail::trace_summary(detail.exec_output_tail.as_ref());
                 error!(
-                    message = %failure.message,
+                    message = %detail.message,
                     reason = %failure.reason,
-                    category = %failure.category,
-                    system_actor = ?failure.system_actor,
-                    signature = ?failure.signature,
-                    cause_count = failure.causes.len(),
+                    category = %detail.category,
+                    system_actor = ?detail.system_actor,
+                    signature = ?detail.signature,
+                    cause_count = detail.causes.len(),
                     exec_output_tail_present = tail.present,
                     exec_stdout_tail_bytes = tail.stdout_bytes,
                     exec_stderr_tail_bytes = tail.stderr_bytes,
@@ -1426,6 +1466,20 @@ impl Event {
                 ..
             } => {
                 info!(pr_url = %pr_url, pr_number, draft, owner, repo, "Pull request created");
+            }
+            Self::PullRequestLinked { pull_request } => {
+                info!(
+                    pr_url = %pull_request.html_url(),
+                    pr_number = pull_request.number,
+                    "Pull request linked"
+                );
+            }
+            Self::PullRequestUnlinked { pull_request } => {
+                info!(
+                    pr_url = %pull_request.html_url(),
+                    pr_number = pull_request.number,
+                    "Pull request unlinked"
+                );
             }
             Self::PullRequestFailed { error, .. } => {
                 error!(error = %error, "Pull request creation failed");

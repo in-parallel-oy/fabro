@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 
 use crate::{
     BilledTokenCounts, Checkpoint, Conclusion, InterviewQuestionRecord, InvalidTransition,
-    ModelRef, PullRequestRecord, RunControlAction, RunDiff, RunId, RunSandbox, RunSpec, RunStatus,
+    ModelRef, PullRequestLink, RunControlAction, RunDiff, RunId, RunSandbox, RunSpec, RunStatus,
     StageCompletion, StageHandler, StageId, StageState, StartRecord,
 };
 
@@ -14,6 +14,8 @@ use crate::{
 pub struct RunProjection {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub title:              String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id:          Option<RunId>,
     pub spec:               RunSpec,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub web_url:            Option<String>,
@@ -27,7 +29,7 @@ pub struct RunProjection {
     pub checkpoints:        Vec<CheckpointRecord>,
     pub conclusion:         Option<Conclusion>,
     pub sandbox:            Option<RunSandbox>,
-    pub pull_request:       Option<PullRequestRecord>,
+    pub pull_request:       Option<PullRequestLink>,
     pub superseded_by:      Option<RunId>,
     pub pending_interviews: BTreeMap<String, PendingInterviewRecord>,
     stages:                 HashMap<StageId, StageProjection>,
@@ -156,6 +158,7 @@ impl RunProjection {
     pub fn new(title: String, spec: RunSpec, created_at: DateTime<Utc>) -> Self {
         Self {
             title,
+            parent_id: None,
             spec,
             web_url: None,
             start: None,

@@ -17,17 +17,17 @@ import { Link, Outlet, useLocation, useMatches, useNavigate } from "react-router
 import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
 
 import { EditableRunTitle } from "../components/editable-run-title";
+import { GitPullRequestIcon } from "../components/icons";
 import { InterviewDock } from "../components/interview-dock";
-import { PullRequestChip } from "../components/pull-request-chip";
 import { SteerBar, type SteerBarHandle } from "../components/steer-bar";
 import { ErrorState } from "../components/state";
 import { useToast } from "../components/toast";
 import { ConfirmDialog, SECONDARY_BUTTON_CLASS, Tooltip } from "../components/ui";
 import {
   isRunStatus,
-  mapRunSummaryToRunItem,
+  mapRunToRunItem,
   runStatusDisplay,
-  type RunSummary,
+  type Run,
 } from "../data/runs";
 import { useDemoMode } from "../lib/demo-mode";
 import { useSWRConfig } from "swr";
@@ -62,6 +62,7 @@ const allTabs = [
   { name: "Overview", path: "", count: null, demoOnly: false },
   { name: "Stages", path: "/stages", count: null, demoOnly: false },
   { name: "Files Changed", path: "/files", count: null, demoOnly: false },
+  { name: "Children", path: "/children", count: null, demoOnly: false },
   { name: "Sandbox", path: "/sandbox", count: null, demoOnly: false, requiresSandbox: true },
   { name: "Billing", path: "/billing", count: null, demoOnly: false },
 ];
@@ -107,7 +108,7 @@ function useTickingNow(intervalMs: number): number {
   return now;
 }
 
-type RunDetailRun = ReturnType<typeof mapRunSummaryToRunItem> & {
+type RunDetailRun = ReturnType<typeof mapRunToRunItem> & {
   statusLabel: string;
   statusDot: string;
   statusText: string;
@@ -145,8 +146,8 @@ function runHasSandbox(runState: unknown): boolean {
   );
 }
 
-function buildRunDetailRun(summary: RunSummary): RunDetailRun {
-  const item = mapRunSummaryToRunItem(summary);
+function buildRunDetailRun(summary: Run): RunDetailRun {
+  const item = mapRunToRunItem(summary);
   const rawStatus = summary.lifecycle.status;
   const statusKind = rawStatus.kind;
   const display = isRunStatus(statusKind)
@@ -189,11 +190,14 @@ export default function RunDetail({ params }: { params: { id: string } }) {
   const [deletePending, setDeletePending] = useState(false);
   const { push, dismiss } = useToast();
   const filesCount = runQuery.data?.diff?.files_changed ?? null;
+  const childrenCount = runQuery.data?.children_count ?? null;
   const hasSandbox = runHasSandbox(runStateQuery.data);
   const tabs = allTabs
-    .map((tab) =>
-      tab.name === "Files Changed" ? { ...tab, count: filesCount } : tab,
-    )
+    .map((tab) => {
+      if (tab.name === "Files Changed") return { ...tab, count: filesCount };
+      if (tab.name === "Children") return { ...tab, count: childrenCount };
+      return tab;
+    })
     .filter((t) => (!t.demoOnly || demoMode) && (!t.requiresSandbox || hasSandbox));
   const lifecycleToastStateRef = useRef<LifecycleToastState>(INITIAL_LIFECYCLE_TOAST_STATE);
   const steerBarRef = useRef<SteerBarHandle | null>(null);
@@ -337,17 +341,22 @@ export default function RunDetail({ params }: { params: { id: string } }) {
                 </span>
               </Tooltip>
             )}
-            {run.number != null && run.pullRequestUrl && (
-              <PullRequestChip
-                number={run.number}
-                url={run.pullRequestUrl}
-                iconClassName="size-3.5"
-              />
-            )}
           </div>
         </div>
 
         {demoMode && <ConnectMenu />}
+
+        {run.pullRequestUrl && run.number != null && (
+          <a
+            href={run.pullRequestUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={SECONDARY_BUTTON_CLASS}
+          >
+            <GitPullRequestIcon className="size-4 text-mint" />
+            <span className="font-mono">#{run.number}</span>
+          </a>
+        )}
 
         <ActionsMenu
           canSendInterrupt={statusKind === "running"}
@@ -417,7 +426,7 @@ export default function RunDetail({ params }: { params: { id: string } }) {
                 }`}
               >
                 {tab.name}
-                {tab.count != null && (
+                {tab.count != null && tab.count > 0 && (
                   <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-xs font-normal tabular-nums ${
                     isActive ? "bg-overlay-strong text-fg-3" : "bg-overlay text-fg-muted"
                   }`}>

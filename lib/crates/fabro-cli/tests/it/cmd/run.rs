@@ -5,7 +5,7 @@
 
 use fabro_auth::{AuthCredential, AuthDetails};
 use fabro_config::Storage;
-use fabro_model::Provider;
+use fabro_model::ProviderId;
 use fabro_test::{fabro_json_snapshot, fabro_snapshot, test_context};
 use fabro_vault::{SecretType, Vault};
 use httpmock::MockServer;
@@ -84,14 +84,14 @@ fn run_completed_event(run_id: &str) -> serde_json::Value {
     })
 }
 
-fn seed_anthropic_vault(storage_dir: &std::path::Path, base_url: &str) {
+fn seed_anthropic_vault(storage_dir: &std::path::Path) {
     let mut vault =
         Vault::load(Storage::new(storage_dir).secrets_path()).expect("test vault should load");
     vault
         .set(
             "anthropic",
             &serde_json::to_string(&AuthCredential {
-                provider: Provider::Anthropic.id(),
+                provider: ProviderId::anthropic(),
                 details:  AuthDetails::ApiKey {
                     key: "vault-anthropic-key".to_string(),
                 },
@@ -101,14 +101,6 @@ fn seed_anthropic_vault(storage_dir: &std::path::Path, base_url: &str) {
             None,
         )
         .expect("Anthropic credential should store in test vault");
-    vault
-        .set(
-            "ANTHROPIC_BASE_URL",
-            base_url,
-            SecretType::Environment,
-            None,
-        )
-        .expect("Anthropic base URL should store in test vault");
 }
 
 fn run_running_event(run_id: &str, seq: u32) -> serde_json::Value {
@@ -154,6 +146,7 @@ fn help() {
       -v, --verbose                Enable verbose output
           --sandbox <SANDBOX>      Sandbox for agent tools [possible values: local, docker, daytona]
           --label <KEY=VALUE>      Attach a label to this run (repeatable, format: KEY=VALUE)
+          --parent <RUN>           Link this run to an existing orchestration parent run
           --preserve-sandbox       Keep the sandbox alive after the run finishes (for debugging)
       -d, --detach                 Run the workflow in the background and print the run ID
       -h, --help                   Print help
@@ -203,6 +196,60 @@ fn detach_uses_explicit_server_target_and_prints_remote_run_id() {
     create_mock.assert();
     start_mock.assert();
     assert_eq!(output_stderr(&output), "");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        run_id.as_str()
+    );
+}
+
+#[test]
+fn run_parent_resolves_parent_and_sends_parent_id_in_manifest() {
+    let context = test_context!();
+    let server = MockServer::start();
+    let run_id = unique_run_id();
+    let parent_id = unique_run_id();
+    let resolve_mock = super::support::mock_resolved_run(&server, "nightly-parent", &parent_id);
+    let create_mock = server.mock(|when, then| {
+        when.method("POST")
+            .path("/api/v1/runs")
+            .json_body_includes(format!(r#"{{"parent_id":"{parent_id}"}}"#));
+        then.status(201)
+            .header("Content-Type", "application/json")
+            .body(run_status_response(run_id.as_str(), "submitted").to_string());
+    });
+    let start_mock = server.mock(|when, then| {
+        when.method("POST")
+            .path(format!("/api/v1/runs/{run_id}/start"));
+        then.status(200)
+            .header("Content-Type", "application/json")
+            .body(run_status_response(run_id.as_str(), "queued").to_string());
+    });
+
+    let workflow = context.install_fixture("simple.fabro");
+    let output = context
+        .run_cmd()
+        .args([
+            "--server",
+            &format!("{}/api/v1", server.base_url()),
+            "--detach",
+            "--dry-run",
+            "--auto-approve",
+            "--parent",
+            "nightly-parent",
+            workflow.to_str().unwrap(),
+        ])
+        .output()
+        .expect("command should execute");
+
+    assert!(
+        output.status.success(),
+        "command failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    resolve_mock.assert();
+    create_mock.assert();
+    start_mock.assert();
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),
         run_id.as_str()
@@ -307,17 +354,18 @@ fn run_create_failure_shows_action_context_and_response_body() {
 #[test]
 fn run_uses_vault_credentials_for_worker_execution() {
     let mut context = test_context!();
+    let llm_server = MockServer::start();
+    // Configure base_url via settings.toml to point to the mock server
     context.write_home(
         ".fabro/settings.toml",
-        "[server.auth]\nmethods = [\"dev-token\"]\n",
+        format!(
+            "[server.auth]\nmethods = [\"dev-token\"]\n\n[llm.providers.anthropic]\nbase_url = \"{}/v1\"\n",
+            llm_server.base_url()
+        ),
     );
     context.isolated_server();
     let run_id = unique_run_id();
-    let llm_server = MockServer::start();
-    seed_anthropic_vault(
-        &context.storage_dir,
-        &format!("{}/v1", llm_server.base_url()),
-    );
+    seed_anthropic_vault(&context.storage_dir);
 
     let llm_mock = llm_server.mock(|when, then| {
         when.method("POST")
@@ -637,6 +685,14 @@ fn run_rejects_unbound_template_inputs_before_creating_remote_run() {
     assert!(
         stderr.contains("inputs.app_dir"),
         "stderr should name the unbound variable: {stderr}"
+    );
+    assert!(
+        stderr.contains("templated_unbound.fabro"),
+        "stderr should name the workflow source: {stderr}"
+    );
+    assert!(
+        !stderr.contains("<string>"),
+        "stderr should not expose MiniJinja's generic source name: {stderr}"
     );
 }
 

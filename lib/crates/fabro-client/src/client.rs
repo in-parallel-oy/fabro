@@ -2,21 +2,23 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::num::NonZeroU64;
 use std::path::Path;
+use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use bytes::Bytes;
 use fabro_api::types;
-use fabro_http::header::{AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE};
+use fabro_http::header::{ACCEPT, AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE};
 use fabro_http::multipart::{Form, Part};
-use fabro_model::{Model, ModelTestMode, Provider};
+use fabro_model::{Model, ModelTestMode, ProviderId};
 use fabro_types::settings::run::MergeStrategy;
 use fabro_types::{
-    ArtifactUpload, EventEnvelope, RunBlobId, RunEvent, RunId, RunProjection, RunSummary, StageId,
+    ArtifactUpload, EventEnvelope, Run, RunBlobId, RunEvent, RunId, RunProjection,
+    SessionEventEnvelope, SessionId, SessionRecord, StageId,
 };
 use fabro_util::exit::{ErrorExt, ExitClass};
-use futures::StreamExt;
 use futures::future::BoxFuture;
+use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::fs::File;
 use tokio::sync::Mutex;
@@ -44,9 +46,22 @@ pub struct RunEventStream {
     buffered_events: VecDeque<EventEnvelope>,
 }
 
+type HttpByteStream = Pin<Box<dyn Stream<Item = Result<Bytes>> + Send>>;
+
+pub struct SessionEventStream {
+    stream:          HttpByteStream,
+    pending_bytes:   Vec<u8>,
+    buffered_events: VecDeque<SessionEventEnvelope>,
+}
+
 pub struct RewindRunResult {
     pub status:   u16,
     pub response: types::RewindResponse,
+}
+
+#[derive(Default)]
+struct ListStoreRunsOptions {
+    parent_id: Option<RunId>,
 }
 
 #[derive(Clone)]
@@ -141,6 +156,42 @@ impl RunEventStream {
 
             if let Some(chunk) = self.stream.next().await {
                 let chunk = chunk.map_err(anyhow::Error::new)?;
+                self.pending_bytes.extend_from_slice(&chunk);
+                self.buffer_sse_events(false)?;
+            } else {
+                self.buffer_sse_events(true)?;
+                return Ok(self.buffered_events.pop_front());
+            }
+        }
+    }
+
+    fn buffer_sse_events(&mut self, finalize: bool) -> Result<()> {
+        for payload in sse::drain_sse_payloads(&mut self.pending_bytes, finalize) {
+            self.buffered_events
+                .push_back(serde_json::from_str(&payload)?);
+        }
+        Ok(())
+    }
+}
+
+impl SessionEventStream {
+    #[must_use]
+    pub fn new(stream: HttpByteStream) -> Self {
+        Self {
+            stream,
+            pending_bytes: Vec::new(),
+            buffered_events: VecDeque::new(),
+        }
+    }
+
+    pub async fn next_event(&mut self) -> Result<Option<SessionEventEnvelope>> {
+        loop {
+            if let Some(event) = self.buffered_events.pop_front() {
+                return Ok(Some(event));
+            }
+
+            if let Some(chunk) = self.stream.next().await {
+                let chunk = chunk?;
                 self.pending_bytes.extend_from_slice(&chunk);
                 self.buffer_sse_events(false)?;
             } else {
@@ -560,6 +611,53 @@ impl Client {
             .context("server returned invalid JSON for server settings")
     }
 
+    pub async fn create_session(&self, body: types::CreateSessionRequest) -> Result<SessionRecord> {
+        let response = self
+            .send_api(
+                |client| async move { client.create_session().body(body.clone()).send().await },
+            )
+            .await?;
+        Ok(response.into_inner())
+    }
+
+    #[expect(
+        clippy::disallowed_types,
+        reason = "Client builds raw server API request URLs for wire transit; logging redaction is handled at log boundaries."
+    )]
+    pub async fn submit_session_turn_stream(
+        &self,
+        session_id: SessionId,
+        input: impl Into<String>,
+    ) -> Result<SessionEventStream> {
+        let base_url = self.base_url();
+        let mut url = fabro_http::Url::parse(&base_url)
+            .with_context(|| format!("invalid server base URL {base_url}"))?;
+        url.path_segments_mut()
+            .map_err(|()| anyhow!("server base URL cannot accept path segments"))?
+            .extend(["api", "v1", "sessions", &session_id.to_string(), "turns"]);
+        let body = types::SubmitTurnRequest {
+            input: input.into(),
+        };
+        let response = self
+            .send_http(|http_client| {
+                let url = url.clone();
+                let body = body.clone();
+                async move {
+                    http_client
+                        .post(url)
+                        .header(ACCEPT, "text/event-stream")
+                        .json(&body)
+                        .send()
+                        .await
+                }
+            })
+            .await?;
+        let stream = response
+            .bytes_stream()
+            .map(|chunk| chunk.map_err(anyhow::Error::new));
+        Ok(SessionEventStream::new(Box::pin(stream)))
+    }
+
     pub async fn create_run_from_manifest(&self, manifest: types::RunManifest) -> Result<RunId> {
         let response = self
             .send_api(
@@ -608,17 +706,12 @@ impl Client {
         provider: Option<&str>,
         query: Option<&str>,
     ) -> Result<Vec<Model>> {
-        let provider = provider
-            .map(|provider| {
-                provider
-                    .parse::<Provider>()
-                    .map_err(|_| anyhow!("unknown provider: {provider}"))
-            })
-            .transpose()?;
+        let provider = provider.map(ProviderId::new);
         let mut offset = 0u64;
         let mut models = Vec::new();
 
         loop {
+            let provider = provider.clone();
             let response = self
                 .send_api(|client| async move {
                     let mut request = client.list_models().page_limit(100u64).page_offset(offset);
@@ -794,7 +887,7 @@ impl Client {
         Ok(bytes)
     }
 
-    pub async fn start_run(&self, run_id: &RunId, resume: bool) -> Result<RunSummary> {
+    pub async fn start_run(&self, run_id: &RunId, resume: bool) -> Result<Run> {
         let response = self
             .send_api(|client| async move {
                 client
@@ -808,7 +901,7 @@ impl Client {
         convert_type(response.into_inner())
     }
 
-    pub async fn cancel_run(&self, run_id: &RunId) -> Result<RunSummary> {
+    pub async fn cancel_run(&self, run_id: &RunId) -> Result<Run> {
         let response = self
             .send_api(
                 |client| async move { client.cancel_run().id(run_id.to_string()).send().await },
@@ -846,7 +939,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn archive_run(&self, run_id: &RunId) -> Result<RunSummary> {
+    pub async fn archive_run(&self, run_id: &RunId) -> Result<Run> {
         let response = self
             .send_api(
                 |client| async move { client.archive_run().id(run_id.to_string()).send().await },
@@ -855,7 +948,7 @@ impl Client {
         convert_type(response.into_inner())
     }
 
-    pub async fn unarchive_run(&self, run_id: &RunId) -> Result<RunSummary> {
+    pub async fn unarchive_run(&self, run_id: &RunId) -> Result<Run> {
         let response = self
             .send_api(
                 |client| async move { client.unarchive_run().id(run_id.to_string()).send().await },
@@ -917,21 +1010,42 @@ impl Client {
         Ok(response.into_inner())
     }
 
-    pub async fn list_store_runs(&self) -> Result<Vec<RunSummary>> {
+    pub async fn list_store_runs(&self) -> Result<Vec<Run>> {
+        self.list_store_runs_with_options(ListStoreRunsOptions::default())
+            .await
+    }
+
+    pub async fn list_store_runs_by_parent(&self, parent_id: RunId) -> Result<Vec<Run>> {
+        self.list_store_runs_with_options(ListStoreRunsOptions {
+            parent_id: Some(parent_id),
+        })
+        .await
+    }
+
+    async fn list_store_runs_with_options(
+        &self,
+        options: ListStoreRunsOptions,
+    ) -> Result<Vec<Run>> {
         let mut all_runs = Vec::new();
         let mut offset = 0_u64;
         let limit = 100_u64;
+        let parent_id = options.parent_id.map(|run_id| run_id.to_string());
 
         loop {
             let response = self
-                .send_api(|client| async move {
-                    client
-                        .list_runs()
-                        .page_limit(limit)
-                        .page_offset(offset)
-                        .include_archived(true)
-                        .send()
-                        .await
+                .send_api(|client| {
+                    let parent_id = parent_id.clone();
+                    async move {
+                        let mut request = client
+                            .list_runs()
+                            .page_limit(limit)
+                            .page_offset(offset)
+                            .include_archived(true);
+                        if let Some(parent_id) = parent_id {
+                            request = request.parent_id(parent_id);
+                        }
+                        request.send().await
+                    }
                 })
                 .await?;
             let parsed = response.into_inner();
@@ -952,7 +1066,37 @@ impl Client {
         Ok(all_runs)
     }
 
-    pub async fn retrieve_run(&self, run_id: &RunId) -> Result<RunSummary> {
+    pub async fn link_run_parent(&self, child_id: &RunId, parent_id: &RunId) -> Result<Run> {
+        let body = types::UpdateRunParentRequest {
+            parent_id: parent_id.to_string(),
+        };
+        let response = self
+            .send_api(|client| async move {
+                client
+                    .link_run_parent()
+                    .id(child_id.to_string())
+                    .body(body.clone())
+                    .send()
+                    .await
+            })
+            .await?;
+        convert_type(response.into_inner())
+    }
+
+    pub async fn unlink_run_parent(&self, child_id: &RunId) -> Result<Run> {
+        let response = self
+            .send_api(|client| async move {
+                client
+                    .unlink_run_parent()
+                    .id(child_id.to_string())
+                    .send()
+                    .await
+            })
+            .await?;
+        convert_type(response.into_inner())
+    }
+
+    pub async fn retrieve_run(&self, run_id: &RunId) -> Result<Run> {
         let response = self
             .send_api(
                 |client| async move { client.retrieve_run().id(run_id.to_string()).send().await },
@@ -961,7 +1105,7 @@ impl Client {
         convert_type(response.into_inner())
     }
 
-    pub async fn resolve_run(&self, selector: &str) -> Result<RunSummary> {
+    pub async fn resolve_run(&self, selector: &str) -> Result<Run> {
         let response = self
             .send_api(|client| async move {
                 client
@@ -1017,7 +1161,7 @@ impl Client {
         run_id: &RunId,
         force: bool,
         model: Option<String>,
-    ) -> Result<fabro_types::PullRequestRecord> {
+    ) -> Result<fabro_types::PullRequestLink> {
         let body = types::CreateRunPullRequestRequest { force, model };
         let response = self
             .send_api(|client| async move {
@@ -1036,7 +1180,7 @@ impl Client {
     pub async fn get_run_pull_request(
         &self,
         run_id: &RunId,
-    ) -> Result<fabro_types::PullRequestDetail> {
+    ) -> Result<fabro_types::PullRequestResponse> {
         let response = self
             .send_api(|client| async move {
                 client
@@ -1048,6 +1192,43 @@ impl Client {
             .await
             .map_err(add_pr_upgrade_hint)?;
         Ok(response.into_inner())
+    }
+
+    pub async fn link_run_pull_request(
+        &self,
+        run_id: &RunId,
+        html_url: String,
+    ) -> Result<fabro_types::PullRequestLink> {
+        let body = types::LinkRunPullRequestRequest { html_url };
+        let response = self
+            .send_api(|client| async move {
+                client
+                    .link_run_pull_request()
+                    .id(run_id.to_string())
+                    .body(body.clone())
+                    .send()
+                    .await
+            })
+            .await
+            .map_err(add_pr_upgrade_hint)?;
+        convert_type(response.into_inner())
+    }
+
+    pub async fn unlink_run_pull_request(
+        &self,
+        run_id: &RunId,
+    ) -> Result<fabro_types::PullRequestLink> {
+        let response = self
+            .send_api(|client| async move {
+                client
+                    .unlink_run_pull_request()
+                    .id(run_id.to_string())
+                    .send()
+                    .await
+            })
+            .await
+            .map_err(add_pr_upgrade_hint)?;
+        convert_type(response.into_inner())
     }
 
     pub async fn merge_run_pull_request(
@@ -1683,7 +1864,7 @@ mod tests {
 
     use chrono::Duration as ChronoDuration;
     use fabro_util::exit;
-    use httpmock::Method::POST;
+    use httpmock::Method::{GET, POST};
     use httpmock::MockServer;
     use serde_json::json;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -1814,6 +1995,33 @@ mod tests {
 
         assert_eq!(chunk, Bytes::from_static(b"data: hello\n\n"));
         server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn list_models_allows_custom_provider_filters() {
+        let server = MockServer::start_async().await;
+        let mock = server
+            .mock_async(|when, then| {
+                when.method(GET)
+                    .path("/api/v1/models")
+                    .query_param("provider", "bedrock");
+                then.status(200)
+                    .header("Content-Type", "application/json")
+                    .body(
+                        serde_json::json!({
+                            "data": [],
+                            "meta": { "has_more": false }
+                        })
+                        .to_string(),
+                    );
+            })
+            .await;
+
+        let client = Client::new_no_proxy(&server.url("")).unwrap();
+        let models = client.list_models(Some("bedrock"), None).await.unwrap();
+
+        mock.assert_async().await;
+        assert!(models.is_empty());
     }
 
     async fn oauth_client(

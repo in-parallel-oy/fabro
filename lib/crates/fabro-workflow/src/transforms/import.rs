@@ -4,16 +4,25 @@ use std::sync::Arc;
 
 use fabro_graphviz::graph::{AttrValue, Edge, Graph, Node};
 use fabro_graphviz::parser;
-use fabro_template::{TemplateContext, render as render_template};
+use fabro_template::TemplateContext;
+use fabro_validate::Diagnostic;
 
+use super::file_inlining::template_include_loader;
 use super::{FileInliningTransform, Transform};
 use crate::error::Error;
 use crate::file_resolver::{FileResolver, ResolvedFile};
+use crate::static_reference::{ReferenceKind, validate_static_reference};
+use crate::transforms::variable_expansion::{
+    RenderMode, TemplateRenderTarget, TemplateTransform, render_template_for_target,
+};
 
 pub struct ImportTransform {
     current_dir: PathBuf,
     resolver:    Arc<dyn FileResolver>,
     inputs:      HashMap<String, toml::Value>,
+    source_name: Option<String>,
+    source_text: Option<String>,
+    render_mode: RenderMode,
 }
 
 struct PlaceholderOptions {
@@ -28,6 +37,7 @@ struct PreparedImport {
     exit_id:             String,
     entry_id:            String,
     exit_predecessor_id: String,
+    diagnostics:         Vec<Diagnostic>,
 }
 
 enum ImportPrepareError {
@@ -52,7 +62,23 @@ impl ImportTransform {
             current_dir,
             resolver,
             inputs,
+            source_name: None,
+            source_text: None,
+            render_mode: RenderMode::Structural,
         }
+    }
+
+    #[must_use]
+    pub fn with_template_options(
+        mut self,
+        source_name: Option<String>,
+        source_text: Option<String>,
+        render_mode: RenderMode,
+    ) -> Self {
+        self.source_name = source_name;
+        self.source_text = source_text;
+        self.render_mode = render_mode;
+        self
     }
 
     fn collect_import_nodes(graph: &Graph) -> Vec<(String, String)> {
@@ -73,11 +99,12 @@ impl ImportTransform {
         graph: &mut Graph,
         placeholder_id: &str,
         import_path: &str,
+        parent_goal: &str,
         current_base_dir: &Path,
         import_stack: &mut Vec<PathBuf>,
-    ) -> Result<(), Error> {
+    ) -> Result<Vec<Diagnostic>, Error> {
         if !graph.nodes.contains_key(placeholder_id) {
-            return Ok(());
+            return Ok(Vec::new());
         }
 
         if graph
@@ -90,16 +117,21 @@ impl ImportTransform {
                 placeholder_id,
                 &format!("import placeholder '{placeholder_id}' cannot have a self-loop"),
             );
-            return Ok(());
+            return Ok(Vec::new());
         }
 
         let placeholder = match Self::placeholder_config(graph, placeholder_id) {
             Ok(placeholder) => placeholder,
             Err(message) => {
                 Self::poison_placeholder(graph, placeholder_id, &message);
-                return Ok(());
+                return Ok(Vec::new());
             }
         };
+
+        if let Err(error) = validate_static_reference(import_path, ReferenceKind::Import) {
+            Self::poison_placeholder(graph, placeholder_id, &error.to_string());
+            return Ok(Vec::new());
+        }
 
         let Some(resolved_file) = self.resolver.resolve(current_base_dir, import_path) else {
             Self::poison_placeholder(
@@ -107,7 +139,7 @@ impl ImportTransform {
                 placeholder_id,
                 &format!("file not found: {import_path}"),
             );
-            return Ok(());
+            return Ok(Vec::new());
         };
 
         if import_stack.contains(&resolved_file.path) {
@@ -122,17 +154,18 @@ impl ImportTransform {
                 placeholder_id,
                 &format!("circular import detected: {cycle}"),
             );
-            return Ok(());
+            return Ok(Vec::new());
         }
 
-        let prepared = match self.prepare_import(&resolved_file, import_stack) {
+        let prepared = match self.prepare_import(&resolved_file, parent_goal, import_stack) {
             Ok(prepared) => prepared,
             Err(ImportPrepareError::Hard(error)) => return Err(error),
             Err(ImportPrepareError::Soft(message)) => {
                 Self::poison_placeholder(graph, placeholder_id, &message);
-                return Ok(());
+                return Ok(Vec::new());
             }
         };
+        let diagnostics = prepared.diagnostics.clone();
 
         if let Err(message) = Self::splice_import(
             graph,
@@ -144,22 +177,21 @@ impl ImportTransform {
             Self::poison_placeholder(graph, placeholder_id, &message);
         }
 
-        Ok(())
+        Ok(diagnostics)
     }
 
     fn prepare_import(
         &self,
         resolved_file: &ResolvedFile,
+        parent_goal: &str,
         import_stack: &mut Vec<PathBuf>,
     ) -> Result<PreparedImport, ImportPrepareError> {
         Self::with_import_stack(import_stack, resolved_file.path.clone(), |import_stack| {
-            let rendered_source = render_template(
-                &resolved_file.content,
-                &TemplateContext::for_input_scan(self.inputs.clone()),
-            )
-            .map_err(|error| ImportPrepareError::Hard(Error::Validation(error.to_string())))?;
+            let mut diagnostics = Vec::new();
+            let source_name = resolved_file.path.display().to_string();
+            let source_text = resolved_file.content.clone();
 
-            let mut graph = parser::parse(&rendered_source).map_err(|error| {
+            let mut graph = parser::parse(&resolved_file.content).map_err(|error| {
                 ImportPrepareError::Soft(format!(
                     "failed to parse {}: {error}",
                     resolved_file.path.display()
@@ -170,9 +202,34 @@ impl ImportTransform {
                 .path
                 .parent()
                 .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-            graph = FileInliningTransform::new(import_base_dir.clone(), Arc::clone(&self.resolver))
-                .apply(graph)
-                .map_err(ImportPrepareError::Hard)?;
+            let (inlined_graph, file_diagnostics) =
+                FileInliningTransform::new(import_base_dir.clone(), Arc::clone(&self.resolver))
+                    .with_template_options(
+                        self.inputs.clone(),
+                        Some(source_name.clone()),
+                        Some(source_text.clone()),
+                        self.render_mode,
+                    )
+                    .with_goal_override(Some(parent_goal.to_string()))
+                    .apply_with_diagnostics(graph)
+                    .map_err(ImportPrepareError::Hard)?;
+            graph = inlined_graph;
+            diagnostics.extend(file_diagnostics);
+
+            graph.attrs.insert(
+                "goal".to_string(),
+                AttrValue::String(parent_goal.to_string()),
+            );
+            let (templated_graph, template_diagnostics) = TemplateTransform {
+                inputs:      self.inputs.clone(),
+                source_name: Some(source_name),
+                source_text: Some(source_text),
+                render_mode: self.render_mode,
+            }
+            .apply_with_diagnostics(graph)
+            .map_err(ImportPrepareError::Hard)?;
+            graph = templated_graph;
+            diagnostics.extend(template_diagnostics);
 
             if let Some(message) = Self::unresolved_imported_prompt_error(&graph) {
                 return Err(ImportPrepareError::Soft(message));
@@ -180,16 +237,21 @@ impl ImportTransform {
 
             let nested_imports = Self::collect_import_nodes(&graph);
             for (placeholder_id, import_path) in nested_imports {
-                self.expand_import(
+                let nested_diagnostics = self.expand_import(
                     &mut graph,
                     &placeholder_id,
                     &import_path,
+                    parent_goal,
                     &import_base_dir,
                     import_stack,
                 )?;
+                diagnostics.extend(nested_diagnostics);
             }
 
-            Self::validate_imported_graph(graph).map_err(ImportPrepareError::Soft)
+            let mut prepared =
+                Self::validate_imported_graph(graph).map_err(ImportPrepareError::Soft)?;
+            prepared.diagnostics = diagnostics;
+            Ok(prepared)
         })
     }
 
@@ -228,6 +290,7 @@ impl ImportTransform {
             exit_id,
             entry_id,
             exit_predecessor_id,
+            diagnostics: _,
         } = prepared;
 
         for node_id in imported_graph.nodes.keys() {
@@ -476,6 +539,7 @@ impl ImportTransform {
             exit_id,
             entry_id,
             exit_predecessor_id,
+            diagnostics: Vec::new(),
         })
     }
 
@@ -590,21 +654,69 @@ impl PreparedImport {
 
 impl Transform for ImportTransform {
     fn apply(&self, graph: Graph) -> Result<Graph, Error> {
+        let (graph, diagnostics) = self.apply_with_diagnostics(graph)?;
+        if !diagnostics.is_empty() {
+            return Err(Error::ValidationFailed { diagnostics });
+        }
+        Ok(graph)
+    }
+}
+
+impl ImportTransform {
+    pub(crate) fn apply_with_diagnostics(
+        &self,
+        graph: Graph,
+    ) -> Result<(Graph, Vec<Diagnostic>), Error> {
         let mut graph = graph;
         let imports = Self::collect_import_nodes(&graph);
         let mut import_stack = Vec::new();
+        let mut diagnostics = Vec::new();
+        let path_ctx = TemplateContext::for_input_scan(self.inputs.clone());
+        let mut ignored_goal_diagnostics = Vec::new();
+        let goal_target = TemplateRenderTarget::graph_attr(self.source_name.clone(), "goal")
+            .with_source_text(self.source_text.as_deref(), graph.goal())
+            .with_include_loader(Some(template_include_loader(
+                self.current_dir.clone(),
+                Arc::clone(&self.resolver),
+            )));
+        let parent_goal = render_template_for_target(
+            graph.goal(),
+            &path_ctx,
+            self.render_mode,
+            &goal_target,
+            &mut ignored_goal_diagnostics,
+        )?;
 
         for (placeholder_id, import_path) in imports {
-            self.expand_import(
+            if let Err(error) = validate_static_reference(&import_path, ReferenceKind::Import) {
+                Self::poison_placeholder(&mut graph, &placeholder_id, &error.to_string());
+                continue;
+            }
+            let target = TemplateRenderTarget::node_attr(
+                self.source_name.clone(),
+                placeholder_id.clone(),
+                "import",
+            )
+            .with_source_text(self.source_text.as_deref(), &import_path);
+            let rendered_import_path = render_template_for_target(
+                &import_path,
+                &path_ctx,
+                self.render_mode,
+                &target,
+                &mut diagnostics,
+            )?;
+            let import_diagnostics = self.expand_import(
                 &mut graph,
                 &placeholder_id,
-                &import_path,
+                &rendered_import_path,
+                &parent_goal,
                 &self.current_dir,
                 &mut import_stack,
             )?;
+            diagnostics.extend(import_diagnostics);
         }
 
-        Ok(graph)
+        Ok((graph, diagnostics))
     }
 }
 
@@ -616,6 +728,7 @@ mod tests {
 
     use fabro_graphviz::graph::AttrValue;
     use fabro_graphviz::parser;
+    use fabro_util::error::collect_chain;
 
     use super::*;
     use crate::file_resolver::FilesystemFileResolver;
@@ -642,6 +755,83 @@ mod tests {
         )
         .apply(graph)
         .unwrap()
+    }
+
+    #[test]
+    fn templated_import_path_poison_placeholder_before_rendering() {
+        let dir = tempfile::tempdir().unwrap();
+        let graph = parse_graph(
+            r#"digraph Test {
+                start [shape=Mdiamond]
+                validate [import="{{ inputs.path }}"]
+                exit [shape=Msquare]
+                start -> validate -> exit
+            }"#,
+        );
+
+        let graph = ImportTransform::new(
+            dir.path().to_path_buf(),
+            Arc::new(FilesystemFileResolver::new(None)),
+            HashMap::new(),
+        )
+        .with_template_options(
+            Some("workflow.fabro".to_string()),
+            Some("workflow source {{ inputs.path }}".to_string()),
+            RenderMode::Strict,
+        )
+        .apply(graph)
+        .unwrap();
+
+        let error = graph.nodes["validate"]
+            .attrs
+            .get("import_error")
+            .and_then(AttrValue::as_str)
+            .expect("templated import path should poison placeholder");
+        assert!(
+            error.contains("templates are not supported in import references"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn imported_workflow_template_error_names_imported_file() {
+        let dir = tempfile::tempdir().unwrap();
+        write_file(
+            &dir.path().join("child.fabro"),
+            r#"digraph Child {
+                graph [goal="{{ inputs.foo }}"]
+                start [shape=Mdiamond]
+                work [prompt="Do it"]
+                exit [shape=Msquare]
+                start -> work -> exit
+            }"#,
+        );
+        let graph = parse_graph(
+            r#"digraph Test {
+                start [shape=Mdiamond]
+                validate [import="./child.fabro"]
+                exit [shape=Msquare]
+                start -> validate -> exit
+            }"#,
+        );
+
+        let err = ImportTransform::new(
+            dir.path().to_path_buf(),
+            Arc::new(FilesystemFileResolver::new(None)),
+            HashMap::new(),
+        )
+        .with_template_options(
+            Some("workflow.fabro".to_string()),
+            Some("workflow source".to_string()),
+            RenderMode::Strict,
+        )
+        .apply(graph)
+        .unwrap_err();
+        let rendered = collect_chain(&err).join(": ");
+
+        assert!(rendered.contains("child.fabro"), "{rendered}");
+        assert!(rendered.contains("inputs.foo"), "{rendered}");
+        assert!(!rendered.contains("<string>"), "{rendered}");
     }
 
     fn basic_import_source() -> &'static str {
@@ -713,6 +903,88 @@ mod tests {
                 .classes
                 .iter()
                 .any(|class_name| class_name == "validate")
+        );
+    }
+
+    #[test]
+    fn import_reports_structural_diagnostic_for_imported_prompt_templates() {
+        let dir = tempfile::tempdir().unwrap();
+        write_file(
+            &dir.path().join("validate.fabro"),
+            r#"digraph validate {
+                start [shape=Mdiamond]
+                lint [prompt="Run {{ inputs.task }}"]
+                exit [shape=Msquare]
+                start -> lint -> exit
+            }"#,
+        );
+
+        let graph = parse_graph(
+            r#"digraph Deploy {
+                start [shape=Mdiamond]
+                validate [import="./validate.fabro"]
+                exit [shape=Msquare]
+                start -> validate -> exit
+            }"#,
+        );
+
+        let (graph, diagnostics) = ImportTransform::new(
+            dir.path().to_path_buf(),
+            Arc::new(FilesystemFileResolver::new(None)),
+            HashMap::new(),
+        )
+        .apply_with_diagnostics(graph)
+        .unwrap();
+
+        assert_eq!(
+            graph.nodes["validate.lint"]
+                .attrs
+                .get("prompt")
+                .and_then(AttrValue::as_str),
+            Some("Run ")
+        );
+        let diagnostic = diagnostics
+            .iter()
+            .find(|diagnostic| diagnostic.rule == "template_undefined_variable")
+            .expect("expected imported prompt template diagnostic");
+        assert_eq!(diagnostic.node_id.as_deref(), Some("lint"));
+        assert!(
+            diagnostic
+                .source_path
+                .as_deref()
+                .is_some_and(|path| path.ends_with("validate.fabro")),
+            "{diagnostic:?}"
+        );
+        assert!(
+            diagnostic
+                .message
+                .contains("node `lint` attribute `prompt`"),
+            "{diagnostic:?}"
+        );
+    }
+
+    #[test]
+    fn templated_import_path_poison_placeholder() {
+        let dir = tempfile::tempdir().unwrap();
+        let graph = apply_import(
+            r#"digraph Deploy {
+                start [shape=Mdiamond]
+                validate [import="./{{ inputs.workflow }}.fabro"]
+                exit [shape=Msquare]
+                start -> validate -> exit
+            }"#,
+            dir.path(),
+            None,
+        );
+
+        let error = graph.nodes["validate"]
+            .attrs
+            .get("import_error")
+            .and_then(AttrValue::as_str)
+            .expect("templated import path should poison placeholder");
+        assert!(
+            error.contains("templates are not supported in import references"),
+            "unexpected error: {error}"
         );
     }
 

@@ -9,7 +9,9 @@ use futures::stream;
 use crate::error::{
     Error, ProviderErrorDetail, ProviderErrorKind, error_from_grpc_status, error_from_status_code,
 };
-use crate::provider::{ProviderAdapter, StreamEventStream, validate_tool_choice};
+use crate::provider::{
+    ProviderAdapter, StreamEventStream, validate_standard_speed, validate_tool_choice,
+};
 use crate::providers::common::{
     self as common, extract_system_prompt, parse_error_body, parse_rate_limit_headers,
     parse_retry_after,
@@ -924,10 +926,16 @@ impl ProviderAdapter for Adapter {
         &self.provider_name
     }
 
-    async fn complete(&self, request: &Request) -> Result<Response, Error> {
+    fn validate_request(&self, request: &Request) -> Result<(), Error> {
+        validate_standard_speed(self, request)?;
         if let Some(tc) = &request.tool_choice {
             validate_tool_choice(self, tc)?;
         }
+        Ok(())
+    }
+
+    async fn complete(&self, request: &Request) -> Result<Response, Error> {
+        self.validate_request(request)?;
         let api_body = build_api_request(request).await;
 
         let api_model = common::api_model_id(self.catalog.as_deref(), &request.model);
@@ -995,9 +1003,7 @@ impl ProviderAdapter for Adapter {
     }
 
     async fn stream(&self, request: &Request) -> Result<StreamEventStream, Error> {
-        if let Some(tc) = &request.tool_choice {
-            validate_tool_choice(self, tc)?;
-        }
+        self.validate_request(request)?;
         let api_body = build_api_request(request).await;
 
         let api_model = common::api_model_id(self.catalog.as_deref(), &request.model);

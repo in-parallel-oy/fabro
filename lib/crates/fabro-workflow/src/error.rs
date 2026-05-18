@@ -1,8 +1,12 @@
+use std::fmt;
+use std::sync::Arc;
+
 use fabro_graphviz::Error as GraphvizError;
 use fabro_llm::{Error as LlmError, ProviderErrorKind};
+use fabro_template::TemplateError;
 pub use fabro_types::failure_signature::FailureSignature;
 pub use fabro_types::outcome::FailureCategory;
-use fabro_types::{FailureReason, RunFailure};
+use fabro_types::{ExecOutputTail, FailureReason, RunFailure};
 use fabro_util::error::{SharedError, collect_causes, collect_chain, render_with_causes};
 use fabro_validate::Diagnostic;
 use thiserror::Error as ThisError;
@@ -98,6 +102,55 @@ const STRUCTURAL_HINTS: &[&str] = &[
     "write scope violation",
     "scope violation",
 ];
+
+#[derive(Debug, Clone)]
+pub struct SharedTemplateError(Arc<TemplateError>);
+
+impl SharedTemplateError {
+    #[must_use]
+    pub fn new(error: TemplateError) -> Self {
+        Self(Arc::new(error))
+    }
+
+    #[must_use]
+    pub fn inner(&self) -> &TemplateError {
+        &self.0
+    }
+}
+
+impl fmt::Display for SharedTemplateError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, formatter)
+    }
+}
+
+impl std::error::Error for SharedTemplateError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.source()
+    }
+}
+
+impl miette::Diagnostic for SharedTemplateError {
+    fn code<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        miette::Diagnostic::code(self.inner())
+    }
+
+    fn help<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        miette::Diagnostic::help(self.inner())
+    }
+
+    fn source_code(&self) -> Option<&dyn miette::SourceCode> {
+        miette::Diagnostic::source_code(self.inner())
+    }
+
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
+        miette::Diagnostic::labels(self.inner())
+    }
+
+    fn diagnostic_source(&self) -> Option<&dyn miette::Diagnostic> {
+        miette::Diagnostic::diagnostic_source(self.inner())
+    }
+}
 
 /// Classify a failure reason string using heuristics.
 ///
@@ -205,20 +258,29 @@ pub enum Error {
     #[error("Validation failed")]
     ValidationFailed { diagnostics: Vec<Diagnostic> },
 
+    #[error("{message}")]
+    Template {
+        message: String,
+        #[source]
+        source:  SharedTemplateError,
+    },
+
     #[error("Engine error: {message}")]
     Engine {
-        message:       String,
-        failure_class: FailureCategory,
+        message:          String,
+        failure_class:    FailureCategory,
+        exec_output_tail: Option<ExecOutputTail>,
         #[source]
-        source:        Option<SharedError>,
+        source:           Option<SharedError>,
     },
 
     #[error("Handler error: {message}")]
     Handler {
-        message:       String,
-        failure_class: FailureCategory,
+        message:          String,
+        failure_class:    FailureCategory,
+        exec_output_tail: Option<ExecOutputTail>,
         #[source]
-        source:        Option<SharedError>,
+        source:           Option<SharedError>,
     },
 
     #[error("LLM error: {0}")]
@@ -255,6 +317,28 @@ impl Error {
         Self::Handler {
             message,
             failure_class,
+            exec_output_tail: None,
+            source: None,
+        }
+    }
+
+    pub fn template(message: impl Into<String>, source: TemplateError) -> Self {
+        Self::Template {
+            message: message.into(),
+            source:  SharedTemplateError::new(source),
+        }
+    }
+
+    pub fn handler_with_exec_output_tail(
+        message: impl Into<String>,
+        exec_output_tail: Option<ExecOutputTail>,
+    ) -> Self {
+        let message = message.into();
+        let failure_class = classify_failure_reason(&message);
+        Self::Handler {
+            message,
+            failure_class,
+            exec_output_tail,
             source: None,
         }
     }
@@ -262,6 +346,14 @@ impl Error {
     pub fn handler_with_source(
         message: impl Into<String>,
         source: impl Into<anyhow::Error>,
+    ) -> Self {
+        Self::handler_with_source_and_exec_output_tail(message, source, None)
+    }
+
+    pub fn handler_with_source_and_exec_output_tail(
+        message: impl Into<String>,
+        source: impl Into<anyhow::Error>,
+        exec_output_tail: Option<ExecOutputTail>,
     ) -> Self {
         let message = message.into();
         let source = SharedError::new(source.into());
@@ -271,6 +363,7 @@ impl Error {
         Self::Handler {
             message,
             failure_class,
+            exec_output_tail,
             source: Some(source),
         }
     }
@@ -287,6 +380,7 @@ impl Error {
         Self::Engine {
             message,
             failure_class,
+            exec_output_tail: None,
             source: None,
         }
     }
@@ -303,6 +397,7 @@ impl Error {
         Self::Engine {
             message,
             failure_class,
+            exec_output_tail: None,
             source: Some(source),
         }
     }
@@ -317,6 +412,7 @@ impl Error {
             Self::Engine { source, .. } | Self::Handler { source, .. } => source
                 .as_ref()
                 .map_or_else(Vec::new, |source| collect_chain(source)),
+            Self::Template { source, .. } => collect_chain(source),
             Self::Llm(err) => collect_causes(err),
             _ => Vec::new(),
         }
@@ -342,6 +438,7 @@ impl Error {
             Self::Parse(_)
             | Self::Validation(_)
             | Self::ValidationFailed { .. }
+            | Self::Template { .. }
             | Self::Stylesheet(_)
             | Self::Checkpoint(_)
             | Self::Precondition(_)
@@ -361,6 +458,7 @@ impl Error {
             Self::Parse(_)
             | Self::Validation(_)
             | Self::ValidationFailed { .. }
+            | Self::Template { .. }
             | Self::Stylesheet(_)
             | Self::Checkpoint(_)
             | Self::Unsupported(_) => FailureCategory::Deterministic,
@@ -374,21 +472,42 @@ impl Error {
     /// Return a stable failure signature hint when structured error info is
     /// available.
     #[must_use]
-    pub fn failure_signature_hint(&self) -> Option<String> {
+    pub fn failure_signature_hint(&self) -> Option<FailureSignature> {
         match self {
-            Self::Llm(sdk_err) => Some(sdk_err.failure_signature_hint()),
+            Self::Llm(sdk_err) => Some(FailureSignature(sdk_err.failure_signature_hint())),
             _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn to_failure_detail(&self) -> FailureDetail {
+        let message = match self {
+            Self::Engine { message, .. } | Self::Handler { message, .. } => message.clone(),
+            _ => self.to_string(),
+        };
+        let explicit_exec_output_tail = match self {
+            Self::Engine {
+                exec_output_tail, ..
+            }
+            | Self::Handler {
+                exec_output_tail, ..
+            } => exec_output_tail.clone(),
+            _ => None,
+        };
+        FailureDetail {
+            message,
+            causes: self.causes(),
+            category: self.failure_category(),
+            system_actor: None,
+            signature: self.failure_signature_hint(),
+            exec_output_tail: explicit_exec_output_tail
+                .or_else(|| fabro_sandbox::default_redacted_output_tail(self)),
         }
     }
 
     /// Build a fail `Outcome` with structured `FailureDetail`.
     pub fn to_fail_outcome(&self) -> Outcome {
-        let failure = FailureDetail {
-            message:      self.display_with_causes(),
-            category:     self.failure_category(),
-            system_actor: None,
-            signature:    self.failure_signature_hint(),
-        };
+        let failure = self.to_failure_detail();
         Outcome {
             status: StageOutcome::Failed {
                 retry_requested: false,
@@ -399,20 +518,48 @@ impl Error {
     }
 }
 
+impl miette::Diagnostic for Error {
+    fn code<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        match self {
+            Self::Template { source, .. } => miette::Diagnostic::code(source),
+            _ => None,
+        }
+    }
+
+    fn help<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        match self {
+            Self::Template { source, .. } => miette::Diagnostic::help(source),
+            _ => None,
+        }
+    }
+
+    fn source_code(&self) -> Option<&dyn miette::SourceCode> {
+        match self {
+            Self::Template { source, .. } => miette::Diagnostic::source_code(source),
+            _ => None,
+        }
+    }
+
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
+        match self {
+            Self::Template { source, .. } => miette::Diagnostic::labels(source),
+            _ => None,
+        }
+    }
+
+    fn diagnostic_source(&self) -> Option<&dyn miette::Diagnostic> {
+        match self {
+            Self::Template { source, .. } => Some(source),
+            _ => None,
+        }
+    }
+}
+
 #[must_use]
 pub fn run_failure_from_error(error: &Error, reason: FailureReason) -> RunFailure {
-    let message = match error {
-        Error::Engine { message, .. } | Error::Handler { message, .. } => message.clone(),
-        _ => error.to_string(),
-    };
     RunFailure {
-        message,
-        causes: error.causes(),
         reason,
-        category: error.failure_category(),
-        system_actor: None,
-        signature: error.failure_signature_hint().map(FailureSignature),
-        exec_output_tail: fabro_sandbox::default_redacted_output_tail(error),
+        detail: error.to_failure_detail(),
     }
 }
 
@@ -422,13 +569,8 @@ pub fn run_failure_from_outcome_failure(
     reason: FailureReason,
 ) -> RunFailure {
     RunFailure {
-        message: failure.message.clone(),
-        causes: Vec::new(),
         reason,
-        category: failure.category,
-        system_actor: failure.system_actor,
-        signature: failure.signature.clone().map(FailureSignature),
-        exec_output_tail: None,
+        detail: failure.clone(),
     }
 }
 
@@ -455,7 +597,8 @@ impl From<GraphvizError> for Error {
 
 impl From<fabro_template::TemplateError> for Error {
     fn from(err: fabro_template::TemplateError) -> Self {
-        Self::Validation(collect_chain(&err).join(": "))
+        let rendered = collect_chain(&err).join(": ");
+        Self::template(format!("template expansion failed: {rendered}"), err)
     }
 }
 
@@ -535,15 +678,41 @@ mod tests {
     fn validation_failed_display() {
         let err = Error::ValidationFailed {
             diagnostics: vec![Diagnostic {
-                rule:     "test".to_string(),
+                rule: "test".to_string(),
                 severity: fabro_validate::Severity::Error,
-                message:  "missing start node".to_string(),
-                node_id:  None,
-                edge:     None,
-                fix:      None,
+                message: "missing start node".to_string(),
+                node_id: None,
+                edge: None,
+                fix: None,
+
+                ..Diagnostic::default()
             }],
         };
         assert_eq!(err.to_string(), "Validation failed");
+    }
+
+    #[test]
+    fn template_error_variant_preserves_source_chain() {
+        let template_err = fabro_template::render_named(
+            "workflow.fabro",
+            "{{ inputs.missing }}",
+            &fabro_template::TemplateContext::new(),
+        )
+        .unwrap_err();
+
+        let err = Error::template("template expansion failed", template_err);
+        let chain = collect_chain(&err);
+
+        assert!(
+            chain
+                .iter()
+                .any(|part| part.contains("template expansion failed"))
+        );
+        assert!(
+            chain
+                .iter()
+                .any(|part| part.contains("undefined template variable"))
+        );
     }
 
     #[test]
@@ -1663,7 +1832,9 @@ mod tests {
         });
         assert_eq!(
             err.failure_signature_hint(),
-            Some("api_deterministic|openai|authentication".to_string())
+            Some(FailureSignature(
+                "api_deterministic|openai|authentication".to_string()
+            ))
         );
     }
 
@@ -1770,12 +1941,14 @@ mod tests {
             Error::Validation("bad".into()),
             Error::ValidationFailed {
                 diagnostics: vec![Diagnostic {
-                    rule:     "test".into(),
+                    rule: "test".into(),
                     severity: fabro_validate::Severity::Error,
-                    message:  "bad".into(),
-                    node_id:  None,
-                    edge:     None,
-                    fix:      None,
+                    message: "bad".into(),
+                    node_id: None,
+                    edge: None,
+                    fix: None,
+
+                    ..Diagnostic::default()
                 }],
             },
             Error::engine("engine err"),
@@ -1912,10 +2085,10 @@ mod tests {
         let err = Error::handler("connection refused");
         let failure = run_failure_from_error(&err, FailureReason::WorkflowError);
 
-        assert_eq!(failure.message, "connection refused");
-        assert_eq!(failure.causes, Vec::<String>::new());
+        assert_eq!(failure.detail.message, "connection refused");
+        assert_eq!(failure.detail.causes, Vec::<String>::new());
         assert_eq!(failure.reason, FailureReason::WorkflowError);
-        assert_eq!(failure.category, FailureCategory::TransientInfra);
+        assert_eq!(failure.detail.category, FailureCategory::TransientInfra);
     }
 
     #[test]

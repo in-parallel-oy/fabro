@@ -191,6 +191,7 @@ fn main() {
         ("FailureReason", "fabro_types::status::FailureReason", &[]),
         ("FailureCategory", "fabro_types::FailureCategory", &[]),
         ("FailureSignature", "fabro_types::FailureSignature", &[]),
+        ("FailureDetail", "fabro_types::FailureDetail", &[]),
         ("RunFailure", "fabro_types::RunFailure", &[]),
         ("BlockedReason", "fabro_types::status::BlockedReason", &[]),
         (
@@ -378,7 +379,24 @@ fn main() {
         ("RunEvent", "fabro_types::RunEvent", &[]),
         ("EventEnvelope", "fabro_types::EventEnvelope", &[]),
         ("PullRequest", "fabro_types::PullRequest", &[]),
+        ("PullRequestLink", "fabro_types::PullRequestLink", &[]),
         ("PullRequestDetails", "fabro_types::PullRequestDetails", &[]),
+        ("PullRequestMeta", "fabro_types::PullRequestMeta", &[]),
+        (
+            "PullRequestResponse",
+            "fabro_types::PullRequestResponse",
+            &[],
+        ),
+        (
+            "PullRequestDetailsStatus",
+            "fabro_types::PullRequestDetailsStatus",
+            &[],
+        ),
+        (
+            "PullRequestDetailsUnavailableReason",
+            "fabro_types::PullRequestDetailsUnavailableReason",
+            &[],
+        ),
         ("RunSandboxRuntime", "fabro_types::RunSandboxRuntime", &[]),
         ("PullRequestUser", "fabro_types::PullRequestUser", &[]),
         ("PullRequestRef", "fabro_types::PullRequestRef", &[]),
@@ -395,6 +413,17 @@ fn main() {
         ("SandboxProvider", "fabro_types::SandboxProvider", &[]),
         ("RunSandbox", "fabro_types::RunSandbox", &[]),
         ("SandboxDetails", "fabro_types::SandboxDetails", &[]),
+        ("SandboxNetwork", "fabro_types::SandboxNetwork", &[]),
+        (
+            "SandboxNetworkPolicy",
+            "fabro_types::SandboxNetworkPolicy",
+            &[],
+        ),
+        (
+            "SandboxNetworkPolicyMode",
+            "fabro_types::SandboxNetworkPolicyMode",
+            &[],
+        ),
         ("SandboxService", "fabro_types::SandboxService", &[]),
         (
             "SandboxServiceDiscoverySource",
@@ -414,6 +443,20 @@ fn main() {
         ("SandboxState", "fabro_types::SandboxState", &[]),
         ("SandboxResources", "fabro_types::SandboxResources", &[]),
         ("SandboxTimestamps", "fabro_types::SandboxTimestamps", &[]),
+        ("SessionId", "fabro_types::SessionId", &[]),
+        ("TurnId", "fabro_types::TurnId", &[]),
+        ("SessionStatus", "fabro_types::SessionStatus", &[]),
+        ("TurnStatus", "fabro_types::TurnStatus", &[]),
+        ("PermissionLevel", "fabro_types::PermissionLevel", &[]),
+        ("SessionMessage", "fabro_types::SessionMessage", &[]),
+        ("SessionRecord", "fabro_types::SessionRecord", &[]),
+        ("SessionSummary", "fabro_types::SessionSummary", &[]),
+        ("TurnRecord", "fabro_types::TurnRecord", &[]),
+        (
+            "SessionEventEnvelope",
+            "fabro_types::SessionEventEnvelope",
+            &[],
+        ),
     ];
     for (name, path, impls) in replacements {
         settings.with_replacement(*name, *path, impls.iter().copied());

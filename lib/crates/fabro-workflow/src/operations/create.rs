@@ -10,21 +10,17 @@ use std::sync::Arc;
 
 use fabro_config::Storage;
 use fabro_graphviz::graph::{AttrValue, Graph};
-#[cfg(test)]
-use fabro_model::catalog::LlmCatalogSettings;
 use fabro_model::{Catalog, ProviderId};
 use fabro_sandbox::SandboxProvider;
 use fabro_store::Database;
-use fabro_template::{TemplateContext, TemplateError, render as render_template, render_lenient};
 use fabro_types::settings::run::{RunMode, RunNamespace};
-use fabro_types::{ForkSourceRef, GitContext, RunId, RunProvenance, WorkflowSettings};
-use fabro_util::error::collect_chain;
+use fabro_types::{
+    ForkSourceRef, GitContext, ManifestPath, RunId, RunProvenance, WorkflowSettings,
+};
 use fabro_util::json::normalize_json_value;
-use fabro_validate::{Diagnostic, Severity};
 use tokio::task::spawn_blocking;
 
 use super::source::{ResolveWorkflowInput, WorkflowInput, resolve_workflow};
-use crate::ManifestPath;
 use crate::error::Error;
 use crate::event::{Event, append_event, to_run_event_at};
 use crate::file_resolver::FileResolver;
@@ -33,7 +29,7 @@ use crate::pipeline::{self, Persisted, TransformOptions, Validated};
 use crate::records::RunSpec;
 use crate::run_lookup::default_scratch_base;
 use crate::run_materialization::materialize_run;
-use crate::transforms::Transform;
+use crate::transforms::{RenderMode, Transform};
 use crate::workflow_bundle::{RunDefinition, WorkflowBundle};
 
 #[derive(Clone, Debug)]
@@ -49,6 +45,7 @@ pub struct CreateRunInput {
     pub title: Option<String>,
     pub git: Option<GitContext>,
     pub fork_source_ref: Option<ForkSourceRef>,
+    pub parent_id: Option<RunId>,
     pub provenance: Option<RunProvenance>,
     pub configured_providers: Vec<ProviderId>,
     /// Public URL where this run can be viewed in the web UI, when the server
@@ -70,6 +67,7 @@ struct PersistCreateOptions {
     run_id:               Option<RunId>,
     run_dir:              Option<PathBuf>,
     workflow_slug:        Option<String>,
+    source_name:          Option<String>,
     labels:               HashMap<String, String>,
     source_directory:     Option<String>,
     git:                  Option<GitContext>,
@@ -111,6 +109,7 @@ pub async fn create(
         title,
         git,
         fork_source_ref,
+        parent_id,
         provenance,
         configured_providers,
         web_url,
@@ -135,6 +134,10 @@ pub async fn create(
     };
 
     let raw_source = resolved.raw_source.clone();
+    let source_name = resolved
+        .dot_path
+        .as_ref()
+        .map(|path| path.display().to_string());
     let persisted = spawn_blocking(move || {
         create_from_source(
             &raw_source,
@@ -143,6 +146,7 @@ pub async fn create(
                 run_id: Some(run_id),
                 run_dir: Some(persisted_run_dir),
                 workflow_slug: workflow_slug.or(resolved_workflow_slug),
+                source_name,
                 labels,
                 source_directory,
                 git,
@@ -171,6 +175,7 @@ pub async fn create(
         submitted_manifest_bytes.as_deref(),
         accepted_definition.as_ref(),
         title,
+        parent_id,
         web_url,
     )
     .await?;
@@ -191,6 +196,7 @@ async fn persist_created_run(
     submitted_manifest_bytes: Option<&[u8]>,
     accepted_definition: Option<&RunDefinition>,
     explicit_title: Option<String>,
+    parent_id: Option<RunId>,
     web_url: Option<String>,
 ) -> Result<(), Error> {
     let record = persisted.run_spec();
@@ -244,6 +250,7 @@ async fn persist_created_run(
             manifest_blob,
             git: record.git.clone(),
             fork_source_ref: record.fork_source_ref.clone(),
+            parent_id,
             web_url,
         },
         record.run_id.created_at(),
@@ -279,22 +286,6 @@ fn validate_sandbox_provider(run: &RunNamespace) -> Result<(), Error> {
     Ok(())
 }
 
-/// How the template-expansion pass should treat undefined input variables.
-///
-/// Validate is structural — it should not fail just because the user has not
-/// bound `{{ inputs.* }}` yet. Run-start is strict — missing inputs are real
-/// errors. Splitting the two lets validate work on a bare `.fabro` while
-/// run-start preserves its current hard-fail behavior.
-#[derive(Clone, Copy, Debug)]
-pub enum RenderMode {
-    /// Undefined inputs are hard errors. Used by run-create.
-    Strict,
-    /// Undefined inputs render as empty and become warning diagnostics on the
-    /// returned `Validated`, so structural lints still run. Used by
-    /// `fabro validate`.
-    Structural,
-}
-
 fn create_from_source(
     dot_source: &str,
     options: PersistCreateOptions,
@@ -302,17 +293,19 @@ fn create_from_source(
     file_resolver: Option<Arc<dyn FileResolver>>,
     goal_override: Option<&str>,
 ) -> Result<Persisted, Error> {
-    let validated = preprocess_and_validate(
+    let mut validated = preprocess_and_validate(
         dot_source,
+        options.source_name.clone(),
         current_dir,
         file_resolver,
         Vec::new(),
         Some(&options.settings),
         goal_override,
-        RenderMode::Strict,
+        RenderMode::Structural,
         &options.catalog,
     )?;
 
+    validated.promote_template_undefined_variables_to_errors();
     if validated.has_errors() {
         return Err(Error::ValidationFailed {
             diagnostics: validated.diagnostics().to_vec(),
@@ -324,6 +317,7 @@ fn create_from_source(
 
 pub(super) fn preprocess_and_validate(
     dot_source: &str,
+    source_name: Option<String>,
     current_dir: Option<PathBuf>,
     file_resolver: Option<Arc<dyn FileResolver>>,
     custom_transforms: Vec<Box<dyn Transform>>,
@@ -333,75 +327,19 @@ pub(super) fn preprocess_and_validate(
     catalog: &Arc<Catalog>,
 ) -> Result<Validated, Error> {
     let inputs = run_inputs(settings);
-    let template_ctx = TemplateContext::for_input_scan(inputs.clone());
-    let (source, template_diagnostics) = match render_mode {
-        RenderMode::Strict => {
-            let source = render_template(dot_source, &template_ctx)
-                .map_err(|err| template_parse_error(&err))?;
-            (source, Vec::new())
-        }
-        RenderMode::Structural => match render_template(dot_source, &template_ctx) {
-            Ok(source) => (source, Vec::new()),
-            Err(TemplateError::UndefinedVariable {
-                expression, line, ..
-            }) => {
-                let diagnostic = template_diagnostic(expression.as_deref(), line);
-                let source = render_lenient(dot_source, &template_ctx)
-                    .map_err(|err| template_parse_error(&err))?;
-                (source, vec![diagnostic])
-            }
-            Err(error) => return Err(template_parse_error(&error)),
-        },
-    };
-
-    let mut parsed = pipeline::parse(&source)?;
+    let mut parsed = pipeline::parse(dot_source)?;
     apply_goal_override(&mut parsed.graph, goal_override);
 
     let transformed = pipeline::transform(parsed, &TransformOptions {
         current_dir,
         file_resolver,
         inputs,
+        source_name,
+        render_mode,
         custom_transforms,
         catalog: Arc::clone(catalog),
     })?;
-    let mut validated = pipeline::validate(transformed, catalog.as_ref(), &[]);
-    if !template_diagnostics.is_empty() {
-        validated.prepend_diagnostics(template_diagnostics);
-    }
-    Ok(validated)
-}
-
-const TEMPLATE_UNDEFINED_VARIABLE_RULE: &str = "template_undefined_variable";
-
-fn template_diagnostic(expression: Option<&str>, line: Option<u32>) -> Diagnostic {
-    let location = line.map(|l| format!(" at line {l}")).unwrap_or_default();
-    let (name, message) = match expression {
-        Some(expr) => (
-            expr,
-            format!("undefined template variable `{expr}`{location}"),
-        ),
-        None => (
-            "<unknown>",
-            format!("undefined template variable{location}"),
-        ),
-    };
-    Diagnostic {
-        rule: TEMPLATE_UNDEFINED_VARIABLE_RULE.to_owned(),
-        severity: Severity::Warning,
-        message,
-        node_id: None,
-        edge: None,
-        fix: Some(format!(
-            "bind `{name}` via `[run.inputs]` in workflow.toml, or pass `--input {name}=<value>`"
-        )),
-    }
-}
-
-fn template_parse_error(error: &TemplateError) -> Error {
-    Error::Parse(format!(
-        "template expansion failed: {}",
-        collect_chain(error).join(": ")
-    ))
+    Ok(pipeline::validate(transformed, catalog.as_ref(), &[]))
 }
 
 fn run_inputs(settings: Option<&WorkflowSettings>) -> HashMap<String, toml::Value> {
@@ -428,6 +366,7 @@ fn persist_validated(
         run_id,
         run_dir,
         workflow_slug,
+        source_name: _,
         labels,
         source_directory,
         git,
@@ -490,11 +429,14 @@ mod tests {
     use fabro_types::settings::InterpString;
     use fabro_types::settings::run::RunMode;
     use fabro_types::{WorkflowSettings, fixtures};
+    use fabro_util::error::collect_chain;
+    use fabro_validate::Severity;
     use object_store::local::LocalFileSystem;
     use object_store::memory::InMemory;
 
     use super::*;
     use crate::operations::{ValidateInput, validate};
+    use crate::pipeline::types::TEMPLATE_UNDEFINED_VARIABLE_RULE;
     use crate::workflow_bundle::BundledWorkflow;
     fn memory_store() -> Arc<Database> {
         Arc::new(Database::new(
@@ -519,7 +461,7 @@ mod tests {
     }
 
     fn test_catalog() -> Arc<Catalog> {
-        Arc::new(Catalog::from_builtin_with_overrides(&LlmCatalogSettings::default()).unwrap())
+        Arc::new(Catalog::from_builtin().unwrap())
     }
 
     fn validate_dot(dot_source: &str, settings: WorkflowSettings) -> Validated {
@@ -532,7 +474,6 @@ mod tests {
             cwd: PathBuf::from("."),
             custom_transforms: Vec::new(),
             catalog: test_catalog(),
-            mode: RenderMode::Structural,
         })
         .unwrap()
     }
@@ -580,16 +521,40 @@ mod tests {
     }
 
     #[test]
-    fn strict_render_hard_fails_on_unbound_inputs() {
+    fn promote_template_undefined_rule_turns_warning_into_error() {
         let dot = r#"digraph Test {
             graph [goal="Build {{ inputs.app_dir }}"]
             start [shape=Mdiamond, label="Start"]
             exit  [shape=Msquare,  label="Exit"]
             start -> exit
         }"#;
+        let mut validated = validate_dot(dot, WorkflowSettings::default());
+        assert!(!validated.has_errors());
+
+        validated.promote_template_undefined_variables_to_errors();
+
+        assert!(validated.has_errors());
+        let diagnostic = validated
+            .diagnostics()
+            .iter()
+            .find(|d| d.rule == TEMPLATE_UNDEFINED_VARIABLE_RULE)
+            .expect("expected template diagnostic");
+        assert_eq!(diagnostic.severity, Severity::Error);
+    }
+
+    #[test]
+    fn strict_template_error_for_inline_prompt_names_workflow_file_and_node() {
+        let dot = r#"digraph ValidatePlan {
+            start [shape=Mdiamond, label="Start"]
+            exit  [shape=Msquare, label="Exit"]
+            test_inline_prompt [label="moo" prompt="{{ inputs.foo }}"]
+            start -> test_inline_prompt -> exit
+        }"#;
+
         let result = preprocess_and_validate(
             dot,
-            None,
+            Some("workflow.fabro".to_string()),
+            Some(PathBuf::from(".")),
             None,
             Vec::new(),
             Some(&WorkflowSettings::default()),
@@ -597,19 +562,51 @@ mod tests {
             RenderMode::Strict,
             &test_catalog(),
         );
-
         let Err(err) = result else {
-            panic!("expected strict mode to hard-fail on unbound inputs");
+            panic!("expected strict mode to hard-fail on unbound inline prompt");
         };
-        let message = err.to_string();
-        assert!(
-            message.contains("template expansion failed"),
-            "missing prefix in: {message}"
+
+        let rendered = collect_chain(&err).join(": ");
+        assert!(rendered.contains("workflow.fabro"), "{rendered}");
+        assert!(rendered.contains("test_inline_prompt"), "{rendered}");
+        assert!(rendered.contains("prompt"), "{rendered}");
+        assert!(!rendered.contains("<string>"), "{rendered}");
+    }
+
+    #[test]
+    fn imported_prompt_template_error_names_prompt_file_and_node() {
+        let dir = tempfile::tempdir().unwrap();
+        let prompt_path = dir.path().join("test.md");
+        std::fs::write(&prompt_path, "{{ inputs.foo }}").unwrap();
+        let dot = r#"digraph ValidatePlan {
+            start [shape=Mdiamond, label="Start"]
+            exit  [shape=Msquare, label="Exit"]
+            test_imported_prompt [label="moo" prompt="@test.md"]
+            start -> test_imported_prompt -> exit
+        }"#;
+
+        let result = preprocess_and_validate(
+            dot,
+            Some("workflow.fabro".to_string()),
+            Some(dir.path().to_path_buf()),
+            Some(Arc::new(crate::file_resolver::FilesystemFileResolver::new(
+                None,
+            ))),
+            Vec::new(),
+            Some(&WorkflowSettings::default()),
+            None,
+            RenderMode::Strict,
+            &test_catalog(),
         );
-        assert!(
-            message.contains("inputs.app_dir"),
-            "missing variable in: {message}"
-        );
+        let Err(err) = result else {
+            panic!("expected strict mode to hard-fail on unbound imported prompt");
+        };
+
+        let rendered = collect_chain(&err).join(": ");
+        assert!(rendered.contains("test.md"), "{rendered}");
+        assert!(rendered.contains("test_imported_prompt"), "{rendered}");
+        assert!(rendered.contains("prompt"), "{rendered}");
+        assert!(!rendered.contains("<string>"), "{rendered}");
     }
 
     #[test]
@@ -630,6 +627,151 @@ mod tests {
             .and_then(AttrValue::as_str)
             .unwrap();
         assert_eq!(prompt, "Goal: Fix bugs");
+    }
+
+    #[test]
+    fn validate_does_not_render_source_level_templated_node_ids() {
+        let dot = r#"digraph Test {
+            graph [goal="Fix bugs"]
+            start [shape=Mdiamond]
+            {{ inputs.step }} [prompt="Do work"]
+            exit [shape=Msquare]
+            start -> exit
+        }"#;
+
+        let result = validate(ValidateInput {
+            workflow:          WorkflowInput::DotSource {
+                source:   dot.to_string(),
+                base_dir: None,
+            },
+            settings:          settings_from_run_layer({
+                let mut inputs = std::collections::HashMap::new();
+                inputs.insert("step".to_string(), toml::Value::String("work".to_string()));
+                RunLayer {
+                    inputs: Some(inputs),
+                    ..RunLayer::default()
+                }
+            }),
+            cwd:               PathBuf::from("."),
+            custom_transforms: Vec::new(),
+            catalog:           test_catalog(),
+        });
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn inline_and_file_prompt_diagnostics_match() {
+        fn normalized_diagnostics(
+            validated: &Validated,
+        ) -> Vec<(String, Severity, String, Option<String>)> {
+            validated
+                .diagnostics()
+                .iter()
+                .map(|diagnostic| {
+                    (
+                        diagnostic.rule.clone(),
+                        diagnostic.severity.clone(),
+                        diagnostic.message.clone(),
+                        diagnostic.node_id.clone(),
+                    )
+                })
+                .collect()
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("missing.md"),
+            "Work in {{ inputs.app_dir }}",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("goal.md"), "Goal: {{ goal }}").unwrap();
+
+        let inline_missing = validate(ValidateInput {
+            workflow:          WorkflowInput::DotSource {
+                source:   r#"digraph Test {
+                    graph [goal="Demo"]
+                    start [shape=Mdiamond]
+                    work [prompt="Work in {{ inputs.app_dir }}"]
+                    exit [shape=Msquare]
+                    start -> work -> exit
+                }"#
+                .to_string(),
+                base_dir: Some(dir.path().to_path_buf()),
+            },
+            settings:          WorkflowSettings::default(),
+            cwd:               dir.path().to_path_buf(),
+            custom_transforms: Vec::new(),
+            catalog:           test_catalog(),
+        })
+        .unwrap();
+        let file_missing = validate(ValidateInput {
+            workflow:          WorkflowInput::DotSource {
+                source:   r#"digraph Test {
+                    graph [goal="Demo"]
+                    start [shape=Mdiamond]
+                    work [prompt="@missing.md"]
+                    exit [shape=Msquare]
+                    start -> work -> exit
+                }"#
+                .to_string(),
+                base_dir: Some(dir.path().to_path_buf()),
+            },
+            settings:          WorkflowSettings::default(),
+            cwd:               dir.path().to_path_buf(),
+            custom_transforms: Vec::new(),
+            catalog:           test_catalog(),
+        })
+        .unwrap();
+        assert_eq!(
+            normalized_diagnostics(&inline_missing),
+            normalized_diagnostics(&file_missing)
+        );
+
+        let inline_goal = validate(ValidateInput {
+            workflow:          WorkflowInput::DotSource {
+                source:   r#"digraph Test {
+                    graph [goal="Ship"]
+                    start [shape=Mdiamond]
+                    work [prompt="Goal: {{ goal }}"]
+                    exit [shape=Msquare]
+                    start -> work -> exit
+                }"#
+                .to_string(),
+                base_dir: Some(dir.path().to_path_buf()),
+            },
+            settings:          WorkflowSettings::default(),
+            cwd:               dir.path().to_path_buf(),
+            custom_transforms: Vec::new(),
+            catalog:           test_catalog(),
+        })
+        .unwrap();
+        let file_goal = validate(ValidateInput {
+            workflow:          WorkflowInput::DotSource {
+                source:   r#"digraph Test {
+                    graph [goal="Ship"]
+                    start [shape=Mdiamond]
+                    work [prompt="@goal.md"]
+                    exit [shape=Msquare]
+                    start -> work -> exit
+                }"#
+                .to_string(),
+                base_dir: Some(dir.path().to_path_buf()),
+            },
+            settings:          WorkflowSettings::default(),
+            cwd:               dir.path().to_path_buf(),
+            custom_transforms: Vec::new(),
+            catalog:           test_catalog(),
+        })
+        .unwrap();
+        assert_eq!(
+            inline_goal.graph().nodes["work"].attrs.get("prompt"),
+            file_goal.graph().nodes["work"].attrs.get("prompt")
+        );
+        assert_eq!(
+            normalized_diagnostics(&inline_goal),
+            normalized_diagnostics(&file_goal)
+        );
     }
 
     #[test]
@@ -711,7 +853,6 @@ mod tests {
             cwd:               PathBuf::from("."),
             custom_transforms: Vec::new(),
             catalog:           test_catalog(),
-            mode:              RenderMode::Strict,
         });
         assert!(result.is_err());
     }
@@ -756,7 +897,6 @@ mod tests {
             cwd:               PathBuf::from("."),
             custom_transforms: vec![Box::new(TagTransform)],
             catalog:           test_catalog(),
-            mode:              RenderMode::Strict,
         })
         .unwrap();
         validated.raise_on_errors().unwrap();
@@ -791,11 +931,59 @@ mod tests {
             cwd:               dir.path().to_path_buf(),
             custom_transforms: Vec::new(),
             catalog:           test_catalog(),
-            mode:              RenderMode::Strict,
         })
         .unwrap();
         validated.raise_on_errors().unwrap();
         assert_eq!(validated.graph().goal(), "ship it");
+    }
+
+    #[test]
+    fn validate_from_file_resolves_minijinja_includes_relative_to_prompt_and_goal_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let prompt_dir = dir.path().join("prompts");
+        let goal_dir = dir.path().join("goals");
+        std::fs::create_dir_all(&prompt_dir).unwrap();
+        std::fs::create_dir_all(&goal_dir).unwrap();
+        std::fs::write(
+            prompt_dir.join("prompt.md"),
+            r#"{% include "prompt.tpl.md" %}"#,
+        )
+        .unwrap();
+        std::fs::write(prompt_dir.join("prompt.tpl.md"), "included prompt").unwrap();
+        std::fs::write(goal_dir.join("goal.md"), r#"{% include "goal.tpl.md" %}"#).unwrap();
+        std::fs::write(goal_dir.join("goal.tpl.md"), "included goal").unwrap();
+
+        let dot_path = dir.path().join("workflow.fabro");
+        std::fs::write(
+            &dot_path,
+            r#"digraph Test {
+                graph [goal="@goals/goal.md"]
+                start [shape=Mdiamond]
+                work [prompt="@prompts/prompt.md"]
+                exit [shape=Msquare]
+                start -> work -> exit
+            }"#,
+        )
+        .unwrap();
+
+        let validated = validate(ValidateInput {
+            workflow:          WorkflowInput::Path(dot_path),
+            settings:          WorkflowSettings::default(),
+            cwd:               dir.path().to_path_buf(),
+            custom_transforms: Vec::new(),
+            catalog:           test_catalog(),
+        })
+        .unwrap();
+
+        validated.raise_on_errors().unwrap();
+        assert_eq!(validated.graph().goal(), "included goal");
+        assert_eq!(
+            validated.graph().nodes["work"]
+                .attrs
+                .get("prompt")
+                .and_then(AttrValue::as_str),
+            Some("included prompt")
+        );
     }
 
     #[test]
@@ -833,7 +1021,6 @@ mod tests {
             cwd:               PathBuf::from("."),
             custom_transforms: Vec::new(),
             catalog:           test_catalog(),
-            mode:              RenderMode::Strict,
         })
         .unwrap();
 
@@ -844,6 +1031,57 @@ mod tests {
                 .get("prompt")
                 .and_then(AttrValue::as_str),
             Some("Lint Ship")
+        );
+    }
+
+    #[test]
+    fn validate_from_bundle_resolves_minijinja_includes_in_prompt_and_goal_files() {
+        let validated = validate(ValidateInput {
+            workflow:          WorkflowInput::Bundled(BundledWorkflow {
+                path:   ManifestPath::from_wire("workflow.fabro").unwrap(),
+                source: r#"digraph Test {
+                    graph [goal="@goals/goal.md"]
+                    start [shape=Mdiamond]
+                    work [prompt="@prompts/work.md"]
+                    exit [shape=Msquare]
+                    start -> work -> exit
+                }"#
+                .to_string(),
+                config: None,
+                files:  HashMap::from([
+                    (
+                        ManifestPath::from_wire("goals/goal.md").unwrap(),
+                        r#"{% include "goal.tpl.md" %}"#.to_string(),
+                    ),
+                    (
+                        ManifestPath::from_wire("goals/goal.tpl.md").unwrap(),
+                        "Bundled goal".to_string(),
+                    ),
+                    (
+                        ManifestPath::from_wire("prompts/work.md").unwrap(),
+                        r#"{% include "work.tpl.md" %}"#.to_string(),
+                    ),
+                    (
+                        ManifestPath::from_wire("prompts/work.tpl.md").unwrap(),
+                        "Bundled prompt".to_string(),
+                    ),
+                ]),
+            }),
+            settings:          WorkflowSettings::default(),
+            cwd:               PathBuf::from("."),
+            custom_transforms: Vec::new(),
+            catalog:           test_catalog(),
+        })
+        .unwrap();
+
+        validated.raise_on_errors().unwrap();
+        assert_eq!(validated.graph().goal(), "Bundled goal");
+        assert_eq!(
+            validated.graph().nodes["work"]
+                .attrs
+                .get("prompt")
+                .and_then(AttrValue::as_str),
+            Some("Bundled prompt")
         );
     }
 
@@ -873,6 +1111,7 @@ mod tests {
                 title: None,
                 git: None,
                 fork_source_ref: None,
+                parent_id: None,
                 provenance: None,
                 configured_providers: Vec::new(),
                 web_url: None,
@@ -918,6 +1157,7 @@ mod tests {
                 title: None,
                 git: None,
                 fork_source_ref: None,
+                parent_id: None,
                 provenance: None,
                 configured_providers: Vec::new(),
                 web_url: None,
@@ -985,6 +1225,7 @@ mod tests {
                     push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
                 }),
                 fork_source_ref: None,
+                parent_id: None,
                 provenance: None,
                 configured_providers: Vec::new(),
                 web_url: None,
@@ -1095,6 +1336,7 @@ mod tests {
                 title: None,
                 git: None,
                 fork_source_ref: None,
+                parent_id: None,
                 provenance: None,
                 configured_providers: Vec::new(),
                 web_url: None,
@@ -1139,6 +1381,7 @@ mod tests {
                     push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
                 }),
                 fork_source_ref: None,
+                parent_id: None,
                 provenance: None,
                 configured_providers: Vec::new(),
                 web_url: None,
@@ -1205,6 +1448,7 @@ mod tests {
                 title: None,
                 git: None,
                 fork_source_ref: None,
+                parent_id: None,
                 provenance: None,
                 configured_providers: Vec::new(),
                 web_url: None,
@@ -1250,6 +1494,7 @@ mod tests {
                 title: None,
                 git: None,
                 fork_source_ref: None,
+                parent_id: None,
                 provenance: Some(fabro_types::RunProvenance {
                     server:  Some(fabro_types::RunServerProvenance {
                         version: "0.9.0".to_string(),

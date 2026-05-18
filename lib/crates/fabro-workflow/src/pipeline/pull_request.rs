@@ -6,10 +6,8 @@ use fabro_graphviz::parser;
 use fabro_llm::client::Client;
 use fabro_llm::generate::{GenerateParams, generate_object};
 use fabro_model::Catalog;
-#[cfg(test)]
-use fabro_model::catalog::LlmCatalogSettings;
 use fabro_store::RunProjection;
-use fabro_types::PullRequestRecord;
+use fabro_types::PullRequestLink;
 use fabro_types::settings::run::MergeStrategy;
 use fabro_util::text::strip_goal_decoration;
 use tracing::{debug, info, warn};
@@ -472,13 +470,21 @@ pub struct OpenPullRequestRequest<'a> {
     pub run_state:   Option<&'a RunProjection>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreatedPullRequest {
+    pub link:        PullRequestLink,
+    pub title:       String,
+    pub base_branch: String,
+    pub head_branch: String,
+}
+
 /// Optionally open a pull request after a successful workflow run.
 ///
-/// Returns `Ok(Some(PullRequestRecord))` if a PR was created, `Ok(None)` if
+/// Returns `Ok(Some(CreatedPullRequest))` if a PR was created, `Ok(None)` if
 /// the diff was empty, or `Err` on failure.
 pub async fn maybe_open_pull_request(
     req: OpenPullRequestRequest<'_>,
-) -> Result<Option<PullRequestRecord>, String> {
+) -> Result<Option<CreatedPullRequest>, String> {
     if req.diff.is_empty() {
         debug!("Empty diff, skipping pull request creation");
         return Ok(None);
@@ -541,18 +547,18 @@ pub async fn maybe_open_pull_request(
         }
     }
 
-    let record = PullRequestRecord {
-        provider: "github".to_string(),
-        html_url: created.html_url,
-        number: created.number,
+    let link = PullRequestLink {
         owner,
         repo,
-        base_branch: req.base_branch.to_string(),
-        head_branch: req.head_branch.to_string(),
-        title,
+        number: created.number,
     };
 
-    Ok(Some(record))
+    Ok(Some(CreatedPullRequest {
+        link,
+        title,
+        base_branch: req.base_branch.to_string(),
+        head_branch: req.head_branch.to_string(),
+    }))
 }
 
 /// PULL_REQUEST phase: optionally create a pull request after finalize.
@@ -615,11 +621,15 @@ pub async fn pull_request(concluded: Concluded, options: &PullRequestOptions) ->
                     })
                     .await
                     {
-                        Ok(Some(record)) => {
-                            services
-                                .emitter
-                                .emit(&Event::pull_request_created(&record, pr_cfg.draft));
-                            pr_url = Some(record.html_url.clone());
+                        Ok(Some(created)) => {
+                            services.emitter.emit(&Event::pull_request_created(
+                                &created.link,
+                                &created.base_branch,
+                                &created.head_branch,
+                                &created.title,
+                                pr_cfg.draft,
+                            ));
+                            pr_url = Some(created.link.html_url());
                         }
                         Ok(None) => {}
                         Err(e) => {
@@ -668,6 +678,8 @@ mod tests {
     use fabro_llm::client::Client;
     use fabro_llm::provider::{ProviderAdapter, StreamEventStream};
     use fabro_llm::types::{FinishReason, Message, Request, Response, StreamEvent, TokenCounts};
+    use fabro_model::ProviderId;
+    use fabro_model::catalog::{LlmCatalogSettings, ProviderCatalogSettings};
     use fabro_store::Database;
     use fabro_types::{
         BilledTokenCounts, RunProjection, RunSpec, SuccessReason, WorkflowSettings,
@@ -768,9 +780,20 @@ mod tests {
     }
 
     fn test_catalog() -> Arc<Catalog> {
+        Arc::new(Catalog::from_builtin().expect("default catalog should build"))
+    }
+
+    fn test_catalog_with_provider_base_url(provider: &str, base_url: &str) -> Arc<Catalog> {
+        let mut settings = LlmCatalogSettings::default();
+        settings
+            .providers
+            .insert(provider.to_string(), ProviderCatalogSettings {
+                base_url: Some(base_url.to_string()),
+                ..ProviderCatalogSettings::default()
+            });
         Arc::new(
-            Catalog::from_builtin_with_overrides(&LlmCatalogSettings::default())
-                .expect("default catalog should build"),
+            Catalog::from_builtin_with_overrides(&settings)
+                .expect("catalog with custom base_url should build"),
         )
     }
 
@@ -814,7 +837,7 @@ mod tests {
 
     fn openai_api_key_credential(key: &str) -> AuthCredential {
         AuthCredential {
-            provider: fabro_model::Provider::OpenAi.id(),
+            provider: ProviderId::openai(),
             details:  AuthDetails::ApiKey {
                 key: key.to_string(),
             },
@@ -1156,6 +1179,7 @@ mod tests {
             manifest_blob:    None,
             git:              run_spec.git.clone(),
             fork_source_ref:  None,
+            parent_id:        None,
             web_url:          None,
         })
         .await
@@ -1223,6 +1247,7 @@ mod tests {
             manifest_blob:    None,
             git:              run_spec.git.clone(),
             fork_source_ref:  None,
+            parent_id:        None,
             web_url:          None,
         })
         .await
@@ -1325,15 +1350,11 @@ mod tests {
                 None,
             )
             .unwrap();
-        let base_url = server.url("/v1");
-        let llm_source: Arc<dyn CredentialSource> =
-            Arc::new(VaultCredentialSource::with_env_lookup(
-                Arc::new(AsyncRwLock::new(vault)),
-                move |name| match name {
-                    "OPENAI_BASE_URL" => Some(base_url.clone()),
-                    _ => None,
-                },
-            ));
+        let llm_source: Arc<dyn CredentialSource> = Arc::new(VaultCredentialSource::new(Arc::new(
+            AsyncRwLock::new(vault),
+        )));
+        // Use catalog settings to override base_url instead of env var
+        let catalog = test_catalog_with_provider_base_url("openai", &server.url("/v1"));
 
         let store = test_store();
         let run_store = store.create_run(&fixtures::RUN_1).await.unwrap();
@@ -1345,7 +1366,7 @@ mod tests {
             "gpt-5.4",
             &run_store_handle,
             llm_source.as_ref(),
-            test_catalog(),
+            catalog,
             Some(&make_test_conclusion()),
             None,
         )
@@ -1579,6 +1600,7 @@ mod tests {
             manifest_blob:    None,
             git:              None,
             fork_source_ref:  None,
+            parent_id:        None,
             web_url:          None,
         })
         .await
@@ -1698,6 +1720,7 @@ mod tests {
             manifest_blob:    None,
             git:              None,
             fork_source_ref:  None,
+            parent_id:        None,
             web_url:          None,
         })
         .await
@@ -1764,6 +1787,7 @@ mod tests {
         openai_mock_id: usize,
         github_mock_id: usize,
         llm_source:     Arc<dyn CredentialSource>,
+        catalog:        Arc<Catalog>,
         creds:          fabro_github::GitHubCredentials,
         run_store:      RunStoreHandle,
     }
@@ -1822,15 +1846,11 @@ mod tests {
                 None,
             )
             .unwrap();
-        let base_url = openai_server.url("/v1");
-        let llm_source: Arc<dyn CredentialSource> =
-            Arc::new(VaultCredentialSource::with_env_lookup(
-                Arc::new(AsyncRwLock::new(vault)),
-                move |name| match name {
-                    "OPENAI_BASE_URL" => Some(base_url.clone()),
-                    _ => None,
-                },
-            ));
+        let llm_source: Arc<dyn CredentialSource> = Arc::new(VaultCredentialSource::new(Arc::new(
+            AsyncRwLock::new(vault),
+        )));
+        // Use catalog settings to override base_url instead of env var
+        let catalog = test_catalog_with_provider_base_url("openai", &openai_server.url("/v1"));
 
         let creds = fabro_github::GitHubCredentials::Pat("test-token".to_string());
 
@@ -1868,6 +1888,7 @@ mod tests {
             manifest_blob:    None,
             git:              None,
             fork_source_ref:  None,
+            parent_id:        None,
             web_url:          None,
         })
         .await
@@ -1904,6 +1925,7 @@ mod tests {
             openai_mock_id,
             github_mock_id,
             llm_source,
+            catalog,
             creds,
             run_store: run_store.into(),
         }
@@ -1932,7 +1954,7 @@ mod tests {
             auto_merge: None,
             run_store: &harness.run_store,
             llm_source: harness.llm_source.as_ref(),
-            catalog: test_catalog(),
+            catalog: harness.catalog.clone(),
             conclusion: None,
             run_state: None,
         })
@@ -1969,7 +1991,7 @@ mod tests {
             auto_merge: None,
             run_store: &harness.run_store,
             llm_source: harness.llm_source.as_ref(),
-            catalog: test_catalog(),
+            catalog: harness.catalog.clone(),
             conclusion: None,
             run_state: None,
         })
@@ -1977,8 +1999,9 @@ mod tests {
         .expect("PR creation should succeed");
 
         let record = result.expect("PR record should be Some");
-        assert_eq!(record.title.chars().count(), 72);
-        assert!(record.title.ends_with('\u{2026}'));
+        let title = record.title;
+        assert_eq!(title.chars().count(), 72);
+        assert!(title.ends_with('\u{2026}'));
         harness.assert_mocks_called_once().await;
     }
 }

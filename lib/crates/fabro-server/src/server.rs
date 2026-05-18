@@ -28,16 +28,17 @@ pub use fabro_api::types::{
     CompletionResponse, CompletionToolChoiceMode, CompletionUsage, CreateCompletionRequest,
     CreateRunPullRequestRequest, CreateSecretRequest, DeleteRunResponse, DeleteRunSandbox,
     DeleteSecretRequest, DiskUsageResponse, DiskUsageRunRow, DiskUsageSummaryRow, ForkRequest,
-    ForkResponse, MergeRunPullRequestRequest, MergeRunPullRequestResponse, ModelReference,
-    PaginatedEventList, PaginatedRunList, PaginationMeta, PreflightResponse, PreviewUrlRequest,
-    PreviewUrlResponse, PruneRunEntry, PruneRunsRequest, PruneRunsResponse,
-    RenderWorkflowGraphDirection, RenderWorkflowGraphRequest, RewindRequest, RewindResponse,
-    RunArtifactEntry, RunArtifactListResponse, RunBilling, RunBillingStage, RunBillingTotals,
-    RunError, RunManifest, RunStage, SandboxDetails, SandboxFileEntry, SandboxFileListResponse,
-    SandboxService, SandboxServiceListResponse, SshAccessRequest, SshAccessResponse, StageHandler,
-    StageState, StartRunRequest, SubmitAnswerRequest, SystemFeatures, SystemInfoResponse,
-    SystemRepairRunIssue, SystemRepairRunsResponse, SystemRunCounts, TimelineEntryResponse,
-    VncPreviewResponse, WriteBlobResponse,
+    ForkResponse, LinkRunPullRequestRequest, MergeRunPullRequestRequest,
+    MergeRunPullRequestResponse, ModelReference, PaginatedEventList, PaginatedRunList,
+    PaginationMeta, PreflightResponse, PreviewUrlRequest, PreviewUrlResponse, PruneRunEntry,
+    PruneRunsRequest, PruneRunsResponse, RenderWorkflowGraphDirection, RenderWorkflowGraphRequest,
+    RewindRequest, RewindResponse, RunArtifactEntry, RunArtifactListResponse, RunBilling,
+    RunBillingStage, RunBillingTotals, RunError, RunManifest, RunStage, SandboxDetails,
+    SandboxFileEntry, SandboxFileListResponse, SandboxService, SandboxServiceListResponse,
+    SshAccessRequest, SshAccessResponse, StageHandler, StageState, StartRunRequest,
+    SubmitAnswerRequest, SystemFeatures, SystemInfoResponse, SystemRepairRunIssue,
+    SystemRepairRunsResponse, SystemRunCounts, TimelineEntryResponse, VncPreviewResponse,
+    WriteBlobResponse,
 };
 use fabro_auth::{
     CredentialSource, VaultCredentialSource, auth_issue_message, parse_credential_secret,
@@ -71,7 +72,7 @@ use fabro_slack::{blocks as slack_blocks, connection as slack_connection};
 use fabro_static::EnvVars;
 use fabro_store::{
     ArtifactKey, ArtifactStore, Database, EventEnvelope, EventPayload, NodeArtifact,
-    PendingInterviewRecord, StageArtifactEntry, StageId,
+    PendingInterviewRecord, SessionStore, StageArtifactEntry, StageId,
 };
 #[cfg(test)]
 use fabro_types::BlockedReason;
@@ -81,10 +82,12 @@ use fabro_types::settings::server::{
 };
 use fabro_types::settings::{InterpString, RunNamespace};
 use fabro_types::{
-    EventBody, InterviewQuestionRecord, Principal, PullRequestRecord, QuestionType, RunBlobId,
+    EventBody, InterviewQuestionRecord, Principal, PullRequestLink, QuestionType, RunBlobId,
     RunControlAction, RunEvent, RunId, ServerSettings, SessionCapability,
 };
-use fabro_util::error::{SharedError, collect_causes, render_with_causes};
+use fabro_util::error::{
+    SharedError, collect_causes, render_compact_with_causes, render_with_causes,
+};
 use fabro_util::version::FABRO_VERSION;
 use fabro_vault::{Error as VaultError, SecretType, Vault};
 use fabro_workflow::artifact_upload::ArtifactSink;
@@ -140,6 +143,7 @@ use crate::{
 };
 
 mod handler;
+mod session_runtime;
 
 pub(crate) use handler::events::EventListParams;
 #[cfg(test)]
@@ -151,6 +155,7 @@ pub(in crate::server) use handler::graph::{
 };
 #[cfg(test)]
 pub(in crate::server) use handler::system::validate_github_slug;
+use session_runtime::SessionRuntimeManager;
 
 pub(crate) type EnvLookup = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
 
@@ -511,6 +516,8 @@ pub struct AppState {
     runs: Mutex<HashMap<RunId, ManagedRun>>,
     aggregate_billing: Mutex<BillingAccumulator>,
     store: Arc<Database>,
+    session_store: SessionStore,
+    session_runtimes: SessionRuntimeManager,
     artifact_store: ArtifactStore,
     worker_tokens: WorkerTokenKeys,
     started_at: Instant,
@@ -522,6 +529,7 @@ pub struct AppState {
     /// proceed in parallel. See `crate::run_files` for semantics.
     pub(crate) files_in_flight: FilesInFlight,
     pull_request_create_locks: PullRequestCreateLocks,
+    parent_link_lock: AsyncMutex<()>,
 
     pub(crate) vault: Arc<AsyncRwLock<Vault>>,
     pub(super) server_secrets: ServerSecrets,
@@ -707,6 +715,16 @@ impl AppState {
         resolve_llm_client_from_source(self.llm_source.as_ref(), self.catalog()).await
     }
 
+    pub(crate) async fn ready_llm_provider_ids(&self) -> Vec<ProviderId> {
+        match self.resolve_llm_client().await {
+            Ok(result) => result.provider_ids(),
+            Err(err) => {
+                warn!(error = ?err, "Failed to resolve LLM client while checking ready providers");
+                Vec::new()
+            }
+        }
+    }
+
     pub(crate) fn vault_or_env(&self, name: &str) -> Option<String> {
         process_env_var(name).or_else(|| {
             self.vault
@@ -745,6 +763,14 @@ impl AppState {
     /// without cross-module state coupling on the `AppState` field layout.
     pub(crate) fn store_ref(&self) -> &Arc<Database> {
         &self.store
+    }
+
+    pub(crate) fn session_store(&self) -> &SessionStore {
+        &self.session_store
+    }
+
+    pub(crate) fn session_runtimes(&self) -> &SessionRuntimeManager {
+        &self.session_runtimes
     }
 
     pub(crate) fn server_secret(&self, name: &str) -> Option<String> {
@@ -873,13 +899,12 @@ async fn resolve_llm_client_from_source(
         .resolve(catalog.as_ref())
         .await
         .context("resolving LLM credentials")?;
-    let client = LlmClient::from_credentials(resolved.credentials, catalog)
-        .await
-        .context("creating LLM client")?;
+    let report = LlmClient::from_credentials_report(resolved.credentials, catalog).await;
 
     Ok(LlmClientResult {
-        client,
-        auth_issues: resolved.auth_issues,
+        client:              report.client,
+        auth_issues:         resolved.auth_issues,
+        registration_issues: report.registration_issues,
     })
 }
 
@@ -1315,7 +1340,7 @@ struct PrunePlan {
     reason = "sync helper invoked from async handler via spawn_blocking (see callers at :1301 / :1341)"
 )]
 fn build_disk_usage_response(
-    summaries: &[fabro_types::RunSummary],
+    summaries: &[fabro_types::Run],
     storage_dir: &std::path::Path,
     verbose: bool,
 ) -> anyhow::Result<DiskUsageResponse> {
@@ -1388,7 +1413,7 @@ fn build_disk_usage_response(
 
 fn build_prune_plan(
     request: &PruneRunsRequest,
-    summaries: &[fabro_types::RunSummary],
+    summaries: &[fabro_types::Run],
     storage_dir: &std::path::Path,
 ) -> anyhow::Result<PrunePlan> {
     let scratch_base_dir = scratch_base(storage_dir);
@@ -1543,6 +1568,15 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
     ));
     let (global_event_tx, _) = broadcast::channel(4096);
     let current_server_settings = Arc::new(resolved_settings.server_settings);
+    let session_store = SessionStore::new(
+        PathBuf::from(resolve_interp_string(
+            &current_server_settings.server.storage.root,
+        )?)
+        .join("sessions"),
+    );
+    session_store
+        .recover_stale_running_state(chrono::Utc::now())
+        .context("recovering stale session runtime state")?;
     let current_manifest_run_defaults = Arc::new(resolved_settings.manifest_run_defaults);
     let current_manifest_run_settings = resolved_settings.manifest_run_settings;
     let current_catalog = Arc::new(
@@ -1579,6 +1613,8 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
         runs: Mutex::new(HashMap::new()),
         aggregate_billing: Mutex::new(BillingAccumulator::default()),
         store,
+        session_store,
+        session_runtimes: SessionRuntimeManager::new(),
         artifact_store,
         worker_tokens,
         started_at: Instant::now(),
@@ -1587,6 +1623,7 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
         global_event_tx,
         files_in_flight: new_files_in_flight(),
         pull_request_create_locks: Arc::new(Mutex::new(HashMap::new())),
+        parent_link_lock: AsyncMutex::new(()),
         vault,
         server_secrets,
         llm_source,
@@ -2412,7 +2449,10 @@ fn update_live_run_from_event(state: &AppState, run_id: RunId, event: &RunEvent)
             managed_run.status = RunStatus::Failed {
                 reason: props.failure.reason,
             };
-            managed_run.error = Some(props.failure.message.clone());
+            managed_run.error = Some(render_compact_with_causes(
+                &props.failure.detail.message,
+                &props.failure.detail.causes,
+            ));
             managed_run.active_api_stages.clear();
             managed_run.active_non_steerable_agent_stages.clear();
         }
@@ -3361,10 +3401,9 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
             .conclusion
             .as_ref()
             .and_then(|conclusion| {
-                conclusion
-                    .failure
-                    .as_ref()
-                    .map(|failure| failure.message.clone())
+                conclusion.failure.as_ref().map(|failure| {
+                    render_compact_with_causes(&failure.detail.message, &failure.detail.causes)
+                })
             })
             .or_else(|| managed_run.error.clone());
         managed_run.checkpoint = final_state.current_checkpoint().cloned();

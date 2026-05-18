@@ -64,7 +64,10 @@ mod tests {
 [providers.venice]
 display_name = "Venice"
 adapter = "openai_compatible"
+agent_profile = "openai"
 base_url = "https://api.venice.ai/api/v1"
+
+[providers.venice.auth]
 credentials = ["env:VENICE_API_KEY"]
 
 [models."venice-large"]
@@ -81,7 +84,6 @@ context_window = 128000
 tools = true
 vision = false
 reasoning = false
-effort = false
 "#,
         )
         .unwrap();
@@ -89,7 +91,7 @@ effort = false
     }
 
     fn builtin_transform() -> ModelResolutionTransform {
-        let catalog = Catalog::from_builtin_with_overrides(&LlmCatalogSettings::default()).unwrap();
+        let catalog = Catalog::from_builtin().unwrap();
         ModelResolutionTransform::new(Arc::new(catalog))
     }
 

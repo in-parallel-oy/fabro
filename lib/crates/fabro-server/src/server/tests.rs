@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::Infallible;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -8,6 +9,7 @@ use std::sync::{Arc as StdArc, Mutex as StdMutex};
 
 use axum::body::Body;
 use axum::http::{Method, Request, header};
+use axum::response::sse::{Event as SseEvent, Sse};
 use chrono::{Duration as ChronoDuration, Utc};
 use fabro_auth::{AuthCredential, AuthDetails};
 use fabro_config::ServerSettingsBuilder;
@@ -17,14 +19,16 @@ use fabro_interview::{
 };
 use fabro_llm::types::{Message as LlmMessage, Request as LlmRequest};
 use fabro_model::catalog::LlmCatalogSettings;
-use fabro_model::{Catalog, ModelRef, Provider, Speed};
+use fabro_model::{Catalog, ModelRef, ProviderId, Speed};
 use fabro_types::settings::ServerAuthMethod;
 use fabro_types::{
     AttrValue, AuthMethod, CommandTermination, FailureCategory, FailureDetail, Graph,
     InterviewQuestionRecord, Node, Outcome, QuestionType, RunBlobId, RunId, RunSpec,
-    SandboxProvider, SuccessReason, SystemActorKind, WorkflowSettings, fixtures,
+    SandboxProvider, SessionMessage, SuccessReason, SystemActorKind, WorkflowSettings, fixtures,
 };
 use fabro_util::check_report::CheckStatus;
+use futures_util::stream;
+use http_body_util::BodyExt as _;
 use httpmock::Method::{GET, POST};
 use httpmock::MockServer;
 use serde_json::json;
@@ -94,10 +98,7 @@ fn spa_fixture_root() -> PathBuf {
 }
 
 fn state_test_catalog() -> Arc<Catalog> {
-    Arc::new(
-        Catalog::from_builtin_with_overrides(&LlmCatalogSettings::default())
-            .expect("default catalog should build"),
-    )
+    Arc::new(Catalog::from_builtin().expect("default catalog should build"))
 }
 
 fn test_app_with_scheduler(state: Arc<AppState>) -> Router {
@@ -131,6 +132,36 @@ methods = ["dev-token"]
 async fn body_json(body: Body) -> serde_json::Value {
     let bytes = to_bytes(body, usize::MAX).await.unwrap();
     serde_json::from_slice(&bytes).unwrap()
+}
+
+async fn read_sse_until(body: &mut Body, expected_event: &str) -> String {
+    let mut sse_data = String::new();
+    for _ in 0..32 {
+        let frame = tokio::time::timeout(Duration::from_secs(2), body.frame())
+            .await
+            .unwrap_or_else(|_| panic!("timed out waiting for SSE event {expected_event}"))
+            .unwrap_or_else(|| panic!("SSE ended before event {expected_event}"))
+            .expect("SSE frame should be readable");
+        if let Some(data) = frame.data_ref() {
+            sse_data.push_str(&String::from_utf8_lossy(data));
+            if sse_events(&sse_data).iter().any(|event| {
+                event["event"]
+                    .as_str()
+                    .is_some_and(|name| name == expected_event)
+            }) {
+                return sse_data;
+            }
+        }
+    }
+    panic!("SSE event {expected_event} not found in {sse_data}");
+}
+
+fn sse_events(sse_data: &str) -> Vec<serde_json::Value> {
+    sse_data
+        .lines()
+        .filter_map(|line| line.strip_prefix("data:"))
+        .filter_map(|json| serde_json::from_str(json.trim()).ok())
+        .collect()
 }
 
 fn run_json_id(run: &serde_json::Value) -> Option<&str> {
@@ -194,7 +225,7 @@ async fn mock_daytona_current_key<'a>(
 
 fn openai_api_key_credential(key: &str) -> AuthCredential {
     AuthCredential {
-        provider: Provider::OpenAi.id(),
+        provider: ProviderId::openai(),
         details:  AuthDetails::ApiKey {
             key: key.to_string(),
         },
@@ -223,6 +254,39 @@ fn openai_responses_payload(text: &str) -> serde_json::Value {
             "output_tokens": 20
         }
     })
+}
+
+fn openai_stream_body(text: &str) -> String {
+    let created = json!({
+        "type": "response.created",
+        "response": {
+            "id": "resp_session",
+            "model": "gpt-5.4-mini"
+        }
+    });
+    let delta = json!({
+        "type": "response.output_text.delta",
+        "delta": text
+    });
+    let completed = json!({
+        "type": "response.completed",
+        "response": {
+            "id": "resp_session",
+            "model": "gpt-5.4-mini",
+            "status": "completed",
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "input_tokens_details": { "cached_tokens": 0 },
+                "output_tokens_details": { "reasoning_tokens": 0 }
+            }
+        }
+    });
+    format!(
+        "event: response.created\ndata: {created}\n\n\
+         event: response.output_text.delta\ndata: {delta}\n\n\
+         event: response.completed\ndata: {completed}\n\n"
+    )
 }
 
 macro_rules! assert_status {
@@ -1023,7 +1087,7 @@ async fn create_secret_stores_valid_credential_entries() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
     let credential = fabro_auth::AuthCredential {
-        provider: Provider::OpenAi.id(),
+        provider: ProviderId::openai(),
         details:  fabro_auth::AuthDetails::CodexOAuth {
             tokens:     fabro_auth::OAuthTokens {
                 access_token:  "access".to_string(),
@@ -1286,7 +1350,7 @@ async fn llm_source_configured_providers_reads_openai_codex_from_vault() {
             .llm_source
             .configured_providers(catalog.as_ref())
             .await,
-        vec![Provider::OpenAi.id()]
+        vec![ProviderId::openai()]
     );
 }
 
@@ -1304,17 +1368,15 @@ async fn resolve_llm_client_uses_env_lookup_for_openai_settings() {
                 .json_body(openai_responses_payload("hello from env lookup"));
         })
         .await;
-    let base_url = server.url("/v1");
-    let state = test_app_state_with_env_lookup(
-        default_test_server_settings(),
-        RunLayer::default(),
-        5,
-        move |name| match name {
-            "OPENAI_BASE_URL" => Some(base_url.clone()),
+    let state = TestAppStateBuilder::new()
+        .runtime_settings(default_test_server_settings(), RunLayer::default())
+        .max_concurrent_runs(5)
+        .env_lookup(|name| match name {
             "OPENAI_ORG_ID" => Some("env-org".to_string()),
             _ => None,
-        },
-    );
+        })
+        .provider_base_url("openai", server.url("/v1"))
+        .build();
     state
         .vault
         .write()
@@ -2116,6 +2178,723 @@ async fn create_run(app: &Router, dot_source: &str) -> String {
 }
 
 #[tokio::test]
+async fn create_session_rejects_missing_permissions() {
+    let state = test_app_state_with_isolated_storage();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api("/sessions"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"working_dir": "/tmp"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn create_session_rejects_unknown_permission_value() {
+    let state = test_app_state_with_isolated_storage();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api("/sessions"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"permissions": "readonly"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn session_apis_create_list_replay_events_and_delete() {
+    let state = test_app_state_with_isolated_storage();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api("/sessions"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "title": "Investigate failure",
+                        "working_dir": "/tmp",
+                        "provider": "openai",
+                        "model": "gpt-5.4-mini",
+                        "permissions": "read-only"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let created = response_json!(create_response, StatusCode::CREATED).await;
+    let session_id = created["id"]
+        .as_str()
+        .expect("create session response should include id")
+        .to_string();
+    assert_eq!(created["status"], "idle");
+    assert_eq!(created["working_dir"], "/tmp");
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api("/sessions"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let list = response_json!(list_response, StatusCode::OK).await;
+    assert_eq!(list["data"].as_array().unwrap().len(), 1);
+
+    let turns_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/sessions/{session_id}/turns")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let turns = response_json!(turns_response, StatusCode::OK).await;
+    assert!(turns["data"].as_array().unwrap().is_empty());
+
+    let replay_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/sessions/{session_id}/events?since_seq=1")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let replay = response_json!(replay_response, StatusCode::OK).await;
+    assert_eq!(replay["data"][0]["seq"], 1);
+    assert_eq!(replay["data"][0]["event"], "session.created");
+
+    let generated_client_replay_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/sessions/{session_id}/events?since_seq=1")))
+                .header(header::ACCEPT, "application/json,text/event-stream")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let generated_client_replay =
+        response_json!(generated_client_replay_response, StatusCode::OK).await;
+    assert_eq!(
+        generated_client_replay["data"][0]["event"],
+        "session.created"
+    );
+
+    let header_replay_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/sessions/{session_id}/events")))
+                .header("last-event-id", "1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let header_replay = response_json!(header_replay_response, StatusCode::OK).await;
+    assert!(
+        header_replay["data"]
+            .as_array()
+            .expect("events response should contain array")
+            .is_empty()
+    );
+
+    let delete_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(api(&format!("/sessions/{session_id}")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    checked_response!(delete_response, StatusCode::NO_CONTENT).await;
+
+    let get_deleted_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/sessions/{session_id}")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    checked_response!(get_deleted_response, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn streaming_session_turn_persists_terminal_failure_event() {
+    let state = test_app_state_with_isolated_storage();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api("/sessions"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "working_dir": "/tmp",
+                        "provider": "openai",
+                        "model": "gpt-5.4-mini",
+                        "permissions": "read-only"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let created = response_json!(create_response, StatusCode::CREATED).await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+
+    let stream_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api(&format!("/sessions/{session_id}/turns")))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"input": "hello"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stream_response.status(), StatusCode::OK);
+    let body = String::from_utf8(
+        to_bytes(stream_response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(body.contains("turn.running"), "SSE body: {body}");
+    assert!(body.contains("turn.failed"), "SSE body: {body}");
+    assert!(
+        body.contains("LLM credentials not configured for provider 'openai'"),
+        "SSE body: {body}"
+    );
+
+    let turns_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/sessions/{session_id}/turns")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let turns = response_json!(turns_response, StatusCode::OK).await;
+    assert_eq!(turns["data"][0]["status"], "failed");
+
+    let events_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/sessions/{session_id}/events")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let events = response_json!(events_response, StatusCode::OK).await;
+    let event_names = events["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|event| event["event"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(event_names, vec![
+        "session.created",
+        "turn.running",
+        "turn.failed"
+    ]);
+
+    let turn_id = turns["data"][0]["id"].as_str().unwrap();
+    let interrupt_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api(&format!(
+                    "/sessions/{session_id}/turns/{turn_id}/interrupt"
+                )))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let interrupt_error = response_json!(interrupt_response, StatusCode::CONFLICT).await;
+    assert_eq!(
+        interrupt_error["errors"][0]["detail"],
+        "Turn is already terminal."
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn session_events_sse_replays_history_then_streams_live_events() {
+    let state = test_app_state_with_isolated_storage();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api("/sessions"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "working_dir": "/tmp",
+                        "provider": "openai",
+                        "model": "gpt-5.4-mini",
+                        "permissions": "read-only"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let created = response_json!(create_response, StatusCode::CREATED).await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+
+    let events_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/sessions/{session_id}/events?since_seq=1")))
+                .header(header::ACCEPT, "text/event-stream")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(events_response.status(), StatusCode::OK);
+    assert!(
+        events_response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("text/event-stream")
+    );
+    let mut events_body = events_response.into_body();
+    let replay = read_sse_until(&mut events_body, "session.created").await;
+    assert_eq!(sse_events(&replay)[0]["event"], "session.created");
+
+    let stream_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api(&format!("/sessions/{session_id}/turns")))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"input": "hello"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stream_response.status(), StatusCode::OK);
+    let _ = to_bytes(stream_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+
+    let live = read_sse_until(&mut events_body, "turn.failed").await;
+    let event_names = sse_events(&live)
+        .into_iter()
+        .map(|event| event["event"].as_str().unwrap().to_string())
+        .collect::<Vec<_>>();
+    assert!(event_names.contains(&"turn.running".to_string()));
+    assert!(event_names.contains(&"turn.failed".to_string()));
+}
+
+#[tokio::test]
+async fn streaming_session_turn_updates_runtime_context_without_copying_prior_history_to_turn() {
+    let llm = MockServer::start_async().await;
+    let response_mock = llm
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/v1/responses")
+                .header("authorization", "Bearer openai-key");
+            then.status(200)
+                .header("content-type", "text/event-stream")
+                .body(openai_stream_body("new answer"));
+        })
+        .await;
+    // Use an isolated storage root so parallel tests do not race on the
+    // shared default session storage directory. `session_store` writes
+    // `session.json` via `fs::write`, which truncates before writing; a
+    // concurrent reader can observe the empty file and fail to deserialize.
+    let storage_dir = std::env::temp_dir().join(format!("fabro-server-test-{}", Ulid::new()));
+    std::fs::create_dir_all(&storage_dir).expect("test storage dir should be creatable");
+    let server_settings = server_settings_from_toml(&format!(
+        r#"
+_version = 1
+
+[server.storage]
+root = "{}"
+
+[server.auth]
+methods = ["dev-token"]
+"#,
+        storage_dir.display()
+    ));
+    let state = TestAppStateBuilder::new()
+        .runtime_settings(server_settings, RunLayer::default())
+        .max_concurrent_runs(5)
+        .provider_base_url("openai", llm.url("/v1"))
+        .build();
+    state
+        .vault
+        .write()
+        .await
+        .set(
+            "openai_codex",
+            &serde_json::to_string(&openai_api_key_credential("openai-key")).unwrap(),
+            SecretType::Credential,
+            None,
+        )
+        .unwrap();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api("/sessions"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "working_dir": "/tmp",
+                        "provider": "openai",
+                        "model": "gpt-5.4-mini",
+                        "permissions": "read-only"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let created = response_json!(create_response, StatusCode::CREATED).await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+    let session_id_typed = session_id.parse().unwrap();
+    let now = Utc::now();
+    let mut record = state
+        .session_store()
+        .get_session(session_id_typed)
+        .await
+        .unwrap()
+        .unwrap();
+    record.runtime_context = vec![
+        SessionMessage::user("prior question", now),
+        SessionMessage::Assistant {
+            content:        "prior answer".to_string(),
+            tool_calls:     Vec::new(),
+            provider_parts: Vec::new(),
+            usage:          json!({ "input_tokens": 0, "output_tokens": 0 }),
+            response_id:    "prior_resp".to_string(),
+            timestamp:      now,
+        },
+    ];
+    state.session_store().update_session(record).await.unwrap();
+
+    let stream_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api(&format!("/sessions/{session_id}/turns")))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"input": "new question"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stream_response.status(), StatusCode::OK);
+    let body = String::from_utf8(
+        to_bytes(stream_response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(body.contains("turn.succeeded"), "SSE body: {body}");
+
+    let session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/sessions/{session_id}")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let session = response_json!(session_response, StatusCode::OK).await;
+    let runtime_context = session["runtime_context"].as_array().unwrap();
+    assert_eq!(runtime_context.len(), 4);
+    assert!(
+        runtime_context
+            .iter()
+            .any(|message| message["content"] == "prior question")
+    );
+    assert!(
+        runtime_context
+            .iter()
+            .any(|message| message["content"] == "new answer")
+    );
+
+    let turns_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/sessions/{session_id}/turns")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let turns = response_json!(turns_response, StatusCode::OK).await;
+    let turn = &turns["data"][0];
+    assert_eq!(turn["input"], "new question");
+    assert_eq!(turn["output"], "new answer");
+    assert!(turn.get("messages").is_none());
+    response_mock.assert_async().await;
+}
+
+async fn hanging_openai_responses()
+-> Sse<impl futures_util::Stream<Item = Result<SseEvent, Infallible>>> {
+    let created = json!({
+        "type": "response.created",
+        "response": {
+            "id": "resp_hanging",
+            "model": "gpt-5.4-mini"
+        }
+    });
+    let first = stream::once(async move {
+        Ok(SseEvent::default()
+            .event("response.created")
+            .data(created.to_string()))
+    });
+    Sse::new(first.chain(stream::pending()))
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn interrupt_active_session_turn_cancels_runtime_and_persists_interrupted() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let llm_addr = listener.local_addr().unwrap();
+    let llm_app = Router::new().route("/v1/responses", post(hanging_openai_responses));
+    let llm_handle = tokio::spawn(async move {
+        axum::serve(listener, llm_app).await.unwrap();
+    });
+    // Use an isolated storage root so that other tests' AppState startup does
+    // not run `recover_stale_running_state` against this test's session
+    // directory and mark its in-flight turn as Interrupted.
+    let storage_dir = std::env::temp_dir().join(format!("fabro-server-test-{}", Ulid::new()));
+    std::fs::create_dir_all(&storage_dir).expect("test storage dir should be creatable");
+    let server_settings = server_settings_from_toml(&format!(
+        r#"
+_version = 1
+
+[server.storage]
+root = "{}"
+
+[server.auth]
+methods = ["dev-token"]
+"#,
+        storage_dir.display()
+    ));
+    let state = TestAppStateBuilder::new()
+        .runtime_settings(server_settings, RunLayer::default())
+        .max_concurrent_runs(5)
+        .provider_base_url("openai", format!("http://{llm_addr}/v1"))
+        .build();
+    state
+        .vault
+        .write()
+        .await
+        .set(
+            "openai_codex",
+            &serde_json::to_string(&openai_api_key_credential("openai-key")).unwrap(),
+            SecretType::Credential,
+            None,
+        )
+        .unwrap();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api("/sessions"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "working_dir": "/tmp",
+                        "provider": "openai",
+                        "model": "gpt-5.4-mini",
+                        "permissions": "read-only"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let created = response_json!(create_response, StatusCode::CREATED).await;
+    let session_id = created["id"].as_str().unwrap().to_string();
+
+    let stream_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api(&format!("/sessions/{session_id}/turns")))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"input": "please wait"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stream_response.status(), StatusCode::OK);
+    let mut stream_body = stream_response.into_body();
+    // Wait for `turn.assistant_text_start` so the agent is committed to the
+    // in-flight LLM call. Waiting only for `turn.running` (emitted before
+    // `build_agent_session` and `process_input`) leaves a window in which the
+    // turn can reach a terminal state before the interrupt request arrives,
+    // making the assertions below flaky under heavy CI load.
+    let running = read_sse_until(&mut stream_body, "turn.assistant_text_start").await;
+    let turn_id = sse_events(&running)
+        .into_iter()
+        .find_map(|event| {
+            (event["event"] == "turn.running")
+                .then(|| event["turn_id"].as_str().unwrap().to_string())
+        })
+        .expect("running event should include turn id");
+
+    let conflict_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api(&format!("/sessions/{session_id}/turns")))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"input": "second"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    checked_response!(conflict_response, StatusCode::CONFLICT).await;
+
+    let delete_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(api(&format!("/sessions/{session_id}")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let delete_error = response_json!(delete_response, StatusCode::CONFLICT).await;
+    assert_eq!(
+        delete_error["errors"][0]["detail"],
+        "Session has an active turn."
+    );
+
+    let interrupt_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api(&format!(
+                    "/sessions/{session_id}/turns/{turn_id}/interrupt"
+                )))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let interrupt_event = response_json!(interrupt_response, StatusCode::ACCEPTED).await;
+    assert_eq!(interrupt_event["event"], "turn.interrupt_requested");
+
+    let interrupted = read_sse_until(&mut stream_body, "turn.interrupted").await;
+    assert!(
+        sse_events(&interrupted)
+            .iter()
+            .any(|event| event["event"] == "turn.interrupted")
+    );
+
+    let turn_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/sessions/{session_id}/turns/{turn_id}")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let turn = response_json!(turn_response, StatusCode::OK).await;
+    assert_eq!(turn["status"], "interrupted");
+    llm_handle.abort();
+}
+
+#[tokio::test]
 async fn create_run_response_includes_web_url_when_web_enabled() {
     let state = test_app_state_with_options(
         server_settings_from_toml(
@@ -2266,7 +3045,10 @@ async fn validate_endpoint_uses_app_state_catalog_for_model_diagnostics() {
 [providers.acme]
 display_name = "Acme"
 adapter = "openai_compatible"
+agent_profile = "openai"
 base_url = "https://api.acme.test/v1"
+
+[providers.acme.auth]
 credentials = ["env:ACME_API_KEY"]
 
 [models."acme-large"]
@@ -2282,7 +3064,6 @@ context_window = 128000
 tools = true
 vision = false
 reasoning = false
-effort = false
 "#,
     )
     .expect("catalog fixture should parse");
@@ -2317,6 +3098,68 @@ effort = false
             .iter()
             .all(|diagnostic| diagnostic["rule"] != "node_model_known"),
         "custom model/provider should validate against app-state catalog: {body}"
+    );
+}
+
+#[tokio::test]
+async fn validate_endpoint_returns_template_source_coordinates() {
+    let app = test_app_with();
+    let dot = r#"digraph ValidatePlan {
+        start [shape=Mdiamond, label="Start"]
+        exit  [shape=Msquare, label="Exit"]
+        test_imported_prompt [label="moo" prompt="@test.md"]
+        start -> test_imported_prompt -> exit
+    }"#;
+    let manifest = serde_json::json!({
+        "version": 1,
+        "cwd": "/tmp",
+        "target": {
+            "identifier": "workflow.fabro",
+            "path": "workflow.fabro",
+        },
+        "workflows": {
+            "workflow.fabro": {
+                "source": dot,
+                "files": {
+                    "test.md": {
+                        "content": "{{ inputs.foo }}",
+                        "ref": {
+                            "type": "file_inline",
+                            "original": "test.md",
+                            "from": "workflow.fabro",
+                        },
+                    },
+                },
+            },
+        },
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api("/validate"))
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&manifest).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    let diagnostics = body["workflow"]["diagnostics"].as_array().unwrap();
+    let diagnostic = diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic["rule"] == "template_undefined_variable")
+        .expect("expected template diagnostic");
+
+    assert_eq!(diagnostic["source_path"], "test.md");
+    assert_eq!(diagnostic["line"], 1);
+    assert_eq!(diagnostic["column"], 4);
+    assert!(
+        diagnostic["node_id"]
+            .as_str()
+            .unwrap()
+            .contains("test_imported_prompt")
     );
 }
 
@@ -2458,6 +3301,7 @@ async fn append_default_run_created(run_store: &fabro_store::RunDatabase, run_id
         manifest_blob: None,
         git: None,
         fork_source_ref: None,
+        parent_id: None,
         web_url: None,
     })
     .await
@@ -2769,9 +3613,7 @@ fn test_billed_usage(
                     "output_tokens": output_tokens
                 }
             },
-            "facts": {
-                "provider": "open_ai"
-            }
+            "facts": { "algorithm": "openai" }
         },
         "total_usd_micros": input_tokens + output_tokens
     }))
@@ -2807,6 +3649,7 @@ async fn list_run_stages_distinguishes_visits() {
             manifest_blob: None,
             git: None,
             fork_source_ref: None,
+            parent_id: None,
             web_url: None,
         },
         workflow_event::Event::RunStarting,
@@ -3617,6 +4460,20 @@ fn create_github_token_app_state_with_env_lookup(
     github_api_base_url: Option<String>,
     env_lookup: impl Fn(&str) -> Option<String> + Send + Sync + 'static,
 ) -> Arc<AppState> {
+    create_github_token_app_state_with_env_lookup_and_llm_catalog_settings(
+        token,
+        github_api_base_url,
+        env_lookup,
+        LlmCatalogSettings::default(),
+    )
+}
+
+fn create_github_token_app_state_with_env_lookup_and_llm_catalog_settings(
+    token: Option<&str>,
+    github_api_base_url: Option<String>,
+    env_lookup: impl Fn(&str) -> Option<String> + Send + Sync + 'static,
+    llm_catalog_settings: LlmCatalogSettings,
+) -> Arc<AppState> {
     let (store, artifact_store) = test_store_bundle();
     let vault_path = test_secret_store_path();
     let server_env_path = vault_path.with_file_name("server.env");
@@ -3624,7 +4481,7 @@ fn create_github_token_app_state_with_env_lookup(
         resolved_settings: resolved_runtime_settings_for_tests(
             github_token_settings(),
             RunLayer::default(),
-            LlmCatalogSettings::default(),
+            llm_catalog_settings,
         ),
         registry_factory_override: None,
         max_concurrent_runs: 5,
@@ -3721,6 +4578,17 @@ async fn create_run_with_pull_request_record(
     .await;
 }
 
+async fn create_run_with_linked_pull_request_record(
+    state: &Arc<AppState>,
+    run_id: RunId,
+    pull_request: PullRequestLink,
+) {
+    create_durable_run_with_events(state, run_id, &[workflow_event::Event::PullRequestLinked {
+        pull_request,
+    }])
+    .await;
+}
+
 async fn create_completed_run_ready_for_pull_request(
     state: &Arc<AppState>,
     run_id: RunId,
@@ -3776,6 +4644,7 @@ async fn create_completed_run_ready_for_pull_request(
             manifest_blob: None,
             git,
             fork_source_ref: None,
+            parent_id: None,
             web_url: None,
         },
         workflow_event::Event::WorkflowRunStarted {
@@ -3965,6 +4834,58 @@ async fn list_models_marks_configured_true_when_provider_has_credential_material
 }
 
 #[tokio::test]
+async fn list_models_marks_configured_false_when_provider_cannot_register() {
+    let llm_catalog_settings: LlmCatalogSettings = toml::from_str(
+        r#"
+[providers.acme]
+display_name = "Acme"
+adapter = "openai_compatible"
+agent_profile = "openai"
+priority = 120
+
+[providers.acme.auth]
+credentials = ["env:ACME_API_KEY"]
+
+[models."acme-large"]
+provider = "acme"
+display_name = "Acme Large"
+family = "acme"
+default = true
+
+[models."acme-large".limits]
+context_window = 128000
+
+[models."acme-large".features]
+tools = true
+vision = false
+reasoning = false
+"#,
+    )
+    .expect("catalog fixture should parse");
+    let state = TestAppStateBuilder::new()
+        .runtime_settings(default_test_server_settings(), RunLayer::default())
+        .max_concurrent_runs(5)
+        .env_lookup(|name| (name == "ACME_API_KEY").then(|| "acme-key".to_string()))
+        .llm_catalog_settings(llm_catalog_settings)
+        .build();
+    let app = crate::test_support::build_test_router(state);
+
+    let req = Request::builder()
+        .method("GET")
+        .uri(api("/models?provider=acme"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    let models = body["data"].as_array().unwrap();
+
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0]["id"], "acme-large");
+    assert_eq!(models[0]["configured"].as_bool(), Some(false));
+}
+
+#[tokio::test]
 async fn list_models_marks_configured_false_when_no_credential_material() {
     let state = test_app_state_with_env_lookup(
         default_test_server_settings(),
@@ -4015,9 +4936,12 @@ async fn list_models_uses_app_state_catalog_overrides() {
 [providers.acme]
 display_name = "Acme"
 adapter = "openai_compatible"
+agent_profile = "openai"
 base_url = "https://api.acme.test/v1"
-credentials = ["env:ACME_API_KEY"]
 priority = 120
+
+[providers.acme.auth]
+credentials = ["env:ACME_API_KEY"]
 
 [models."acme-large"]
 provider = "acme"
@@ -4032,7 +4956,6 @@ context_window = 128000
 tools = true
 vision = false
 reasoning = false
-effort = false
 "#,
     )
     .expect("catalog fixture should parse");
@@ -4971,12 +5894,13 @@ async fn get_run_pull_request_returns_live_detail_from_github() {
         .unwrap();
     let body = response_json!(response, StatusCode::OK).await;
 
-    assert_eq!(body["pull_request"]["number"], 42);
-    assert_eq!(body["pull_request"]["owner"], "acme");
-    assert_eq!(body["state"], "closed");
-    assert_eq!(body["merged"], true);
-    assert_eq!(body["pull_request"]["head_branch"], "feature");
-    assert_eq!(body["pull_request"]["base_branch"], "main");
+    assert_eq!(body["data"]["link"]["number"], 42);
+    assert_eq!(body["data"]["link"]["owner"], "acme");
+    assert_eq!(body["data"]["details"]["state"], "closed");
+    assert_eq!(body["data"]["details"]["merged"], true);
+    assert_eq!(body["data"]["details"]["head_branch"], "feature");
+    assert_eq!(body["data"]["details"]["base_branch"], "main");
+    assert_eq!(body["meta"]["details_status"], "available");
     github_mock.assert();
 }
 
@@ -5002,35 +5926,140 @@ async fn get_run_pull_request_returns_not_found_when_record_missing() {
 }
 
 #[tokio::test]
-async fn get_run_pull_request_rejects_non_github_record_url() {
-    let (state, app, run_id) = pr_test_app(Some("ghu_test"), None);
+async fn link_run_pull_request_links_github_pr_from_any_repo_and_updates_state() {
+    let (_state, app, run_id) = pr_test_app_with_minimal_run(None, None).await;
 
-    create_run_with_pull_request_record(
-        &state,
-        run_id,
-        "https://gitlab.com/acme/widgets/-/merge_requests/42",
-        42,
-        "Fix the bug",
-    )
-    .await;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(api(&format!("/runs/{run_id}/pull_request")))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "html_url": "https://github.com/other/repo/pull/987"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+
+    assert_eq!(body["html_url"], "https://github.com/other/repo/pull/987");
+    assert_eq!(body["owner"], "other");
+    assert_eq!(body["repo"], "repo");
+    assert_eq!(body["number"], 987);
+
+    let state_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/runs/{run_id}/state")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let state_body = response_json!(state_response, StatusCode::OK).await;
+    assert_eq!(
+        state_body["pull_request"]["html_url"],
+        "https://github.com/other/repo/pull/987"
+    );
+}
+
+#[tokio::test]
+async fn link_run_pull_request_rejects_non_github_url() {
+    let (_state, app, run_id) = pr_test_app_with_minimal_run(None, None).await;
 
     let response = app
         .oneshot(
             Request::builder()
-                .method("GET")
+                .method("PUT")
                 .uri(api(&format!("/runs/{run_id}/pull_request")))
-                .body(Body::empty())
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "html_url": "https://gitlab.com/acme/widgets/-/merge_requests/42"
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
         .unwrap();
     let body = response_json!(response, StatusCode::BAD_REQUEST).await;
 
-    assert_eq!(body["errors"][0]["code"], "unsupported_host");
+    assert_eq!(
+        body["errors"][0]["code"],
+        "unsupported_pull_request_provider"
+    );
 }
 
 #[tokio::test]
-async fn get_run_pull_request_returns_service_unavailable_without_github_credentials() {
+async fn unlink_run_pull_request_appends_event_and_clears_projected_state() {
+    let (state, app, run_id) = pr_test_app_with_minimal_run(None, None).await;
+    let link_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(api(&format!("/runs/{run_id}/pull_request")))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "html_url": "https://github.com/acme/widgets/pull/42"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    response_json!(link_response, StatusCode::OK).await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(api(&format!("/runs/{run_id}/pull_request")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+
+    assert_eq!(body["html_url"], "https://github.com/acme/widgets/pull/42");
+
+    let state_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/runs/{run_id}/state")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let state_body = response_json!(state_response, StatusCode::OK).await;
+    assert!(state_body["pull_request"].is_null());
+
+    let run_id = run_id.parse::<RunId>().unwrap();
+    let run_store = state.store.open_run_reader(&run_id).await.unwrap();
+    let events = run_store.list_events().await.unwrap();
+    assert!(events.iter().any(|event| {
+        event.event.event_name() == "pull_request.unlinked"
+            && event.event.properties().unwrap()["pull_request"]["html_url"]
+                == "https://github.com/acme/widgets/pull/42"
+    }));
+}
+
+#[tokio::test]
+async fn get_run_pull_request_returns_stored_github_association_without_github_credentials() {
     let (state, app, run_id) = pr_test_app(None, None);
 
     create_run_with_pull_request_record(
@@ -5052,13 +6081,23 @@ async fn get_run_pull_request_returns_service_unavailable_without_github_credent
         )
         .await
         .unwrap();
-    let body = response_json!(response, StatusCode::SERVICE_UNAVAILABLE).await;
+    let body = response_json!(response, StatusCode::OK).await;
 
-    assert_eq!(body["errors"][0]["code"], "integration_unavailable");
+    assert_eq!(body["data"]["link"]["number"], 42);
+    assert_eq!(
+        body["data"]["link"]["html_url"],
+        "https://github.com/acme/widgets/pull/42"
+    );
+    assert!(body["data"]["details"].is_null());
+    assert_eq!(body["meta"]["details_status"], "unavailable");
+    assert_eq!(
+        body["meta"]["details_unavailable_reason"],
+        "integration_unavailable"
+    );
 }
 
 #[tokio::test]
-async fn get_run_pull_request_returns_bad_gateway_when_github_pr_is_missing() {
+async fn get_run_pull_request_returns_stored_github_association_when_github_pr_is_missing() {
     let github = MockServer::start();
     let github_mock = github.mock(|when, then| {
         when.method("GET")
@@ -5089,9 +6128,16 @@ async fn get_run_pull_request_returns_bad_gateway_when_github_pr_is_missing() {
         )
         .await
         .unwrap();
-    let body = response_json!(response, StatusCode::BAD_GATEWAY).await;
+    let body = response_json!(response, StatusCode::OK).await;
 
-    assert_eq!(body["errors"][0]["code"], "github_not_found");
+    assert_eq!(body["data"]["link"]["number"], 42);
+    assert_eq!(
+        body["data"]["link"]["html_url"],
+        "https://github.com/acme/widgets/pull/42"
+    );
+    assert!(body["data"]["details"].is_null());
+    assert_eq!(body["meta"]["details_status"], "unavailable");
+    assert_eq!(body["meta"]["details_unavailable_reason"], "not_found");
     github_mock.assert();
 }
 
@@ -5130,14 +6176,11 @@ async fn create_run_pull_request_creates_and_persists_record() {
                 ));
         })
         .await;
-    let openai_base_url = llm.url("/v1");
-    let state = create_github_token_app_state_with_env_lookup(
+    let state = create_github_token_app_state_with_env_lookup_and_llm_catalog_settings(
         Some("ghu_test"),
         Some(github.base_url()),
-        move |name| match name {
-            "OPENAI_BASE_URL" => Some(openai_base_url.clone()),
-            _ => None,
-        },
+        |_| None,
+        llm_catalog_settings_with_provider_base_url("openai", llm.url("/v1")),
     );
     state
         .vault
@@ -5199,7 +6242,8 @@ async fn create_run_pull_request_creates_and_persists_record() {
         .unwrap();
     let state_body = response_json!(state_response, StatusCode::OK).await;
     assert_eq!(state_body["pull_request"]["number"], 42);
-    assert!(state_body["pull_request"]["title"].as_str().is_some());
+    assert_eq!(state_body["pull_request"]["owner"], "acme");
+    assert_eq!(state_body["pull_request"]["repo"], "widgets");
 
     response_mock.assert_async().await;
     create_mock.assert();
@@ -5440,35 +6484,6 @@ async fn merge_run_pull_request_rejects_invalid_method() {
 }
 
 #[tokio::test]
-async fn merge_run_pull_request_rejects_non_github_record_url() {
-    let (state, app, run_id) = pr_test_app(Some("ghu_test"), None);
-
-    create_run_with_pull_request_record(
-        &state,
-        run_id,
-        "https://gitlab.com/acme/widgets/-/merge_requests/42",
-        42,
-        "Fix the bug",
-    )
-    .await;
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api(&format!("/runs/{run_id}/pull_request/merge")))
-                .header("content-type", "application/json")
-                .body(Body::from(json!({ "method": "squash" }).to_string()))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let body = response_json!(response, StatusCode::BAD_REQUEST).await;
-
-    assert_eq!(body["errors"][0]["code"], "unsupported_host");
-}
-
-#[tokio::test]
 async fn merge_run_pull_request_returns_service_unavailable_without_github_credentials() {
     let (state, app, run_id) = pr_test_app(None, None);
 
@@ -5498,6 +6513,45 @@ async fn merge_run_pull_request_returns_service_unavailable_without_github_crede
 }
 
 #[tokio::test]
+async fn merge_run_pull_request_uses_stored_link_coordinates() {
+    let github = MockServer::start();
+    let github_mock = github.mock(|when, then| {
+        when.method("PUT")
+            .path("/repos/acme/widgets/pulls/42/merge")
+            .header("authorization", "Bearer ghu_test")
+            .json_body(json!({ "merge_method": "squash" }));
+        then.status(200)
+            .header("content-type", "application/json")
+            .body(json!({}).to_string());
+    });
+    let (state, app, run_id) = pr_test_app(Some("ghu_test"), Some(github.base_url()));
+
+    create_run_with_linked_pull_request_record(&state, run_id, PullRequestLink {
+        owner:  "acme".to_string(),
+        repo:   "widgets".to_string(),
+        number: 42,
+    })
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api(&format!("/runs/{run_id}/pull_request/merge")))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "method": "squash" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+
+    assert_eq!(body["number"], 42);
+    assert_eq!(body["html_url"], "https://github.com/acme/widgets/pull/42");
+    github_mock.assert();
+}
+
+#[tokio::test]
 async fn close_run_pull_request_returns_not_found_when_record_missing() {
     let (_state, app, run_id) = pr_test_app_with_minimal_run(Some("ghu_test"), None).await;
 
@@ -5514,34 +6568,6 @@ async fn close_run_pull_request_returns_not_found_when_record_missing() {
     let body = response_json!(response, StatusCode::NOT_FOUND).await;
 
     assert_eq!(body["errors"][0]["code"], "no_stored_record");
-}
-
-#[tokio::test]
-async fn close_run_pull_request_rejects_non_github_record_url() {
-    let (state, app, run_id) = pr_test_app(Some("ghu_test"), None);
-
-    create_run_with_pull_request_record(
-        &state,
-        run_id,
-        "https://gitlab.com/acme/widgets/-/merge_requests/42",
-        42,
-        "Fix the bug",
-    )
-    .await;
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api(&format!("/runs/{run_id}/pull_request/close")))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let body = response_json!(response, StatusCode::BAD_REQUEST).await;
-
-    assert_eq!(body["errors"][0]["code"], "unsupported_host");
 }
 
 #[tokio::test]
@@ -8154,6 +9180,7 @@ async fn delete_run_with_preserved_sandbox_returns_handoff() {
             manifest_blob: None,
             git: None,
             fork_source_ref: None,
+            parent_id: None,
             web_url: None,
         },
         workflow_event::Event::RunSubmitted {
@@ -8220,6 +9247,7 @@ async fn delete_run_retry_after_missing_provider_resource_removes_metadata() {
             manifest_blob: None,
             git: None,
             fork_source_ref: None,
+            parent_id: None,
             web_url: None,
         },
         workflow_event::Event::RunSubmitted {
@@ -8384,7 +9412,7 @@ async fn get_aggregate_billing_returns_provider_model_speed_identity() {
         agg.total_runs = 1;
         agg.by_model.insert(
             ModelRef {
-                provider: Provider::Anthropic.id(),
+                provider: ProviderId::anthropic(),
                 model_id: "claude-opus-4-6".to_string(),
                 speed:    None,
             },
@@ -8403,7 +9431,7 @@ async fn get_aggregate_billing_returns_provider_model_speed_identity() {
         );
         agg.by_model.insert(
             ModelRef {
-                provider: Provider::Anthropic.id(),
+                provider: ProviderId::anthropic(),
                 model_id: "claude-opus-4-6".to_string(),
                 speed:    Some(Speed::Fast),
             },
@@ -8470,7 +9498,7 @@ fn aggregate_billing_counts_projection_rollup_usage_visits() {
         by_model:           vec![
             fabro_workflow::ProjectionBillingByModel {
                 model:   ModelRef {
-                    provider: Provider::OpenAi.id(),
+                    provider: ProviderId::openai(),
                     model_id: "gpt-5.4".to_string(),
                     speed:    None,
                 },
@@ -8487,7 +9515,7 @@ fn aggregate_billing_counts_projection_rollup_usage_visits() {
             },
             fabro_workflow::ProjectionBillingByModel {
                 model:   ModelRef {
-                    provider: Provider::OpenAi.id(),
+                    provider: ProviderId::openai(),
                     model_id: "gpt-5.4".to_string(),
                     speed:    Some(Speed::Fast),
                 },
@@ -8514,7 +9542,7 @@ fn aggregate_billing_counts_projection_rollup_usage_visits() {
     assert_eq!(accumulator.by_model.len(), 2);
     assert_eq!(
         accumulator.by_model[&ModelRef {
-            provider: Provider::OpenAi.id(),
+            provider: ProviderId::openai(),
             model_id: "gpt-5.4".to_string(),
             speed:    None,
         }]
@@ -8523,7 +9551,7 @@ fn aggregate_billing_counts_projection_rollup_usage_visits() {
     );
     assert_eq!(
         accumulator.by_model[&ModelRef {
-            provider: Provider::OpenAi.id(),
+            provider: ProviderId::openai(),
             model_id: "gpt-5.4".to_string(),
             speed:    None,
         }]
@@ -8533,7 +9561,7 @@ fn aggregate_billing_counts_projection_rollup_usage_visits() {
     );
     assert_eq!(
         accumulator.by_model[&ModelRef {
-            provider: Provider::OpenAi.id(),
+            provider: ProviderId::openai(),
             model_id: "gpt-5.4".to_string(),
             speed:    Some(Speed::Fast),
         }]
@@ -8542,7 +9570,7 @@ fn aggregate_billing_counts_projection_rollup_usage_visits() {
     );
     assert_eq!(
         accumulator.by_model[&ModelRef {
-            provider: Provider::OpenAi.id(),
+            provider: ProviderId::openai(),
             model_id: "gpt-5.4".to_string(),
             speed:    Some(Speed::Fast),
         }]
@@ -9475,9 +10503,12 @@ async fn create_completion_default_model_uses_app_state_catalog() {
 [providers.acme]
 display_name = "Acme"
 adapter = "openai_compatible"
+agent_profile = "openai"
 base_url = "https://api.acme.test/v1"
-credentials = ["env:ACME_API_KEY"]
 priority = 120
+
+[providers.acme.auth]
+credentials = ["env:ACME_API_KEY"]
 
 [models."acme-large"]
 provider = "acme"
@@ -9492,7 +10523,6 @@ context_window = 128000
 tools = true
 vision = false
 reasoning = false
-effort = false
 "#,
     )
     .expect("catalog fixture should parse");
@@ -9573,7 +10603,7 @@ async fn demo_get_run_returns_run_summary_shape() {
         .unwrap();
     let response = app.oneshot(req).await.unwrap();
     let body = response_json!(response, StatusCode::OK).await;
-    // Should have RunSummary fields, not RunStatusResponse fields
+    // Should have Run fields, not RunStatusResponse fields
     assert!(body["id"].is_string(), "should have id field");
     assert!(body["goal"].is_string(), "should have goal field");
     assert!(

@@ -5,6 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow};
 use fabro_api::types;
@@ -16,13 +17,20 @@ use fabro_config::{
 };
 use fabro_graphviz::graph::AttrValue;
 use fabro_graphviz::parser;
-use fabro_template::{TemplateContext, render_lenient as render_scan_template};
+use fabro_template::{
+    BundleTemplateStore, FilesystemTemplateStore, RecordingTemplateStore, TemplateContext,
+    TemplateRenderMode, TemplateSource, discover_static_dependency_closure, render_source,
+};
 use fabro_types::settings::interp::InterpString;
 use fabro_types::settings::run::{ApprovalMode, ResolvedGoalSource, ResolvedRunGoal, RunMode};
-use fabro_types::{DirtyStatus, GitContext, PreRunPushOutcome, RunId, WorkflowSettings};
-use fabro_workflow::ManifestPath;
+use fabro_types::{
+    DirtyStatus, GitContext, ManifestPath, PreRunPushOutcome, RunId, WorkflowSettings,
+};
 use fabro_workflow::git::{
     GitSyncStatus, branch_needs_push, head_sha, push_branch_noninteractive, sync_status,
+};
+use fabro_workflow::static_reference::{
+    AttributeScope, ReferenceKind, reference_kind_for_attribute,
 };
 
 #[derive(Debug, Default)]
@@ -122,7 +130,7 @@ pub fn build_sparse_run_overrides(input: RunOverrideInput<'_>) -> Option<RunLaye
 
 struct CollectContext<'a> {
     cwd:               &'a Path,
-    inputs:            &'a HashMap<String, toml::Value>,
+    inputs:            HashMap<String, toml::Value>,
     workflows:         HashMap<String, types::ManifestWorkflow>,
     visited_workflows: HashSet<String>,
 }
@@ -183,7 +191,7 @@ pub fn build_run_manifest(input: ManifestBuildInput) -> Result<BuiltManifest> {
 
     let mut context = CollectContext {
         cwd:               &input.cwd,
-        inputs:            &workflow_settings.run.inputs,
+        inputs:            workflow_settings.run.inputs.clone(),
         workflows:         HashMap::new(),
         visited_workflows: HashSet::new(),
     };
@@ -223,13 +231,10 @@ pub fn build_run_manifest(input: ManifestBuildInput) -> Result<BuiltManifest> {
     let working_directory =
         project::resolve_working_directory_from_run(&workflow_settings.run, &input.cwd);
 
-    let rendered_root_source =
-        render_workflow_scan_source(&root_source, &target_path, &workflow_settings.run.inputs)?;
-
     let goal = resolve_manifest_goal(
         input.run_overrides.as_ref(),
         &workflow_settings,
-        &rendered_root_source,
+        &root_source,
         &target_path,
         &working_directory,
     )?;
@@ -245,6 +250,7 @@ pub fn build_run_manifest(input: ManifestBuildInput) -> Result<BuiltManifest> {
             cwd: input.cwd.display().to_string(),
             git,
             goal,
+            parent_id: None,
             run_id: input.run_id.map(|run_id| run_id.to_string()),
             title: None,
             target: types::ManifestTarget {
@@ -321,30 +327,53 @@ fn collect_workflow_files(
     files: &mut HashMap<String, types::ManifestFileEntry>,
     visited_imports: &mut HashSet<String>,
 ) -> Result<()> {
-    let rendered_source = render_workflow_scan_source(
-        &workflow.source,
-        &workflow.absolute_dot_path,
-        context.inputs,
-    )?;
-    let graph = parser::parse(&rendered_source).map_err(|err| {
+    let graph = parser::parse(&workflow.source).map_err(|err| {
         anyhow!(
             "Failed to parse {}: {err}",
             workflow.absolute_dot_path.display()
         )
     })?;
+    let workflow_base_dir = workflow
+        .absolute_dot_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."));
+    let workflow_template_root = manifest_parent_or_dot(&workflow.dot_path)?;
 
     if let Some(goal_ref) = graph.attrs.get("goal").and_then(AttrValue::as_str) {
         if goal_ref.starts_with('@') {
-            collect_bundled_file(
+            let bundled = collect_bundled_file(
                 files,
-                workflow
-                    .absolute_dot_path
-                    .parent()
-                    .unwrap_or_else(|| Path::new(".")),
+                workflow_base_dir,
                 context.cwd,
                 goal_ref.trim_start_matches('@'),
                 types::ManifestFileRefType::FileInline,
+                manifest_attr_reference_kind(AttributeScope::Graph, "goal", goal_ref)?,
                 Some(workflow.dot_path.clone()),
+            )?;
+            let source = std::fs::read_to_string(&bundled.absolute_path)
+                .with_context(|| format!("Failed to read {}", bundled.absolute_path.display()))?;
+            collect_template_include_files(
+                files,
+                context.cwd,
+                TemplateSource {
+                    path:    bundled.path.clone(),
+                    content: source,
+                },
+                &manifest_parent_or_dot(&bundled.path)?,
+                Some(&bundled.path),
+                &context.inputs,
+            )?;
+        } else {
+            collect_template_include_files(
+                files,
+                context.cwd,
+                TemplateSource {
+                    path:    workflow.dot_path.clone(),
+                    content: goal_ref.to_owned(),
+                },
+                &workflow_template_root,
+                Some(&workflow.dot_path),
+                &context.inputs,
             )?;
         }
     }
@@ -352,16 +381,41 @@ fn collect_workflow_files(
     for node in graph.nodes.values() {
         if let Some(prompt_ref) = node.attrs.get("prompt").and_then(AttrValue::as_str) {
             if prompt_ref.starts_with('@') {
-                collect_bundled_file(
+                let bundled = collect_bundled_file(
                     files,
-                    workflow
-                        .absolute_dot_path
-                        .parent()
-                        .unwrap_or_else(|| Path::new(".")),
+                    workflow_base_dir,
                     context.cwd,
                     prompt_ref.trim_start_matches('@'),
                     types::ManifestFileRefType::FileInline,
+                    manifest_attr_reference_kind(AttributeScope::Node, "prompt", prompt_ref)?,
                     Some(workflow.dot_path.clone()),
+                )?;
+                let source =
+                    std::fs::read_to_string(&bundled.absolute_path).with_context(|| {
+                        format!("Failed to read {}", bundled.absolute_path.display())
+                    })?;
+                collect_template_include_files(
+                    files,
+                    context.cwd,
+                    TemplateSource {
+                        path:    bundled.path.clone(),
+                        content: source,
+                    },
+                    &manifest_parent_or_dot(&bundled.path)?,
+                    Some(&bundled.path),
+                    &context.inputs,
+                )?;
+            } else {
+                collect_template_include_files(
+                    files,
+                    context.cwd,
+                    TemplateSource {
+                        path:    workflow.dot_path.clone(),
+                        content: prompt_ref.to_owned(),
+                    },
+                    &workflow_template_root,
+                    Some(&workflow.dot_path),
+                    &context.inputs,
                 )?;
             }
         }
@@ -369,13 +423,11 @@ fn collect_workflow_files(
         if let Some(import_ref) = node.attrs.get("import").and_then(AttrValue::as_str) {
             let imported = collect_bundled_file(
                 files,
-                workflow
-                    .absolute_dot_path
-                    .parent()
-                    .unwrap_or_else(|| Path::new(".")),
+                workflow_base_dir,
                 context.cwd,
                 import_ref,
                 types::ManifestFileRefType::Import,
+                manifest_attr_reference_kind(AttributeScope::Node, "import", import_ref)?,
                 Some(workflow.dot_path.clone()),
             )?;
             let import_key = imported.path.to_string();
@@ -396,30 +448,102 @@ fn collect_workflow_files(
         if let Some(child_ref) = node
             .attrs
             .get("stack.child_workflow")
-            .or_else(|| node.attrs.get("stack.child_dotfile"))
             .and_then(AttrValue::as_str)
         {
-            collect_workflow_entry(
-                context,
-                Path::new(child_ref),
-                workflow
-                    .absolute_dot_path
-                    .parent()
-                    .unwrap_or_else(|| Path::new(".")),
-            )?;
+            manifest_attr_reference_kind(AttributeScope::Node, "stack.child_workflow", child_ref)?
+                .validate(child_ref)
+                .map_err(anyhow::Error::new)?;
+            collect_workflow_entry(context, Path::new(child_ref), workflow_base_dir)?;
         }
     }
 
     Ok(())
 }
 
-fn render_workflow_scan_source(
-    source: &str,
-    path: &Path,
+fn collect_template_include_files(
+    files: &mut HashMap<String, types::ManifestFileEntry>,
+    cwd: &Path,
+    source: TemplateSource,
+    template_root: &ManifestPath,
+    from: Option<&ManifestPath>,
     inputs: &HashMap<String, toml::Value>,
-) -> Result<String> {
-    render_scan_template(source, &TemplateContext::for_input_scan(inputs.clone()))
-        .with_context(|| format!("Failed to render {} for manifest scanning", path.display()))
+) -> Result<()> {
+    let source_path = source.path.clone();
+    let store = FilesystemTemplateStore::new(cwd.to_path_buf(), template_root.clone());
+    let closure = discover_static_dependency_closure([source], &store)
+        .map_err(|err| anyhow!("failed to discover template dependencies: {err}"))?;
+    verify_recorded_template_dependencies(
+        &source_path,
+        &closure,
+        template_root,
+        files,
+        from,
+        inputs,
+    )?;
+
+    for (path, source) in closure.sources {
+        if path == source_path {
+            continue;
+        }
+        let key = path.to_string();
+        files
+            .entry(key)
+            .or_insert_with(|| types::ManifestFileEntry {
+                content: source.content,
+                ref_:    types::ManifestFileRef {
+                    from:     from.map(std::string::ToString::to_string),
+                    original: path.to_string(),
+                    type_:    types::ManifestFileRefType::FileInline,
+                },
+            });
+    }
+    Ok(())
+}
+
+fn verify_recorded_template_dependencies(
+    source_path: &ManifestPath,
+    closure: &fabro_template::TemplateDependencyClosure,
+    template_root: &ManifestPath,
+    files: &HashMap<String, types::ManifestFileEntry>,
+    from: Option<&ManifestPath>,
+    inputs: &HashMap<String, toml::Value>,
+) -> Result<()> {
+    let Some(source) = closure.sources.get(source_path) else {
+        return Ok(());
+    };
+    let mut bundled_files = closure
+        .sources
+        .iter()
+        .map(|(path, source)| (path.clone(), source.content.clone()))
+        .collect::<HashMap<_, _>>();
+    for (path, entry) in files {
+        if let Some(path) = ManifestPath::from_wire(path) {
+            bundled_files.insert(path, entry.content.clone());
+        }
+    }
+    let allowed = bundled_files.keys().cloned().collect();
+    let store = RecordingTemplateStore::with_allowed(
+        BundleTemplateStore::new(template_root.clone(), bundled_files),
+        allowed,
+    );
+    let ctx = TemplateContext::for_input_scan(inputs.clone());
+    render_source(source, &ctx, Arc::new(store), TemplateRenderMode::Lenient).with_context(
+        || {
+            let from =
+                from.map_or_else(|| source_path.to_string(), std::string::ToString::to_string);
+            format!("failed to verify template dependencies for {from}")
+        },
+    )?;
+    Ok(())
+}
+
+fn manifest_attr_reference_kind(
+    scope: AttributeScope,
+    key: &str,
+    value: &str,
+) -> Result<ReferenceKind> {
+    reference_kind_for_attribute(scope, key, value)
+        .ok_or_else(|| anyhow!("unsupported manifest reference attribute: {key}={value}"))
 }
 
 fn collect_config_dockerfile(
@@ -445,7 +569,6 @@ fn collect_config_dockerfile(
     let Some(DaytonaDockerfileLayer::Path { path }) = dockerfile else {
         return Ok(());
     };
-
     let absolute_config_path = cwd.join(config_path.as_path());
     collect_bundled_file(
         files,
@@ -455,6 +578,7 @@ fn collect_config_dockerfile(
         cwd,
         path,
         types::ManifestFileRefType::Dockerfile,
+        ReferenceKind::Dockerfile,
         Some(config_path.clone()),
     )?;
     Ok(())
@@ -471,8 +595,13 @@ fn collect_bundled_file(
     cwd: &Path,
     reference: &str,
     ref_type: types::ManifestFileRefType,
+    reference_kind: ReferenceKind,
     from: Option<ManifestPath>,
 ) -> Result<BundledFile> {
+    reference_kind
+        .validate(reference)
+        .map_err(anyhow::Error::new)?;
+
     let absolute_path = normalize_absolute_path(base_dir, reference)
         .ok_or_else(|| anyhow!("unsupported manifest reference: {reference}"))?;
     let path = manifest_path_from_absolute(&absolute_path, cwd)?;
@@ -530,6 +659,9 @@ fn resolve_manifest_goal(
         return Ok(None);
     };
     if let Some(reference) = goal.strip_prefix('@') {
+        ReferenceKind::GraphGoalFile
+            .validate(reference)
+            .map_err(anyhow::Error::new)?;
         let goal_path = normalize_absolute_path(
             root_dot_path.parent().unwrap_or_else(|| Path::new(".")),
             reference,
@@ -698,6 +830,12 @@ fn manifest_path_from_absolute(path: &Path, cwd: &Path) -> Result<ManifestPath> 
         .ok_or_else(|| anyhow!("Failed to compute manifest path for {}", path.display()))
 }
 
+fn manifest_parent_or_dot(path: &ManifestPath) -> Result<ManifestPath> {
+    let parent = path.parent_or_dot().to_string_lossy();
+    ManifestPath::from_wire(&parent)
+        .ok_or_else(|| anyhow!("invalid manifest parent path for {path}: {parent}"))
+}
+
 pub fn manifest_args_is_empty(args: &types::ManifestArgs) -> bool {
     args.auto_approve.is_none()
         && args.dry_run.is_none()
@@ -860,6 +998,164 @@ mod tests {
     }
 
     #[test]
+    fn build_manifest_bundles_static_minijinja_includes_from_prompts_and_goals() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path();
+        let workflow_dir = project.join(".fabro/workflows/demo");
+        std::fs::create_dir_all(workflow_dir.join("prompts")).unwrap();
+        std::fs::write(project.join(".fabro/project.toml"), "_version = 1\n").unwrap();
+        std::fs::write(
+            workflow_dir.join("workflow.toml"),
+            "_version = 1\n\n[workflow]\ngraph = \"workflow.fabro\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            workflow_dir.join("workflow.fabro"),
+            r#"digraph Demo {
+                graph [goal="@prompts/goal.md"]
+                start [shape=Mdiamond]
+                exit [shape=Msquare]
+                file_prompt [prompt="@prompts/plan.md"]
+                inline_prompt [prompt="{% include 'inline.tpl.md' %}"]
+                start -> file_prompt -> inline_prompt -> exit
+            }"#,
+        )
+        .unwrap();
+        std::fs::write(
+            workflow_dir.join("prompts/goal.md"),
+            r#"{% include "goal.tpl.md" %}"#,
+        )
+        .unwrap();
+        std::fs::write(workflow_dir.join("prompts/goal.tpl.md"), "ship it").unwrap();
+        std::fs::write(
+            workflow_dir.join("prompts/plan.md"),
+            r#"{% include "plan.tpl.md" %}"#,
+        )
+        .unwrap();
+        std::fs::write(workflow_dir.join("prompts/plan.tpl.md"), "plan it").unwrap();
+        std::fs::write(workflow_dir.join("inline.tpl.md"), "inline it").unwrap();
+
+        let built = build_run_manifest(ManifestBuildInput {
+            workflow: PathBuf::from(".fabro/workflows/demo/workflow.toml"),
+            cwd: project.to_path_buf(),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let root = &built.manifest.workflows[".fabro/workflows/demo/workflow.fabro"];
+        assert!(
+            root.files
+                .contains_key(".fabro/workflows/demo/prompts/goal.tpl.md")
+        );
+        assert!(
+            root.files
+                .contains_key(".fabro/workflows/demo/prompts/plan.tpl.md")
+        );
+        assert!(
+            root.files
+                .contains_key(".fabro/workflows/demo/inline.tpl.md")
+        );
+    }
+
+    #[test]
+    fn build_manifest_bundles_static_minijinja_includes_from_all_branches_and_macros() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path();
+        let workflow_dir = project.join(".fabro/workflows/demo");
+        std::fs::create_dir_all(workflow_dir.join("prompts")).unwrap();
+        std::fs::write(project.join(".fabro/project.toml"), "_version = 1\n").unwrap();
+        std::fs::write(
+            workflow_dir.join("workflow.toml"),
+            "_version = 1\n\n[workflow]\ngraph = \"workflow.fabro\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            workflow_dir.join("workflow.fabro"),
+            r#"digraph Demo {
+                graph [goal="ship"]
+                start [shape=Mdiamond]
+                exit [shape=Msquare]
+                work [prompt="@prompts/plan.md"]
+                start -> work -> exit
+            }"#,
+        )
+        .unwrap();
+        std::fs::write(
+            workflow_dir.join("prompts/plan.md"),
+            r#"{% if inputs.use_a %}{% include "a.md" %}{% else %}{% include "b.md" %}{% endif %}
+{% from "helpers.md" import render_advanced_prompt %}"#,
+        )
+        .unwrap();
+        std::fs::write(workflow_dir.join("prompts/a.md"), "A").unwrap();
+        std::fs::write(workflow_dir.join("prompts/b.md"), "B").unwrap();
+        std::fs::write(
+            workflow_dir.join("prompts/helpers.md"),
+            r#"{% macro render_advanced_prompt() %}{% include "advanced.md" %}{% endmacro %}"#,
+        )
+        .unwrap();
+        std::fs::write(workflow_dir.join("prompts/advanced.md"), "advanced").unwrap();
+
+        let built = build_run_manifest(ManifestBuildInput {
+            workflow: PathBuf::from(".fabro/workflows/demo/workflow.toml"),
+            cwd: project.to_path_buf(),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let root = &built.manifest.workflows[".fabro/workflows/demo/workflow.fabro"];
+        for path in [
+            ".fabro/workflows/demo/prompts/a.md",
+            ".fabro/workflows/demo/prompts/b.md",
+            ".fabro/workflows/demo/prompts/helpers.md",
+            ".fabro/workflows/demo/prompts/advanced.md",
+        ] {
+            assert!(root.files.contains_key(path), "missing {path}");
+        }
+    }
+
+    #[test]
+    fn build_manifest_rejects_dynamic_minijinja_include_discovery() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path();
+        let workflow_dir = project.join(".fabro/workflows/demo");
+        std::fs::create_dir_all(workflow_dir.join("prompts")).unwrap();
+        std::fs::write(project.join(".fabro/project.toml"), "_version = 1\n").unwrap();
+        std::fs::write(
+            workflow_dir.join("workflow.toml"),
+            "_version = 1\n\n[workflow]\ngraph = \"workflow.fabro\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            workflow_dir.join("workflow.fabro"),
+            r#"digraph Demo {
+                graph [goal="ship"]
+                start [shape=Mdiamond]
+                exit [shape=Msquare]
+                work [prompt="@prompts/plan.md"]
+                start -> work -> exit
+            }"#,
+        )
+        .unwrap();
+        std::fs::write(
+            workflow_dir.join("prompts/plan.md"),
+            r"{% include inputs.partial %}",
+        )
+        .unwrap();
+
+        let err = build_run_manifest(ManifestBuildInput {
+            workflow: PathBuf::from(".fabro/workflows/demo/workflow.toml"),
+            cwd: project.to_path_buf(),
+            ..Default::default()
+        })
+        .unwrap_err();
+
+        assert!(
+            err.to_string().contains("dynamic template dependency"),
+            "unexpected error: {err:#}"
+        );
+    }
+
+    #[test]
     fn build_manifest_bundles_project_config_daytona_dockerfile_relative_to_project_config() {
         let temp = tempfile::tempdir().unwrap();
         let project = temp.path();
@@ -907,7 +1203,7 @@ dockerfile = { path = "Dockerfile" }
     }
 
     #[test]
-    fn build_manifest_uses_input_overrides_for_structural_file_scanning() {
+    fn build_manifest_rejects_templated_file_references() {
         let temp = tempfile::tempdir().unwrap();
         let project = temp.path();
         let workflow_dir = project.join(".fabro/workflows/demo");
@@ -928,68 +1224,111 @@ dockerfile = { path = "Dockerfile" }
                 start [shape=Mdiamond]
                 exit [shape=Msquare]
                 plan [prompt="@prompts/{{ inputs.prompt_file }}"]
-                imported [import="./imports/{{ inputs.import_file }}"]
-                child [shape=house, stack.child_workflow="../{{ inputs.child_workflow }}/workflow.fabro"]
-                start -> plan -> imported -> child -> exit
+                start -> plan -> exit
             }"#,
         )
         .unwrap();
         std::fs::write(workflow_dir.join("prompts/plan.md"), "plan it").unwrap();
-        std::fs::write(
-            workflow_dir.join("imports/checks.fabro"),
-            r"digraph Checks { start [shape=Mdiamond] exit [shape=Msquare] start -> exit }",
-        )
-        .unwrap();
-        std::fs::write(
-            child_dir.join("workflow.fabro"),
-            r"digraph Child { start [shape=Mdiamond] exit [shape=Msquare] start -> exit }",
-        )
-        .unwrap();
 
-        let built = build_run_manifest(ManifestBuildInput {
+        let err = build_run_manifest(ManifestBuildInput {
             workflow: PathBuf::from(".fabro/workflows/demo/workflow.toml"),
             cwd: project.to_path_buf(),
-            input_overrides: HashMap::from([
-                (
-                    "prompt_file".to_string(),
-                    toml::Value::String("plan.md".to_string()),
-                ),
-                (
-                    "import_file".to_string(),
-                    toml::Value::String("checks.fabro".to_string()),
-                ),
-                (
-                    "child_workflow".to_string(),
-                    toml::Value::String("child".to_string()),
-                ),
-            ]),
             ..Default::default()
         })
-        .unwrap();
-
-        let root = &built.manifest.workflows[".fabro/workflows/demo/workflow.fabro"];
+        .unwrap_err();
         assert!(
-            root.source.contains("{{ inputs.prompt_file }}"),
-            "manifest should store original workflow source"
-        );
-        assert!(
-            root.files
-                .contains_key(".fabro/workflows/demo/prompts/plan.md")
-        );
-        assert!(
-            root.files
-                .contains_key(".fabro/workflows/demo/imports/checks.fabro")
-        );
-        assert!(
-            built
-                .manifest
-                .workflows
-                .contains_key(".fabro/workflows/child/workflow.fabro")
+            err.to_string()
+                .contains("templates are not supported in file inline references"),
+            "unexpected error: {err:#}"
         );
     }
 
     #[test]
-    fn build_manifest_uses_input_overrides_for_graph_goal_file_resolution() {
+    fn build_manifest_rejects_templated_import_reference() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path();
+        let workflow_dir = project.join(".fabro/workflows/demo");
+        std::fs::create_dir_all(workflow_dir.join("imports")).unwrap();
+        std::fs::write(project.join(".fabro/project.toml"), "_version = 1\n").unwrap();
+        std::fs::write(
+            workflow_dir.join("workflow.toml"),
+            "_version = 1\n\n[workflow]\ngraph = \"workflow.fabro\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            workflow_dir.join("workflow.fabro"),
+            r#"digraph Demo {
+                graph [goal="Demo"]
+                start [shape=Mdiamond]
+                imported [import="./imports/{{ inputs.import_file }}"]
+                exit [shape=Msquare]
+                start -> imported -> exit
+            }"#,
+        )
+        .unwrap();
+
+        let err = build_run_manifest(ManifestBuildInput {
+            workflow: PathBuf::from(".fabro/workflows/demo/workflow.toml"),
+            cwd: project.to_path_buf(),
+            input_overrides: HashMap::from([(
+                "import_file".to_string(),
+                toml::Value::String("checks.fabro".to_string()),
+            )]),
+            ..Default::default()
+        })
+        .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("templates are not supported in import references"),
+            "unexpected error: {err:#}"
+        );
+    }
+
+    #[test]
+    fn build_manifest_rejects_templated_child_workflow_reference() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path();
+        let workflow_dir = project.join(".fabro/workflows/demo");
+        std::fs::create_dir_all(&workflow_dir).unwrap();
+        std::fs::write(project.join(".fabro/project.toml"), "_version = 1\n").unwrap();
+        std::fs::write(
+            workflow_dir.join("workflow.toml"),
+            "_version = 1\n\n[workflow]\ngraph = \"workflow.fabro\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            workflow_dir.join("workflow.fabro"),
+            r#"digraph Demo {
+                graph [goal="Demo"]
+                start [shape=Mdiamond]
+                child [shape=house, stack.child_workflow="../{{ inputs.child_workflow }}/workflow.fabro"]
+                exit [shape=Msquare]
+                start -> child -> exit
+            }"#,
+        )
+        .unwrap();
+
+        let err = build_run_manifest(ManifestBuildInput {
+            workflow: PathBuf::from(".fabro/workflows/demo/workflow.toml"),
+            cwd: project.to_path_buf(),
+            input_overrides: HashMap::from([(
+                "child_workflow".to_string(),
+                toml::Value::String("child".to_string()),
+            )]),
+            ..Default::default()
+        })
+        .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("templates are not supported in child workflow references"),
+            "unexpected error: {err:#}"
+        );
+    }
+
+    #[test]
+    fn build_manifest_rejects_templated_graph_goal_file_reference() {
         let temp = tempfile::tempdir().unwrap();
         let project = temp.path();
         let workflow_dir = project.join(".fabro/workflows/demo");
@@ -1012,7 +1351,7 @@ dockerfile = { path = "Dockerfile" }
         .unwrap();
         std::fs::write(workflow_dir.join("prompts/goal.md"), "ship it").unwrap();
 
-        let built = build_run_manifest(ManifestBuildInput {
+        let err = build_run_manifest(ManifestBuildInput {
             workflow: PathBuf::from(".fabro/workflows/demo/workflow.toml"),
             cwd: project.to_path_buf(),
             input_overrides: HashMap::from([(
@@ -1021,16 +1360,11 @@ dockerfile = { path = "Dockerfile" }
             )]),
             ..Default::default()
         })
-        .unwrap();
-
-        let goal = built.manifest.goal.expect("manifest goal should resolve");
-        assert_eq!(goal.path.as_deref(), Some("prompts/goal.md"));
-        assert_eq!(goal.text, "ship it");
-        assert_eq!(goal.type_, types::ManifestGoalType::Graph);
-        let root = &built.manifest.workflows[".fabro/workflows/demo/workflow.fabro"];
+        .unwrap_err();
         assert!(
-            root.source.contains("{{ inputs.goal_file }}"),
-            "manifest should store original workflow source"
+            err.to_string()
+                .contains("templates are not supported in graph goal file references"),
+            "unexpected error: {err:#}"
         );
     }
 

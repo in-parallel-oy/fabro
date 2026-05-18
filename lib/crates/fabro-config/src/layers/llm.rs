@@ -7,7 +7,7 @@
 //! display_name = "Kimi"
 //! adapter = "openai_compatible"
 //! base_url = "https://api.moonshot.ai/v1"
-//! credentials = ["credential:kimi", "env:KIMI_API_KEY"]
+//! auth = { credentials = ["credential:kimi", "env:KIMI_API_KEY"] }
 //! priority = 60
 //! enabled = true
 //! aliases = ["moonshot"]
@@ -19,7 +19,7 @@
 //!
 //! Per-provider and per-model entries field-merge across layers (default →
 //! user → server → project → workflow/run). Inner arrays such as
-//! `credentials`, `aliases`, `controls.reasoning_effort`, and
+//! `auth.credentials`, `aliases`, `controls.reasoning_effort`, and
 //! `controls.speed` replace as whole arrays.
 //!
 //! Adapter keys (`adapter = "..."`) are parsed as plain strings here.
@@ -29,6 +29,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use fabro_model::catalog::deserialize_knowledge_cutoff;
+use fabro_model::{AgentProfileKind, BillingPolicy, ProviderAuthConfig};
 pub use fabro_model::{
     CredentialRef, CredentialRefParseError, HeaderValueRef, ReasoningEffortFeature,
 };
@@ -53,29 +54,33 @@ pub struct LlmLayer {
 #[serde(deny_unknown_fields)]
 pub struct ProviderSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub display_name:  Option<String>,
+    pub display_name:   Option<String>,
     /// Adapter registry key (e.g. `"openai_compatible"`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub adapter:       Option<String>,
+    pub adapter:        Option<String>,
+    /// Agent profile used for routing/profile-specific behavior.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub base_url:      Option<String>,
-    /// Ordered list of credential references — first successful wins. Each
-    /// entry must be a typed `CredentialRef` (`credential:<id>` or
-    /// `env:<NAME>`); literal secret strings fail deserialization.
+    pub agent_profile:  Option<AgentProfileKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub credentials:   Option<Vec<CredentialRef>>,
+    pub auth:           Option<ProviderAuthConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub billing_policy: Option<BillingPolicy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key_url:    Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url:       Option<String>,
     /// Extra HTTP headers attached to every outgoing provider request after
     /// credential resolution. Header values are typed so secret-bearing values
     /// stay as references until a later resolution phase.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub extra_headers: Option<HashMap<String, HeaderValueRef>>,
+    pub extra_headers:  Option<HashMap<String, HeaderValueRef>>,
     /// Higher wins; missing → `0`; ties broken by canonical provider ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub priority:      Option<i32>,
+    pub priority:       Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub enabled:       Option<bool>,
+    pub enabled:        Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub aliases:       Option<Vec<String>>,
+    pub aliases:        Option<Vec<String>>,
 }
 
 /// One entry in `[llm.models.<id>]`.
@@ -89,6 +94,9 @@ pub struct ModelSettings {
     /// when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_id:               Option<String>,
+    /// Agent profile used for routing/profile-specific behavior.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_profile:        Option<AgentProfileKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name:         Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -107,6 +115,10 @@ pub struct ModelSettings {
     pub knowledge_cutoff:     Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default:              Option<bool>,
+    /// Whether this model should be preferred for provider connectivity
+    /// probes. Missing or false falls back to the provider default model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub probe:                Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enabled:              Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -145,8 +157,6 @@ pub struct ModelFeatures {
     pub reasoning_effort: Option<ReasoningEffortFeature>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_cache:     Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub effort:           Option<bool>,
 }
 
 /// User-facing allow-list for native control values Fabro accepts on this
@@ -193,6 +203,8 @@ pub struct CostRates {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+
+    use fabro_model::ApiKeyHeaderPolicy;
 
     use super::*;
     use crate::layers::Combine;
@@ -280,6 +292,40 @@ mod tests {
         }
         let err: Result<Wrap, _> = toml::from_str(r#"v = ["sk-literal-secret"]"#);
         assert!(err.is_err(), "literal secret strings must fail to parse");
+    }
+
+    #[test]
+    fn provider_agent_profile_parses_from_toml() {
+        let parsed: LlmLayer = toml::from_str(
+            r#"
+[providers.acme]
+adapter = "openai_compatible"
+agent_profile = "anthropic"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            parsed.providers.get("acme").unwrap().agent_profile,
+            Some(fabro_model::AgentProfileKind::Anthropic)
+        );
+    }
+
+    #[test]
+    fn model_agent_profile_parses_from_toml() {
+        let parsed: LlmLayer = toml::from_str(
+            r#"
+[models.acme_large]
+provider = "acme"
+agent_profile = "gemini"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            parsed.models.get("acme_large").unwrap().agent_profile,
+            Some(fabro_model::AgentProfileKind::Gemini)
+        );
     }
 
     // ---- HeaderValueRef --------------------------------------------------
@@ -426,24 +472,30 @@ mod tests {
 [providers.kimi]
 display_name = "Kimi"
 adapter = "openai_compatible"
+agent_profile = "openai"
 base_url = "https://api.moonshot.ai/v1"
-credentials = ["credential:kimi", "env:KIMI_API_KEY"]
 priority = 60
 enabled = true
 aliases = ["moonshot"]
+
+[providers.kimi.auth]
+credentials = ["credential:kimi", "env:KIMI_API_KEY"]
 "#;
         let layer: LlmLayer = toml::from_str(toml).unwrap();
         let kimi = layer.providers.get("kimi").unwrap();
         assert_eq!(kimi.display_name.as_deref(), Some("Kimi"));
         assert_eq!(kimi.adapter.as_deref(), Some("openai_compatible"));
+        assert_eq!(kimi.agent_profile, Some(AgentProfileKind::OpenAi));
+        let auth = kimi.auth.as_ref().expect("expected api_key auth");
+        assert_eq!(auth.header, ApiKeyHeaderPolicy::Bearer);
+        assert_eq!(auth.credentials, vec![
+            CredentialRef::Credential("kimi".to_string()),
+            CredentialRef::Env("KIMI_API_KEY".to_string()),
+        ]);
         assert_eq!(kimi.base_url.as_deref(), Some("https://api.moonshot.ai/v1"));
         assert_eq!(kimi.priority, Some(60));
         assert_eq!(kimi.enabled, Some(true));
         assert_eq!(kimi.aliases.as_deref(), Some(&["moonshot".to_string()][..]));
-        assert_eq!(kimi.credentials.as_ref().unwrap(), &vec![
-            CredentialRef::Credential("kimi".to_string()),
-            CredentialRef::Env("KIMI_API_KEY".to_string()),
-        ]);
     }
 
     #[test]
@@ -463,7 +515,7 @@ x-portkey-config = { credential = "portkey_config" }
         let layer: LlmLayer = toml::from_str(toml).unwrap();
         let portkey = layer.providers.get("portkey").unwrap();
 
-        assert!(portkey.credentials.is_none());
+        assert!(portkey.auth.is_none());
         let headers = portkey.extra_headers.as_ref().unwrap();
         assert_eq!(
             headers.get("x-portkey-api-key"),
@@ -519,7 +571,6 @@ max_output = 32768
 tools = true
 vision = false
 reasoning = true
-effort = false
 
 [models."kimi-k2.5".costs]
 input_cost_per_mtok = 0.60
@@ -547,7 +598,6 @@ cache_input_cost_per_mtok = 0.15
         assert_eq!(features.tools, Some(true));
         assert_eq!(features.vision, Some(false));
         assert_eq!(features.reasoning, Some(true));
-        assert_eq!(features.effort, Some(false));
 
         let costs = m.costs.as_ref().unwrap();
         assert_eq!(costs.base.input_cost_per_mtok, Some(0.60));
@@ -639,6 +689,17 @@ unknown_field = true
     }
 
     #[test]
+    fn rejects_removed_provider_base_url_env_field() {
+        let toml = r#"
+[providers.kimi]
+adapter = "openai_compatible"
+base_url_env = "KIMI_BASE_URL"
+"#;
+        let err = toml::from_str::<LlmLayer>(toml).unwrap_err();
+        assert!(err.to_string().contains("base_url_env"));
+    }
+
+    #[test]
     fn rejects_unknown_model_field() {
         let toml = r#"
 [models.foo]
@@ -656,6 +717,7 @@ mystery = 1
         let high = ProviderSettings {
             adapter: Some("openai_compatible".to_string()),
             base_url: Some("https://override.example".to_string()),
+            agent_profile: Some(fabro_model::AgentProfileKind::Anthropic),
             ..ProviderSettings::default()
         };
         let low = ProviderSettings {
@@ -663,6 +725,7 @@ mystery = 1
             base_url: Some("https://defaults.example".to_string()),
             display_name: Some("Default".to_string()),
             priority: Some(10),
+            agent_profile: Some(fabro_model::AgentProfileKind::OpenAi),
             ..ProviderSettings::default()
         };
         let merged = high.combine(low);
@@ -670,40 +733,63 @@ mystery = 1
         assert_eq!(merged.base_url.as_deref(), Some("https://override.example"));
         assert_eq!(merged.display_name.as_deref(), Some("Default"));
         assert_eq!(merged.priority, Some(10));
+        assert_eq!(
+            merged.agent_profile,
+            Some(fabro_model::AgentProfileKind::Anthropic)
+        );
     }
 
     #[test]
-    fn provider_credentials_array_replaces_wholesale() {
-        // Higher layer redeclares credentials → low layer's list is dropped
-        // entirely (whole-array replacement).
+    fn provider_auth_replaces_wholesale() {
+        // Higher layer redeclares auth, so the low layer's auth table is
+        // dropped entirely (whole-value replacement).
         let high = ProviderSettings {
-            credentials: Some(vec![CredentialRef::Env("FOO".to_string())]),
+            auth: Some(ProviderAuthConfig {
+                credentials: vec![CredentialRef::Env("FOO".to_string())],
+                header:      ApiKeyHeaderPolicy::Bearer,
+            }),
             ..ProviderSettings::default()
         };
         let low = ProviderSettings {
-            credentials: Some(vec![
-                CredentialRef::Credential("bar".to_string()),
-                CredentialRef::Env("BAZ".to_string()),
-            ]),
+            auth: Some(ProviderAuthConfig {
+                credentials: vec![
+                    CredentialRef::Credential("bar".to_string()),
+                    CredentialRef::Env("BAZ".to_string()),
+                ],
+                header:      ApiKeyHeaderPolicy::Custom {
+                    name: "x-api-key".to_string(),
+                },
+            }),
             ..ProviderSettings::default()
         };
         let merged = high.combine(low);
-        assert_eq!(merged.credentials.unwrap(), vec![CredentialRef::Env(
-            "FOO".to_string()
-        )]);
+        assert_eq!(
+            merged.auth,
+            Some(ProviderAuthConfig {
+                credentials: vec![CredentialRef::Env("FOO".to_string())],
+                header:      ApiKeyHeaderPolicy::Bearer,
+            })
+        );
     }
 
     #[test]
-    fn provider_credentials_inherits_when_unset_in_higher_layer() {
+    fn provider_auth_inherits_when_unset_in_higher_layer() {
         let high = ProviderSettings::default();
         let low = ProviderSettings {
-            credentials: Some(vec![CredentialRef::Env("FOO".to_string())]),
+            auth: Some(ProviderAuthConfig {
+                credentials: vec![CredentialRef::Env("FOO".to_string())],
+                header:      ApiKeyHeaderPolicy::Bearer,
+            }),
             ..ProviderSettings::default()
         };
         let merged = high.combine(low);
-        assert_eq!(merged.credentials.unwrap(), vec![CredentialRef::Env(
-            "FOO".to_string()
-        )]);
+        assert_eq!(
+            merged.auth,
+            Some(ProviderAuthConfig {
+                credentials: vec![CredentialRef::Env("FOO".to_string())],
+                header:      ApiKeyHeaderPolicy::Bearer,
+            })
+        );
     }
 
     #[test]
@@ -821,5 +907,22 @@ mystery = 1
             Some(&["high".to_string()][..])
         );
         assert_eq!(merged.speed.as_deref(), Some(&["fast".to_string()][..]));
+    }
+
+    #[test]
+    fn model_agent_profile_merges_as_scalar() {
+        let high = ModelSettings {
+            agent_profile: Some(fabro_model::AgentProfileKind::Gemini),
+            ..ModelSettings::default()
+        };
+        let low = ModelSettings {
+            agent_profile: Some(fabro_model::AgentProfileKind::Anthropic),
+            ..ModelSettings::default()
+        };
+
+        assert_eq!(
+            high.combine(low).agent_profile,
+            Some(fabro_model::AgentProfileKind::Gemini)
+        );
     }
 }

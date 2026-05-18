@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use fabro_auth::{ApiCredential, ApiKeyHeader, CredentialSource};
+use fabro_auth::{ApiCredential, CredentialSource};
 use fabro_model::{Catalog, ProviderId};
 use tracing::debug;
 
@@ -18,6 +18,24 @@ pub struct Client {
     default_provider: Option<String>,
     middleware:       Vec<Arc<dyn Middleware>>,
     catalog:          Option<Arc<Catalog>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProviderRegistrationIssue {
+    pub provider: ProviderId,
+    pub error:    Error,
+}
+
+#[derive(Clone)]
+pub struct ClientRegistrationReport {
+    pub client:              Client,
+    pub registration_issues: Vec<ProviderRegistrationIssue>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RegistrationMode {
+    FailFast,
+    CollectIssues,
 }
 
 impl Client {
@@ -56,6 +74,26 @@ impl Client {
         Self::from_credentials(resolved.credentials, catalog).await
     }
 
+    /// Create a Client report from a credential source.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error` only when the credential source itself fails. Provider
+    /// adapter construction/registration failures are recorded on the report.
+    pub async fn from_source_report(
+        source: &dyn CredentialSource,
+        catalog: Arc<Catalog>,
+    ) -> Result<ClientRegistrationReport, Error> {
+        let resolved = source
+            .resolve(&catalog)
+            .await
+            .map_err(|err| Error::Configuration {
+                message: format!("Failed to resolve LLM credentials: {err}"),
+                source:  None,
+            })?;
+        Ok(Self::from_credentials_report(resolved.credentials, catalog).await)
+    }
+
     /// Create a Client from typed provider credentials.
     ///
     /// # Errors
@@ -65,44 +103,98 @@ impl Client {
         credentials: Vec<ApiCredential>,
         catalog: Arc<Catalog>,
     ) -> Result<Self, Error> {
+        let (report, error) =
+            Self::from_credentials_internal(credentials, catalog, RegistrationMode::FailFast).await;
+        if let Some(error) = error {
+            return Err(error);
+        }
+        Ok(report.client)
+    }
+
+    /// Create a Client while collecting provider adapter registration failures.
+    ///
+    /// Providers whose credentials resolve but whose adapter cannot be
+    /// constructed or initialized are omitted from the returned client and
+    /// reported in `registration_issues`.
+    pub async fn from_credentials_report(
+        credentials: Vec<ApiCredential>,
+        catalog: Arc<Catalog>,
+    ) -> ClientRegistrationReport {
+        let (report, _) =
+            Self::from_credentials_internal(credentials, catalog, RegistrationMode::CollectIssues)
+                .await;
+        report
+    }
+
+    async fn from_credentials_internal(
+        credentials: Vec<ApiCredential>,
+        catalog: Arc<Catalog>,
+        mode: RegistrationMode,
+    ) -> (ClientRegistrationReport, Option<Error>) {
         let mut client = Self {
             providers:        HashMap::new(),
             default_provider: None,
             middleware:       Vec::new(),
             catalog:          Some(Arc::clone(&catalog)),
         };
+        let mut registration_issues = Vec::new();
 
         for credential in credentials {
             let provider_id = credential.provider.clone();
-            let Some(provider) = catalog.provider(&provider_id) else {
-                return Err(Error::Configuration {
+            let adapter = if let Some(provider) = catalog.provider(&provider_id) {
+                let factory = factory_for(provider.adapter);
+                factory(AdapterConfig {
+                    provider_id:   provider.id.to_string(),
+                    auth_header:   credential.auth_header,
+                    base_url:      credential.base_url.or_else(|| provider.base_url.clone()),
+                    extra_headers: credential.extra_headers,
+                    codex_mode:    credential.codex_mode,
+                    org_id:        credential.org_id,
+                    project_id:    credential.project_id,
+                    catalog:       Some(Arc::clone(&catalog)),
+                })
+            } else {
+                Err(Error::Configuration {
                     message: format!(
                         "Provider \"{provider_id}\" is not supported by credential-only registration"
                     ),
                     source:  None,
-                });
+                })
             };
-            let Some(factory) = factory_for(&provider.adapter) else {
-                return Err(Error::Configuration {
-                    message: format!(
-                        "Provider \"{provider_id}\" uses unsupported adapter \"{}\"",
-                        provider.adapter
-                    ),
-                    source:  None,
-                });
-            };
-
-            let adapter = factory(AdapterConfig {
-                provider_id:   provider.id.to_string(),
-                auth_header:   credential.auth_header,
-                base_url:      credential.base_url.or_else(|| provider.base_url.clone()),
-                extra_headers: credential.extra_headers,
-                codex_mode:    credential.codex_mode,
-                org_id:        credential.org_id,
-                project_id:    credential.project_id,
-                catalog:       Some(Arc::clone(&catalog)),
-            });
-            client.register_provider(adapter).await?;
+            match adapter {
+                Ok(adapter) => {
+                    if let Err(error) = client.register_provider(adapter).await {
+                        if mode == RegistrationMode::FailFast {
+                            return (
+                                ClientRegistrationReport {
+                                    client,
+                                    registration_issues,
+                                },
+                                Some(error),
+                            );
+                        }
+                        registration_issues.push(ProviderRegistrationIssue {
+                            provider: provider_id,
+                            error,
+                        });
+                    }
+                }
+                Err(error) => {
+                    if mode == RegistrationMode::FailFast {
+                        return (
+                            ClientRegistrationReport {
+                                client,
+                                registration_issues,
+                            },
+                            Some(error),
+                        );
+                    }
+                    registration_issues.push(ProviderRegistrationIssue {
+                        provider: provider_id,
+                        error,
+                    });
+                }
+            }
         }
 
         debug!(
@@ -111,7 +203,13 @@ impl Client {
             "LLM client initialized from typed credentials"
         );
 
-        Ok(client)
+        (
+            ClientRegistrationReport {
+                client,
+                registration_issues,
+            },
+            None,
+        )
     }
 
     /// Register a provider adapter. Calls `initialize()` on the adapter
@@ -227,6 +325,7 @@ impl Client {
         let provider = self.resolve_provider(request)?;
 
         if self.middleware.is_empty() {
+            provider.validate_request(request)?;
             return provider.complete(request).await;
         }
 
@@ -234,7 +333,10 @@ impl Client {
         let provider_clone = provider.clone();
         let base: NextFn = Arc::new(move |req: Request| {
             let p = provider_clone.clone();
-            Box::pin(async move { p.complete(&req).await })
+            Box::pin(async move {
+                p.validate_request(&req)?;
+                p.complete(&req).await
+            })
         });
 
         let chain = self.middleware.iter().rev().fold(base, |next, mw| {
@@ -261,6 +363,7 @@ impl Client {
         let provider = self.resolve_provider(request)?;
 
         if self.middleware.is_empty() {
+            provider.validate_request(request)?;
             return provider.stream(request).await;
         }
 
@@ -268,7 +371,10 @@ impl Client {
         let provider_clone = provider.clone();
         let base: NextStreamFn = Arc::new(move |req: Request| {
             let p = provider_clone.clone();
-            Box::pin(async move { p.stream(&req).await })
+            Box::pin(async move {
+                p.validate_request(&req)?;
+                p.stream(&req).await
+            })
         });
 
         let chain = self.middleware.iter().rev().fold(base, |next, mw| {
@@ -342,16 +448,11 @@ fn format_additional_speeds(values: &[Speed]) -> String {
     }
 }
 
-pub(crate) fn auth_value(auth_header: &ApiKeyHeader) -> String {
-    match auth_header {
-        ApiKeyHeader::Bearer(value) | ApiKeyHeader::Custom { value, .. } => value.clone(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
-    use fabro_auth::{CredentialSource, ResolvedCredentials};
+    use fabro_auth::{ApiKeyHeader, CredentialSource, ResolvedCredentials};
+    use fabro_model::ProviderId;
     use fabro_model::catalog::LlmCatalogSettings;
     use futures::stream;
 
@@ -525,8 +626,7 @@ mod tests {
 
     #[tokio::test]
     async fn complete_rejects_unsupported_reasoning_effort_before_dispatch() {
-        let catalog =
-            Arc::new(Catalog::from_builtin_with_overrides(&LlmCatalogSettings::default()).unwrap());
+        let catalog = Arc::new(Catalog::from_builtin().unwrap());
         let mut client = Client::new(HashMap::new(), None, vec![]);
         client.catalog = Some(Arc::clone(&catalog));
         client
@@ -552,8 +652,7 @@ mod tests {
 
     #[tokio::test]
     async fn complete_rejects_unsupported_speed_before_dispatch() {
-        let catalog =
-            Arc::new(Catalog::from_builtin_with_overrides(&LlmCatalogSettings::default()).unwrap());
+        let catalog = Arc::new(Catalog::from_builtin().unwrap());
         let mut client = Client::new(HashMap::new(), None, vec![]);
         client.catalog = Some(Arc::clone(&catalog));
         client
@@ -579,8 +678,7 @@ mod tests {
 
     #[tokio::test]
     async fn complete_accepts_standard_speed_without_catalog_declaration() {
-        let catalog =
-            Arc::new(Catalog::from_builtin_with_overrides(&LlmCatalogSettings::default()).unwrap());
+        let catalog = Arc::new(Catalog::from_builtin().unwrap());
         let mut client = Client::new(HashMap::new(), None, vec![]);
         client.catalog = Some(Arc::clone(&catalog));
         client
@@ -599,9 +697,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn complete_accepts_reasoning_effort_for_anthropic_budget_fallback_model() {
+        let catalog = Arc::new(Catalog::from_builtin().unwrap());
+        let mut client = Client::new(HashMap::new(), None, vec![]);
+        client.catalog = Some(Arc::clone(&catalog));
+        client
+            .register_provider(Arc::new(MockProvider::new("anthropic", "accepted")))
+            .await
+            .unwrap();
+
+        let mut request = test_request();
+        request.model = "claude-sonnet-4-5".to_string();
+        request.provider = Some("anthropic".to_string());
+        request.reasoning_effort = Some(ReasoningEffort::Low);
+
+        let response = client.complete(&request).await.unwrap();
+
+        assert_eq!(response.text(), "accepted");
+    }
+
+    #[tokio::test]
     async fn complete_skips_control_validation_for_unknown_model_passthrough() {
-        let catalog =
-            Arc::new(Catalog::from_builtin_with_overrides(&LlmCatalogSettings::default()).unwrap());
+        let catalog = Arc::new(Catalog::from_builtin().unwrap());
         let mut client = Client::new(HashMap::new(), None, vec![]);
         client.catalog = Some(Arc::clone(&catalog));
         client
@@ -622,8 +739,7 @@ mod tests {
 
     #[tokio::test]
     async fn stream_rejects_unsupported_speed_before_dispatch() {
-        let catalog =
-            Arc::new(Catalog::from_builtin_with_overrides(&LlmCatalogSettings::default()).unwrap());
+        let catalog = Arc::new(Catalog::from_builtin().unwrap());
         let mut client = Client::new(HashMap::new(), None, vec![]);
         client.catalog = Some(Arc::clone(&catalog));
         client
@@ -655,7 +771,7 @@ mod tests {
         let client = Client::from_credentials(
             vec![
                 ApiCredential {
-                    provider:      fabro_model::Provider::Anthropic.id(),
+                    provider:      ProviderId::anthropic(),
                     auth_header:   Some(ApiKeyHeader::Custom {
                         name:  "x-api-key".to_string(),
                         value: "anthropic-key".to_string(),
@@ -667,7 +783,7 @@ mod tests {
                     project_id:    None,
                 },
                 ApiCredential {
-                    provider:      fabro_model::Provider::OpenAi.id(),
+                    provider:      ProviderId::openai(),
                     auth_header:   Some(ApiKeyHeader::Bearer("openai-key".to_string())),
                     extra_headers: HashMap::new(),
                     base_url:      None,
@@ -688,11 +804,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn from_credentials_supports_openai_compatible_provider_constants() {
+    async fn from_credentials_supports_builtin_openai_compatible_providers() {
         let catalog = catalog_with("");
         let client = Client::from_credentials(
             vec![ApiCredential {
-                provider:      fabro_model::Provider::Kimi.id(),
+                provider:      ProviderId::new("kimi"),
                 auth_header:   Some(ApiKeyHeader::Bearer("kimi-key".to_string())),
                 extra_headers: HashMap::new(),
                 base_url:      None,
@@ -739,10 +855,76 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn from_credentials_report_skips_provider_that_cannot_register() {
+        let catalog = catalog_with(
+            r#"
+[providers.acme]
+display_name = "Acme"
+adapter = "openai_compatible"
+agent_profile = "openai"
+
+[providers.acme.auth]
+credentials = ["env:ACME_API_KEY"]
+
+[models."acme-large"]
+provider = "acme"
+display_name = "Acme Large"
+family = "acme"
+default = true
+
+[models."acme-large".limits]
+context_window = 128000
+
+[models."acme-large".features]
+tools = true
+vision = false
+reasoning = false
+"#,
+        );
+        let report = Client::from_credentials_report(
+            vec![
+                ApiCredential {
+                    provider:      ProviderId::new("acme"),
+                    auth_header:   Some(ApiKeyHeader::Bearer("acme-key".to_string())),
+                    extra_headers: HashMap::new(),
+                    base_url:      None,
+                    codex_mode:    false,
+                    org_id:        None,
+                    project_id:    None,
+                },
+                ApiCredential {
+                    provider:      ProviderId::openai(),
+                    auth_header:   Some(ApiKeyHeader::Bearer("openai-key".to_string())),
+                    extra_headers: HashMap::new(),
+                    base_url:      None,
+                    codex_mode:    false,
+                    org_id:        None,
+                    project_id:    None,
+                },
+            ],
+            Arc::clone(&catalog),
+        )
+        .await;
+
+        assert_eq!(report.client.provider_names(), vec!["openai"]);
+        assert_eq!(report.registration_issues.len(), 1);
+        assert_eq!(
+            report.registration_issues[0].provider,
+            ProviderId::new("acme")
+        );
+        assert!(
+            report.registration_issues[0]
+                .error
+                .to_string()
+                .contains("uses openai_compatible adapter but does not configure base_url")
+        );
+    }
+
+    #[tokio::test]
     async fn from_source_registers_provider_from_resolved_credentials() {
         let source = StubSource {
             credentials: vec![ApiCredential {
-                provider:      fabro_model::Provider::Anthropic.id(),
+                provider:      ProviderId::anthropic(),
                 auth_header:   Some(ApiKeyHeader::Custom {
                     name:  "x-api-key".to_string(),
                     value: "anthropic-key".to_string(),
@@ -768,9 +950,12 @@ mod tests {
 [providers.acme]
 display_name = "Acme"
 adapter = "openai_compatible"
+agent_profile = "openai"
 base_url = "https://api.acme.test/v1"
-credentials = ["env:ACME_API_KEY"]
 aliases = ["acme-ai"]
+
+[providers.acme.auth]
+credentials = ["env:ACME_API_KEY"]
 
 [models."acme-large"]
 provider = "acme"
@@ -785,7 +970,6 @@ context_window = 128000
 tools = true
 vision = false
 reasoning = false
-effort = false
 "#,
         );
 
@@ -816,9 +1000,12 @@ effort = false
 [providers.acme]
 display_name = "Acme"
 adapter = "openai_compatible"
+agent_profile = "openai"
 base_url = "https://api.acme.test/v1"
-credentials = ["env:ACME_API_KEY"]
 aliases = ["acme-ai"]
+
+[providers.acme.auth]
+credentials = ["env:ACME_API_KEY"]
 
 [models."acme-large"]
 provider = "acme"
@@ -833,7 +1020,6 @@ context_window = 128000
 tools = true
 vision = false
 reasoning = false
-effort = false
 "#,
         );
 
@@ -860,12 +1046,13 @@ effort = false
     }
 
     #[tokio::test]
-    async fn from_credentials_registers_header_only_provider() {
+    async fn from_credentials_registers_no_auth_provider_with_extra_headers() {
         let catalog = catalog_with(
             r#"
 [providers.portkey]
 display_name = "Portkey Bedrock"
 adapter = "anthropic"
+agent_profile = "anthropic"
 base_url = "https://api.portkey.ai/v1"
 
 [providers.portkey.extra_headers]
@@ -884,7 +1071,7 @@ context_window = 200000
 tools = true
 vision = true
 reasoning = true
-effort = true
+reasoning_effort = "levels"
 "#,
         );
 

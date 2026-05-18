@@ -1,10 +1,12 @@
 [providers.inception]
 display_name = "Inception"
 adapter = "openai_compatible"
+api_key_url = "https://console.inceptionlabs.ai/api-keys"
 base_url = "https://api.inceptionlabs.ai/v1"
-credentials = ["credential:inception", "env:INCEPTION_API_KEY"]
 priority = 40
-aliases = ["inception_labs"]
+
+[providers.inception.auth]
+credentials = ["credential:inception", "env:INCEPTION_API_KEY"]
 
 [models."mercury-2"]
 provider = "inception"

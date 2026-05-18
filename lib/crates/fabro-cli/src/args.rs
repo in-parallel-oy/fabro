@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use fabro_agent::cli::AgentArgs;
+use fabro_agent::cli::{AgentArgs, PermissionLevel};
 use fabro_config::{CliLayer, CliLoggingLayer, CliOutputLayer, CliUpdatesLayer};
 use fabro_server::serve::DEFAULT_TCP_PORT;
 use fabro_static::EnvVars;
@@ -293,6 +293,10 @@ pub(crate) struct RunArgs {
     #[arg(long = "label", value_name = "KEY=VALUE")]
     pub(crate) label: Vec<String>,
 
+    /// Link this run to an existing orchestration parent run
+    #[arg(long, value_name = "RUN")]
+    pub(crate) parent: Option<String>,
+
     /// Keep the sandbox alive after the run finishes (for debugging)
     #[arg(long)]
     pub(crate) preserve_sandbox: bool,
@@ -376,6 +380,10 @@ pub(crate) struct RunsListArgs {
     /// Only display run IDs
     #[arg(short = 'q', long)]
     pub(crate) quiet: bool,
+
+    /// Only display runs linked to this orchestration parent
+    #[arg(long, value_name = "RUN")]
+    pub(crate) parent: Option<String>,
 }
 
 #[derive(Args)]
@@ -771,7 +779,7 @@ pub(crate) struct ProviderLoginArgs {
 
     /// LLM provider to authenticate with
     #[arg(long)]
-    pub(crate) provider: fabro_model::Provider,
+    pub(crate) provider: fabro_model::ProviderId,
 
     /// Read an API key from stdin instead of prompting
     #[arg(long)]
@@ -886,6 +894,46 @@ pub(crate) struct PrViewArgs {
 
     /// Run ID or prefix
     pub(crate) run_id: String,
+}
+
+#[derive(Args)]
+pub(crate) struct PrLinkArgs {
+    #[command(flatten)]
+    pub(crate) server: ServerTargetArgs,
+
+    /// Run ID or prefix
+    pub(crate) run_id: String,
+    /// GitHub pull request URL to associate with the run
+    pub(crate) url:    String,
+}
+
+#[derive(Args)]
+pub(crate) struct PrUnlinkArgs {
+    #[command(flatten)]
+    pub(crate) server: ServerTargetArgs,
+
+    /// Run ID or prefix
+    pub(crate) run_id: String,
+}
+
+#[derive(Args)]
+pub(crate) struct ParentLinkArgs {
+    #[command(flatten)]
+    pub(crate) server: ServerTargetArgs,
+
+    /// Child run selector
+    pub(crate) child_run:  String,
+    /// Parent run selector
+    pub(crate) parent_run: String,
+}
+
+#[derive(Args)]
+pub(crate) struct ParentUnlinkArgs {
+    #[command(flatten)]
+    pub(crate) server: ServerTargetArgs,
+
+    /// Child run selector
+    pub(crate) child_run: String,
 }
 
 #[derive(Args)]
@@ -1004,6 +1052,28 @@ pub(crate) struct ExecArgs {
 
     #[command(flatten)]
     pub(crate) agent: AgentArgs,
+}
+
+#[derive(Args)]
+pub(crate) struct SessionArgs {
+    #[command(flatten)]
+    pub(crate) connection: ServerConnectionArgs,
+
+    /// Task prompt
+    #[arg(short = 'p', long = "prompt")]
+    pub(crate) prompt: String,
+
+    /// LLM provider (anthropic, openai, gemini, kimi, zai, minimax, inception)
+    #[arg(long)]
+    pub(crate) provider: Option<String>,
+
+    /// Model name (defaults per provider)
+    #[arg(long)]
+    pub(crate) model: Option<String>,
+
+    /// Permission level for tool execution
+    #[arg(long = "permissions", value_name = "LEVEL", value_enum)]
+    pub(crate) permissions: Option<PermissionLevel>,
 }
 
 #[derive(Args)]
@@ -1139,6 +1209,8 @@ pub(crate) enum Commands {
     /// Run an agentic coding session
     #[command(hide = true)]
     Exec(ExecArgs),
+    /// Run a persistent Fabro agent session
+    Session(SessionArgs),
     #[command(flatten)]
     RunCmd(RunCommands),
     /// Validate run configuration without executing
@@ -1182,6 +1254,8 @@ pub(crate) enum Commands {
     Auth(AuthNamespace),
     /// Pull request operations
     Pr(PrNamespace),
+    /// Manage run parent links
+    Parent(ParentNamespace),
     /// Manage server-owned secrets
     Secret(SecretNamespace),
     /// Inspect effective settings
@@ -1243,6 +1317,7 @@ impl Commands {
             },
             Self::Dump(_) => "dump",
             Self::Exec(_) => "exec",
+            Self::Session(_) => "session",
             Self::RunCmd(cmd) => cmd.name(),
             Self::Preflight(_) => "preflight",
             Self::Validate(_) => "validate",
@@ -1284,9 +1359,15 @@ impl Commands {
             },
             Self::Pr(ns) => match &ns.command {
                 PrCommand::Create(_) => "pr create",
+                PrCommand::Link(_) => "pr link",
+                PrCommand::Unlink(_) => "pr unlink",
                 PrCommand::View(_) => "pr view",
                 PrCommand::Merge(_) => "pr merge",
                 PrCommand::Close(_) => "pr close",
+            },
+            Self::Parent(ns) => match &ns.command {
+                ParentCommand::Link(_) => "parent link",
+                ParentCommand::Unlink(_) => "parent unlink",
             },
             Self::Secret(ns) => match &ns.command {
                 SecretCommand::List(_) => "secret list",
@@ -1335,12 +1416,30 @@ pub(crate) struct PrNamespace {
 pub(crate) enum PrCommand {
     /// Create a pull request from a completed run
     Create(PrCreateArgs),
+    /// Link or replace the GitHub pull request associated with a run
+    Link(PrLinkArgs),
+    /// Unlink the pull request associated with a run
+    Unlink(PrUnlinkArgs),
     /// View pull request details
     View(PrViewArgs),
     /// Merge a pull request
     Merge(PrMergeArgs),
     /// Close a pull request
     Close(PrCloseArgs),
+}
+
+#[derive(Args)]
+pub(crate) struct ParentNamespace {
+    #[command(subcommand)]
+    pub(crate) command: ParentCommand,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ParentCommand {
+    /// Link or replace a run's orchestration parent
+    Link(ParentLinkArgs),
+    /// Unlink a run from its orchestration parent
+    Unlink(ParentUnlinkArgs),
 }
 
 #[derive(Args)]
@@ -1553,7 +1652,7 @@ pub(crate) struct InstallGithubArgs {
 #[derive(Args, Debug, Clone, Default)]
 pub(crate) struct InstallNonInteractiveArgs {
     #[arg(long, hide = true)]
-    pub(crate) llm_provider: Option<fabro_model::Provider>,
+    pub(crate) llm_provider: Option<fabro_model::ProviderId>,
 
     #[arg(long, hide = true)]
     pub(crate) llm_api_key_stdin: bool,
