@@ -219,53 +219,11 @@ pub struct CommandCompletedProps {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AgentCliStartedProps {
-    pub visit:    u32,
-    pub mode:     String,
-    pub provider: String,
-    pub model:    String,
-    pub command:  String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AgentCliCompletedProps {
-    pub stdout:      String,
-    pub stderr:      String,
-    pub exit_code:   i32,
-    pub duration_ms: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AgentCliCancelledProps {
-    pub stdout:      String,
-    pub stderr:      String,
-    pub duration_ms: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AgentCliTimedOutProps {
-    pub stdout:      String,
-    pub stderr:      String,
-    pub duration_ms: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentAcpStartedProps {
-    pub visit:     u32,
-    pub mode:      String,
-    pub provider:  String,
-    pub model:     String,
-    pub command:   String,
-    /// Credential resolution mode: `"fabro"` when Fabro injected credentials
-    /// (API key env, optional CLI login), `"host"` when the ACP child was
-    /// launched without credential injection so it can use the host's
-    /// already-authenticated subscription session.
-    #[serde(default = "default_acp_auth_mode")]
-    pub auth_mode: String,
-}
-
-fn default_acp_auth_mode() -> String {
-    "fabro".to_string()
+    pub visit:       u32,
+    pub command:     String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

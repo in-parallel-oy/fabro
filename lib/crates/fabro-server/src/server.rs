@@ -40,9 +40,7 @@ pub use fabro_api::types::{
     SystemRepairRunsResponse, SystemRunCounts, TimelineEntryResponse, VncPreviewResponse,
     WriteBlobResponse,
 };
-use fabro_auth::{
-    CredentialSource, VaultCredentialSource, auth_issue_message, parse_credential_secret,
-};
+use fabro_auth::{CredentialSource, VaultCredentialSource, auth_issue_message};
 #[cfg(test)]
 use fabro_config::RunSettingsBuilder;
 use fabro_config::daemon::ServerDaemon;
@@ -139,7 +137,8 @@ use crate::server_secrets::{LlmClientResult, ServerSecrets};
 use crate::spawn_env::{apply_render_graph_env, apply_worker_env};
 use crate::worker_token::{WorkerTokenKeys, issue_worker_token};
 use crate::{
-    canonical_host, demo, diagnostics, run_manifest, security_headers, static_files, web_auth,
+    canonical_host, demo, diagnostics, run_manifest, security_headers, static_files,
+    vault_legacy_migration, web_auth,
 };
 
 mod handler;
@@ -1364,7 +1363,7 @@ fn build_disk_usage_response(
         if verbose {
             run_rows.push(DiskUsageRunRow {
                 run_id:        Some(run.run_id().to_string()),
-                workflow_name: Some(run.workflow_name()),
+                workflow_name: Some(run.workflow_display_name()),
                 status:        Some(run.status().to_string()),
                 start_time:    Some(run.start_time()),
                 size_bytes:    Some(to_i64(size)),
@@ -1459,7 +1458,7 @@ fn build_prune_plan(
         .map(|run| PruneRunEntry {
             run_id:        Some(run.run_id().to_string()),
             dir_name:      Some(run.dir_name.clone()),
-            workflow_name: Some(run.workflow_name()),
+            workflow_name: Some(run.workflow_display_name()),
             size_bytes:    Some(to_i64(dir_size(&run.path))),
         })
         .collect::<Vec<_>>();
@@ -1558,7 +1557,32 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
         shutdown,
     } = config;
 
-    let vault = Arc::new(AsyncRwLock::new(Vault::load(vault_path)?));
+    match vault_legacy_migration::migrate_legacy_vault_file(&vault_path) {
+        Ok(report) if report.changed() => {
+            let backup_path = report
+                .backup_path
+                .as_ref()
+                .map_or_else(|| "<none>".to_string(), |path| path.display().to_string());
+            warn!(
+                migrated_entries = report.migrated_entries,
+                skipped_entries = report.skipped_entries,
+                backup_path = %backup_path,
+                removal_deadline = vault_legacy_migration::REMOVAL_DEADLINE,
+                "Migrated legacy vault file"
+            );
+        }
+        Ok(_) => {}
+        Err(err) => {
+            warn!(
+                error = %err,
+                removal_deadline = vault_legacy_migration::REMOVAL_DEADLINE,
+                "Legacy vault migration failed; continuing with normal vault load"
+            );
+        }
+    }
+    let vault = Vault::load(vault_path.clone())
+        .with_context(|| format!("load vault {}", vault_path.display()))?;
+    let vault = Arc::new(AsyncRwLock::new(vault));
     let llm_source: Arc<dyn CredentialSource> = Arc::new(VaultCredentialSource::with_env_lookup(
         Arc::clone(&vault),
         {
@@ -2483,18 +2507,17 @@ fn update_live_run_from_event(state: &AppState, run_id: RunId, event: &RunEvent)
                 }
             }
         }
-        // Track non-steerable agent stages. CLI/ACP started/completed are
+        // Track non-steerable agent stages. ACP started/completed are
         // coarser and sometimes fail to emit terminal events on error paths;
         // stage.completed/stage.failed below are the backstops.
-        EventBody::AgentCliStarted(_) | EventBody::AgentAcpStarted(_) => {
+        EventBody::AgentAcpStarted(_) => {
             if let Some(stage_id) = event.stage_id.as_ref() {
                 managed_run
                     .active_non_steerable_agent_stages
                     .insert(stage_id.clone());
             }
         }
-        EventBody::AgentCliCompleted(_)
-        | EventBody::AgentAcpCompleted(_)
+        EventBody::AgentAcpCompleted(_)
         | EventBody::AgentAcpCancelled(_)
         | EventBody::AgentAcpTimedOut(_) => {
             if let Some(stage_id) = &event.stage_id {
@@ -2504,7 +2527,7 @@ fn update_live_run_from_event(state: &AppState, run_id: RunId, event: &RunEvent)
             }
         }
         // Stage lifecycle backstop: cover both completion and failure
-        // paths so a failing CLI stage doesn't strand its entry.
+        // paths so a failing ACP stage doesn't strand its entry.
         EventBody::StageCompleted(_) | EventBody::StageFailed(_) => {
             if let Some(stage_id) = &event.stage_id {
                 managed_run.active_api_stages.remove(stage_id);

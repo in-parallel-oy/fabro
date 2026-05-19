@@ -1,7 +1,13 @@
 ---
-title: "Fabro MCP server"
+title: "ACP backend and Fabro MCP server"
 date: "2026-05-11"
 ---
+
+## ACP agent backend
+
+Fabro introduced Agent Client Protocol as a first-class backend for agent execution. Instead of routing every agent through Fabro-owned provider adapters, workflows can hand a stage to a stdio ACP process and keep that process responsible for its own tools, context, and model auth.
+
+ACP runs also emit dedicated workflow events and projections, so run detail, logs, and stored events can distinguish protocol activity from API-backed model calls. This gives teams a clearer integration path for custom agent runtimes while keeping normal Fabro run lifecycle, checkpoint, and validation behavior.
 
 ## Fabro MCP server
 
@@ -33,7 +39,9 @@ This lets agent tools orchestrate Fabro runs without scraping CLI output or hand
 </Accordion>
 
 <Accordion title="Workflows">
-- Added a bundled `daytona-medium` workflow for verifying the Daytona Medium sandbox starts with standard tooling
+- Added ACP execution events and stored projections for protocol sessions
+- Added validation for ACP backend configuration on workflow nodes
+- Added sandbox stdio support for local, Docker, and test-support providers
 </Accordion>
 
 <Accordion title="Improvements">

@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{AcpAuthMode, LlmBackend};
+use crate::AgentBackend;
 
 /// Typed attribute values for nodes, edges, and graph-level attributes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -258,26 +258,23 @@ impl Node {
     }
 
     #[must_use]
-    pub fn llm_backend(&self) -> Option<Result<LlmBackend, strum::ParseError>> {
+    pub fn agent_backend(&self) -> Option<Result<AgentBackend, strum::ParseError>> {
         self.backend().map(str::parse)
     }
 
     #[must_use]
-    pub fn acp_command(&self) -> Option<&str> {
+    pub fn legacy_acp_command_attr(&self) -> Option<&str> {
         self.str_attr("acp_command")
     }
 
     #[must_use]
-    pub fn acp_auth_raw(&self) -> Option<&str> {
-        self.str_attr("acp_auth")
+    pub fn acp_command_attr(&self) -> Option<&str> {
+        self.str_attr("acp.command")
     }
 
-    /// Parsed `acp_auth` attribute. Returns `Ok(AcpAuthMode::Fabro)` when the
-    /// attribute is absent. Returns `Err` when the attribute is set but does
-    /// not parse — callers (validation, handler) decide how to surface it.
-    pub fn acp_auth(&self) -> Result<AcpAuthMode, strum::ParseError> {
-        self.acp_auth_raw()
-            .map_or(Ok(AcpAuthMode::default()), str::parse)
+    #[must_use]
+    pub fn acp_config_attr(&self) -> Option<&str> {
+        self.str_attr("acp.config")
     }
 
     #[must_use]

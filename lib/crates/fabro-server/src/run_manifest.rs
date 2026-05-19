@@ -93,7 +93,6 @@ pub(crate) fn prepare_manifest(
 
     let args_overrides =
         manifest_args_overrides(manifest.args.as_ref()).context("failed to parse manifest args")?;
-    let workflow_run_layer = root_workflow_run_layer(&workflow_input)?;
     let mut workflow_settings_builder =
         WorkflowSettingsBuilder::new().server_run_defaults(manifest_run_defaults.clone());
     if let Some(run) = args_overrides.run {
@@ -102,9 +101,10 @@ pub(crate) fn prepare_manifest(
     if let Some(cli) = args_overrides.cli {
         workflow_settings_builder = workflow_settings_builder.cli_overrides(cli);
     }
-    if !workflow_run_layer.eq(&RunLayer::default()) {
-        workflow_settings_builder =
-            workflow_settings_builder.workflow_run_layer(workflow_run_layer);
+    if let Some(config) = workflow_input.config.as_ref() {
+        let workflow_run_layer = workflow_run_layer_with_resolved_dockerfile(&workflow_input)?;
+        workflow_settings_builder = workflow_settings_builder
+            .workflow_toml_with_run_layer(&config.source, workflow_run_layer)?;
     }
     for config in manifest
         .configs
@@ -316,11 +316,11 @@ fn workflow_files_from_manifest(
     Ok(bundled)
 }
 
-fn root_workflow_run_layer(workflow: &BundledWorkflow) -> Result<RunLayer> {
-    let Some(config) = workflow.config.as_ref() else {
-        return Ok(RunLayer::default());
-    };
-
+fn workflow_run_layer_with_resolved_dockerfile(workflow: &BundledWorkflow) -> Result<RunLayer> {
+    let config = workflow
+        .config
+        .as_ref()
+        .expect("workflow config should exist before resolving its run layer");
     // Parse via `SettingsLayer` so unknown nested keys (like a stale
     // `[server.integrations.github.permissions]` after the move to
     // `[run.integrations.github.permissions]`) trip
@@ -1962,6 +1962,126 @@ app_id = "fixture-app-id"
         assert!(settings_json.pointer("/server").is_none());
     }
 
+    #[test]
+    fn prepare_manifest_preserves_bundled_workflow_metadata() {
+        let mut manifest = minimal_manifest();
+        manifest.workflows.get_mut("workflow.fabro").unwrap().config =
+            Some(types::ManifestWorkflowConfig {
+                path:   "workflow.toml".to_string(),
+                source: r#"
+_version = 1
+
+[workflow]
+name = "Ship feature"
+description = "Move the feature through review"
+
+[workflow.metadata]
+team = "platform"
+priority = "high"
+
+[run.sandbox]
+provider = "local"
+"#
+                .to_string(),
+            });
+
+        let prepared = prepare_manifest(
+            &manifest_run_defaults(Some(&default_settings_fixture())),
+            &manifest,
+        )
+        .unwrap();
+
+        assert_eq!(
+            prepared.settings.workflow.name.as_deref(),
+            Some("Ship feature")
+        );
+        assert_eq!(
+            prepared.settings.workflow.description.as_deref(),
+            Some("Move the feature through review")
+        );
+        assert_eq!(
+            prepared
+                .settings
+                .workflow
+                .metadata
+                .get("team")
+                .map(String::as_str),
+            Some("platform")
+        );
+        assert_eq!(
+            prepared
+                .settings
+                .workflow
+                .metadata
+                .get("priority")
+                .map(String::as_str),
+            Some("high")
+        );
+    }
+
+    #[test]
+    fn prepare_manifest_keeps_missing_metadata_names_absent() {
+        let mut manifest = minimal_manifest();
+        manifest.target.identifier = "release-flow".to_string();
+        manifest.workflows.get_mut("workflow.fabro").unwrap().source = r"
+digraph GraphName {
+    start [shape=Mdiamond]
+    exit [shape=Msquare]
+    start -> exit
+}
+"
+        .to_string();
+        manifest.configs.push(types::ManifestConfig {
+            path:   Some(".fabro/project.toml".to_string()),
+            source: Some(
+                r#"_version = 1
+
+[project.metadata]
+team = "platform"
+"#
+                .to_string(),
+            ),
+            type_:  types::ManifestConfigType::Project,
+        });
+
+        let prepared = prepare_manifest(
+            &manifest_run_defaults(Some(&default_settings_fixture())),
+            &manifest,
+        )
+        .unwrap();
+
+        assert_eq!(prepared.settings.workflow.name, None);
+        assert_eq!(prepared.settings.project.name, None);
+    }
+
+    #[test]
+    fn prepare_manifest_preserves_explicit_project_name() {
+        let mut manifest = minimal_manifest();
+        manifest.configs.push(types::ManifestConfig {
+            path:   Some(".fabro/project.toml".to_string()),
+            source: Some(
+                r#"_version = 1
+
+[project]
+name = "Control Plane"
+"#
+                .to_string(),
+            ),
+            type_:  types::ManifestConfigType::Project,
+        });
+
+        let prepared = prepare_manifest(
+            &manifest_run_defaults(Some(&default_settings_fixture())),
+            &manifest,
+        )
+        .unwrap();
+
+        assert_eq!(
+            prepared.settings.project.name.as_deref(),
+            Some("Control Plane")
+        );
+    }
+
     #[tokio::test]
     async fn invalid_preflight_returns_diagnostics_without_runtime_checks() {
         let state = crate::test_support::test_app_state();
@@ -2081,6 +2201,74 @@ provider = "local"
         );
     }
 
+    #[test]
+    fn prepare_manifest_does_not_backfill_missing_project_and_workflow_names() {
+        let mut manifest = minimal_manifest();
+        manifest.workflows.get_mut("workflow.fabro").unwrap().config =
+            Some(types::ManifestWorkflowConfig {
+                path:   "workflow.toml".to_string(),
+                source: "_version = 1\n".to_string(),
+            });
+        manifest.configs.push(types::ManifestConfig {
+            path:   Some("/tmp/project/.fabro/project.toml".to_string()),
+            source: Some("_version = 1\n".to_string()),
+            type_:  types::ManifestConfigType::Project,
+        });
+
+        let prepared = prepare_manifest(
+            &manifest_run_defaults(Some(&default_settings_fixture())),
+            &manifest,
+        )
+        .unwrap();
+
+        assert_eq!(prepared.settings.project.name, None);
+        assert_eq!(prepared.settings.workflow.name, None);
+    }
+
+    #[test]
+    fn prepare_manifest_preserves_explicit_project_and_workflow_names() {
+        let mut manifest = minimal_manifest();
+        manifest.workflows.get_mut("workflow.fabro").unwrap().config =
+            Some(types::ManifestWorkflowConfig {
+                path:   "workflow.toml".to_string(),
+                source: r#"
+_version = 1
+
+[workflow]
+name = "Workflow Config Name"
+"#
+                .to_string(),
+            });
+        manifest.configs.push(types::ManifestConfig {
+            path:   Some("/tmp/project/.fabro/project.toml".to_string()),
+            source: Some(
+                r#"
+_version = 1
+
+[project]
+name = "Project Config Name"
+"#
+                .to_string(),
+            ),
+            type_:  types::ManifestConfigType::Project,
+        });
+
+        let prepared = prepare_manifest(
+            &manifest_run_defaults(Some(&default_settings_fixture())),
+            &manifest,
+        )
+        .unwrap();
+
+        assert_eq!(
+            prepared.settings.project.name.as_deref(),
+            Some("Project Config Name")
+        );
+        assert_eq!(
+            prepared.settings.workflow.name.as_deref(),
+            Some("Workflow Config Name")
+        );
+    }
+
     #[tokio::test]
     async fn preflight_daytona_without_github_credentials_returns_report() {
         let state = crate::test_support::test_app_state();
@@ -2150,15 +2338,9 @@ provider = "daytona"
             .write()
             .await
             .set(
-                "openai",
-                &serde_json::to_string(&fabro_auth::AuthCredential {
-                    provider: ProviderId::openai(),
-                    details:  fabro_auth::AuthDetails::ApiKey {
-                        key: "test-openai-key".to_string(),
-                    },
-                })
-                .unwrap(),
-                fabro_vault::SecretType::Credential,
+                "OPENAI_API_KEY",
+                "test-openai-key",
+                fabro_vault::SecretType::Token,
                 None,
             )
             .unwrap();
@@ -2317,15 +2499,16 @@ digraph Demo {
         );
     }
 
-    mod root_workflow_run_layer_tests {
-        //! `root_workflow_run_layer` parses bundled workflow.toml through
-        //! the strict `SettingsLayer` schema, so unknown fields anywhere in
-        //! the document trip `deny_unknown_fields`.
+    mod workflow_run_layer_with_resolved_dockerfile_tests {
+        //! `workflow_run_layer_with_resolved_dockerfile` parses bundled
+        //! workflow.toml through the strict `SettingsLayer` schema, so
+        //! unknown fields anywhere in the document trip
+        //! `deny_unknown_fields`.
 
         use fabro_types::ManifestPath;
         use fabro_workflow::workflow_bundle::{BundledWorkflow, ParsedWorkflowConfig};
 
-        use super::super::root_workflow_run_layer;
+        use super::super::workflow_run_layer_with_resolved_dockerfile;
 
         fn workflow_with_config(source: &str) -> BundledWorkflow {
             BundledWorkflow {
@@ -2350,7 +2533,8 @@ issues = "read"
 "#,
             );
 
-            let run = root_workflow_run_layer(&workflow).expect("workflow.toml should parse");
+            let run = workflow_run_layer_with_resolved_dockerfile(&workflow)
+                .expect("workflow.toml should parse");
             let github = run
                 .integrations
                 .as_ref()
@@ -2374,7 +2558,7 @@ issues = "read"
 "#,
             );
 
-            let err = root_workflow_run_layer(&workflow)
+            let err = workflow_run_layer_with_resolved_dockerfile(&workflow)
                 .expect_err("stale [server.integrations.github.permissions] should be rejected");
             let message = format!("{err:#}");
             assert!(
@@ -2396,8 +2580,8 @@ contents = "read"
 "#,
             );
 
-            let run =
-                root_workflow_run_layer(&workflow).expect("workflow + run blocks should parse");
+            let run = workflow_run_layer_with_resolved_dockerfile(&workflow)
+                .expect("workflow + run blocks should parse");
             assert!(run.integrations.is_some());
         }
     }

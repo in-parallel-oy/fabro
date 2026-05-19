@@ -1,6 +1,5 @@
 extern crate self as fabro_types;
 
-pub mod acp_auth_mode;
 pub mod artifact;
 pub mod auth;
 pub mod billing;
@@ -41,7 +40,6 @@ pub mod stage_id;
 pub mod start;
 pub mod status;
 
-pub use acp_auth_mode::AcpAuthMode;
 pub use artifact::ArtifactUpload;
 pub use auth::{IdpIdentity, IdpIdentityError};
 pub use billing::{
@@ -63,7 +61,7 @@ pub use graph::{
     shape_to_handler_type,
 };
 pub use interview::{InterviewQuestionRecord, QuestionType};
-pub use llm_backend::LlmBackend;
+pub use llm_backend::AgentBackend;
 pub use manifest_path::{ManifestPath, ManifestPathParseError};
 pub use outcome::{
     FailureCategory, FailureDetail, NodeResult, Outcome, OutcomeMeta, StageOutcome, StageState,

@@ -4,63 +4,28 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use fabro_acp::{
-    AcpCommandError, AcpError, AcpRunRequest, render_stop_reason, resolve_acp_command,
-};
+use fabro_acp::{AcpCommandError, AcpError, AcpProcessSpec, AcpRunRequest, render_stop_reason};
 use fabro_agent::{Sandbox, StaticEnvProvider, ToolEnvProvider};
-use fabro_auth::CredentialResolver;
 use fabro_graphviz::graph::Node;
-use fabro_model::{Catalog, ProviderId};
-use fabro_types::AcpAuthMode;
 use fabro_util::time::elapsed_ms;
 use tokio_util::sync::CancellationToken;
 
 use super::super::agent::{CodergenBackend, CodergenResult, CodergenRunRequest, OneShotRequest};
-use super::cli::AgentCli;
-use super::launch_env::{AgentLaunchEnvRequest, resolve_agent_launch_env};
-use super::{changed_files, routing};
+use super::changed_files;
 use crate::error::Error;
 use crate::event::{Emitter, Event, RunNoticeCode, RunNoticeLevel, StageScope};
 
 pub struct AgentAcpBackend {
-    model: String,
-    provider_id: ProviderId,
-    tool_env: Option<Arc<dyn ToolEnvProvider>>,
+    tool_env:                     Option<Arc<dyn ToolEnvProvider>>,
     github_token_refresh_managed: bool,
-    resolver: Option<CredentialResolver>,
-    catalog: Arc<Catalog>,
 }
 
 impl AgentAcpBackend {
     #[must_use]
-    pub fn new(
-        model: String,
-        provider_id: impl Into<ProviderId>,
-        resolver: CredentialResolver,
-    ) -> Self {
-        let provider_id = provider_id.into();
-        let catalog = default_catalog();
+    pub fn new() -> Self {
         Self {
-            model,
-            provider_id,
-            tool_env: None,
+            tool_env:                     None,
             github_token_refresh_managed: false,
-            resolver: Some(resolver),
-            catalog,
-        }
-    }
-
-    #[must_use]
-    pub fn new_from_env(model: String, provider_id: impl Into<ProviderId>) -> Self {
-        let provider_id = provider_id.into();
-        let catalog = default_catalog();
-        Self {
-            model,
-            provider_id,
-            tool_env: None,
-            github_token_refresh_managed: false,
-            resolver: None,
-            catalog,
         }
     }
 
@@ -81,12 +46,6 @@ impl AgentAcpBackend {
         self
     }
 
-    #[must_use]
-    pub fn with_catalog(mut self, catalog: Arc<Catalog>) -> Self {
-        self.catalog = catalog;
-        self
-    }
-
     async fn run_turn(
         &self,
         node: &Node,
@@ -96,80 +55,29 @@ impl AgentAcpBackend {
         sandbox: &Arc<dyn Sandbox>,
         cancel_token: CancellationToken,
     ) -> Result<CodergenResult, Error> {
-        let files_before = changed_files::detect_changed_files(sandbox).await;
-        let model = node.model().unwrap_or(&self.model);
-        let provider = routing::resolve_node_provider_context(
-            self.catalog.as_ref(),
-            &self.provider_id,
-            &self.model,
-            node,
-        )?;
-        let provider_id = provider.provider_id;
-        let profile_kind = provider.profile_kind;
-        let auth_mode = node.acp_auth().map_err(|_| {
-            Error::handler(format!(
-                "unsupported acp_auth value \"{}\"; expected one of: {}",
-                node.acp_auth_raw().unwrap_or_default(),
-                AcpAuthMode::expected_values()
-            ))
-        })?;
-        let mut command =
-            resolve_acp_command(node.acp_command()).map_err(acp_command_error_to_workflow)?;
-
-        let launch_env = match auth_mode {
-            AcpAuthMode::Fabro => {
-                resolve_agent_launch_env(AgentLaunchEnvRequest {
-                    provider_id: provider_id.clone(),
-                    cli: AgentCli::for_profile_kind(profile_kind),
-                    catalog: self.catalog.as_ref(),
-                    resolver: self.resolver.as_ref(),
-                    tool_env: self.tool_env.as_ref(),
-                    github_token_refresh_managed: self.github_token_refresh_managed,
-                    stage_label: "ACP",
-                    emitter,
-                    sandbox,
-                    cancel_token: &cancel_token,
-                })
-                .await?
-            }
-            AcpAuthMode::Host => {
-                let stripped = strip_auth_env(command.env());
-                if !stripped.is_empty() {
-                    emitter.notice(
-                        RunNoticeLevel::Warn,
-                        RunNoticeCode::AcpHostAuthOverride,
-                        format!(
-                            "Stripping auth-shaped env vars from acp_command under acp_auth=\"host\": {}",
-                            stripped.join(", ")
-                        ),
-                    );
-                    command = command.with_env_stripped(&stripped);
-                }
-                resolve_host_auth_launch_env(self.tool_env.as_ref()).await?
-            }
-        };
+        let process_spec = resolve_acp_process_spec(node)?;
+        let config_name = process_spec.name().map(str::to_string);
+        let launch_env = self.resolve_launch_env(emitter).await?;
         let on_activity = {
             let emitter = Arc::clone(emitter);
             Arc::new(move || emitter.touch()) as Arc<dyn Fn() + Send + Sync>
         };
 
-        let command_display = command.to_string();
+        let command_display = process_spec.to_string();
         emitter.emit_scoped(
             &Event::AgentAcpStarted {
-                node_id:   node.id.clone(),
-                visit:     stage_scope.visit,
-                mode:      "acp".to_string(),
-                provider:  provider_id.to_string(),
-                model:     model.to_string(),
-                command:   command_display,
-                auth_mode: auth_mode.to_string(),
+                node_id: node.id.clone(),
+                visit: stage_scope.visit,
+                command: command_display,
+                config_name,
             },
             stage_scope,
         );
 
+        let files_before = changed_files::detect_changed_files(sandbox).await;
         let launch_start = std::time::Instant::now();
         let result = match fabro_acp::run_acp_turn(AcpRunRequest {
-            command,
+            command: process_spec,
             prompt,
             cwd: sandbox.working_directory().to_string(),
             timeout_ms: node.timeout().map(crate::millis_u64),
@@ -252,50 +160,33 @@ impl AgentAcpBackend {
             last_file_touched,
         })
     }
+
+    async fn resolve_launch_env(
+        &self,
+        emitter: &Arc<Emitter>,
+    ) -> Result<HashMap<String, String>, Error> {
+        let Some(provider) = &self.tool_env else {
+            return Ok(HashMap::new());
+        };
+        if self.github_token_refresh_managed {
+            emitter.notice(
+                RunNoticeLevel::Info,
+                RunNoticeCode::GithubTokenRefreshLimited,
+                "ACP agent stages receive workflow env at process launch; stages running beyond \
+                 token expiry may need to be retried.",
+            );
+        }
+        provider
+            .resolve()
+            .await
+            .map_err(|err| Error::handler_with_anyhow("Failed to resolve ACP agent env", err))
+    }
 }
 
-/// Names of env vars that should never be forwarded under
-/// `acp_auth = "host"`: an injected API key flips the ACP child into
-/// API-key mode and bills against the key rather than the subscription
-/// session the host CLI is logged into.
-fn is_auth_env_var(name: &str) -> bool {
-    let lower = name.to_ascii_lowercase();
-    lower.ends_with("_api_key")
-        || lower.ends_with("_auth_token")
-        || lower == "openai_session_id"
-        || lower == "chatgpt_account_id"
-}
-
-fn strip_auth_env(env: &HashMap<String, String>) -> Vec<String> {
-    let mut stripped: Vec<String> = env
-        .keys()
-        .filter(|name| is_auth_env_var(name))
-        .cloned()
-        .collect();
-    stripped.sort();
-    stripped
-}
-
-async fn resolve_host_auth_launch_env(
-    tool_env: Option<&Arc<dyn ToolEnvProvider>>,
-) -> Result<HashMap<String, String>, Error> {
-    let Some(provider) = tool_env else {
-        return Ok(HashMap::new());
-    };
-    let resolved = provider
-        .resolve()
-        .await
-        .map_err(|err| Error::handler_with_anyhow("Failed to resolve ACP agent env", err))?;
-    // Defense-in-depth: even tool_env should never carry API-key style vars
-    // into a host-auth ACP child.
-    Ok(resolved
-        .into_iter()
-        .filter(|(name, _)| !is_auth_env_var(name))
-        .collect())
-}
-
-fn default_catalog() -> Arc<Catalog> {
-    Arc::new(Catalog::from_builtin().expect("default catalog should build"))
+impl Default for AgentAcpBackend {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[async_trait]
@@ -313,36 +204,44 @@ impl CodergenBackend for AgentAcpBackend {
         .await
     }
 
-    async fn one_shot(&self, request: OneShotRequest<'_>) -> Result<CodergenResult, Error> {
-        let prompt = match request.system_prompt.filter(|prompt| !prompt.is_empty()) {
-            Some(system_prompt) => format!("System:\n{system_prompt}\n\nUser:\n{}", request.prompt),
-            None => request.prompt.to_string(),
-        };
-        self.run_turn(
-            request.node,
-            prompt,
-            request.emitter,
-            request.stage_scope,
-            request.sandbox,
-            request.cancel_token,
-        )
-        .await
+    async fn one_shot(&self, _request: OneShotRequest<'_>) -> Result<CodergenResult, Error> {
+        Err(Error::Validation(
+            "backend=\"acp\" is only valid on agent nodes; prompt nodes are API-only".to_string(),
+        ))
     }
 }
 
-fn acp_command_error_to_workflow(error: AcpCommandError) -> Error {
+fn acp_process_error_to_workflow(error: AcpCommandError) -> Error {
     match error {
-        AcpCommandError::EmptyOverride => Error::handler("acp_command must not be empty"),
-        AcpCommandError::MissingOverride => Error::handler(
-            "acp_command is required for backend=\"acp\" because Fabro does not install ACP agents",
-        ),
+        AcpCommandError::LegacyCommandAttribute => {
+            Error::handler("acp_command is no longer supported; use acp.command or acp.config")
+        }
+        AcpCommandError::EmptyOverride => Error::handler("ACP process attribute must not be empty"),
+        AcpCommandError::MissingOverride => {
+            Error::handler("backend=\"acp\" requires exactly one of acp.command or acp.config")
+        }
         AcpCommandError::UnsupportedTransport => {
             Error::handler("only stdio ACP commands are supported")
         }
-        AcpCommandError::Parse(source) => {
-            Error::handler_with_source("Failed to resolve ACP command", source)
+        AcpCommandError::InvalidCommandString => {
+            Error::handler("Failed to parse acp.command as a shell command")
+        }
+        AcpCommandError::InvalidConfigJson(source) => {
+            Error::handler_with_source("Failed to parse acp.config as JSON", source)
+        }
+        AcpCommandError::InvalidConfigShape(message) => {
+            Error::handler(format!("Invalid acp.config shape: {message}"))
         }
     }
+}
+
+fn resolve_acp_process_spec(node: &Node) -> Result<AcpProcessSpec, Error> {
+    AcpProcessSpec::from_attrs(
+        node.legacy_acp_command_attr(),
+        node.acp_command_attr(),
+        node.acp_config_attr(),
+    )
+    .map_err(acp_process_error_to_workflow)
 }
 
 fn acp_error_to_workflow(error: AcpError) -> Error {
@@ -375,17 +274,14 @@ mod tests {
     use fabro_acp::{AcpError, AcpProcessExit};
     use fabro_agent::{LocalSandbox, Sandbox, shell_quote};
     use fabro_graphviz::graph::{AttrValue, Node};
-    use fabro_model::ProviderId;
     use fabro_sandbox::test_support::MockSandbox;
     use fabro_types::{CommandTermination, EventBody, ExecOutputTail};
     use tokio_util::sync::CancellationToken;
 
     use super::{AgentAcpBackend, acp_error_to_workflow};
     use crate::context::Context;
-    use crate::event::{Emitter, StageScope};
-    use crate::handler::agent::{
-        CodergenBackend, CodergenResult, CodergenRunRequest, OneShotRequest,
-    };
+    use crate::event::Emitter;
+    use crate::handler::agent::{CodergenBackend, CodergenResult, CodergenRunRequest};
 
     #[tokio::test]
     async fn acp_backend_run_sends_prompt_and_returns_text() {
@@ -397,28 +293,20 @@ mod tests {
             .unwrap();
 
         let mut node = Node::new("work");
-        node.attrs.insert(
-            "provider".to_string(),
-            AttrValue::String("openai".to_string()),
-        );
-        node.attrs.insert(
-            "model".to_string(),
-            AttrValue::String("fake-acp".to_string()),
-        );
         node.attrs
             .insert("backend".to_string(), AttrValue::String("acp".to_string()));
         node.attrs.insert(
-            "acp_command".to_string(),
+            "acp.command".to_string(),
             AttrValue::String(format!(
                 "python3 {}",
                 shell_quote(&script_path.to_string_lossy())
             )),
         );
 
-        let backend =
-            AgentAcpBackend::new_from_env("fake-acp".to_string(), ProviderId::openai()).with_env(
-                HashMap::from([("ACP_MODE".to_string(), "write_file".to_string())]),
-            );
+        let backend = AgentAcpBackend::new().with_env(HashMap::from([(
+            "ACP_MODE".to_string(),
+            "write_file".to_string(),
+        )]));
         let sandbox: Arc<dyn Sandbox> = Arc::new(LocalSandbox::new(tempdir.path().to_path_buf()));
         let emitter = Arc::new(Emitter::default());
         let context = Context::new();
@@ -449,63 +337,93 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn acp_backend_one_shot_combines_system_prompt_and_uses_passed_sandbox() {
+    async fn acp_backend_accepts_acp_command_attribute_without_model_or_provider() {
         let tempdir = tempfile::tempdir().unwrap();
+        init_git(tempdir.path());
         let script_path = tempdir.path().join("fake_acp_agent.py");
-        let prompt_record_path = tempdir.path().join("prompt.json");
         tokio::fs::write(&script_path, fake_acp_agent_script())
             .await
             .unwrap();
 
-        let mut node = Node::new("prompt");
-        node.attrs.insert(
-            "provider".to_string(),
-            AttrValue::String("openai".to_string()),
-        );
+        let mut node = Node::new("work");
         node.attrs
             .insert("backend".to_string(), AttrValue::String("acp".to_string()));
         node.attrs.insert(
-            "acp_command".to_string(),
+            "acp.command".to_string(),
             AttrValue::String(format!(
                 "python3 {}",
                 shell_quote(&script_path.to_string_lossy())
             )),
         );
 
-        let backend = AgentAcpBackend::new_from_env("fake-acp".to_string(), ProviderId::openai())
-            .with_env(HashMap::from([
-                (
-                    "ACP_PROMPT_RECORD".to_string(),
-                    prompt_record_path.to_string_lossy().into_owned(),
-                ),
-                ("ACP_MODE".to_string(), "write_file".to_string()),
-            ]));
+        let backend = AgentAcpBackend::new().with_env(HashMap::from([(
+            "ACP_MODE".to_string(),
+            "write_file".to_string(),
+        )]));
         let sandbox: Arc<dyn Sandbox> = Arc::new(LocalSandbox::new(tempdir.path().to_path_buf()));
         let emitter = Arc::new(Emitter::default());
         let context = Context::new();
-        let stage_scope = StageScope::for_handler(&context, "prompt");
         let result = backend
-            .one_shot(OneShotRequest {
-                node:          &node,
-                prompt:        "User prompt",
-                system_prompt: Some("System prompt"),
-                emitter:       &emitter,
-                stage_scope:   &stage_scope,
-                sandbox:       &sandbox,
-                cancel_token:  CancellationToken::new(),
+            .run(CodergenRunRequest {
+                node:         &node,
+                prompt:       "write hello",
+                context:      &context,
+                thread_id:    None,
+                emitter:      &emitter,
+                sandbox:      &sandbox,
+                tool_hooks:   None,
+                cancel_token: CancellationToken::new(),
             })
             .await
             .unwrap();
 
-        assert!(matches!(result, CodergenResult::Text { .. }));
-        let recorded = tokio::fs::read_to_string(prompt_record_path).await.unwrap();
-        assert!(recorded.contains("System:\\nSystem prompt\\n\\nUser:\\nUser prompt"));
-        assert_eq!(
-            tokio::fs::read_to_string(tempdir.path().join("hello.txt"))
-                .await
-                .unwrap(),
-            "hello from sandbox\n"
+        let CodergenResult::Text { text, .. } = result else {
+            panic!("expected text result");
+        };
+        assert_eq!(text, "hello from acp");
+    }
+
+    #[tokio::test]
+    async fn acp_backend_does_not_forward_provider_credentials() {
+        let mut sandbox = MockSandbox::linux();
+        sandbox.stdio_process_error = Some("stop before ACP handshake".to_string());
+        let sandbox = Arc::new(sandbox);
+        let sandbox_dyn: Arc<dyn Sandbox> = sandbox.clone();
+
+        let mut node = Node::new("work");
+        node.attrs
+            .insert("backend".to_string(), AttrValue::String("acp".to_string()));
+        node.attrs.insert(
+            "acp.command".to_string(),
+            AttrValue::String("fake-acp-agent".to_string()),
         );
+
+        let backend = AgentAcpBackend::new();
+        let emitter = Arc::new(Emitter::default());
+        let context = Context::new();
+        let result = backend
+            .run(CodergenRunRequest {
+                node:         &node,
+                prompt:       "write hello",
+                context:      &context,
+                thread_id:    None,
+                emitter:      &emitter,
+                sandbox:      &sandbox_dyn,
+                tool_hooks:   None,
+                cancel_token: CancellationToken::new(),
+            })
+            .await;
+        assert!(result.is_err());
+
+        let captured = sandbox
+            .captured_env_vars
+            .lock()
+            .expect("captured env lock poisoned")
+            .clone()
+            .unwrap_or_default();
+        assert!(!captured.contains_key("OPENAI_API_KEY"));
+        assert!(!captured.contains_key("ANTHROPIC_API_KEY"));
+        assert!(!captured.contains_key("GEMINI_API_KEY"));
     }
 
     #[tokio::test]
@@ -518,21 +436,17 @@ mod tests {
 
         let mut node = Node::new("work");
         node.attrs.insert(
-            "provider".to_string(),
-            AttrValue::String("openai".to_string()),
-        );
-        node.attrs.insert(
-            "acp_command".to_string(),
+            "acp.command".to_string(),
             AttrValue::String(format!(
                 "python3 {}",
                 shell_quote(&script_path.to_string_lossy())
             )),
         );
 
-        let backend =
-            AgentAcpBackend::new_from_env("fake-acp".to_string(), ProviderId::openai()).with_env(
-                HashMap::from([("ACP_STOP_REASON".to_string(), "cancelled".to_string())]),
-            );
+        let backend = AgentAcpBackend::new().with_env(HashMap::from([(
+            "ACP_STOP_REASON".to_string(),
+            "cancelled".to_string(),
+        )]));
         let sandbox: Arc<dyn Sandbox> = Arc::new(LocalSandbox::new(tempdir.path().to_path_buf()));
         let emitter = Arc::new(Emitter::default());
         let context = Context::new();
@@ -574,16 +488,12 @@ mod tests {
         })
         .to_string();
         let mut node = Node::new("work");
-        node.attrs.insert(
-            "provider".to_string(),
-            AttrValue::String("openai".to_string()),
-        );
         node.attrs
             .insert("backend".to_string(), AttrValue::String("acp".to_string()));
         node.attrs
-            .insert("acp_command".to_string(), AttrValue::String(raw_command));
+            .insert("acp.config".to_string(), AttrValue::String(raw_command));
 
-        let backend = AgentAcpBackend::new_from_env("fake-acp".to_string(), ProviderId::openai());
+        let backend = AgentAcpBackend::new();
         let sandbox: Arc<dyn Sandbox> = Arc::new(LocalSandbox::new(tempdir.path().to_path_buf()));
         let emitter = Arc::new(Emitter::default());
         let events = Arc::new(Mutex::new(Vec::new()));
@@ -622,20 +532,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn acp_backend_requires_explicit_acp_command() {
+    async fn acp_backend_requires_explicit_process_attr() {
         let sandbox = MockSandbox::linux();
         let sandbox = Arc::new(sandbox);
         let sandbox_dyn: Arc<dyn Sandbox> = sandbox.clone();
 
         let mut node = Node::new("work");
-        node.attrs.insert(
-            "provider".to_string(),
-            AttrValue::String("openai".to_string()),
-        );
         node.attrs
             .insert("backend".to_string(), AttrValue::String("acp".to_string()));
 
-        let backend = AgentAcpBackend::new_from_env("fake-acp".to_string(), ProviderId::openai());
+        let backend = AgentAcpBackend::new();
         let emitter = Arc::new(Emitter::default());
         let context = Context::new();
         let result = backend
@@ -651,11 +557,11 @@ mod tests {
             })
             .await;
         let Err(err) = result else {
-            panic!("ACP without acp_command should fail");
+            panic!("ACP without process attr should fail");
         };
         assert!(
             err.to_string()
-                .contains("acp_command is required for backend=\"acp\"")
+                .contains("requires exactly one of acp.command or acp.config")
         );
         assert!(
             sandbox
@@ -663,7 +569,7 @@ mod tests {
                 .lock()
                 .expect("captured env lock poisoned")
                 .is_none(),
-            "ACP process should not launch when acp_command is missing"
+            "ACP process should not launch when process attr is missing"
         );
     }
 
@@ -677,21 +583,17 @@ mod tests {
         let sandbox_dyn: Arc<dyn Sandbox> = sandbox.clone();
 
         let mut node = Node::new("work");
-        node.attrs.insert(
-            "provider".to_string(),
-            AttrValue::String("openai".to_string()),
-        );
         node.attrs
             .insert("backend".to_string(), AttrValue::String("acp".to_string()));
         node.attrs.insert(
-            "acp_command".to_string(),
+            "acp.command".to_string(),
             AttrValue::String("fake-acp-agent".to_string()),
         );
 
-        let backend =
-            AgentAcpBackend::new_from_env("fake-acp".to_string(), ProviderId::openai()).with_env(
-                HashMap::from([("OPENAI_API_KEY".to_string(), "test-key".to_string())]),
-            );
+        let backend = AgentAcpBackend::new().with_env(HashMap::from([(
+            "WORKFLOW_ENV".to_string(),
+            "test-value".to_string(),
+        )]));
         let emitter = Arc::new(Emitter::default());
         let context = Context::new();
         let result = backend
@@ -724,156 +626,6 @@ mod tests {
         assert_eq!(
             err.failure_category(),
             crate::error::FailureCategory::Deterministic
-        );
-    }
-
-    #[tokio::test]
-    async fn acp_backend_host_auth_skips_credential_injection() {
-        let mut sandbox = MockSandbox::linux();
-        sandbox.stdio_process_error = Some("captured-env-only".to_string());
-        let sandbox = Arc::new(sandbox);
-        let sandbox_dyn: Arc<dyn Sandbox> = sandbox.clone();
-
-        let mut node = Node::new("work");
-        node.attrs.insert(
-            "provider".to_string(),
-            AttrValue::String("openai".to_string()),
-        );
-        node.attrs
-            .insert("backend".to_string(), AttrValue::String("acp".to_string()));
-        node.attrs.insert(
-            "acp_command".to_string(),
-            AttrValue::String("codex-acp".to_string()),
-        );
-        node.attrs.insert(
-            "acp_auth".to_string(),
-            AttrValue::String("host".to_string()),
-        );
-
-        // Even if a tool_env hands in an OPENAI_API_KEY, host-auth must strip
-        // it; otherwise the spawned ACP child would bill against the key
-        // instead of the host's subscription session.
-        let backend = AgentAcpBackend::new_from_env("fake-acp".to_string(), ProviderId::openai())
-            .with_env(HashMap::from([
-                ("OPENAI_API_KEY".to_string(), "leaked-key".to_string()),
-                ("GH_TOKEN".to_string(), "gh-token-value".to_string()),
-            ]));
-        let emitter = Arc::new(Emitter::default());
-        let events = Arc::new(Mutex::new(Vec::new()));
-        emitter.on_event({
-            let events = Arc::clone(&events);
-            move |event| events.lock().unwrap().push(event.clone())
-        });
-        let context = Context::new();
-        let _ = backend
-            .run(CodergenRunRequest {
-                node:         &node,
-                prompt:       "hello",
-                context:      &context,
-                thread_id:    None,
-                emitter:      &emitter,
-                sandbox:      &sandbox_dyn,
-                tool_hooks:   None,
-                cancel_token: CancellationToken::new(),
-            })
-            .await;
-
-        let captured = sandbox
-            .captured_env_vars
-            .lock()
-            .expect("captured env lock poisoned")
-            .clone()
-            .expect("ACP host-auth path should still spawn the stdio child");
-        assert!(
-            !captured.contains_key("OPENAI_API_KEY"),
-            "host-auth must not inject OPENAI_API_KEY into the ACP child env, got: {captured:?}"
-        );
-        assert!(
-            !captured.contains_key("ANTHROPIC_API_KEY"),
-            "host-auth must not inject ANTHROPIC_API_KEY into the ACP child env"
-        );
-        assert_eq!(
-            captured.get("GH_TOKEN").map(String::as_str),
-            Some("gh-token-value"),
-            "non-auth tool env should still be forwarded under host-auth"
-        );
-
-        let events = events.lock().unwrap();
-        let auth_mode = events
-            .iter()
-            .find_map(|event| match &event.body {
-                EventBody::AgentAcpStarted(props) => Some(props.auth_mode.as_str()),
-                _ => None,
-            })
-            .expect("AgentAcpStarted should be emitted");
-        assert_eq!(auth_mode, "host");
-    }
-
-    #[tokio::test]
-    async fn acp_backend_host_auth_strips_api_key_from_parsed_command_env() {
-        let mut sandbox = MockSandbox::linux();
-        sandbox.stdio_process_error = Some("captured-env-only".to_string());
-        let sandbox = Arc::new(sandbox);
-        let sandbox_dyn: Arc<dyn Sandbox> = sandbox.clone();
-
-        // JSON acp_command with OPENAI_API_KEY in env — host-auth must strip it
-        // out before launching the child.
-        let raw_command = serde_json::json!({
-            "type": "stdio",
-            "name": "codex",
-            "command": "codex-acp",
-            "args": [],
-            "env": [
-                {"name": "OPENAI_API_KEY", "value": "leaked-key"},
-                {"name": "FOO", "value": "bar"},
-            ],
-        })
-        .to_string();
-
-        let mut node = Node::new("work");
-        node.attrs.insert(
-            "provider".to_string(),
-            AttrValue::String("openai".to_string()),
-        );
-        node.attrs
-            .insert("backend".to_string(), AttrValue::String("acp".to_string()));
-        node.attrs
-            .insert("acp_command".to_string(), AttrValue::String(raw_command));
-        node.attrs.insert(
-            "acp_auth".to_string(),
-            AttrValue::String("host".to_string()),
-        );
-
-        let backend = AgentAcpBackend::new_from_env("fake-acp".to_string(), ProviderId::openai());
-        let emitter = Arc::new(Emitter::default());
-        let context = Context::new();
-        let _ = backend
-            .run(CodergenRunRequest {
-                node:         &node,
-                prompt:       "hello",
-                context:      &context,
-                thread_id:    None,
-                emitter:      &emitter,
-                sandbox:      &sandbox_dyn,
-                tool_hooks:   None,
-                cancel_token: CancellationToken::new(),
-            })
-            .await;
-
-        let captured = sandbox
-            .captured_env_vars
-            .lock()
-            .expect("captured env lock poisoned")
-            .clone()
-            .expect("ACP host-auth path should still spawn the stdio child");
-        assert!(
-            !captured.contains_key("OPENAI_API_KEY"),
-            "host-auth must strip OPENAI_API_KEY from acp_command env, got: {captured:?}"
-        );
-        assert_eq!(
-            captured.get("FOO").map(String::as_str),
-            Some("bar"),
-            "non-auth env vars from acp_command should still be forwarded"
         );
     }
 

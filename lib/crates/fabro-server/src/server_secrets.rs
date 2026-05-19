@@ -56,7 +56,10 @@ impl ServerSecrets {
         clippy::disallowed_methods,
         reason = "Bridging server.env to process env is the documented startup behavior."
     )]
-    #[allow(unsafe_code, reason = "set_var requires unsafe; called single-threaded at startup")]
+    #[allow(
+        unsafe_code,
+        reason = "set_var requires unsafe; called single-threaded at startup"
+    )]
     pub(crate) fn expose_file_entries_to_process_env(&self) {
         for (key, value) in &self.file_entries {
             if std::env::var(key).is_err() {
