@@ -67,19 +67,23 @@ fn git_setup_intent(run_options: &RunOptions) -> GitSetupIntent {
 fn build_sandbox_env(
     spec: &SandboxEnvSpec,
     github_app: Option<&fabro_github::GitHubCredentials>,
+    vault_claude_token: Option<String>,
 ) -> Result<BuiltSandboxEnv, Error> {
     let mut env = spec.devcontainer_env.clone();
     env.extend(spec.toml_env.clone());
 
-    // Forward the host's Claude Code subscription OAuth token when present.
-    // `claude setup-token` produces a long-lived token meant for headless use;
-    // `claude-agent-acp` reads it from this env var. Explicit toml/devcontainer
-    // values still win because we only insert when the key is absent.
+    // Forward the operator's Claude Code subscription OAuth token to the
+    // sandbox so `claude-agent-acp` can authenticate. The token is sourced
+    // from (in order of precedence) the daemon's process env, then the
+    // fabro server vault. Explicit toml/devcontainer values still win
+    // because we only insert when the key is absent.
     if !env.contains_key("CLAUDE_CODE_OAUTH_TOKEN") {
-        if let Ok(token) = std::env::var("CLAUDE_CODE_OAUTH_TOKEN") {
-            if !token.is_empty() {
-                env.insert("CLAUDE_CODE_OAUTH_TOKEN".to_string(), token);
-            }
+        let resolved = std::env::var("CLAUDE_CODE_OAUTH_TOKEN")
+            .ok()
+            .filter(|v| !v.is_empty())
+            .or_else(|| vault_claude_token.filter(|v| !v.is_empty()));
+        if let Some(token) = resolved {
+            env.insert("CLAUDE_CODE_OAUTH_TOKEN".to_string(), token);
         }
     }
 
@@ -486,9 +490,19 @@ pub async fn initialize(
         });
     }
 
+    let vault_claude_token = if let Some(vault) = options.vault.as_ref() {
+        vault
+            .read()
+            .await
+            .get("CLAUDE_CODE_OAUTH_TOKEN")
+            .map(str::to_string)
+    } else {
+        None
+    };
     let (base_env, github_token) = build_sandbox_env(
         &options.sandbox_env,
         options.run_options.github_app.as_ref(),
+        vault_claude_token,
     )?;
     let tool_env_provider = Arc::new(WorkflowToolEnvProvider {
         base_env:     base_env.clone(),
