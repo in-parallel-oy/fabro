@@ -36,9 +36,11 @@ pub use fabro_api::types::{
     RunArtifactListResponse, RunBilling, RunBillingStage, RunBillingTotals, RunError, RunManifest,
     RunStage, SandboxDetails, SandboxFileEntry, SandboxFileListResponse, SandboxService,
     SandboxServiceListResponse, SshAccessRequest, SshAccessResponse, StageHandler, StageState,
-    StartRunRequest, SubmitAnswerRequest, SystemFeatures, SystemInfoResponse, SystemRepairRunIssue,
-    SystemRepairRunsResponse, SystemRunCounts, TimelineEntryResponse, VncPreviewResponse,
-    WriteBlobResponse,
+    StartRunRequest, SubmitAnswerRequest, SystemCpuResourceScope, SystemCpuResources,
+    SystemDiskResourceScope, SystemDiskResources, SystemFeatures, SystemInfoResponse,
+    SystemMemoryResourceScope, SystemMemoryResources, SystemRepairRunIssue,
+    SystemRepairRunsResponse, SystemResourcesResponse, SystemRunCounts, TimelineEntryResponse,
+    VncPreviewResponse, WriteBlobResponse,
 };
 use fabro_auth::{CredentialSource, VaultCredentialSource, auth_issue_message};
 #[cfg(test)]
@@ -142,6 +144,7 @@ use crate::{
 };
 
 mod handler;
+mod resource_sampler;
 mod session_runtime;
 
 pub(crate) use handler::events::EventListParams;
@@ -519,6 +522,7 @@ pub struct AppState {
     artifact_store: ArtifactStore,
     worker_tokens: WorkerTokenKeys,
     started_at: Instant,
+    resource_sampler: resource_sampler::ResourceSampler,
     max_concurrent_runs: usize,
     scheduler_notify: Notify,
     global_event_tx: broadcast::Sender<EventEnvelope>,
@@ -1646,6 +1650,7 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
         artifact_store,
         worker_tokens,
         started_at: Instant::now(),
+        resource_sampler: resource_sampler::ResourceSampler::new(),
         max_concurrent_runs,
         scheduler_notify: Notify::new(),
         global_event_tx,
