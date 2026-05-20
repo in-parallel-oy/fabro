@@ -130,6 +130,51 @@ fn build_sandbox_env(
     Ok((env, source))
 }
 
+/// Materialise `~/.codex/auth.json` in the sandbox from a vaulted ChatGPT
+/// OAuth credential so `codex-acp` nodes authenticate. Skips when a file
+/// already exists (explicit auth wins). Written via a temp upload + `cp` so
+/// the result is owned by the sandbox's default (non-root) user with 0600
+/// perms — `write_file` uploads as root, which codex can read but not
+/// refresh-persist.
+async fn inject_codex_auth(
+    sandbox: &dyn Sandbox,
+    credential: &fabro_auth::OAuthCredential,
+) -> anyhow::Result<()> {
+    const AUTH_PATH: &str = "/home/dev/.codex/auth.json";
+    const TMP_PATH: &str = "/tmp/.fabro-codex-auth.json";
+
+    if sandbox
+        .file_exists(AUTH_PATH)
+        .await
+        .map_err(|e| anyhow::anyhow!("file_exists failed: {e}"))?
+    {
+        return Ok(());
+    }
+
+    let json = fabro_auth::codex_auth_json(credential).await?;
+    sandbox
+        .write_file(TMP_PATH, &json)
+        .await
+        .map_err(|e| anyhow::anyhow!("write_file failed: {e}"))?;
+
+    let cmd = format!(
+        "set -e; mkdir -p /home/dev/.codex; cp {TMP_PATH} {AUTH_PATH}; \
+         chmod 600 {AUTH_PATH}; rm -f {TMP_PATH}"
+    );
+    let result = sandbox
+        .exec_command(&cmd, 30_000, None, None, None)
+        .await
+        .map_err(|e| anyhow::anyhow!("exec_command failed: {e}"))?;
+    if !result.is_success() {
+        anyhow::bail!(
+            "install command failed (exit {}): {}",
+            result.display_exit_code(),
+            result.stderr
+        );
+    }
+    Ok(())
+}
+
 async fn build_registry(
     spec: &LlmSpec,
     interviewer: Arc<dyn fabro_interview::Interviewer>,
@@ -490,20 +535,41 @@ pub async fn initialize(
         });
     }
 
-    let vault_claude_token = if let Some(vault) = options.vault.as_ref() {
-        vault
-            .read()
-            .await
-            .get("CLAUDE_CODE_OAUTH_TOKEN")
-            .map(str::to_string)
+    let (vault_claude_token, vault_codex_credential) = if let Some(vault) = options.vault.as_ref() {
+        let guard = vault.read().await;
+        let claude = guard.get("CLAUDE_CODE_OAUTH_TOKEN").map(str::to_string);
+        // Best-effort: a schema/decode error just means codex auth is skipped,
+        // not that the whole run fails.
+        let codex =
+            fabro_auth::vault_get_oauth(&guard, fabro_auth::OPENAI_CODEX_VAULT_SECRET_NAME)
+                .unwrap_or(None);
+        (claude, codex)
     } else {
-        None
+        (None, None)
     };
     let (base_env, github_token) = build_sandbox_env(
         &options.sandbox_env,
         options.run_options.github_app.as_ref(),
         vault_claude_token,
     )?;
+
+    // Codex subscription auth: `codex-acp` (unlike `claude-agent-acp`) has no
+    // OAuth-token env var — it loads ChatGPT auth from `$CODEX_HOME/auth.json`.
+    // Materialise that file in the sandbox from the vaulted OPENAI_CODEX
+    // credential so codex-acp nodes can authenticate. Best-effort: a failure
+    // here only disables codex nodes, so warn and continue.
+    if let Some(credential) = vault_codex_credential {
+        if let Err(err) = inject_codex_auth(sandbox.as_ref(), &credential).await {
+            options.emitter.notice(
+                RunNoticeLevel::Warn,
+                RunNoticeCode::CodexAuthInjectionFailed,
+                format!(
+                    "Codex auth.json not written; codex-acp nodes will fail to \
+                     authenticate: {err}"
+                ),
+            );
+        }
+    }
     let tool_env_provider = Arc::new(WorkflowToolEnvProvider {
         base_env:     base_env.clone(),
         github_token: github_token.clone(),

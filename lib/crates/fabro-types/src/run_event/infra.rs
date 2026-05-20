@@ -25,6 +25,7 @@ pub enum RunNoticeCode {
     CheckpointMetadataDegraded,
     CheckpointMetadataPushFailed,
     CheckpointMetadataWriteFailed,
+    CodexAuthInjectionFailed,
     DirtyWorktree,
     GitDiffFailed,
     GitPushFailed,
