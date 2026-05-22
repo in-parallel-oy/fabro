@@ -1,8 +1,10 @@
 import {
+  Fragment,
   useEffect,
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 import {
   ArrowPathIcon,
@@ -12,23 +14,41 @@ import {
   FolderIcon,
   RectangleStackIcon,
   SignalIcon,
+  SparklesIcon,
 } from "@heroicons/react/20/solid";
-import { Link, Outlet, useLocation, useMatches, useNavigate } from "react-router";
+import {
+  Link,
+  Outlet,
+  useLocation,
+  useMatches,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
 
+import AskFabroSidebar, {
+  SIDEBAR_WIDTH,
+} from "../components/chats/ask-fabro-sidebar";
 import { EditableRunTitle } from "../components/editable-run-title";
 import { GitPullRequestIcon } from "../components/icons";
 import { InterviewDock } from "../components/interview-dock";
 import { SteerBar, type SteerBarHandle } from "../components/steer-bar";
 import { ErrorState } from "../components/state";
 import { useToast } from "../components/toast";
-import { ConfirmDialog, SECONDARY_BUTTON_CLASS, Tooltip } from "../components/ui";
+import { ConfirmDialog, HoverCard, SECONDARY_BUTTON_CLASS, Tooltip } from "../components/ui";
 import {
   isRunStatus,
   mapRunToRunItem,
   runStatusDisplay,
   type Run,
 } from "../data/runs";
+import type {
+  PullRequestDetails,
+  RepositoryRef,
+  RunLifecycle,
+  WorkflowRef,
+} from "@qltysh/fabro-api-client";
+import { useAskFabroLayout } from "../lib/ask-fabro-layout";
 import { useDemoMode } from "../lib/demo-mode";
 import { useSWRConfig } from "swr";
 import {
@@ -44,7 +64,7 @@ import { formatAbsoluteTs, formatRelativeTime } from "../lib/format";
 import { queryKeys } from "../lib/query-keys";
 import { useRunEvents } from "../lib/run-events";
 import { useRunToasts } from "../hooks/use-run-toasts";
-import { useRun, useRunQuestions, useRunState } from "../lib/queries";
+import { useRun, useRunPullRequest, useRunQuestions, useRunState } from "../lib/queries";
 import {
   canArchive,
   canCancel,
@@ -167,16 +187,186 @@ export function meta({ data }: any) {
   return [{ title: run ? `${run.title} — Fabro` : "Run — Fabro" }];
 }
 
+// ---- Header hover-card popovers ----
+
+function PopoverHeader({ children }: { children: ReactNode }) {
+  return (
+    <div className="mb-1.5 border-b border-line pb-1 font-medium text-fg-2">
+      {children}
+    </div>
+  );
+}
+
+function PopoverRows({ children }: { children: ReactNode }) {
+  return <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">{children}</dl>;
+}
+
+function PopoverRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <>
+      <dt className="text-fg-3">{label}</dt>
+      <dd className="min-w-0 text-fg">{children}</dd>
+    </>
+  );
+}
+
+function humanizeFailureReason(reason: string): string {
+  const spaced = reason.replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Shown only when the run failed or is archived — see `showStatusPopover`. */
+function StatusPopover({ lifecycle }: { lifecycle: RunLifecycle }) {
+  const status = lifecycle.status;
+  return (
+    <>
+      <PopoverHeader>Run status</PopoverHeader>
+      <PopoverRows>
+        {status.kind === "failed" && (
+          <PopoverRow label="Reason">{humanizeFailureReason(status.reason)}</PopoverRow>
+        )}
+        {lifecycle.error && (
+          <PopoverRow label="Error">
+            <span className="break-words">{lifecycle.error.message}</span>
+          </PopoverRow>
+        )}
+        {lifecycle.archived && (
+          <PopoverRow label="Archived">
+            {lifecycle.archived_at ? formatAbsoluteTs(lifecycle.archived_at) : "Yes"}
+          </PopoverRow>
+        )}
+      </PopoverRows>
+    </>
+  );
+}
+
+function RepositoryPopover({
+  repository,
+  cloneBranch,
+}: {
+  repository: RepositoryRef;
+  cloneBranch: string | null | undefined;
+}) {
+  return (
+    <>
+      <PopoverHeader>Repository</PopoverHeader>
+      <PopoverRows>
+        <PopoverRow label="Name">
+          <span className="font-mono break-all">{repository.name}</span>
+        </PopoverRow>
+        {cloneBranch && (
+          <PopoverRow label="Branch">
+            <span className="font-mono break-all">{cloneBranch}</span>
+          </PopoverRow>
+        )}
+      </PopoverRows>
+    </>
+  );
+}
+
+function WorkflowPopover({
+  workflow,
+  labels,
+}: {
+  workflow: WorkflowRef;
+  labels: Record<string, string>;
+}) {
+  const labelEntries = Object.entries(labels);
+  const hasCounts = workflow.node_count > 0 || workflow.edge_count > 0;
+  return (
+    <>
+      <PopoverHeader>Workflow</PopoverHeader>
+      {hasCounts && (
+        <div className="text-fg">
+          {workflow.node_count} {workflow.node_count === 1 ? "node" : "nodes"}
+          <span className="text-fg-muted"> · </span>
+          {workflow.edge_count} {workflow.edge_count === 1 ? "edge" : "edges"}
+        </div>
+      )}
+      {labelEntries.length > 0 && (
+        <div className={hasCounts ? "mt-2" : undefined}>
+          <div className="mb-1 text-fg-3">Labels</div>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+            {labelEntries.map(([key, value]) => (
+              <Fragment key={key}>
+                <dt className="font-mono text-fg-3">{key}</dt>
+                <dd className="min-w-0 font-mono break-all text-fg">{value}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        </div>
+      )}
+    </>
+  );
+}
+
+function prStateBadge(details: PullRequestDetails): { label: string; className: string } {
+  if (details.merged) return { label: "Merged", className: "bg-mint/15 text-mint" };
+  if (details.draft) return { label: "Draft", className: "bg-overlay-strong text-fg-3" };
+  if (details.state === "closed") {
+    return { label: "Closed", className: "bg-coral/15 text-coral" };
+  }
+  return { label: "Open", className: "bg-teal-500/15 text-teal-300" };
+}
+
+/** Fetches live PR details on hover — mounted only while the card is open. */
+function PullRequestPopover({ runId }: { runId: string }) {
+  const prQuery = useRunPullRequest(runId);
+  const response = prQuery.data;
+  const details =
+    response?.meta.details_status === "available" ? response.data.details : null;
+
+  let body: ReactNode;
+  if (prQuery.isLoading) {
+    body = <div className="text-fg-3">Loading…</div>;
+  } else if (!details) {
+    body = <div className="text-fg-3">Live details unavailable.</div>;
+  } else {
+    const badge = prStateBadge(details);
+    body = (
+      <div className="space-y-2">
+        <div className="break-words text-fg">{details.title}</div>
+        <div className="flex items-center gap-2">
+          <span
+            className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${badge.className}`}
+          >
+            {badge.label}
+          </span>
+          <span className="flex min-w-0 items-center gap-1 font-mono text-fg-3">
+            <span className="truncate">{details.head_branch}</span>
+            <span className="shrink-0 text-fg-muted">→</span>
+            <span className="truncate">{details.base_branch}</span>
+          </span>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <>
+      <PopoverHeader>Pull request</PopoverHeader>
+      {body}
+    </>
+  );
+}
+
 export default function RunDetail({ params }: { params: { id: string } }) {
   const demoMode = useDemoMode();
   const runQuery = useRun(params.id);
   const runStateQuery = useRunState(params.id);
-  const run = runQuery.data ? buildRunDetailRun(runQuery.data) : null;
+  const summary = runQuery.data;
+  const run = summary ? buildRunDetailRun(summary) : null;
   const statusKind = runQuery.data?.lifecycle.status.kind;
   const isBlocked = statusKind === "blocked";
   const questionsQuery = useRunQuestions(params.id, isBlocked);
   const pendingQuestions = questionsQuery.data ?? [];
   const { pathname } = useLocation();
+  const [searchParams] = useSearchParams();
+  // The "Ask Fabro" assistant is gated behind ?ask=1 while the feature is in
+  // prototype: the trigger button and the docked sidebar only render then.
+  const askEnabled = searchParams.get("ask") === "1";
+  const [askOpen, setAskOpen] = useState(false);
+  const sidebarWidth = askEnabled && askOpen ? SIDEBAR_WIDTH : 0;
+  const { setSidebarWidth } = useAskFabroLayout();
   const matches = useMatches();
   const basePath = `/runs/${params.id}`;
   const previewMutation = usePreviewRun(params.id);
@@ -208,6 +398,13 @@ export default function RunDetail({ params }: { params: { id: string } }) {
 
   useRunEvents(params.id);
   useRunToasts(params.id);
+
+  // Publish the docked sidebar's width so the app shell insets `<main>` and
+  // the page content shifts left while the sidebar is open.
+  useEffect(() => {
+    setSidebarWidth(sidebarWidth);
+    return () => setSidebarWidth(0);
+  }, [sidebarWidth, setSidebarWidth]);
 
   useEffect(() => {
     if (previewMutation.data?.intent === "preview") {
@@ -246,7 +443,7 @@ export default function RunDetail({ params }: { params: { id: string } }) {
     return <div className="py-12" />;
   }
 
-  if (!run) {
+  if (!run || !summary) {
     return (
       <div className="py-12">
         <ErrorState
@@ -256,6 +453,33 @@ export default function RunDetail({ params }: { params: { id: string } }) {
       </div>
     );
   }
+
+  const showStatusPopover =
+    summary.lifecycle.status.kind === "failed" ||
+    summary.lifecycle.archived ||
+    summary.lifecycle.error != null;
+  const showWorkflowPopover =
+    summary.workflow.node_count > 0 ||
+    summary.workflow.edge_count > 0 ||
+    Object.keys(summary.labels).length > 0;
+  const statusBadge = (
+    <span className="flex items-center gap-1.5">
+      <span className={`size-2 rounded-full ${run.statusDot}`} />
+      <span className={`font-medium ${run.statusText}`}>{run.statusLabel}</span>
+    </span>
+  );
+  const repoChip = (
+    <span className="flex items-center gap-1.5 font-mono text-xs text-fg-muted">
+      <FolderIcon className="size-3.5" aria-hidden="true" />
+      {run.repo}
+    </span>
+  );
+  const workflowChip = (
+    <span className="flex items-center gap-1.5 font-mono text-xs text-fg-muted">
+      <RectangleStackIcon className="size-3.5" aria-hidden="true" />
+      {run.workflow}
+    </span>
+  );
 
   const visibility = lifecycleActionVisibility(run.lifecycleStatus);
   const previewPending = previewMutation.isMutating;
@@ -315,18 +539,38 @@ export default function RunDetail({ params }: { params: { id: string } }) {
         <div className="min-w-0 flex-1">
           <EditableRunTitle runId={params.id} title={run.title} />
           <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-            <span className="flex items-center gap-1.5">
-              <span className={`size-2 rounded-full ${run.statusDot}`} />
-              <span className={`font-medium ${run.statusText}`}>{run.statusLabel}</span>
-            </span>
-            <span className="flex items-center gap-1.5 font-mono text-xs text-fg-muted">
-              <FolderIcon className="size-3.5" aria-hidden="true" />
-              {run.repo}
-            </span>
-            <span className="flex items-center gap-1.5 font-mono text-xs text-fg-muted">
-              <RectangleStackIcon className="size-3.5" aria-hidden="true" />
-              {run.workflow}
-            </span>
+            {showStatusPopover ? (
+              <HoverCard content={<StatusPopover lifecycle={summary.lifecycle} />}>
+                {statusBadge}
+              </HoverCard>
+            ) : (
+              statusBadge
+            )}
+            {summary.repository ? (
+              <HoverCard
+                content={
+                  <RepositoryPopover
+                    repository={summary.repository}
+                    cloneBranch={summary.sandbox?.runtime?.clone_branch}
+                  />
+                }
+              >
+                {repoChip}
+              </HoverCard>
+            ) : (
+              repoChip
+            )}
+            {showWorkflowPopover ? (
+              <HoverCard
+                content={
+                  <WorkflowPopover workflow={summary.workflow} labels={summary.labels} />
+                }
+              >
+                {workflowChip}
+              </HoverCard>
+            ) : (
+              workflowChip
+            )}
             {run.elapsed && (
               <span className="flex items-center gap-1.5 font-mono text-xs text-fg-muted">
                 <ClockIcon className="size-3.5" aria-hidden="true" />
@@ -347,15 +591,17 @@ export default function RunDetail({ params }: { params: { id: string } }) {
         {demoMode && <ConnectMenu />}
 
         {run.pullRequestUrl && run.number != null && (
-          <a
-            href={run.pullRequestUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={SECONDARY_BUTTON_CLASS}
-          >
-            <GitPullRequestIcon className="size-4 text-mint" />
-            <span className="font-mono">#{run.number}</span>
-          </a>
+          <HoverCard content={<PullRequestPopover runId={params.id} />}>
+            <a
+              href={run.pullRequestUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={SECONDARY_BUTTON_CLASS}
+            >
+              <GitPullRequestIcon className="size-4 text-mint" />
+              <span className="font-mono">#{run.number}</span>
+            </a>
+          </HoverCard>
         )}
 
         <ActionsMenu
@@ -385,6 +631,21 @@ export default function RunDetail({ params }: { params: { id: string } }) {
           cancelPending={cancelPending}
           onCancel={() => void cancelMutation.trigger()}
         />
+
+        {askEnabled && (
+          <button
+            type="button"
+            onClick={() => setAskOpen(true)}
+            disabled={askOpen}
+            className={classNames(
+              SECONDARY_BUTTON_CLASS,
+              "disabled:cursor-not-allowed disabled:opacity-60",
+            )}
+          >
+            <SparklesIcon className="size-4 text-teal-300" aria-hidden="true" />
+            Ask Fabro
+          </button>
+        )}
       </div>
 
       <ConfirmDialog
@@ -449,13 +710,24 @@ export default function RunDetail({ params }: { params: { id: string } }) {
         <Outlet />
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-page">
+      <div
+        className="fixed bottom-0 left-0 z-30 border-t border-line bg-page transition-[right] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        style={{ right: sidebarWidth }}
+      >
         {hasPendingQuestions ? (
           <InterviewDock runId={params.id} questions={pendingQuestions} />
         ) : (
           <SteerBar ref={steerBarRef} runId={params.id} />
         )}
       </div>
+
+      {askEnabled && (
+        // Docked below the top nav (h-16) and above the steer bar (z-30); the
+        // sidebar animates its own width, so the wrapper collapses when closed.
+        <div className="fixed top-16 right-0 bottom-0 z-40">
+          <AskFabroSidebar isOpen={askOpen} onClose={() => setAskOpen(false)} />
+        </div>
+      )}
     </div>
   );
 }

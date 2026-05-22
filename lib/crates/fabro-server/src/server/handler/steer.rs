@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
@@ -9,11 +9,9 @@ use fabro_api::types::SteerRunRequest;
 use fabro_types::Principal;
 use fabro_workflow::run_status::RunStatus;
 
-use super::super::{
-    AnswerTransportError, AppState, durable_run_status, parse_run_id_path, reject_if_archived,
-};
+use super::super::{AnswerTransportError, AppState, durable_run_status, reject_if_archived};
 use crate::error::ApiError;
-use crate::principal_middleware::RequiredUser;
+use crate::principal_middleware::RequireRunScopedOrRunTools;
 
 pub(super) fn routes() -> axum::Router<Arc<AppState>> {
     axum::Router::new()
@@ -28,15 +26,14 @@ enum RunControlRequest {
 }
 
 impl RunControlRequest {
-    const fn requires_active_api_session(&self) -> bool {
+    const fn requires_active_steerable_session(&self) -> bool {
         matches!(self, Self::Interrupt | Self::InterruptThenSteer { .. })
     }
 }
 
 async fn steer_run(
-    auth: RequiredUser,
+    RequireRunScopedOrRunTools(id, actor): RequireRunScopedOrRunTools,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
     Json(req): Json<SteerRunRequest>,
 ) -> Response {
     // OpenAPI enforces minLength=1/maxLength=8192 already; only whitespace-only
@@ -52,27 +49,22 @@ async fn steer_run(
         RunControlRequest::Steer { text }
     };
 
-    control_run(auth, state, id, control).await
+    control_run(actor, state, id, control).await
 }
 
 async fn interrupt_run(
-    auth: RequiredUser,
+    RequireRunScopedOrRunTools(id, actor): RequireRunScopedOrRunTools,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
 ) -> Response {
-    control_run(auth, state, id, RunControlRequest::Interrupt).await
+    control_run(actor, state, id, RunControlRequest::Interrupt).await
 }
 
 async fn control_run(
-    auth: RequiredUser,
+    actor: Principal,
     state: Arc<AppState>,
-    id: String,
+    id: fabro_types::RunId,
     control: RunControlRequest,
 ) -> Response {
-    let id = match parse_run_id_path(&id) {
-        Ok(id) => id,
-        Err(response) => return response,
-    };
     if let Some(response) = reject_if_archived(state.as_ref(), &id).await {
         return response;
     }
@@ -112,13 +104,11 @@ async fn control_run(
                     }
                     RunStatus::Running => {}
                 }
-                // Steerability predicate. Best-effort, target-oriented:
-                //   - If at least one API-mode session is active → forward.
-                //   - Else if no agent stages are active at all → forward (worker hub buffers
-                //     for the next session).
-                //   - Else (active agents exist but all are non-steerable) → 409.
-                if managed_run.active_api_stages.is_empty()
-                    && !managed_run.active_non_steerable_agent_stages.is_empty()
+                // Plain steers buffer in the worker hub when no agent session
+                // is active; if active agents exist but none are steerable,
+                // there is no live control channel to target.
+                if managed_run.active_steerable_stages.is_empty()
+                    && !managed_run.active_non_steerable_stages.is_empty()
                 {
                     return ApiError::with_code(
                         StatusCode::CONFLICT,
@@ -127,12 +117,15 @@ async fn control_run(
                     )
                     .into_response();
                 }
-                if managed_run.active_api_stages.is_empty() && control.requires_active_api_session()
+                // Interrupts need a live session because there's nothing to
+                // cancel otherwise.
+                if managed_run.active_steerable_stages.is_empty()
+                    && control.requires_active_steerable_session()
                 {
                     return ApiError::with_code(
                         StatusCode::CONFLICT,
-                        "Run has no active API-mode agent session.",
-                        "no_active_api_session",
+                        "Run has no active steerable agent session.",
+                        "no_active_steerable_session",
                     )
                     .into_response();
                 }
@@ -154,7 +147,6 @@ async fn control_run(
         .into_response();
     };
 
-    let actor = Principal::User(auth.0);
     let result = match control {
         RunControlRequest::Steer { text } => answer_transport.steer(text, actor).await,
         RunControlRequest::Interrupt => answer_transport.interrupt(actor).await,

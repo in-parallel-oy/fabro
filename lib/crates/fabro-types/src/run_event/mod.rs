@@ -2,6 +2,7 @@ pub mod agent;
 pub mod infra;
 pub mod misc;
 pub mod run;
+pub mod session;
 pub mod stage;
 
 pub use agent::*;
@@ -14,6 +15,7 @@ use serde::de::Error as DeError;
 use serde::ser::Error as SerError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value, json};
+pub use session::*;
 pub use stage::*;
 
 use crate::{ParallelBranchId, Principal, RunId, StageId};
@@ -66,6 +68,12 @@ pub enum EventBody {
     RunInterrupt(RunInterruptProps),
     #[serde(rename = "run.steer")]
     RunSteer(RunSteerProps),
+    #[serde(rename = "run.pair.started")]
+    RunPairStarted(RunPairStartedProps),
+    #[serde(rename = "run.pair.ended")]
+    RunPairEnded(RunPairEndedProps),
+    #[serde(rename = "run.pair.failed")]
+    RunPairFailed(RunPairFailedProps),
     #[serde(rename = "run.blocked")]
     RunBlocked(RunBlockedProps),
     #[serde(rename = "run.unblocked")]
@@ -90,6 +98,26 @@ pub enum EventBody {
     RunUnarchived(RunUnarchivedProps),
     #[serde(rename = "run.title.updated")]
     RunTitleUpdated(RunTitleUpdatedProps),
+    #[serde(rename = "run.session.created")]
+    RunSessionCreated(RunSessionCreatedProps),
+    #[serde(rename = "run.session.turn.started")]
+    RunSessionTurnStarted(RunSessionTurnStartedProps),
+    #[serde(rename = "run.session.user_message")]
+    RunSessionUserMessage(RunSessionUserMessageProps),
+    #[serde(rename = "run.session.assistant_delta")]
+    RunSessionAssistantDelta(RunSessionAssistantDeltaProps),
+    #[serde(rename = "run.session.assistant_message")]
+    RunSessionAssistantMessage(RunSessionAssistantMessageProps),
+    #[serde(rename = "run.session.tool_call.started")]
+    RunSessionToolCallStarted(RunSessionToolCallStartedProps),
+    #[serde(rename = "run.session.tool_call.completed")]
+    RunSessionToolCallCompleted(RunSessionToolCallCompletedProps),
+    #[serde(rename = "run.session.turn.succeeded")]
+    RunSessionTurnSucceeded(RunSessionTurnSucceededProps),
+    #[serde(rename = "run.session.turn.failed")]
+    RunSessionTurnFailed(RunSessionTurnFailedProps),
+    #[serde(rename = "run.session.turn.interrupted")]
+    RunSessionTurnInterrupted(RunSessionTurnInterruptedProps),
     #[serde(rename = "run.parent.linked")]
     RunParentLinked(RunParentLinkedProps),
     #[serde(rename = "run.parent.unlinked")]
@@ -184,6 +212,10 @@ pub enum EventBody {
     AgentTurnLimitReached(AgentTurnLimitReachedProps),
     #[serde(rename = "agent.steering.injected")]
     AgentSteeringInjected(AgentSteeringInjectedProps),
+    #[serde(rename = "agent.pair.user_message")]
+    AgentPairUserMessage(AgentPairUserMessageProps),
+    #[serde(rename = "agent.pair.system_message")]
+    AgentPairSystemMessage(AgentPairSystemMessageProps),
     #[serde(rename = "agent.interrupt.injected")]
     AgentInterruptInjected(AgentInterruptInjectedProps),
     #[serde(rename = "agent.steer.buffered")]
@@ -380,6 +412,9 @@ impl EventBody {
             Self::RunRunning(_) => "run.running",
             Self::RunInterrupt(_) => "run.interrupt",
             Self::RunSteer(_) => "run.steer",
+            Self::RunPairStarted(_) => "run.pair.started",
+            Self::RunPairEnded(_) => "run.pair.ended",
+            Self::RunPairFailed(_) => "run.pair.failed",
             Self::RunBlocked(_) => "run.blocked",
             Self::RunUnblocked(_) => "run.unblocked",
             Self::RunRemoving(_) => "run.removing",
@@ -392,6 +427,16 @@ impl EventBody {
             Self::RunArchived(_) => "run.archived",
             Self::RunUnarchived(_) => "run.unarchived",
             Self::RunTitleUpdated(_) => "run.title.updated",
+            Self::RunSessionCreated(_) => "run.session.created",
+            Self::RunSessionTurnStarted(_) => "run.session.turn.started",
+            Self::RunSessionUserMessage(_) => "run.session.user_message",
+            Self::RunSessionAssistantDelta(_) => "run.session.assistant_delta",
+            Self::RunSessionAssistantMessage(_) => "run.session.assistant_message",
+            Self::RunSessionToolCallStarted(_) => "run.session.tool_call.started",
+            Self::RunSessionToolCallCompleted(_) => "run.session.tool_call.completed",
+            Self::RunSessionTurnSucceeded(_) => "run.session.turn.succeeded",
+            Self::RunSessionTurnFailed(_) => "run.session.turn.failed",
+            Self::RunSessionTurnInterrupted(_) => "run.session.turn.interrupted",
             Self::RunParentLinked(_) => "run.parent.linked",
             Self::RunParentUnlinked(_) => "run.parent.unlinked",
             Self::RunCompleted(_) => "run.completed",
@@ -439,6 +484,8 @@ impl EventBody {
             Self::AgentLoopDetected(_) => "agent.loop.detected",
             Self::AgentTurnLimitReached(_) => "agent.turn.limit",
             Self::AgentSteeringInjected(_) => "agent.steering.injected",
+            Self::AgentPairUserMessage(_) => "agent.pair.user_message",
+            Self::AgentPairSystemMessage(_) => "agent.pair.system_message",
             Self::AgentInterruptInjected(_) => "agent.interrupt.injected",
             Self::AgentSteerBuffered(_) => "agent.steer.buffered",
             Self::AgentSteerDropped(_) => "agent.steer.dropped",
@@ -512,6 +559,10 @@ impl EventBody {
         }
     }
 
+    pub fn is_run_session_event(&self) -> bool {
+        self.event_name().starts_with("run.session.")
+    }
+
     fn properties_value(&self) -> serde_json::Result<Value> {
         if let Self::Unknown { properties, .. } = self {
             return Ok(properties.clone());
@@ -537,12 +588,26 @@ fn is_known_event_name(event: &str) -> bool {
             | "run.running"
             | "run.interrupt"
             | "run.steer"
+            | "run.pair.started"
+            | "run.pair.ended"
+            | "run.pair.failed"
             | "run.blocked"
             | "run.unblocked"
             | "run.removing"
             | "run.superseded_by"
             | "run.archived"
             | "run.unarchived"
+            | "run.title.updated"
+            | "run.session.created"
+            | "run.session.turn.started"
+            | "run.session.user_message"
+            | "run.session.assistant_delta"
+            | "run.session.assistant_message"
+            | "run.session.tool_call.started"
+            | "run.session.tool_call.completed"
+            | "run.session.turn.succeeded"
+            | "run.session.turn.failed"
+            | "run.session.turn.interrupted"
             | "run.parent.linked"
             | "run.parent.unlinked"
             | "run.completed"
@@ -590,6 +655,8 @@ fn is_known_event_name(event: &str) -> bool {
             | "agent.loop.detected"
             | "agent.turn.limit"
             | "agent.steering.injected"
+            | "agent.pair.user_message"
+            | "agent.pair.system_message"
             | "agent.interrupt.injected"
             | "agent.steer.buffered"
             | "agent.steer.dropped"
@@ -877,7 +944,7 @@ mod tests {
             actor:              None,
             body:               EventBody::StageCompleted(StageCompletedProps {
                 index: 1,
-                duration_ms: 1234,
+                timing: crate::StageTiming::wall_only(1234),
                 status: crate::StageOutcome::Succeeded,
                 preferred_label: None,
                 suggested_next_ids: vec!["next".to_string()],
@@ -1072,7 +1139,12 @@ mod tests {
             (
                 "run.completed",
                 json!({
-                    "duration_ms": 42,
+                    "timing": {
+                        "wall_time_ms": 42,
+                        "inference_time_ms": 0,
+                        "tool_time_ms": 0,
+                        "active_time_ms": 0
+                    },
                     "artifact_count": 0,
                     "status": "succeeded",
                     "reason": "completed",
@@ -1093,7 +1165,12 @@ mod tests {
                             "category": "deterministic"
                         }
                     },
-                    "duration_ms": 42,
+                    "timing": {
+                        "wall_time_ms": 42,
+                        "inference_time_ms": 0,
+                        "tool_time_ms": 0,
+                        "active_time_ms": 0
+                    },
                     "diff_summary": {
                         "files_changed": 2,
                         "additions": 10,
@@ -1151,7 +1228,7 @@ mod tests {
     fn event_body_event_name_matches_wire_name() {
         let body = EventBody::StageCompleted(StageCompletedProps {
             index: 1,
-            duration_ms: 1234,
+            timing: crate::StageTiming::wall_only(1234),
             status: crate::StageOutcome::Succeeded,
             preferred_label: None,
             suggested_next_ids: vec!["next".to_string()],

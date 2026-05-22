@@ -95,6 +95,28 @@ fn event_body_from_event(event: &Event) -> EventBody {
         Event::RunSteer { text, .. } => {
             EventBody::RunSteer(fabro_types::RunSteerProps { text: text.clone() })
         }
+        Event::RunPairStarted {
+            pair_id, target, ..
+        } => EventBody::RunPairStarted(fabro_types::RunPairStartedProps {
+            pair_id: *pair_id,
+            target:  target.clone(),
+        }),
+        Event::RunPairEnded {
+            pair_id, reason, ..
+        } => EventBody::RunPairEnded(fabro_types::RunPairEndedProps {
+            pair_id: *pair_id,
+            reason:  *reason,
+        }),
+        Event::RunPairFailed {
+            pair_id,
+            reason,
+            message,
+            ..
+        } => EventBody::RunPairFailed(fabro_types::RunPairFailedProps {
+            pair_id: *pair_id,
+            reason:  *reason,
+            message: message.clone(),
+        }),
         Event::RunBlocked { blocked_reason } => {
             EventBody::RunBlocked(fabro_types::RunBlockedProps {
                 blocked_reason: *blocked_reason,
@@ -159,7 +181,7 @@ fn event_body_from_event(event: &Event) -> EventBody {
             previous_parent_id: *previous_parent_id,
         }),
         Event::WorkflowRunCompleted {
-            duration_ms,
+            timing,
             artifact_count,
             status,
             reason,
@@ -169,7 +191,7 @@ fn event_body_from_event(event: &Event) -> EventBody {
             diff_summary,
             billing,
         } => EventBody::RunCompleted(fabro_types::RunCompletedProps {
-            duration_ms:          *duration_ms,
+            timing:               *timing,
             artifact_count:       *artifact_count,
             status:               status.clone(),
             reason:               *reason,
@@ -181,14 +203,14 @@ fn event_body_from_event(event: &Event) -> EventBody {
         }),
         Event::WorkflowRunFailed {
             failure,
-            duration_ms,
+            timing,
             final_git_commit_sha,
             final_patch,
             diff_summary,
             billing,
         } => EventBody::RunFailed(fabro_types::RunFailedProps {
             failure:              failure.clone(),
-            duration_ms:          *duration_ms,
+            timing:               *timing,
             final_git_commit_sha: final_git_commit_sha.clone(),
             final_patch:          final_patch.clone(),
             diff_summary:         *diff_summary,
@@ -263,7 +285,7 @@ fn event_body_from_event(event: &Event) -> EventBody {
         }),
         Event::StageCompleted {
             index,
-            duration_ms,
+            timing,
             status,
             preferred_label,
             suggested_next_ids,
@@ -283,7 +305,7 @@ fn event_body_from_event(event: &Event) -> EventBody {
             ..
         } => EventBody::StageCompleted(fabro_types::StageCompletedProps {
             index: *index,
-            duration_ms: *duration_ms,
+            timing: *timing,
             status: stage_status_from_string(status),
             preferred_label: preferred_label.clone(),
             suggested_next_ids: suggested_next_ids.clone(),
@@ -305,15 +327,15 @@ fn event_body_from_event(event: &Event) -> EventBody {
             index,
             failure,
             will_retry,
-            duration_ms,
+            timing,
             billing,
             ..
         } => EventBody::StageFailed(fabro_types::StageFailedProps {
-            index:       *index,
-            failure:     Some(failure.clone()),
-            will_retry:  *will_retry,
-            duration_ms: *duration_ms,
-            billing:     billing.clone(),
+            index:      *index,
+            failure:    Some(failure.clone()),
+            will_retry: *will_retry,
+            timing:     *timing,
+            billing:    billing.clone(),
         }),
         Event::StageRetrying {
             index,
@@ -1061,6 +1083,32 @@ fn event_body_from_event(event: &Event) -> EventBody {
                 visit: *visit,
             })
         }
+        Event::AgentPairUserMessage {
+            visit,
+            pair_id,
+            message_id,
+            client_message_id,
+            text,
+            ..
+        } => EventBody::AgentPairUserMessage(fabro_types::AgentPairUserMessageProps {
+            pair_id:           *pair_id,
+            message_id:        *message_id,
+            client_message_id: client_message_id.clone(),
+            text:              text.clone(),
+            visit:             *visit,
+        }),
+        Event::AgentPairSystemMessage {
+            visit,
+            pair_id,
+            kind,
+            text,
+            ..
+        } => EventBody::AgentPairSystemMessage(fabro_types::AgentPairSystemMessageProps {
+            pair_id: *pair_id,
+            kind:    *kind,
+            text:    text.clone(),
+            visit:   *visit,
+        }),
         Event::AgentSteerBuffered { .. } => {
             EventBody::AgentSteerBuffered(fabro_types::AgentSteerBufferedProps::default())
         }
@@ -1318,7 +1366,7 @@ mod tests {
                 node_id: "plan".to_string(),
                 name: "Plan".to_string(),
                 index: 0,
-                duration_ms: 5000,
+                timing: ::fabro_types::StageTiming::wall_only(5000),
                 status: "succeeded".to_string(),
                 preferred_label: None,
                 suggested_next_ids: Vec::new(),
@@ -1351,7 +1399,8 @@ mod tests {
         assert_eq!(stored.node_label.as_deref(), Some("Plan"));
         assert_eq!(stored.stage_id, Some(StageId::new("plan", 1)));
         let properties = stored.properties().unwrap();
-        assert_eq!(properties["duration_ms"], 5000);
+        assert_eq!(properties["timing"]["wall_time_ms"], 5000);
+        assert_eq!(properties["timing"]["active_time_ms"], 0);
         assert_eq!(properties["status"], "succeeded");
         assert!(stored.session_id.is_none());
     }
@@ -1362,7 +1411,7 @@ mod tests {
             node_id: "plan".to_string(),
             name: "Plan".to_string(),
             index: 0,
-            duration_ms: 5000,
+            timing: ::fabro_types::StageTiming::wall_only(5000),
             status: "succeeded".to_string(),
             preferred_label: None,
             suggested_next_ids: Vec::new(),
@@ -1391,17 +1440,17 @@ mod tests {
     fn run_event_stage_failure_keeps_failure_detail() {
         let usage = test_usage("gpt-5.2", 321, 54);
         let stored = to_run_event(&fixtures::RUN_3, &Event::StageFailed {
-            node_id:     "code".to_string(),
-            name:        "Code".to_string(),
-            index:       1,
-            failure:     FailureDetail::new(
+            node_id:    "code".to_string(),
+            name:       "Code".to_string(),
+            index:      1,
+            failure:    FailureDetail::new(
                 "lint failed",
                 crate::outcome::FailureCategory::Deterministic,
             ),
-            will_retry:  true,
-            duration_ms: 5000,
-            billing:     Some(usage.clone()),
-            actor:       None,
+            will_retry: true,
+            timing:     ::fabro_types::StageTiming::wall_only(5000),
+            billing:    Some(usage.clone()),
+            actor:      None,
         });
 
         assert_eq!(stored.event_name(), "stage.failed");
@@ -1504,7 +1553,7 @@ mod tests {
     fn run_event_workflow_failure_uses_display_error() {
         let event = Event::workflow_run_failed_from_error(
             &Error::handler("boom"),
-            900,
+            ::fabro_types::RunTiming::wall_only(900),
             FailureReason::WorkflowError,
             Some("abc123".to_string()),
             None,
@@ -1516,7 +1565,7 @@ mod tests {
         assert_eq!(stored.event_name(), "run.failed");
         let properties = stored.properties().unwrap();
         assert_eq!(properties["failure"]["detail"]["message"], "boom");
-        assert_eq!(properties["duration_ms"], 900);
+        assert_eq!(properties["timing"]["wall_time_ms"], 900);
     }
 
     #[test]
@@ -1524,7 +1573,7 @@ mod tests {
         let source = EventTestCause;
         let event = Event::workflow_run_failed_from_error(
             &Error::engine_with_source("Failed to initialize sandbox", source),
-            900,
+            ::fabro_types::RunTiming::wall_only(900),
             FailureReason::WorkflowError,
             None,
             None,
@@ -1549,7 +1598,7 @@ mod tests {
         let source = EventTestCause;
         let event = Event::workflow_run_failed_from_error(
             &Error::engine_with_source("Failed to initialize sandbox", source),
-            900,
+            ::fabro_types::RunTiming::wall_only(900),
             FailureReason::SandboxInitFailed,
             Some("abc123".to_string()),
             None,
@@ -1573,7 +1622,7 @@ mod tests {
             properties["failure"]["detail"]["category"],
             "transient_infra"
         );
-        assert_eq!(properties["duration_ms"], 900);
+        assert_eq!(properties["timing"]["wall_time_ms"], 900);
         assert_eq!(properties["final_git_commit_sha"], "abc123");
         assert!(properties.get("error").is_none());
         assert!(properties.get("causes").is_none());

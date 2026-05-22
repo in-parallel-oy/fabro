@@ -12,10 +12,12 @@ pub mod diff;
 pub mod event_envelope;
 pub mod failure_signature;
 pub mod graph;
+mod id;
 pub mod interview;
 pub mod llm_backend;
 pub mod manifest_path;
 pub mod outcome;
+pub mod pair;
 pub mod principal;
 pub mod pull_request;
 pub mod repository;
@@ -39,6 +41,8 @@ pub mod stage_handler;
 pub mod stage_id;
 pub mod start;
 pub mod status;
+pub mod steering;
+pub mod timing;
 
 pub use artifact::ArtifactUpload;
 pub use auth::{IdpIdentity, IdpIdentityError};
@@ -66,6 +70,15 @@ pub use manifest_path::{ManifestPath, ManifestPathParseError};
 pub use outcome::{
     FailureCategory, FailureDetail, NodeResult, Outcome, OutcomeMeta, StageOutcome, StageState,
 };
+pub use pair::{
+    MAX_PAIR_MESSAGE_BYTES, PairId, PairMessageId, PairMessageRecord, PairMessageRequest,
+    PairRecord, PairStartRequest, PairStatus, PairSystemMessageKind, PairTarget,
+    PairTranscriptAssistantMessage, PairTranscriptDetailRef, PairTranscriptEntry,
+    PairTranscriptError, PairTranscriptMeta, PairTranscriptResponse, PairTranscriptSystemMessage,
+    PairTranscriptToolCall, PairTranscriptToolStatus, PairTranscriptUserMessage,
+    PairTranscriptWarning, RunEventDetailContent, RunEventDetailContentKind,
+    RunEventDetailEnvelope, RunEventDetailResponse, RunPairStatusResponse,
+};
 pub use principal::{AuthMethod, Principal, SystemActorKind, UserPrincipal};
 pub use pull_request::{
     CheckRun, CheckRunStatus, PullRequest, PullRequestDetails, PullRequestDetailsStatus,
@@ -80,7 +93,8 @@ pub use run::{
 pub use run_blob_id::RunBlobId;
 pub use run_event::{
     EventBody, ExecOutputTail, InterviewOption, MetadataSnapshotFailureKind, MetadataSnapshotPhase,
-    RunEvent, RunNoticeCode, RunNoticeLevel, SessionCapability,
+    RunEvent, RunNoticeCode, RunNoticeLevel, RunPairEndedReason, RunPairFailedReason,
+    SessionCapability,
 };
 pub use run_failure::RunFailure;
 pub use run_id::{RunId, fixtures};
@@ -89,8 +103,8 @@ pub use run_projection::{
 };
 pub use run_sandbox::{RunSandbox, RunSandboxRuntime};
 pub use run_summary::{
-    AutomationRef, Run, RunBillingSummary, RunError, RunLifecycle, RunLinks, RunModel, RunOrigin,
-    RunOriginKind, RunTimestamps, WorkflowRef,
+    AskFabro, AskFabroUnavailableReason, AutomationRef, Run, RunBillingSummary, RunError,
+    RunLifecycle, RunLinks, RunModel, RunOrigin, RunOriginKind, RunTimestamps, WorkflowRef,
 };
 pub use run_title::{RunTitleError, infer_run_title, normalize_explicit_run_title};
 pub use sandbox_details::{
@@ -104,8 +118,8 @@ pub use sandbox_services::{
 };
 pub use secret::{SecretMetadata, SecretType};
 pub use session::{
-    PermissionLevel, SessionEventEnvelope, SessionId, SessionMessage, SessionRecord, SessionStatus,
-    SessionSummary, TurnId, TurnRecord, TurnStatus,
+    PermissionLevel, SessionDetail, SessionId, SessionMessage, SessionRecord, SessionStatus,
+    SessionSummary, SessionTurn, TurnId,
 };
 pub use stage_completion::StageCompletion;
 pub use stage_handler::StageHandler;
@@ -116,3 +130,5 @@ pub use status::{
     ParseSuccessReasonError, RunControlAction, RunStatus, RunStatusKind, SuccessReason,
     TerminalStatus,
 };
+pub use steering::SteeringMessage;
+pub use timing::{RunTiming, StageTiming};

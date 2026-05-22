@@ -5,8 +5,9 @@ use chrono::{TimeZone, Utc};
 use fabro_api::types::{RepositoryRef as ApiRepositoryRef, Run as ApiRun};
 use fabro_types::status::{RunStatus, SuccessReason};
 use fabro_types::{
-    DiffSummary, PullRequestLink, RepositoryProvider, RepositoryRef, Run, RunBillingSummary, RunId,
-    RunLifecycle, RunLinks, RunOrigin, RunTimestamps, WorkflowRef,
+    AskFabro, AskFabroUnavailableReason, DiffSummary, PullRequestLink, RepositoryProvider,
+    RepositoryRef, Run, RunBillingSummary, RunId, RunLifecycle, RunLinks, RunOrigin, RunTimestamps,
+    RunTiming, WorkflowRef,
 };
 use serde_json::json;
 
@@ -32,6 +33,8 @@ fn run_summary_json_matches_openapi_shape() {
             slug:       Some("workflow".to_string()),
             name:       Some("Ship workflow".to_string()),
             graph_name: Some("GraphName".to_string()),
+            node_count: 7,
+            edge_count: 9,
         },
         automation:       None,
         repository:       Some(RepositoryRef {
@@ -60,12 +63,16 @@ fn run_summary_json_matches_openapi_shape() {
             started_at: Some(created_at),
             last_event_at: Some(last_event_at),
             completed_at: None,
-            duration_ms: Some(42_000),
-            elapsed_secs: Some(42.0),
         },
+        timing:           Some(RunTiming::new(42_000, 12_000, 30_000)),
         billing:          Some(RunBillingSummary {
             total_usd_micros: Some(123),
         }),
+        ask_fabro:        AskFabro {
+            available:          false,
+            unavailable_reason: Some(AskFabroUnavailableReason::SandboxNotReady),
+            default_model:      Some("gpt-5.4".to_string()),
+        },
         diff:             Some(DiffSummary {
             files_changed: 3,
             additions:     12,
@@ -91,7 +98,9 @@ fn run_summary_json_matches_openapi_shape() {
             "workflow": {
                 "slug": "workflow",
                 "name": "Ship workflow",
-                "graph_name": "GraphName"
+                "graph_name": "GraphName",
+                "node_count": 7,
+                "edge_count": 9
             },
             "automation": null,
             "repository": {
@@ -124,12 +133,21 @@ fn run_summary_json_matches_openapi_shape() {
                 "created_at": "2026-04-20T12:00:00Z",
                 "started_at": "2026-04-20T12:00:00Z",
                 "last_event_at": "2026-04-20T12:00:42Z",
-                "completed_at": null,
-                "duration_ms": 42000,
-                "elapsed_secs": 42.0
+                "completed_at": null
+            },
+            "timing": {
+                "wall_time_ms": 42000,
+                "inference_time_ms": 12000,
+                "tool_time_ms": 30000,
+                "active_time_ms": 42000
             },
             "billing": {
                 "total_usd_micros": 123
+            },
+            "ask_fabro": {
+                "available": false,
+                "unavailable_reason": "sandbox_not_ready",
+                "default_model": "gpt-5.4"
             },
             "diff": {
                 "files_changed": 3,
@@ -197,6 +215,8 @@ fn run_summary_deserializes_when_optional_fields_are_absent() {
     assert_eq!(summary.workflow.name, None);
     assert_eq!(summary.workflow.graph_name.as_deref(), Some("GraphName"));
     assert_eq!(summary.workflow.slug, None);
+    assert_eq!(summary.workflow.node_count, 0);
+    assert_eq!(summary.workflow.edge_count, 0);
     assert_eq!(summary.goal, "ship it");
     assert_eq!(summary.title, "ship it");
     assert_eq!(summary.labels, HashMap::new());
@@ -214,9 +234,9 @@ fn run_summary_deserializes_when_optional_fields_are_absent() {
     assert_eq!(summary.timestamps.last_event_at, None);
     assert_eq!(summary.lifecycle.status, RunStatus::Running);
     assert_eq!(summary.lifecycle.pending_control, None);
-    assert_eq!(summary.timestamps.duration_ms, None);
-    assert_eq!(summary.timestamps.elapsed_secs, None);
+    assert_eq!(summary.timing.map(|t| t.wall_time_ms), None);
     assert_eq!(summary.billing, None);
+    assert_eq!(summary.ask_fabro, AskFabro::default());
     assert_eq!(summary.superseded_by, None);
     assert_eq!(summary.diff, None);
     assert_eq!(summary.pull_request, None);

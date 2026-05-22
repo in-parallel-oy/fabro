@@ -16,7 +16,7 @@ mod generated {
 pub mod types {
     pub use fabro_model::{
         Model, ModelCosts, ModelFeatures, ModelLimits, ModelRef as BillingModelRef, ModelTestMode,
-        ReasoningEffortFeature, Speed as BillingSpeed,
+        Provider, ReasoningEffortFeature, Speed as BillingSpeed,
     };
     pub use fabro_types::settings::server::{
         GithubIntegrationSettings, GithubIntegrationStrategy, IntegrationWebhooksSettings,
@@ -32,20 +32,23 @@ pub mod types {
         BlockedReason, FailureReason, RunControlAction, RunStatus, SuccessReason,
     };
     pub use fabro_types::{
-        AuthMethod, BilledTokenCounts, CommandTermination, Conclusion, DiffStats, DiffSummary,
-        DirtyStatus, EventEnvelope, ExecOutputTail, FailureCategory, FailureDetail,
+        AskFabro, AuthMethod, BilledTokenCounts, CommandTermination, Conclusion, DiffStats,
+        DiffSummary, DirtyStatus, EventEnvelope, ExecOutputTail, FailureCategory, FailureDetail,
         FailureSignature, GitContext, IdpIdentity, InterviewOption, InterviewQuestionRecord,
-        PendingInterviewRecord, PermissionLevel, PreRunPushOutcome, Principal, PullRequest,
-        PullRequestDetails, PullRequestDetailsStatus, PullRequestDetailsUnavailableReason,
-        PullRequestLink, PullRequestMeta, PullRequestResponse, QuestionType, RepositoryRef, Run,
-        RunClientProvenance, RunEvent, RunFailure, RunProjection, RunProvenance, RunSandbox,
+        PairId, PairMessageId, PairMessageRecord, PairMessageRequest, PairRecord, PairStartRequest,
+        PairStatus, PairTarget, PairTranscriptEntry, PairTranscriptResponse,
+        PendingInterviewRecord, PreRunPushOutcome, Principal, PullRequest, PullRequestDetails,
+        PullRequestDetailsStatus, PullRequestDetailsUnavailableReason, PullRequestLink,
+        PullRequestMeta, PullRequestResponse, QuestionType, RepositoryRef, Run,
+        RunClientProvenance, RunEvent, RunEventDetailContentKind, RunEventDetailResponse,
+        RunFailure, RunPairStatusResponse, RunProjection, RunProvenance, RunSandbox,
         RunSandboxRuntime, RunServerProvenance, SandboxDetails, SandboxNetwork,
         SandboxNetworkPolicy, SandboxNetworkPolicyMode, SandboxProvider, SandboxResources,
         SandboxService, SandboxServiceListResponse, SandboxState, SandboxTimestamps,
-        SecretMetadata, SecretType, ServerSettings, SessionEventEnvelope, SessionId,
-        SessionMessage, SessionRecord, SessionStatus, SessionSummary, StageCompletion,
-        StageHandler, StageOutcome, StageProjection, StageState, SystemActorKind, TurnId,
-        TurnRecord, TurnStatus, UserPrincipal, WorkflowSettings,
+        SecretMetadata, SecretType, ServerSettings, SessionDetail, SessionId, SessionMessage,
+        SessionRecord, SessionStatus, SessionSummary, SessionTurn, StageCompletion, StageHandler,
+        StageOutcome, StageProjection, StageState, SystemActorKind, TurnId, UserPrincipal,
+        WorkflowSettings,
     };
 
     pub use crate::generated::types::*;

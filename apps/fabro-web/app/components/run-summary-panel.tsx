@@ -7,7 +7,12 @@ import {
   QuestionMarkCircleIcon,
   ServerIcon,
 } from "@heroicons/react/20/solid";
-import type { Principal, Run, SandboxResources } from "@qltysh/fabro-api-client";
+import type {
+  Principal,
+  Run,
+  SandboxResources,
+  SandboxState,
+} from "@qltysh/fabro-api-client";
 
 import {
   formatBytesAsMemory,
@@ -15,6 +20,8 @@ import {
   formatUsdMicros,
 } from "../lib/format";
 import { useRun, useRunArtifacts, useRunSandboxDetails } from "../lib/queries";
+import { SANDBOX_STATE_DISPLAY } from "../lib/sandbox-state";
+import { Tooltip } from "./ui";
 
 const LABEL_CLASS =
   "text-[10px] font-medium uppercase tracking-[0.08em] text-fg-muted";
@@ -61,15 +68,24 @@ function principalGlyph(icon: ReactNode) {
 function createdByDisplay(actor: Principal): CreatedByDisplay {
   switch (actor.kind) {
     case "user": {
-      const initial = actor.login.charAt(0).toUpperCase() || "?";
-      return {
-        glyph: (
+      let glyph: ReactNode;
+      if (actor.avatar_url) {
+        glyph = (
+          <img
+            alt=""
+            src={actor.avatar_url}
+            className="size-5 rounded-full outline -outline-offset-1 outline-line-strong"
+          />
+        );
+      } else {
+        const initial = actor.login.charAt(0).toUpperCase() || "?";
+        glyph = (
           <span className="grid size-5 place-items-center rounded-full bg-teal-500/20 font-mono text-[10px] font-medium text-teal-500">
             {initial}
           </span>
-        ),
-        label: actor.login,
-      };
+        );
+      }
+      return { glyph, label: actor.login };
     }
     case "agent":
       return { glyph: principalGlyph(<CpuChipIcon className="size-3" />), label: "agent" };
@@ -95,15 +111,46 @@ function createdByDisplay(actor: Principal): CreatedByDisplay {
 export interface RunSummaryPanelViewProps {
   run:                Run | null;
   runLoading:         boolean;
+  sandboxState:       SandboxState | null;
   sandboxResources:   SandboxResources | null;
   sandboxLoading:     boolean;
   artifactsCount:     number | null;
   artifactsLoading:   boolean;
 }
 
+function SandboxValue({
+  state,
+  resources,
+}: {
+  state: SandboxState;
+  resources: SandboxResources | null;
+}) {
+  const display = SANDBOX_STATE_DISPLAY[state] ?? SANDBOX_STATE_DISPLAY.unknown;
+  const cpu = resources?.cpu_cores;
+  const memory = resources?.memory_bytes;
+  const valueText =
+    cpu != null && memory != null
+      ? `${formatCpuCores(cpu)} CPU · ${formatBytesAsMemory(memory)}`
+      : display.label;
+
+  return (
+    <div className="flex items-center gap-2">
+      <Tooltip label={display.description}>
+        <span
+          role="img"
+          aria-label={`Sandbox ${display.label}`}
+          className={`size-2 rounded-full ${display.dot}`}
+        />
+      </Tooltip>
+      <span className={VALUE_CLASS}>{valueText}</span>
+    </div>
+  );
+}
+
 export function RunSummaryPanelView({
   run,
   runLoading,
+  sandboxState,
   sandboxResources,
   sandboxLoading,
   artifactsCount,
@@ -150,13 +197,8 @@ export function RunSummaryPanelView({
         <Cell label="Sandbox">
           {sandboxLoading ? (
             <Skeleton widthClass="w-24" />
-          ) : sandboxResources &&
-            sandboxResources.cpu_cores != null &&
-            sandboxResources.memory_bytes != null ? (
-            <span className={VALUE_CLASS}>
-              {formatCpuCores(sandboxResources.cpu_cores)} CPU ·{" "}
-              {formatBytesAsMemory(sandboxResources.memory_bytes)}
-            </span>
+          ) : sandboxState ? (
+            <SandboxValue state={sandboxState} resources={sandboxResources} />
           ) : (
             <EmDash />
           )}
@@ -195,6 +237,7 @@ export function RunSummaryPanel({ runId }: { runId: string }) {
     <RunSummaryPanelView
       run={runQuery.data ?? null}
       runLoading={runQuery.isLoading && !runQuery.data}
+      sandboxState={sandboxQuery.data?.state ?? null}
       sandboxResources={sandboxQuery.data?.resources ?? null}
       sandboxLoading={sandboxQuery.isLoading && !sandboxQuery.data}
       artifactsCount={artifactsQuery.data?.data.length ?? null}

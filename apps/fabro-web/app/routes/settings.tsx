@@ -2,7 +2,10 @@ import {
   BoltIcon,
   CircleStackIcon,
   Cog6ToothIcon,
+  CpuChipIcon,
+  KeyIcon,
   PuzzlePieceIcon,
+  ServerStackIcon,
   ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 import { Link, Outlet, useLocation, useMatches } from "react-router";
@@ -33,10 +36,22 @@ const navItems: NavEntry[] = [
     match: (p) => p === "/settings",
   },
   {
+    name: "Models",
+    href: "/settings/models",
+    icon: CpuChipIcon,
+    match: (p) => p.startsWith("/settings/models"),
+  },
+  {
     name: "Integrations",
     href: "/settings/integrations",
     icon: PuzzlePieceIcon,
     match: (p) => p.startsWith("/settings/integrations"),
+  },
+  {
+    name: "Secrets",
+    href: "/settings/secrets",
+    icon: KeyIcon,
+    match: (p) => p.startsWith("/settings/secrets"),
   },
   {
     name: "Security",
@@ -49,6 +64,12 @@ const navItems: NavEntry[] = [
     href: "/settings/storage",
     icon: CircleStackIcon,
     match: (p) => p.startsWith("/settings/storage"),
+  },
+  {
+    name: "Resources",
+    href: "/settings/resources",
+    icon: ServerStackIcon,
+    match: (p) => p.startsWith("/settings/resources"),
   },
   { type: "divider", key: "after-storage" },
   {

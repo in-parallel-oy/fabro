@@ -841,6 +841,149 @@ async fn human_gate_interrupted_input_fails_closed_without_fail_route() {
     );
 }
 
+struct NeverAnswerInterviewer;
+
+#[async_trait::async_trait]
+impl Interviewer for NeverAnswerInterviewer {
+    async fn ask(&self, _question: fabro_interview::Question) -> fabro_interview::AnswerSubmission {
+        tokio::time::sleep(Duration::from_mins(1)).await;
+        fabro_interview::AnswerSubmission::system(
+            Answer::interrupted(),
+            fabro_types::SystemActorKind::Engine,
+        )
+    }
+}
+
+#[tokio::test]
+async fn human_gate_timeout_routes_to_default_choice_when_unanswered() {
+    let mut graph = Graph::new("HumanGateTimeoutDefaultChoice");
+
+    let mut start = Node::new("start");
+    start.attrs.insert(
+        "shape".to_string(),
+        AttrValue::String("Mdiamond".to_string()),
+    );
+    graph.nodes.insert("start".to_string(), start);
+
+    let mut exit = Node::new("exit");
+    exit.attrs.insert(
+        "shape".to_string(),
+        AttrValue::String("Msquare".to_string()),
+    );
+    graph.nodes.insert("exit".to_string(), exit);
+
+    let mut gate = Node::new("gate");
+    gate.attrs.insert(
+        "shape".to_string(),
+        AttrValue::String("hexagon".to_string()),
+    );
+    gate.attrs
+        .insert("type".to_string(), AttrValue::String("human".to_string()));
+    gate.attrs.insert(
+        "label".to_string(),
+        AttrValue::String("Approve release?".to_string()),
+    );
+    gate.attrs.insert(
+        "question_type".to_string(),
+        AttrValue::String("multiple_choice".to_string()),
+    );
+    gate.attrs.insert(
+        "human.default_choice".to_string(),
+        AttrValue::String("approve".to_string()),
+    );
+    gate.attrs.insert(
+        "timeout".to_string(),
+        AttrValue::Duration(Duration::from_millis(20)),
+    );
+    graph.nodes.insert("gate".to_string(), gate);
+
+    graph
+        .nodes
+        .insert("approve".to_string(), Node::new("approve"));
+    graph
+        .nodes
+        .insert("revise".to_string(), Node::new("revise"));
+
+    graph.edges.push(Edge::new("start", "gate"));
+
+    let mut approve_edge = Edge::new("gate", "approve");
+    approve_edge.attrs.insert(
+        "label".to_string(),
+        AttrValue::String("[A] Approve".to_string()),
+    );
+    graph.edges.push(approve_edge);
+
+    let mut revise_edge = Edge::new("gate", "revise");
+    revise_edge.attrs.insert(
+        "label".to_string(),
+        AttrValue::String("[R] Revise".to_string()),
+    );
+    graph.edges.push(revise_edge);
+
+    graph.edges.push(Edge::new("approve", "exit"));
+    graph.edges.push(Edge::new("revise", "exit"));
+
+    let interviewer = Arc::new(NeverAnswerInterviewer);
+    let emitter = Emitter::default();
+    let events = collect_events(&emitter);
+
+    let dir = tempfile::tempdir().expect("temporary run dir should be created");
+    let mut registry = HandlerRegistry::new(Box::new(StartHandler));
+    registry.register("start", Box::new(StartHandler));
+    registry.register("exit", Box::new(ExitHandler));
+    registry.register("human", Box::new(HumanHandler::new(interviewer)));
+
+    let engine = WorkflowRunner::new(registry, Arc::new(emitter), local_env());
+    let run_options = RunOptions {
+        settings:         WorkflowSettings::default(),
+        run_dir:          dir.path().to_path_buf(),
+        cancel_token:     CancellationToken::new(),
+        run_id:           test_run_id("test-run"),
+        labels:           std::collections::HashMap::new(),
+        workflow_slug:    None,
+        github_app:       None,
+        base_branch:      None,
+        display_base_sha: None,
+        pre_run_git:      None,
+        fork_source_ref:  None,
+        git:              None,
+    };
+    let (outcome, state) = engine
+        .run_with_state(&graph, &run_options)
+        .await
+        .expect("human timeout should route through default choice");
+
+    if outcome.status != StageOutcome::Succeeded {
+        let gate_outcome = state
+            .current_checkpoint()
+            .and_then(|checkpoint| checkpoint.node_outcomes.get("gate"));
+        panic!(
+            "human timeout should have selected default choice; outcome: {outcome:?}; gate outcome: {gate_outcome:?}"
+        );
+    }
+
+    let checkpoint = state
+        .current_checkpoint()
+        .cloned()
+        .expect("checkpoint should be captured");
+    assert!(
+        checkpoint.completed_nodes.contains(&"approve".to_string()),
+        "default choice target should have completed"
+    );
+    assert!(
+        !checkpoint.completed_nodes.contains(&"revise".to_string()),
+        "non-default choice target should not have completed"
+    );
+
+    let captured_events = events.lock().expect("event log lock poisoned");
+    assert!(
+        captured_events
+            .iter()
+            .any(|event| event.event_name() == "interview.timeout"),
+        "interview.timeout should be emitted on human gate timeout"
+    );
+}
+
 #[tokio::test]
 async fn human_gate_interrupted_input_routes_via_outcome_fail_condition() {
     let mut graph = Graph::new("HumanGateInterruptedFailRoute");
@@ -6987,7 +7130,7 @@ async fn workflow_run_with_vault_only_openai_codex_builds_pr_body() {
         Some(&Conclusion {
             timestamp:            Utc::now(),
             status:               StageOutcome::Succeeded,
-            duration_ms:          1,
+            timing:               fabro_types::RunTiming::wall_only(1),
             failure:              None,
             final_git_commit_sha: None,
             stages:               Vec::new(),
@@ -12111,6 +12254,113 @@ async fn asset_collection_local_sandbox_success() {
     );
     assert!(asset_properties["bytes"].as_u64().unwrap() > 0);
     assert_eq!(asset_properties["attempt"].as_u64().unwrap(), 1);
+}
+
+/// Local sandbox: artifact collection discovers files when the sandbox
+/// working directory itself is a symlink.
+#[tokio::test]
+#[cfg(unix)]
+async fn asset_collection_local_sandbox_symlink_working_directory() {
+    let work_root = tempfile::tempdir().unwrap();
+    let real_work_dir = work_root.path().join("real-workspace");
+    let symlink_work_dir = work_root.path().join("workspace-link");
+    std::fs::create_dir_all(&real_work_dir).expect("real workspace should create");
+    std::os::unix::fs::symlink(&real_work_dir, &symlink_work_dir)
+        .expect("workspace symlink should create");
+    let run_dir = tempfile::tempdir().unwrap();
+
+    let sandbox: Arc<dyn fabro_agent::Sandbox> =
+        Arc::new(fabro_agent::LocalSandbox::new(symlink_work_dir));
+    sandbox.initialize().await.unwrap();
+
+    let mut registry = HandlerRegistry::new(Box::new(AssetCreatorHandler::success()));
+    registry.register("start", Box::new(StartHandler));
+    registry.register("exit", Box::new(ExitHandler));
+
+    let emitter = Emitter::default();
+    let events = collect_events(&emitter);
+
+    let engine = WorkflowRunner::new(registry, Arc::new(emitter), sandbox.clone());
+
+    let mut graph = Graph::new("AssetCollectionSymlinkTest");
+    graph.attrs.insert(
+        "goal".to_string(),
+        AttrValue::String("Test artifact collection from symlinked workdir".to_string()),
+    );
+
+    let mut start = Node::new("start");
+    start.attrs.insert(
+        "shape".to_string(),
+        AttrValue::String("Mdiamond".to_string()),
+    );
+    graph.nodes.insert("start".to_string(), start);
+
+    let mut create_assets = Node::new("create_assets");
+    create_assets.attrs.insert(
+        "label".to_string(),
+        AttrValue::String("Create Assets".to_string()),
+    );
+    graph
+        .nodes
+        .insert("create_assets".to_string(), create_assets);
+
+    let mut exit = Node::new("exit");
+    exit.attrs.insert(
+        "shape".to_string(),
+        AttrValue::String("Msquare".to_string()),
+    );
+    graph.nodes.insert("exit".to_string(), exit);
+
+    graph.edges.push(Edge::new("start", "create_assets"));
+    graph.edges.push(Edge::new("create_assets", "exit"));
+
+    let run_options = RunOptions {
+        settings:         WorkflowSettings {
+            run: fabro_types::settings::RunNamespace {
+                artifacts: fabro_types::settings::run::ArtifactsSettings {
+                    include: vec!["test-results/**".to_string()],
+                },
+                ..fabro_types::settings::RunNamespace::default()
+            },
+            ..WorkflowSettings::default()
+        },
+        run_dir:          run_dir.path().to_path_buf(),
+        cancel_token:     CancellationToken::new(),
+        run_id:           test_run_id("artifact-test-symlink-workdir"),
+        labels:           std::collections::HashMap::new(),
+        workflow_slug:    None,
+        github_app:       None,
+        base_branch:      None,
+        display_base_sha: None,
+        pre_run_git:      None,
+        fork_source_ref:  None,
+        git:              None,
+    };
+    let outcome = engine
+        .run(&graph, &run_options)
+        .await
+        .expect("run should succeed");
+    assert_eq!(outcome.status, StageOutcome::Succeeded);
+
+    let artifacts = test_artifact_store(run_dir.path())
+        .list_for_run(&run_options.run_id)
+        .await
+        .unwrap();
+
+    assert!(
+        artifacts
+            .iter()
+            .any(|artifact| artifact.filename == "test-results/report.xml"),
+        "expected artifact created under symlinked working directory: {artifacts:?}"
+    );
+    assert!(
+        events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| event.event_name() == "artifact.captured"),
+        "artifact.captured should be emitted for symlinked working directory"
+    );
 }
 
 /// Local sandbox: assets are still collected even when the handler fails.

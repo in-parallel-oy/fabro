@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::convert::Infallible;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -9,7 +8,6 @@ use std::sync::{Arc as StdArc, Mutex as StdMutex};
 
 use axum::body::Body;
 use axum::http::{Method, Request, header};
-use axum::response::sse::{Event as SseEvent, Sse};
 use chrono::{Duration as ChronoDuration, Utc};
 use fabro_config::ServerSettingsBuilder;
 use fabro_config::bind::Bind;
@@ -21,13 +19,11 @@ use fabro_model::catalog::LlmCatalogSettings;
 use fabro_model::{Catalog, ModelRef, ProviderId, Speed};
 use fabro_types::settings::ServerAuthMethod;
 use fabro_types::{
-    AttrValue, AuthMethod, CommandTermination, FailureCategory, FailureDetail, Graph,
+    AgentBackend, AttrValue, AuthMethod, CommandTermination, FailureCategory, FailureDetail, Graph,
     InterviewQuestionRecord, Node, Outcome, QuestionType, RunBlobId, RunId, RunSpec,
-    SandboxProvider, SessionMessage, SuccessReason, SystemActorKind, WorkflowSettings, fixtures,
+    SandboxProvider, SuccessReason, SystemActorKind, WorkflowSettings, fixtures,
 };
 use fabro_util::check_report::CheckStatus;
-use futures_util::stream;
-use http_body_util::BodyExt as _;
 use httpmock::Method::{GET, POST};
 use httpmock::MockServer;
 use serde_json::json;
@@ -131,36 +127,6 @@ methods = ["dev-token"]
 async fn body_json(body: Body) -> serde_json::Value {
     let bytes = to_bytes(body, usize::MAX).await.unwrap();
     serde_json::from_slice(&bytes).unwrap()
-}
-
-async fn read_sse_until(body: &mut Body, expected_event: &str) -> String {
-    let mut sse_data = String::new();
-    for _ in 0..32 {
-        let frame = tokio::time::timeout(Duration::from_secs(2), body.frame())
-            .await
-            .unwrap_or_else(|_| panic!("timed out waiting for SSE event {expected_event}"))
-            .unwrap_or_else(|| panic!("SSE ended before event {expected_event}"))
-            .expect("SSE frame should be readable");
-        if let Some(data) = frame.data_ref() {
-            sse_data.push_str(&String::from_utf8_lossy(data));
-            if sse_events(&sse_data).iter().any(|event| {
-                event["event"]
-                    .as_str()
-                    .is_some_and(|name| name == expected_event)
-            }) {
-                return sse_data;
-            }
-        }
-    }
-    panic!("SSE event {expected_event} not found in {sse_data}");
-}
-
-fn sse_events(sse_data: &str) -> Vec<serde_json::Value> {
-    sse_data
-        .lines()
-        .filter_map(|line| line.strip_prefix("data:"))
-        .filter_map(|json| serde_json::from_str(json.trim()).ok())
-        .collect()
 }
 
 fn run_json_id(run: &serde_json::Value) -> Option<&str> {
@@ -268,39 +234,6 @@ fn openai_responses_payload(text: &str) -> serde_json::Value {
             "output_tokens": 20
         }
     })
-}
-
-fn openai_stream_body(text: &str) -> String {
-    let created = json!({
-        "type": "response.created",
-        "response": {
-            "id": "resp_session",
-            "model": "gpt-5.4-mini"
-        }
-    });
-    let delta = json!({
-        "type": "response.output_text.delta",
-        "delta": text
-    });
-    let completed = json!({
-        "type": "response.completed",
-        "response": {
-            "id": "resp_session",
-            "model": "gpt-5.4-mini",
-            "status": "completed",
-            "usage": {
-                "input_tokens": 10,
-                "output_tokens": 5,
-                "input_tokens_details": { "cached_tokens": 0 },
-                "output_tokens_details": { "reasoning_tokens": 0 }
-            }
-        }
-    });
-    format!(
-        "event: response.created\ndata: {created}\n\n\
-         event: response.output_text.delta\ndata: {delta}\n\n\
-         event: response.completed\ndata: {completed}\n\n"
-    )
 }
 
 macro_rules! assert_status {
@@ -641,7 +574,18 @@ fn issue_test_user_jwt() -> String {
 fn issue_test_worker_token(run_id: &RunId) -> String {
     let keys = WorkerTokenKeys::from_master_secret(TEST_SESSION_SECRET.as_bytes())
         .expect("worker keys should derive");
-    issue_worker_token(&keys, run_id).expect("worker token should issue")
+    crate::worker_token::issue_worker_token(&keys, run_id).expect("worker token should issue")
+}
+
+fn issue_test_run_tools_worker_token(run_id: &RunId) -> String {
+    let keys = WorkerTokenKeys::from_master_secret(TEST_SESSION_SECRET.as_bytes())
+        .expect("worker keys should derive");
+    crate::worker_token::issue_worker_token_with_scopes(
+        &keys,
+        run_id,
+        crate::worker_token::WorkerScopeSet::run_worker_with_agent_run_tools(),
+    )
+    .expect("worker token should issue")
 }
 
 async fn create_run_with_bearer(app: &Router, bearer: &str) -> RunId {
@@ -668,6 +612,21 @@ fn bearer_request(method: Method, path: &str, bearer: &str, body: Body) -> Reque
         .uri(api(path))
         .header(header::AUTHORIZATION, format!("Bearer {bearer}"))
         .body(body)
+        .unwrap()
+}
+
+fn json_bearer_request(
+    method: Method,
+    path: &str,
+    bearer: &str,
+    body: &serde_json::Value,
+) -> Request<Body> {
+    Request::builder()
+        .method(method)
+        .uri(api(path))
+        .header(header::AUTHORIZATION, format!("Bearer {bearer}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&body).unwrap()))
         .unwrap()
 }
 
@@ -1603,6 +1562,10 @@ fn worker_command_always_sets_worker_token_env() {
     .expect("github worker token should decode")
     .claims;
     assert_eq!(github_claims.run_id, github_run_id.to_string());
+    assert_eq!(
+        github_claims.scope.split_whitespace().collect::<Vec<_>>(),
+        vec!["run:worker", "agent:run_tools"]
+    );
 
     let dev_token = tempfile::tempdir().unwrap();
     let dev_token_state =
@@ -1636,6 +1599,10 @@ fn worker_command_always_sets_worker_token_env() {
     .expect("dev-token worker token should decode")
     .claims;
     assert_eq!(dev_claims.run_id, dev_token_run_id.to_string());
+    assert_eq!(
+        dev_claims.scope.split_whitespace().collect::<Vec<_>>(),
+        vec!["run:worker", "agent:run_tools"]
+    );
 }
 
 #[cfg(unix)]
@@ -2211,6 +2178,62 @@ async fn subprocess_answer_transport_interrupt_then_steer_enqueues_single_combin
 }
 
 #[tokio::test]
+async fn subprocess_answer_transport_pair_commands_enqueue_control_messages() {
+    let (control_tx, mut control_rx) = tokio::sync::mpsc::channel(3);
+    let transport = RunAnswerTransport::Subprocess { control_tx };
+    let run_id = fixtures::RUN_1;
+    let pair_id = "01HZX6M29F1CD5YYMHT1F5D7WQ".parse().unwrap();
+    let message_id = "01HZX6M4D7Y1QW0Q0P6V8Z4DR5".parse().unwrap();
+    let actor = Principal::System {
+        system_kind: SystemActorKind::Engine,
+    };
+    let target = PairTarget {
+        stage_id:   StageId::new("agent", 1),
+        node_label: "Agent".to_string(),
+    };
+
+    transport
+        .start_pair(run_id, pair_id, target.clone(), actor.clone())
+        .await
+        .unwrap();
+    transport
+        .send_pair_message(
+            pair_id,
+            message_id,
+            "inspect this".to_string(),
+            Some("client-1".to_string()),
+            actor.clone(),
+        )
+        .await
+        .unwrap();
+    transport.end_pair(pair_id, actor.clone()).await.unwrap();
+
+    assert_eq!(
+        control_rx.recv().await,
+        Some(WorkerControlEnvelope::start_pair(
+            run_id,
+            pair_id,
+            target,
+            actor.clone()
+        ))
+    );
+    assert_eq!(
+        control_rx.recv().await,
+        Some(WorkerControlEnvelope::pair_message(
+            pair_id,
+            message_id,
+            "inspect this",
+            Some("client-1".to_string()),
+            actor.clone()
+        ))
+    );
+    assert_eq!(
+        control_rx.recv().await,
+        Some(WorkerControlEnvelope::end_pair(pair_id, actor))
+    );
+}
+
+#[tokio::test]
 async fn in_process_answer_transport_cancel_run_cancels_pending_interviews() {
     let interviewer = Arc::new(ControlInterviewer::new());
     let emitter = Arc::new(fabro_workflow::event::Emitter::new(
@@ -2272,713 +2295,6 @@ async fn create_run(app: &Router, dot_source: &str) -> String {
     let response = app.clone().oneshot(req).await.unwrap();
     let body = body_json(response.into_body()).await;
     body["id"].as_str().unwrap().to_string()
-}
-
-#[tokio::test]
-async fn create_session_rejects_missing_permissions() {
-    let state = test_app_state_with_isolated_storage();
-    let app = crate::test_support::build_test_router(Arc::clone(&state));
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api("/sessions"))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({"working_dir": "/tmp"}).to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-}
-
-#[tokio::test]
-async fn create_session_rejects_unknown_permission_value() {
-    let state = test_app_state_with_isolated_storage();
-    let app = crate::test_support::build_test_router(Arc::clone(&state));
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api("/sessions"))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({"permissions": "readonly"}).to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-}
-
-#[tokio::test]
-async fn session_apis_create_list_replay_events_and_delete() {
-    let state = test_app_state_with_isolated_storage();
-    let app = crate::test_support::build_test_router(Arc::clone(&state));
-    let create_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api("/sessions"))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "title": "Investigate failure",
-                        "working_dir": "/tmp",
-                        "provider": "openai",
-                        "model": "gpt-5.4-mini",
-                        "permissions": "read-only"
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let created = response_json!(create_response, StatusCode::CREATED).await;
-    let session_id = created["id"]
-        .as_str()
-        .expect("create session response should include id")
-        .to_string();
-    assert_eq!(created["status"], "idle");
-    assert_eq!(created["working_dir"], "/tmp");
-
-    let list_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(api("/sessions"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let list = response_json!(list_response, StatusCode::OK).await;
-    assert_eq!(list["data"].as_array().unwrap().len(), 1);
-
-    let turns_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(api(&format!("/sessions/{session_id}/turns")))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let turns = response_json!(turns_response, StatusCode::OK).await;
-    assert!(turns["data"].as_array().unwrap().is_empty());
-
-    let replay_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(api(&format!("/sessions/{session_id}/events?since_seq=1")))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let replay = response_json!(replay_response, StatusCode::OK).await;
-    assert_eq!(replay["data"][0]["seq"], 1);
-    assert_eq!(replay["data"][0]["event"], "session.created");
-
-    let generated_client_replay_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(api(&format!("/sessions/{session_id}/events?since_seq=1")))
-                .header(header::ACCEPT, "application/json,text/event-stream")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let generated_client_replay =
-        response_json!(generated_client_replay_response, StatusCode::OK).await;
-    assert_eq!(
-        generated_client_replay["data"][0]["event"],
-        "session.created"
-    );
-
-    let header_replay_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(api(&format!("/sessions/{session_id}/events")))
-                .header("last-event-id", "1")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let header_replay = response_json!(header_replay_response, StatusCode::OK).await;
-    assert!(
-        header_replay["data"]
-            .as_array()
-            .expect("events response should contain array")
-            .is_empty()
-    );
-
-    let delete_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(api(&format!("/sessions/{session_id}")))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    checked_response!(delete_response, StatusCode::NO_CONTENT).await;
-
-    let get_deleted_response = app
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(api(&format!("/sessions/{session_id}")))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    checked_response!(get_deleted_response, StatusCode::NOT_FOUND).await;
-}
-
-#[tokio::test]
-async fn streaming_session_turn_persists_terminal_failure_event() {
-    let state = test_app_state_with_isolated_storage();
-    let app = crate::test_support::build_test_router(Arc::clone(&state));
-    let create_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api("/sessions"))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "working_dir": "/tmp",
-                        "provider": "openai",
-                        "model": "gpt-5.4-mini",
-                        "permissions": "read-only"
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let created = response_json!(create_response, StatusCode::CREATED).await;
-    let session_id = created["id"].as_str().unwrap().to_string();
-
-    let stream_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api(&format!("/sessions/{session_id}/turns")))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({"input": "hello"}).to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(stream_response.status(), StatusCode::OK);
-    let body = String::from_utf8(
-        to_bytes(stream_response.into_body(), usize::MAX)
-            .await
-            .unwrap()
-            .to_vec(),
-    )
-    .unwrap();
-    assert!(body.contains("turn.running"), "SSE body: {body}");
-    assert!(body.contains("turn.failed"), "SSE body: {body}");
-    assert!(
-        body.contains("LLM credentials not configured for provider 'openai'"),
-        "SSE body: {body}"
-    );
-
-    let turns_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(api(&format!("/sessions/{session_id}/turns")))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let turns = response_json!(turns_response, StatusCode::OK).await;
-    assert_eq!(turns["data"][0]["status"], "failed");
-
-    let events_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(api(&format!("/sessions/{session_id}/events")))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let events = response_json!(events_response, StatusCode::OK).await;
-    let event_names = events["data"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|event| event["event"].as_str().unwrap())
-        .collect::<Vec<_>>();
-    assert_eq!(event_names, vec![
-        "session.created",
-        "turn.running",
-        "turn.failed"
-    ]);
-
-    let turn_id = turns["data"][0]["id"].as_str().unwrap();
-    let interrupt_response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api(&format!(
-                    "/sessions/{session_id}/turns/{turn_id}/interrupt"
-                )))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let interrupt_error = response_json!(interrupt_response, StatusCode::CONFLICT).await;
-    assert_eq!(
-        interrupt_error["errors"][0]["detail"],
-        "Turn is already terminal."
-    );
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn session_events_sse_replays_history_then_streams_live_events() {
-    let state = test_app_state_with_isolated_storage();
-    let app = crate::test_support::build_test_router(Arc::clone(&state));
-    let create_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api("/sessions"))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "working_dir": "/tmp",
-                        "provider": "openai",
-                        "model": "gpt-5.4-mini",
-                        "permissions": "read-only"
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let created = response_json!(create_response, StatusCode::CREATED).await;
-    let session_id = created["id"].as_str().unwrap().to_string();
-
-    let events_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(api(&format!("/sessions/{session_id}/events?since_seq=1")))
-                .header(header::ACCEPT, "text/event-stream")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(events_response.status(), StatusCode::OK);
-    assert!(
-        events_response
-            .headers()
-            .get(header::CONTENT_TYPE)
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .contains("text/event-stream")
-    );
-    let mut events_body = events_response.into_body();
-    let replay = read_sse_until(&mut events_body, "session.created").await;
-    assert_eq!(sse_events(&replay)[0]["event"], "session.created");
-
-    let stream_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api(&format!("/sessions/{session_id}/turns")))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({"input": "hello"}).to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(stream_response.status(), StatusCode::OK);
-    let _ = to_bytes(stream_response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-
-    let live = read_sse_until(&mut events_body, "turn.failed").await;
-    let event_names = sse_events(&live)
-        .into_iter()
-        .map(|event| event["event"].as_str().unwrap().to_string())
-        .collect::<Vec<_>>();
-    assert!(event_names.contains(&"turn.running".to_string()));
-    assert!(event_names.contains(&"turn.failed".to_string()));
-}
-
-#[tokio::test]
-async fn streaming_session_turn_updates_runtime_context_without_copying_prior_history_to_turn() {
-    let llm = MockServer::start_async().await;
-    let response_mock = llm
-        .mock_async(|when, then| {
-            when.method(POST)
-                .path("/v1/responses")
-                .header("authorization", "Bearer openai-key");
-            then.status(200)
-                .header("content-type", "text/event-stream")
-                .body(openai_stream_body("new answer"));
-        })
-        .await;
-    // Use an isolated storage root so parallel tests do not race on the
-    // shared default session storage directory. `session_store` writes
-    // `session.json` via `fs::write`, which truncates before writing; a
-    // concurrent reader can observe the empty file and fail to deserialize.
-    let storage_dir = std::env::temp_dir().join(format!("fabro-server-test-{}", Ulid::new()));
-    std::fs::create_dir_all(&storage_dir).expect("test storage dir should be creatable");
-    let server_settings = server_settings_from_toml(&format!(
-        r#"
-_version = 1
-
-[server.storage]
-root = "{}"
-
-[server.auth]
-methods = ["dev-token"]
-"#,
-        storage_dir.display()
-    ));
-    let state = TestAppStateBuilder::new()
-        .runtime_settings(server_settings, RunLayer::default())
-        .max_concurrent_runs(5)
-        .provider_base_url("openai", llm.url("/v1"))
-        .build();
-    state
-        .vault
-        .write()
-        .await
-        .set("OPENAI_API_KEY", "openai-key", SecretType::Token, None)
-        .unwrap();
-    let app = crate::test_support::build_test_router(Arc::clone(&state));
-    let create_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api("/sessions"))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "working_dir": "/tmp",
-                        "provider": "openai",
-                        "model": "gpt-5.4-mini",
-                        "permissions": "read-only"
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let created = response_json!(create_response, StatusCode::CREATED).await;
-    let session_id = created["id"].as_str().unwrap().to_string();
-    let session_id_typed = session_id.parse().unwrap();
-    let now = Utc::now();
-    let mut record = state
-        .session_store()
-        .get_session(session_id_typed)
-        .await
-        .unwrap()
-        .unwrap();
-    record.runtime_context = vec![
-        SessionMessage::user("prior question", now),
-        SessionMessage::Assistant {
-            content:        "prior answer".to_string(),
-            tool_calls:     Vec::new(),
-            provider_parts: Vec::new(),
-            usage:          json!({ "input_tokens": 0, "output_tokens": 0 }),
-            response_id:    "prior_resp".to_string(),
-            timestamp:      now,
-        },
-    ];
-    state.session_store().update_session(record).await.unwrap();
-
-    let stream_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api(&format!("/sessions/{session_id}/turns")))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({"input": "new question"}).to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(stream_response.status(), StatusCode::OK);
-    let body = String::from_utf8(
-        to_bytes(stream_response.into_body(), usize::MAX)
-            .await
-            .unwrap()
-            .to_vec(),
-    )
-    .unwrap();
-    assert!(body.contains("turn.succeeded"), "SSE body: {body}");
-
-    let session_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(api(&format!("/sessions/{session_id}")))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let session = response_json!(session_response, StatusCode::OK).await;
-    let runtime_context = session["runtime_context"].as_array().unwrap();
-    assert_eq!(runtime_context.len(), 4);
-    assert!(
-        runtime_context
-            .iter()
-            .any(|message| message["content"] == "prior question")
-    );
-    assert!(
-        runtime_context
-            .iter()
-            .any(|message| message["content"] == "new answer")
-    );
-
-    let turns_response = app
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(api(&format!("/sessions/{session_id}/turns")))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let turns = response_json!(turns_response, StatusCode::OK).await;
-    let turn = &turns["data"][0];
-    assert_eq!(turn["input"], "new question");
-    assert_eq!(turn["output"], "new answer");
-    assert!(turn.get("messages").is_none());
-    response_mock.assert_async().await;
-}
-
-async fn hanging_openai_responses()
--> Sse<impl futures_util::Stream<Item = Result<SseEvent, Infallible>>> {
-    let created = json!({
-        "type": "response.created",
-        "response": {
-            "id": "resp_hanging",
-            "model": "gpt-5.4-mini"
-        }
-    });
-    let first = stream::once(async move {
-        Ok(SseEvent::default()
-            .event("response.created")
-            .data(created.to_string()))
-    });
-    Sse::new(first.chain(stream::pending()))
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn interrupt_active_session_turn_cancels_runtime_and_persists_interrupted() {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let llm_addr = listener.local_addr().unwrap();
-    let llm_app = Router::new().route("/v1/responses", post(hanging_openai_responses));
-    let llm_handle = tokio::spawn(async move {
-        axum::serve(listener, llm_app).await.unwrap();
-    });
-    // Use an isolated storage root so that other tests' AppState startup does
-    // not run `recover_stale_running_state` against this test's session
-    // directory and mark its in-flight turn as Interrupted.
-    let storage_dir = std::env::temp_dir().join(format!("fabro-server-test-{}", Ulid::new()));
-    std::fs::create_dir_all(&storage_dir).expect("test storage dir should be creatable");
-    let server_settings = server_settings_from_toml(&format!(
-        r#"
-_version = 1
-
-[server.storage]
-root = "{}"
-
-[server.auth]
-methods = ["dev-token"]
-"#,
-        storage_dir.display()
-    ));
-    let state = TestAppStateBuilder::new()
-        .runtime_settings(server_settings, RunLayer::default())
-        .max_concurrent_runs(5)
-        .provider_base_url("openai", format!("http://{llm_addr}/v1"))
-        .build();
-    state
-        .vault
-        .write()
-        .await
-        .set("OPENAI_API_KEY", "openai-key", SecretType::Token, None)
-        .unwrap();
-    let app = crate::test_support::build_test_router(Arc::clone(&state));
-    let create_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api("/sessions"))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({
-                        "working_dir": "/tmp",
-                        "provider": "openai",
-                        "model": "gpt-5.4-mini",
-                        "permissions": "read-only"
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let created = response_json!(create_response, StatusCode::CREATED).await;
-    let session_id = created["id"].as_str().unwrap().to_string();
-
-    let stream_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api(&format!("/sessions/{session_id}/turns")))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({"input": "please wait"}).to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(stream_response.status(), StatusCode::OK);
-    let mut stream_body = stream_response.into_body();
-    // Wait for `turn.assistant_text_start` so the agent is committed to the
-    // in-flight LLM call. Waiting only for `turn.running` (emitted before
-    // `build_agent_session` and `process_input`) leaves a window in which the
-    // turn can reach a terminal state before the interrupt request arrives,
-    // making the assertions below flaky under heavy CI load.
-    let running = read_sse_until(&mut stream_body, "turn.assistant_text_start").await;
-    let turn_id = sse_events(&running)
-        .into_iter()
-        .find_map(|event| {
-            (event["event"] == "turn.running")
-                .then(|| event["turn_id"].as_str().unwrap().to_string())
-        })
-        .expect("running event should include turn id");
-
-    let conflict_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api(&format!("/sessions/{session_id}/turns")))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    serde_json::json!({"input": "second"}).to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    checked_response!(conflict_response, StatusCode::CONFLICT).await;
-
-    let delete_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(api(&format!("/sessions/{session_id}")))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let delete_error = response_json!(delete_response, StatusCode::CONFLICT).await;
-    assert_eq!(
-        delete_error["errors"][0]["detail"],
-        "Session has an active turn."
-    );
-
-    let interrupt_response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri(api(&format!(
-                    "/sessions/{session_id}/turns/{turn_id}/interrupt"
-                )))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let interrupt_event = response_json!(interrupt_response, StatusCode::ACCEPTED).await;
-    assert_eq!(interrupt_event["event"], "turn.interrupt_requested");
-
-    let interrupted = read_sse_until(&mut stream_body, "turn.interrupted").await;
-    assert!(
-        sse_events(&interrupted)
-            .iter()
-            .any(|event| event["event"] == "turn.interrupted")
-    );
-
-    let turn_response = app
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri(api(&format!("/sessions/{session_id}/turns/{turn_id}")))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let turn = response_json!(turn_response, StatusCode::OK).await;
-    assert_eq!(turn["status"], "interrupted");
-    llm_handle.abort();
 }
 
 #[tokio::test]
@@ -3423,7 +2739,7 @@ async fn persist_cancelled_run_status_ignores_already_terminal_runs() {
     let run_id = fixtures::RUN_1;
     create_durable_run_with_events(&state, run_id, &[
         workflow_event::Event::WorkflowRunCompleted {
-            duration_ms:          1000,
+            timing:               fabro_types::RunTiming::wall_only(1000),
             artifact_count:       0,
             status:               "succeeded".to_string(),
             reason:               SuccessReason::Completed,
@@ -3459,7 +2775,7 @@ async fn delete_terminal_managed_run_does_not_send_cancel_signal() {
     let run_id = fixtures::RUN_1;
     create_durable_run_with_events(&state, run_id, &[
         workflow_event::Event::WorkflowRunCompleted {
-            duration_ms:          1000,
+            timing:               fabro_types::RunTiming::wall_only(1000),
             artifact_count:       0,
             status:               "succeeded".to_string(),
             reason:               SuccessReason::Completed,
@@ -3569,7 +2885,7 @@ async fn list_run_stages_projects_retrying_until_completion() {
             node_id: "setup".to_string(),
             name: "Setup".to_string(),
             index: 0,
-            duration_ms: 5,
+            timing: fabro_types::StageTiming::wall_only(5),
             status: "succeeded".to_string(),
             preferred_label: None,
             suggested_next_ids: Vec::new(),
@@ -3610,14 +2926,14 @@ async fn list_run_stages_projects_retrying_until_completion() {
         "work",
         1,
         &workflow_event::Event::StageFailed {
-            node_id:     "work".to_string(),
-            name:        "Work".to_string(),
-            index:       1,
-            failure:     FailureDetail::new("try again", FailureCategory::TransientInfra),
-            will_retry:  true,
-            duration_ms: 10,
-            billing:     None,
-            actor:       None,
+            node_id:    "work".to_string(),
+            name:       "Work".to_string(),
+            index:      1,
+            failure:    FailureDetail::new("try again", FailureCategory::TransientInfra),
+            will_retry: true,
+            timing:     fabro_types::StageTiming::wall_only(10),
+            billing:    None,
+            actor:      None,
         },
     )
     .await;
@@ -3661,7 +2977,7 @@ async fn list_run_stages_projects_retrying_until_completion() {
             node_id: "work".to_string(),
             name: "Work".to_string(),
             index: 1,
-            duration_ms: 25,
+            timing: fabro_types::StageTiming::wall_only(25),
             status: "partially_succeeded".to_string(),
             preferred_label: None,
             suggested_next_ids: Vec::new(),
@@ -3791,7 +3107,7 @@ async fn list_run_stages_distinguishes_visits() {
             node_id: "verify".to_string(),
             name: "Verify".to_string(),
             index: 1,
-            duration_ms: 1500,
+            timing: fabro_types::StageTiming::wall_only(1500),
             status: "failed".to_string(),
             preferred_label: None,
             suggested_next_ids: Vec::new(),
@@ -3851,7 +3167,7 @@ async fn list_run_stages_distinguishes_visits() {
     assert_eq!(first["visit"], 1);
     assert_eq!(first["handler"], "command");
     assert_eq!(first["status"], "failed");
-    assert_eq!(first["duration_secs"], 1.5);
+    assert_eq!(first["wall_time_ms"], 1500);
 
     let second = stage_entry(&body, "verify@2");
     assert_eq!(second["node_id"], "verify");
@@ -3891,7 +3207,7 @@ async fn run_billing_dedups_retried_nodes_and_sums_their_durations() {
             node_id: "verify".to_string(),
             name: "Verify".to_string(),
             index: 1,
-            duration_ms: 1500,
+            timing: fabro_types::StageTiming::wall_only(1500),
             status: "failed".to_string(),
             preferred_label: None,
             suggested_next_ids: Vec::new(),
@@ -3922,7 +3238,7 @@ async fn run_billing_dedups_retried_nodes_and_sums_their_durations() {
             node_id: "verify".to_string(),
             name: "Verify".to_string(),
             index: 1,
-            duration_ms: 800,
+            timing: fabro_types::StageTiming::wall_only(800),
             status: "succeeded".to_string(),
             preferred_label: None,
             suggested_next_ids: Vec::new(),
@@ -3994,16 +3310,16 @@ async fn run_billing_dedups_retried_nodes_and_sums_their_durations() {
     assert_eq!(stages[0]["stage"]["id"], "verify");
     // Duration on the row is the sum across visits (1.5s + 0.8s = 2.3s).
     assert!(
-        (stages[0]["runtime_secs"].as_f64().unwrap() - 2.3).abs() < f64::EPSILON,
+        stages[0]["timing"]["wall_time_ms"].as_u64().unwrap() == 2300,
         "row runtime_secs should sum visits, got {}",
-        stages[0]["runtime_secs"]
+        stages[0]["timing"]["wall_time_ms"]
     );
 
     // Totals must not double-count: a single 2.3s, not 4.6s.
     assert!(
-        (body["totals"]["runtime_secs"].as_f64().unwrap() - 2.3).abs() < f64::EPSILON,
+        body["totals"]["timing"]["wall_time_ms"].as_u64().unwrap() == 2300,
         "totals.runtime_secs should sum visits exactly once, got {}",
-        body["totals"]["runtime_secs"]
+        body["totals"]["timing"]["wall_time_ms"]
     );
 }
 
@@ -4030,14 +3346,14 @@ async fn run_billing_sums_usage_across_retry_visits_and_uses_latest_model() {
         "verify",
         1,
         &workflow_event::Event::StageFailed {
-            node_id:     "verify".to_string(),
-            name:        "Verify".to_string(),
-            index:       1,
-            failure:     FailureDetail::new("try again", FailureCategory::TransientInfra),
-            will_retry:  true,
-            duration_ms: 1200,
-            billing:     Some(failed_usage),
-            actor:       None,
+            node_id:    "verify".to_string(),
+            name:       "Verify".to_string(),
+            index:      1,
+            failure:    FailureDetail::new("try again", FailureCategory::TransientInfra),
+            will_retry: true,
+            timing:     fabro_types::StageTiming::wall_only(1200),
+            billing:    Some(failed_usage),
+            actor:      None,
         },
     )
     .await;
@@ -4050,7 +3366,7 @@ async fn run_billing_sums_usage_across_retry_visits_and_uses_latest_model() {
             node_id: "verify".to_string(),
             name: "Verify".to_string(),
             index: 1,
-            duration_ms: 800,
+            timing: fabro_types::StageTiming::wall_only(800),
             status: "succeeded".to_string(),
             preferred_label: None,
             suggested_next_ids: Vec::new(),
@@ -4073,7 +3389,7 @@ async fn run_billing_sums_usage_across_retry_visits_and_uses_latest_model() {
 
     let mut latest_outcome: Outcome<Option<fabro_model::BilledModelUsage>> = Outcome::success();
     latest_outcome.usage = Some(success_usage);
-    latest_outcome.duration_ms = Some(800);
+    latest_outcome.timing = Some(fabro_types::StageTiming::wall_only(800));
     let run_store = state.store.open_run(&run_id).await.unwrap();
     workflow_event::append_event(
         &run_store,
@@ -4122,12 +3438,12 @@ async fn run_billing_sums_usage_across_retry_visits_and_uses_latest_model() {
     assert_eq!(stages[0]["billing"]["input_tokens"], 300);
     assert_eq!(stages[0]["billing"]["output_tokens"], 30);
     assert_eq!(stages[0]["billing"]["total_usd_micros"], 330);
-    assert!((stages[0]["runtime_secs"].as_f64().unwrap() - 2.0).abs() < f64::EPSILON);
+    assert!(stages[0]["timing"]["wall_time_ms"].as_u64().unwrap() == 2000);
 
     assert_eq!(body["totals"]["input_tokens"], 300);
     assert_eq!(body["totals"]["output_tokens"], 30);
     assert_eq!(body["totals"]["total_usd_micros"], 330);
-    assert!((body["totals"]["runtime_secs"].as_f64().unwrap() - 2.0).abs() < f64::EPSILON);
+    assert!(body["totals"]["timing"]["wall_time_ms"].as_u64().unwrap() == 2000);
 
     let by_model = body["by_model"].as_array().unwrap();
     assert_eq!(by_model.len(), 2);
@@ -4183,14 +3499,14 @@ async fn list_run_stages_shows_retrying_after_failed_event() {
         "work",
         1,
         &workflow_event::Event::StageFailed {
-            node_id:     "work".to_string(),
-            name:        "Work".to_string(),
-            index:       0,
-            failure:     FailureDetail::new("flake", FailureCategory::TransientInfra),
-            will_retry:  true,
-            duration_ms: 5,
-            billing:     None,
-            actor:       None,
+            node_id:    "work".to_string(),
+            name:       "Work".to_string(),
+            index:      0,
+            failure:    FailureDetail::new("flake", FailureCategory::TransientInfra),
+            will_retry: true,
+            timing:     fabro_types::StageTiming::wall_only(5),
+            billing:    None,
+            actor:      None,
         },
     )
     .await;
@@ -4263,14 +3579,14 @@ async fn list_run_stages_shows_retrying_when_failed_will_retry() {
         "work",
         1,
         &workflow_event::Event::StageFailed {
-            node_id:     "work".to_string(),
-            name:        "Work".to_string(),
-            index:       0,
-            failure:     FailureDetail::new("flake", FailureCategory::TransientInfra),
-            will_retry:  true,
-            duration_ms: 5,
-            billing:     None,
-            actor:       None,
+            node_id:    "work".to_string(),
+            name:       "Work".to_string(),
+            index:      0,
+            failure:    FailureDetail::new("flake", FailureCategory::TransientInfra),
+            will_retry: true,
+            timing:     fabro_types::StageTiming::wall_only(5),
+            billing:    None,
+            actor:      None,
         },
     )
     .await;
@@ -4311,14 +3627,14 @@ async fn run_billing_retried_node_then_succeeded_emits_one_row_with_final_attemp
             max_attempts: 3,
         },
         workflow_event::Event::StageFailed {
-            node_id:     "work".to_string(),
-            name:        "Work".to_string(),
-            index:       0,
-            failure:     FailureDetail::new("transient", FailureCategory::TransientInfra),
-            will_retry:  true,
-            duration_ms: 10,
-            billing:     None,
-            actor:       None,
+            node_id:    "work".to_string(),
+            name:       "Work".to_string(),
+            index:      0,
+            failure:    FailureDetail::new("transient", FailureCategory::TransientInfra),
+            will_retry: true,
+            timing:     fabro_types::StageTiming::wall_only(10),
+            billing:    None,
+            actor:      None,
         },
         workflow_event::Event::StageRetrying {
             node_id:      "work".to_string(),
@@ -4340,7 +3656,7 @@ async fn run_billing_retried_node_then_succeeded_emits_one_row_with_final_attemp
             node_id: "work".to_string(),
             name: "Work".to_string(),
             index: 0,
-            duration_ms: 25,
+            timing: fabro_types::StageTiming::wall_only(25),
             status: "succeeded".to_string(),
             preferred_label: None,
             suggested_next_ids: Vec::new(),
@@ -4380,9 +3696,9 @@ async fn run_billing_retried_node_then_succeeded_emits_one_row_with_final_attemp
         row["state"], "succeeded",
         "final state mirrors the latest StageCompleted"
     );
-    let runtime = row["runtime_secs"].as_f64().unwrap();
-    assert!(
-        (runtime - 0.025).abs() < f64::EPSILON,
+    let runtime = row["timing"]["wall_time_ms"].as_u64().unwrap();
+    assert_eq!(
+        runtime, 25,
         "runtime should equal final attempt's 25ms, got {runtime}"
     );
 }
@@ -4409,7 +3725,7 @@ fn revisit_test_completed_with_visit(
         node_id: node_id.to_string(),
         name: node_id.to_string(),
         index: 0,
-        duration_ms,
+        timing: fabro_types::StageTiming::wall_only(duration_ms),
         status: "succeeded".to_string(),
         preferred_label: None,
         suggested_next_ids: Vec::new(),
@@ -4470,14 +3786,14 @@ async fn run_billing_revisited_node_collapses_to_two_rows_with_summed_visit_dura
         "A appeared first → A's row first"
     );
     assert_eq!(stages[1]["stage"]["id"], "b");
-    let a_runtime = stages[0]["runtime_secs"].as_f64().unwrap();
-    assert!(
-        (a_runtime - 0.1).abs() < f64::EPSILON,
+    let a_runtime = stages[0]["timing"]["wall_time_ms"].as_u64().unwrap();
+    assert_eq!(
+        a_runtime, 100,
         "A should sum both visit durations (1ms + 99ms), got {a_runtime}"
     );
-    let b_runtime = stages[1]["runtime_secs"].as_f64().unwrap();
-    assert!(
-        (b_runtime - 0.002).abs() < f64::EPSILON,
+    let b_runtime = stages[1]["timing"]["wall_time_ms"].as_u64().unwrap();
+    assert_eq!(
+        b_runtime, 2,
         "B should carry its single visit's duration (2ms), got {b_runtime}"
     );
 }
@@ -4523,7 +3839,12 @@ async fn create_unreadable_durable_run(state: &Arc<AppState>, run_id: RunId) {
             "run_id": run_id,
             "event": "run.completed",
             "properties": {
-                "duration_ms": 1,
+                "timing": {
+                    "wall_time_ms": 1,
+                    "inference_time_ms": 0,
+                    "tool_time_ms": 0,
+                    "active_time_ms": 0
+                },
                 "artifact_count": 0,
                 "status": "legacy-status",
                 "reason": "completed",
@@ -4766,7 +4087,7 @@ async fn create_completed_run_ready_for_pull_request(
             goal: Some("Ship the server-side PR".to_string()),
         },
         workflow_event::Event::WorkflowRunCompleted {
-            duration_ms:          1,
+            timing:               fabro_types::RunTiming::wall_only(1),
             artifact_count:       0,
             status:               "succeeded".to_string(),
             reason:               SuccessReason::Completed,
@@ -5085,6 +4406,116 @@ reasoning = false
     assert_eq!(models.len(), 1);
     assert_eq!(models[0]["id"], "acme-large");
     assert_eq!(models[0]["provider"], "acme");
+}
+
+#[tokio::test]
+async fn list_providers_marks_configured_per_provider_and_omits_secrets() {
+    // Only `ANTHROPIC_API_KEY` is supplied, so anthropic resolves as configured
+    // while every other catalog provider does not.
+    let state = test_app_state_with_env_lookup(
+        default_test_server_settings(),
+        RunLayer::default(),
+        5,
+        |name| (name == EnvVars::ANTHROPIC_API_KEY).then(|| "test-key".to_string()),
+    );
+    let app = crate::test_support::build_test_router(state);
+
+    let req = Request::builder()
+        .method("GET")
+        .uri(api("/providers"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    let providers = body["data"].as_array().unwrap();
+
+    assert!(
+        providers.len() >= 2,
+        "builtin catalog should expose multiple providers"
+    );
+
+    let anthropic = providers
+        .iter()
+        .find(|provider| provider["id"] == "anthropic")
+        .expect("anthropic provider should be present");
+    assert_eq!(anthropic["configured"].as_bool(), Some(true));
+
+    // `model_count` and `default_model` must reflect the catalog truth for
+    // this exact provider, not merely be populated.
+    let catalog = Catalog::builtin();
+    let expected_model_count = catalog.list(Some(&ProviderId::anthropic())).len();
+    assert_eq!(
+        anthropic["model_count"].as_u64(),
+        Some(expected_model_count as u64),
+        "anthropic model_count should match the catalog"
+    );
+    let expected_default = catalog
+        .default_for_provider(&ProviderId::anthropic())
+        .expect("anthropic should have a catalog default model");
+    assert_eq!(
+        anthropic["default_model"].as_str(),
+        Some(expected_default.id.as_str()),
+        "anthropic default_model should match the catalog"
+    );
+
+    assert!(
+        providers
+            .iter()
+            .filter(|provider| provider["id"] != "anthropic")
+            .all(|provider| provider["configured"].as_bool() == Some(false)),
+        "providers without supplied credentials should be unconfigured"
+    );
+
+    // Internal-only catalog fields and the injected credential value must
+    // never reach the wire.
+    let serialized = body["data"].to_string();
+    assert!(!serialized.contains("\"auth\""), "leaked `auth`");
+    assert!(
+        !serialized.contains("\"extra_headers\""),
+        "leaked `extra_headers`"
+    );
+    assert!(
+        !serialized.contains("\"billing_policy\""),
+        "leaked `billing_policy`"
+    );
+    assert!(
+        !serialized.contains("\"agent_profile\""),
+        "leaked `agent_profile`"
+    );
+    assert!(
+        !serialized.contains("test-key"),
+        "leaked the injected credential value"
+    );
+}
+
+#[tokio::test]
+async fn list_providers_marks_all_unconfigured_without_credentials() {
+    let state = test_app_state_with_env_lookup(
+        default_test_server_settings(),
+        RunLayer::default(),
+        5,
+        |_| None,
+    );
+    let app = crate::test_support::build_test_router(state);
+
+    let req = Request::builder()
+        .method("GET")
+        .uri(api("/providers"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    let providers = body["data"].as_array().unwrap();
+
+    assert!(!providers.is_empty());
+    assert!(
+        providers
+            .iter()
+            .all(|provider| provider["configured"].as_bool() == Some(false)),
+        "no provider should be configured when no credentials are supplied"
+    );
 }
 
 #[tokio::test]
@@ -7544,6 +6975,23 @@ async fn worker_token_accepts_run_scoped_routes_and_falls_back_to_user_jwt() {
         .unwrap();
     assert_status!(response, StatusCode::OK).await;
 
+    for path in [
+        format!("/runs/{run_id}"),
+        format!("/runs/{run_id}/questions"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(bearer_request(
+                Method::GET,
+                &path,
+                &worker_token,
+                Body::empty(),
+            ))
+            .await
+            .unwrap();
+        assert_status!(response, StatusCode::OK).await;
+    }
+
     let append_body = serde_json::to_vec(&serde_json::json!({
         "id": "evt-run-notice",
         "ts": "2026-04-23T12:00:00Z",
@@ -7630,6 +7078,203 @@ async fn worker_token_accepts_run_scoped_routes_and_falls_back_to_user_jwt() {
         .await
         .unwrap();
     assert_status!(response, StatusCode::FORBIDDEN).await;
+}
+
+#[tokio::test]
+async fn run_tool_worker_token_can_use_client_backend_routes_across_runs() {
+    let (state, app) = jwt_auth_app();
+    let user_jwt = issue_test_user_jwt();
+    let parent_run_id = create_run_with_bearer(&app, &user_jwt).await;
+    let target_run_id = create_run_with_bearer(&app, &user_jwt).await;
+    let run_tool_worker_token = issue_test_run_tools_worker_token(&parent_run_id);
+
+    let response = app
+        .clone()
+        .oneshot(bearer_request(
+            Method::GET,
+            "/runs",
+            &run_tool_worker_token,
+            Body::empty(),
+        ))
+        .await
+        .unwrap();
+    assert_status!(response, StatusCode::OK).await;
+
+    let response = app
+        .clone()
+        .oneshot(bearer_request(
+            Method::GET,
+            &format!("/runs/resolve?selector={target_run_id}"),
+            &run_tool_worker_token,
+            Body::empty(),
+        ))
+        .await
+        .unwrap();
+    assert_status!(response, StatusCode::OK).await;
+
+    for path in [
+        format!("/runs/{target_run_id}"),
+        format!("/runs/{target_run_id}/state"),
+        format!("/runs/{target_run_id}/events"),
+        format!("/runs/{target_run_id}/questions"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(bearer_request(
+                Method::GET,
+                &path,
+                &run_tool_worker_token,
+                Body::empty(),
+            ))
+            .await
+            .unwrap();
+        assert_status!(response, StatusCode::OK).await;
+    }
+
+    let response = app
+        .clone()
+        .oneshot(json_bearer_request(
+            Method::POST,
+            &format!("/runs/{target_run_id}/start"),
+            &run_tool_worker_token,
+            &json!({ "resume": false }),
+        ))
+        .await
+        .unwrap();
+    assert_status!(response, StatusCode::OK).await;
+
+    let response = app
+        .clone()
+        .oneshot(bearer_request(
+            Method::POST,
+            &format!("/runs/{target_run_id}/cancel"),
+            &run_tool_worker_token,
+            Body::empty(),
+        ))
+        .await
+        .unwrap();
+    assert_status!(response, StatusCode::OK).await;
+
+    for path in [
+        format!("/runs/{target_run_id}/archive"),
+        format!("/runs/{target_run_id}/unarchive"),
+        format!("/runs/{target_run_id}/interrupt"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(bearer_request(
+                Method::POST,
+                &path,
+                &run_tool_worker_token,
+                Body::empty(),
+            ))
+            .await
+            .unwrap();
+        assert_ne!(response.status(), StatusCode::UNAUTHORIZED, "{path}");
+        assert_ne!(response.status(), StatusCode::FORBIDDEN, "{path}");
+    }
+
+    let response = app
+        .clone()
+        .oneshot(json_bearer_request(
+            Method::POST,
+            &format!("/runs/{target_run_id}/steer"),
+            &run_tool_worker_token,
+            &json!({ "text": "continue", "interrupt": false }),
+        ))
+        .await
+        .unwrap();
+    assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_ne!(response.status(), StatusCode::FORBIDDEN);
+
+    let response = app
+        .clone()
+        .oneshot(json_bearer_request(
+            Method::POST,
+            &format!("/runs/{target_run_id}/questions/q-1/answer"),
+            &run_tool_worker_token,
+            &json!({ "kind": "yes" }),
+        ))
+        .await
+        .unwrap();
+    assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_ne!(response.status(), StatusCode::FORBIDDEN);
+
+    let created_child = create_run_with_bearer(&app, &run_tool_worker_token).await;
+    let cached = state
+        .store
+        .get_cached_run(&created_child)
+        .await
+        .unwrap()
+        .expect("created run should be cached");
+    assert_eq!(
+        cached
+            .projection
+            .spec
+            .provenance
+            .as_ref()
+            .and_then(|provenance| provenance.subject.as_ref()),
+        Some(&Principal::Worker {
+            run_id: parent_run_id,
+        }),
+    );
+
+    let response = app
+        .clone()
+        .oneshot(json_bearer_request(
+            Method::PUT,
+            &format!("/runs/{created_child}/parent"),
+            &run_tool_worker_token,
+            &json!({ "parent_id": target_run_id.to_string() }),
+        ))
+        .await
+        .unwrap();
+    assert_status!(response, StatusCode::OK).await;
+
+    let response = app
+        .clone()
+        .oneshot(bearer_request(
+            Method::DELETE,
+            &format!("/runs/{created_child}/parent"),
+            &run_tool_worker_token,
+            Body::empty(),
+        ))
+        .await
+        .unwrap();
+    assert_status!(response, StatusCode::OK).await;
+}
+
+#[tokio::test]
+async fn base_worker_token_is_rejected_by_run_tool_only_routes() {
+    let (_state, app) = jwt_auth_app();
+    let user_jwt = issue_test_user_jwt();
+    let run_id = create_run_with_bearer(&app, &user_jwt).await;
+    let worker_token = issue_test_worker_token(&run_id);
+
+    for (method, path) in [
+        (Method::GET, "/runs".to_string()),
+        (Method::POST, "/runs".to_string()),
+        (Method::GET, "/runs/resolve?selector=latest".to_string()),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(bearer_request(
+                method.clone(),
+                &path,
+                &worker_token,
+                Body::empty(),
+            ))
+            .await
+            .unwrap();
+        assert!(
+            matches!(
+                response.status(),
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+            ),
+            "{method} {path} unexpectedly accepted base worker token with status {}",
+            response.status()
+        );
+    }
 }
 
 #[tokio::test]
@@ -7799,18 +7444,11 @@ async fn worker_token_is_rejected_on_user_only_routes() {
         (Method::POST, "/graph/render".to_string()),
         (Method::GET, "/attach".to_string()),
         (Method::GET, "/boards/runs".to_string()),
-        (Method::GET, format!("/runs/{run_id}")),
         (Method::DELETE, format!("/runs/{run_id}")),
-        (Method::GET, format!("/runs/{run_id}/questions")),
-        (Method::POST, format!("/runs/{run_id}/questions/q-1/answer")),
         (Method::GET, format!("/runs/{run_id}/attach")),
         (Method::GET, format!("/runs/{run_id}/checkpoint")),
-        (Method::POST, format!("/runs/{run_id}/cancel")),
-        (Method::POST, format!("/runs/{run_id}/start")),
         (Method::POST, format!("/runs/{run_id}/pause")),
         (Method::POST, format!("/runs/{run_id}/unpause")),
-        (Method::POST, format!("/runs/{run_id}/archive")),
-        (Method::POST, format!("/runs/{run_id}/unarchive")),
         (Method::GET, format!("/runs/{run_id}/graph")),
         (Method::GET, format!("/runs/{run_id}/graph/source")),
         (Method::GET, format!("/runs/{run_id}/stages")),
@@ -8148,7 +7786,7 @@ async fn patch_run_title_updates_active_and_archived_runs() {
         &run_store,
         &run_id,
         &workflow_event::Event::WorkflowRunCompleted {
-            duration_ms:          1,
+            timing:               fabro_types::RunTiming::wall_only(1),
             artifact_count:       0,
             status:               "succeeded".to_string(),
             reason:               SuccessReason::Completed,
@@ -8296,7 +7934,7 @@ async fn cancel_terminal_durable_run_returns_conflict() {
     let run_id = fixtures::RUN_1;
     create_durable_run_with_events(&state, run_id, &[
         workflow_event::Event::WorkflowRunCompleted {
-            duration_ms:          1000,
+            timing:               fabro_types::RunTiming::wall_only(1000),
             artifact_count:       0,
             status:               "succeeded".to_string(),
             reason:               SuccessReason::Completed,
@@ -8346,7 +7984,7 @@ async fn steer_terminal_durable_run_returns_run_not_steerable() {
     let run_id = fixtures::RUN_1;
     create_durable_run_with_events(&state, run_id, &[
         workflow_event::Event::WorkflowRunCompleted {
-            duration_ms:          1000,
+            timing:               fabro_types::RunTiming::wall_only(1000),
             artifact_count:       0,
             status:               "succeeded".to_string(),
             reason:               SuccessReason::Completed,
@@ -8423,7 +8061,7 @@ fn insert_running_control_run(
 }
 
 #[tokio::test]
-async fn steer_without_active_api_session_forwards_plain_steer_for_buffering() {
+async fn steer_without_active_steerable_session_forwards_plain_steer_for_buffering() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
     let run_id = fixtures::RUN_1;
@@ -8451,7 +8089,40 @@ async fn steer_without_active_api_session_forwards_plain_steer_for_buffering() {
 }
 
 #[tokio::test]
-async fn steer_interrupt_without_active_api_session_returns_conflict() {
+async fn steer_with_active_non_steerable_session_returns_conflict() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = fixtures::RUN_1;
+    let stage_id = StageId::new("agent", 1);
+    let (control_tx, _control_rx) = tokio::sync::mpsc::channel(1);
+    let _temp_dir = insert_running_control_run(
+        &state,
+        run_id,
+        Some(RunAnswerTransport::Subprocess { control_tx }),
+    );
+    {
+        let mut runs = state.runs.lock().expect("runs lock poisoned");
+        runs.get_mut(&run_id)
+            .unwrap()
+            .active_non_steerable_stages
+            .insert(stage_id, "session-a".to_string());
+    }
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(api(&format!("/runs/{run_id}/steer")))
+        .header("content-type", "application/json")
+        .body(Body::from(r#"{"text":"try again"}"#))
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let body = body_json(response.into_body()).await;
+    assert_eq!(body["errors"][0]["code"], "agent_not_steerable");
+}
+
+#[tokio::test]
+async fn steer_interrupt_without_active_steerable_session_returns_conflict() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
     let run_id = fixtures::RUN_1;
@@ -8472,11 +8143,11 @@ async fn steer_interrupt_without_active_api_session_returns_conflict() {
     let response = app.oneshot(req).await.unwrap();
     assert_eq!(response.status(), StatusCode::CONFLICT);
     let body = body_json(response.into_body()).await;
-    assert_eq!(body["errors"][0]["code"], "no_active_api_session");
+    assert_eq!(body["errors"][0]["code"], "no_active_steerable_session");
 }
 
 #[tokio::test]
-async fn interrupt_with_active_api_session_forwards_interrupt() {
+async fn interrupt_with_active_steerable_session_forwards_interrupt() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
     let run_id = fixtures::RUN_1;
@@ -8491,7 +8162,7 @@ async fn interrupt_with_active_api_session_forwards_interrupt() {
         let mut runs = state.runs.lock().expect("runs lock poisoned");
         runs.get_mut(&run_id)
             .unwrap()
-            .active_api_stages
+            .active_steerable_stages
             .insert(stage_id, "session-a".to_string());
     }
 
@@ -8513,7 +8184,7 @@ async fn interrupt_with_active_api_session_forwards_interrupt() {
 }
 
 #[tokio::test]
-async fn steer_interrupt_with_active_api_session_forwards_combined_control_message() {
+async fn steer_interrupt_with_active_steerable_session_forwards_combined_control_message() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
     let run_id = fixtures::RUN_1;
@@ -8528,7 +8199,7 @@ async fn steer_interrupt_with_active_api_session_forwards_combined_control_messa
         let mut runs = state.runs.lock().expect("runs lock poisoned");
         runs.get_mut(&run_id)
             .unwrap()
-            .active_api_stages
+            .active_steerable_stages
             .insert(stage_id, "session-a".to_string());
     }
 
@@ -8583,7 +8254,7 @@ async fn interrupt_terminal_run_returns_run_not_interruptible() {
 }
 
 #[test]
-fn active_api_stage_projection_ignores_stale_deactivation() {
+fn active_steerable_stage_projection_ignores_stale_deactivation() {
     let state = test_app_state();
     let run_id = fixtures::RUN_1;
     let temp_dir = tempfile::tempdir().unwrap();
@@ -8638,7 +8309,9 @@ fn active_api_stage_projection_ignores_stale_deactivation() {
     let runs = state.runs.lock().expect("runs lock poisoned");
     let run = runs.get(&run_id).unwrap();
     assert_eq!(
-        run.active_api_stages.get(&stage_id).map(String::as_str),
+        run.active_steerable_stages
+            .get(&stage_id)
+            .map(String::as_str),
         Some("session-b")
     );
 }
@@ -8658,11 +8331,11 @@ fn acp_event_for_stage(run_id: &RunId, event: &workflow_event::Event) -> fabro_t
 }
 
 #[tokio::test]
-async fn steer_with_active_acp_stage_returns_non_steerable_conflict() {
+async fn steer_with_active_acp_session_forwards_to_worker() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
     let run_id = fixtures::RUN_1;
-    let (control_tx, _control_rx) = tokio::sync::mpsc::channel(1);
+    let (control_tx, mut control_rx) = tokio::sync::mpsc::channel(1);
     let _temp_dir = insert_running_control_run(
         &state,
         run_id,
@@ -8676,6 +8349,17 @@ async fn steer_with_active_acp_stage_returns_non_steerable_conflict() {
         config_name: None,
     });
     update_live_run_from_event(&state, run_id, &started);
+    let activated =
+        workflow_event::to_run_event(&run_id, &workflow_event::Event::AgentSessionActivated {
+            node_id:      "agent".to_string(),
+            visit:        1,
+            session_id:   "acp-session".to_string(),
+            thread_id:    None,
+            provider:     Some(AgentBackend::Acp.to_string()),
+            model:        None,
+            capabilities: vec![SessionCapability::Steer],
+        });
+    update_live_run_from_event(&state, run_id, &activated);
 
     let req = Request::builder()
         .method("POST")
@@ -8685,13 +8369,16 @@ async fn steer_with_active_acp_stage_returns_non_steerable_conflict() {
         .unwrap();
 
     let response = app.oneshot(req).await.unwrap();
-    assert_eq!(response.status(), StatusCode::CONFLICT);
-    let body = body_json(response.into_body()).await;
-    assert_eq!(body["errors"][0]["code"], "agent_not_steerable");
+    assert_status!(response, StatusCode::ACCEPTED).await;
+    let envelope = control_rx.recv().await.unwrap();
+    assert!(matches!(
+        envelope.message,
+        WorkerControlMessage::Steer { ref text, .. } if text == "try again"
+    ));
 }
 
 #[tokio::test]
-async fn active_acp_stage_marker_clears_on_terminal_paths() {
+async fn active_acp_steerable_marker_clears_on_terminal_paths() {
     let terminal_events: Vec<workflow_event::Event> = vec![
         workflow_event::Event::AgentAcpCompleted {
             node_id:     "agent".to_string(),
@@ -8716,7 +8403,7 @@ async fn active_acp_stage_marker_clears_on_terminal_paths() {
             node_id: "agent".to_string(),
             name: "agent".to_string(),
             index: 0,
-            duration_ms: 1,
+            timing: fabro_types::StageTiming::wall_only(1),
             status: "success".to_string(),
             preferred_label: None,
             suggested_next_ids: Vec::new(),
@@ -8735,14 +8422,14 @@ async fn active_acp_stage_marker_clears_on_terminal_paths() {
             max_attempts: 1,
         },
         workflow_event::Event::StageFailed {
-            node_id:     "agent".to_string(),
-            name:        "agent".to_string(),
-            index:       0,
-            failure:     FailureDetail::new("failed", FailureCategory::Deterministic),
-            will_retry:  false,
-            duration_ms: 1,
-            billing:     None,
-            actor:       None,
+            node_id:    "agent".to_string(),
+            name:       "agent".to_string(),
+            index:      0,
+            failure:    FailureDetail::new("failed", FailureCategory::Deterministic),
+            will_retry: false,
+            timing:     fabro_types::StageTiming::wall_only(1),
+            billing:    None,
+            actor:      None,
         },
     ];
 
@@ -8750,7 +8437,7 @@ async fn active_acp_stage_marker_clears_on_terminal_paths() {
         let state = test_app_state();
         let app = crate::test_support::build_test_router(Arc::clone(&state));
         let run_id = fixtures::RUN_1;
-        let (control_tx, mut control_rx) = tokio::sync::mpsc::channel(1);
+        let (control_tx, _control_rx) = tokio::sync::mpsc::channel(1);
         let _temp_dir = insert_running_control_run(
             &state,
             run_id,
@@ -8763,23 +8450,30 @@ async fn active_acp_stage_marker_clears_on_terminal_paths() {
             config_name: None,
         });
         update_live_run_from_event(&state, run_id, &started);
+        let activated =
+            workflow_event::to_run_event(&run_id, &workflow_event::Event::AgentSessionActivated {
+                node_id:      "agent".to_string(),
+                visit:        1,
+                session_id:   "acp-session".to_string(),
+                thread_id:    None,
+                provider:     Some(AgentBackend::Acp.to_string()),
+                model:        None,
+                capabilities: vec![SessionCapability::Steer],
+            });
+        update_live_run_from_event(&state, run_id, &activated);
         let terminal = acp_event_for_stage(&run_id, &terminal_event);
         update_live_run_from_event(&state, run_id, &terminal);
 
         let req = Request::builder()
             .method("POST")
-            .uri(api(&format!("/runs/{run_id}/steer")))
-            .header("content-type", "application/json")
-            .body(Body::from(r#"{"text":"try again"}"#))
+            .uri(api(&format!("/runs/{run_id}/interrupt")))
+            .body(Body::empty())
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
-        assert_status!(response, StatusCode::ACCEPTED).await;
-        let envelope = control_rx.recv().await.unwrap();
-        assert!(matches!(
-            envelope.message,
-            WorkerControlMessage::Steer { ref text, .. } if text == "try again"
-        ));
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = body_json(response.into_body()).await;
+        assert_eq!(body["errors"][0]["code"], "no_active_steerable_session");
     }
 }
 
@@ -8950,6 +8644,56 @@ async fn render_graph_from_manifest_returns_svg() {
     );
 }
 
+#[tokio::test]
+async fn render_graph_from_manifest_accepts_fabro_dotted_attributes() {
+    let app = test_app_with();
+    let dot_source = r#"digraph X {
+  start [shape=Mdiamond]
+  exit [shape=Msquare]
+  a [label="A", acp.command="codex"]
+  start -> a -> exit
+}"#;
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(api("/graph/render"))
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::to_string(&serde_json::json!({
+                "manifest": {
+                    "version": 1,
+                    "cwd": "/tmp",
+                    "target": {
+                        "identifier": "workflow.fabro",
+                        "path": "workflow.fabro",
+                    },
+                    "workflows": {
+                        "workflow.fabro": {
+                            "source": dot_source,
+                            "files": {},
+                        },
+                    },
+                },
+                "format": "svg",
+            }))
+            .unwrap(),
+        ))
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+
+    let response = checked_response!(response, StatusCode::OK).await;
+    assert_eq!(
+        response
+            .headers()
+            .get("content-type")
+            .expect("content-type header should be present")
+            .to_str()
+            .unwrap(),
+        "image/svg+xml"
+    );
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn render_graph_bytes_returns_bad_request_for_render_error_protocol() {
@@ -9094,7 +8838,7 @@ async fn archive_and_unarchive_updates_listing_visibility() {
         workflow_event::Event::RunStarting,
         workflow_event::Event::RunRunning,
         workflow_event::Event::WorkflowRunCompleted {
-            duration_ms:          1000,
+            timing:               fabro_types::RunTiming::wall_only(1000),
             artifact_count:       0,
             status:               "succeeded".to_string(),
             reason:               SuccessReason::Completed,
@@ -9428,7 +9172,7 @@ async fn delete_run_retry_after_missing_provider_resource_removes_metadata() {
             primary_repo_link: None,
         },
         workflow_event::Event::WorkflowRunCompleted {
-            duration_ms:          1,
+            timing:               fabro_types::RunTiming::wall_only(1),
             artifact_count:       0,
             status:               "succeeded".to_string(),
             reason:               SuccessReason::Completed,
@@ -9556,7 +9300,10 @@ async fn get_aggregate_billing_returns_zeros_initially() {
     assert_eq!(body["totals"]["runs"].as_i64().unwrap(), 0);
     assert_eq!(body["totals"]["input_tokens"].as_i64().unwrap(), 0);
     assert_eq!(body["totals"]["output_tokens"].as_i64().unwrap(), 0);
-    assert_eq!(body["totals"]["runtime_secs"].as_f64().unwrap(), 0.0);
+    assert_eq!(
+        body["totals"]["timing"]["wall_time_ms"].as_u64().unwrap(),
+        0
+    );
     assert!(body["totals"]["total_usd_micros"].is_null());
     assert!(body["by_model"].as_array().unwrap().is_empty());
 }
@@ -9691,14 +9438,14 @@ fn aggregate_billing_counts_projection_rollup_usage_visits() {
                 },
             },
         ],
-        runtime_ms:         2000,
+        timing:             fabro_types::RunTiming::wall_only(2000),
         billed_visit_count: 2,
     };
 
     accumulate_billing_rollup(&mut accumulator, &rollup);
 
     assert_eq!(accumulator.total_runs, 1);
-    assert_eq!(accumulator.total_runtime_secs, 2.0);
+    assert_eq!(accumulator.total_timing.wall_time_ms, 2000);
     assert_eq!(accumulator.by_model.len(), 2);
     assert_eq!(
         accumulator.by_model[&ModelRef {
@@ -10928,7 +10675,7 @@ async fn boards_runs_excludes_archived_by_default() {
         workflow_event::Event::RunStarting,
         workflow_event::Event::RunRunning,
         workflow_event::Event::WorkflowRunCompleted {
-            duration_ms:          1000,
+            timing:               fabro_types::RunTiming::wall_only(1000),
             artifact_count:       0,
             status:               "succeeded".to_string(),
             reason:               SuccessReason::Completed,
@@ -10977,7 +10724,7 @@ async fn boards_runs_includes_archived_when_flag_set() {
         workflow_event::Event::RunStarting,
         workflow_event::Event::RunRunning,
         workflow_event::Event::WorkflowRunCompleted {
-            duration_ms:          1000,
+            timing:               fabro_types::RunTiming::wall_only(1000),
             artifact_count:       0,
             status:               "succeeded".to_string(),
             reason:               SuccessReason::Completed,
@@ -10997,7 +10744,7 @@ async fn boards_runs_includes_archived_when_flag_set() {
         workflow_event::Event::RunStarting,
         workflow_event::Event::RunRunning,
         workflow_event::Event::WorkflowRunCompleted {
-            duration_ms:          1000,
+            timing:               fabro_types::RunTiming::wall_only(1000),
             artifact_count:       0,
             status:               "succeeded".to_string(),
             reason:               SuccessReason::Completed,
@@ -11070,7 +10817,7 @@ async fn get_run_exposes_canonical_operator_statuses() {
         workflow_event::Event::RunStarting,
         workflow_event::Event::RunRunning,
         workflow_event::Event::WorkflowRunCompleted {
-            duration_ms:          1000,
+            timing:               fabro_types::RunTiming::wall_only(1000),
             artifact_count:       0,
             status:               "succeeded".to_string(),
             reason:               SuccessReason::Completed,
@@ -11155,7 +10902,7 @@ async fn boards_runs_maps_statuses_to_columns() {
         workflow_event::Event::RunStarting,
         workflow_event::Event::RunRunning,
         workflow_event::Event::WorkflowRunCompleted {
-            duration_ms:          1000,
+            timing:               fabro_types::RunTiming::wall_only(1000),
             artifact_count:       0,
             status:               "succeeded".to_string(),
             reason:               SuccessReason::Completed,

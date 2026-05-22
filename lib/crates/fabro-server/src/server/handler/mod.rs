@@ -12,6 +12,7 @@ pub(in crate::server) mod events;
 pub(in crate::server) mod graph;
 mod lifecycle;
 mod models;
+mod pair;
 mod pull_requests;
 mod runs;
 mod sandbox;
@@ -109,6 +110,7 @@ pub(super) fn demo_routes() -> Router<Arc<AppState>> {
         .route("/health/diagnostics", post(demo::run_diagnostics))
         .route("/settings", get(demo::get_server_settings))
         .route("/system/info", get(demo::get_system_info))
+        .route("/system/resources", get(demo::get_system_resources))
         .route("/system/df", get(demo::get_system_disk_usage))
         .route("/system/repair/runs", get(demo::get_system_repair_runs))
         .route("/system/prune/runs", post(demo::prune_runs))
@@ -148,6 +150,7 @@ pub(super) fn real_routes() -> Router<Arc<AppState>> {
         .merge(sandbox::routes())
         .merge(lifecycle::routes())
         .merge(steer::routes())
+        .merge(pair::routes())
         .merge(graph::manifest_routes())
         .merge(graph::run_routes())
         .merge(models::routes())

@@ -17,10 +17,11 @@ use fabro_config::Storage;
 use fabro_config::bind::{Bind, BindRequest};
 use fabro_config::envfile::EnvFileUpdate;
 use fabro_install::{
-    InstallListenConfig, InstallSandboxSelection, OBJECT_STORE_ACCESS_KEY_ID_ENV,
-    OBJECT_STORE_SECRET_ACCESS_KEY_ENV, PendingSettingsWrite, VaultSecretWrite,
-    merge_server_settings, persist_install_outputs_direct, write_github_app_settings,
-    write_object_store_settings, write_sandbox_settings, write_token_settings,
+    InstallListenConfig, InstallPersistencePlan, InstallSandboxSelection,
+    OBJECT_STORE_ACCESS_KEY_ID_ENV, OBJECT_STORE_SECRET_ACCESS_KEY_ENV, PendingSettingsWrite,
+    VaultSecretWrite, merge_server_settings, prepare_dev_token_write_for_install,
+    write_github_app_settings, write_object_store_settings, write_sandbox_settings,
+    write_token_settings,
 };
 use fabro_llm::client::Client as LlmClient;
 use fabro_llm::generate::{GenerateParams, generate};
@@ -34,7 +35,7 @@ use fabro_types::settings::interp::InterpString;
 use fabro_types::settings::server::ObjectStoreSettings;
 use fabro_types::settings::{is_wildcard_host, validate_public_url_with_label};
 use fabro_util::version::FABRO_VERSION;
-use fabro_util::{Home, dev_token, session_secret};
+use fabro_util::{Home, session_secret};
 use fabro_vault::SecretType as VaultSecretType;
 use object_store::aws::resolve_bucket_region;
 use object_store::path::Path as ObjectStorePath;
@@ -1562,6 +1563,7 @@ async fn post_install_finish(
     let mut server_env_writes = object_store_env_plan.writes;
     let server_env_removals = object_store_env_plan.removals;
     let mut dev_token: Option<String> = None;
+    let mut dev_token_write = None;
     match github {
         GithubInstallState::Token(github) => {
             if let Err(err) = write_token_settings(&mut settings_doc) {
@@ -1576,7 +1578,7 @@ async fn post_install_finish(
             let dev_token_path = Storage::new(state.storage_dir.as_ref())
                 .runtime_directory()
                 .dev_token_path();
-            let token = match dev_token::read_or_mint_dev_token_for_install(&dev_token_path) {
+            let prepared = match prepare_dev_token_write_for_install(&dev_token_path) {
                 Ok(value) => value,
                 Err(err) => {
                     return install_error_response(
@@ -1585,7 +1587,8 @@ async fn post_install_finish(
                     );
                 }
             };
-            dev_token = Some(token);
+            dev_token_write = prepared.write;
+            dev_token = Some(prepared.token);
         }
         GithubInstallState::App(github) => {
             if let Err(err) = write_github_app_settings(
@@ -1631,23 +1634,27 @@ async fn post_install_finish(
     )]
     let previous_settings = std::fs::read_to_string(state.config_path.as_ref()).ok();
 
-    if let Err(err) = persist_install_outputs_direct(
-        state.storage_dir.as_ref(),
-        &server_env_writes,
-        &server_env_removals,
-        &vault_secrets,
-        Some(&PendingSettingsWrite {
+    let persistence_plan = InstallPersistencePlan {
+        storage_dir: state.storage_dir.as_ref(),
+        settings_write: Some(PendingSettingsWrite {
             path:              state.config_path.as_ref(),
             contents:          &settings_toml,
             previous_contents: previous_settings.as_deref(),
         }),
-    ) {
+        server_env_writes,
+        server_env_removals,
+        dev_token_write,
+        vault_writes: vault_secrets,
+        vault_removals: Vec::new(),
+    };
+    if let Err(err) = persistence_plan.persist_direct() {
         error!(error = %err, "install persistence failed");
         let status = StatusCode::INTERNAL_SERVER_ERROR;
         let detail = err.to_string();
         let title = status.canonical_reason().unwrap_or("Unknown").to_string();
         let leftover_env_keys: Vec<String> = if err.server_env_applied {
-            server_env_writes
+            persistence_plan
+                .server_env_writes
                 .iter()
                 .map(|write| write.key.clone())
                 .collect()

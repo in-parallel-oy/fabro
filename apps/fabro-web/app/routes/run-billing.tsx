@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 
 import { EmptyState } from "../components/state";
+import { Tooltip } from "../components/ui";
 import {
-  formatDurationSecs,
+  formatDurationMs,
   formatTokenCount,
   formatUsdMicros,
 } from "../lib/format";
@@ -46,40 +47,126 @@ function isVisibleRow(row: MappedStageRow): boolean {
 }
 
 interface MappedStageRow {
-  stage:          string;
-  model:          string | null;
-  inputTokens:    number | null;
-  outputTokens:   number | null;
-  runtimeSecs:    number;
-  totalUsdMicros: number | null | undefined;
-  inFlight:       boolean;
+  stage:            string;
+  model:            string | null;
+  inputTokens:      number | null;
+  outputTokens:     number | null;
+  cacheReadTokens:  number | null;
+  cacheWriteTokens: number | null;
+  wallTimeMs:       number;
+  totalUsdMicros:   number | null | undefined;
+  inFlight:         boolean;
 }
 
-function liveRuntimeSecs(stage: RunBillingStage, now: number): number {
+function liveWallTimeMs(stage: RunBillingStage, now: number): number {
   if (stage.started_at) {
     const startedMs = new Date(stage.started_at).getTime();
     if (Number.isFinite(startedMs)) {
-      return Math.max(0, (now - startedMs) / 1000);
+      return Math.max(0, now - startedMs);
     }
   }
-  return stage.runtime_secs;
+  return stage.timing.wall_time_ms;
 }
 
 export const handle = { wide: true };
 
-function mapStageRow(stage: RunBillingStage, runtimeSecs: number): MappedStageRow {
+function mapStageRow(stage: RunBillingStage, wallTimeMs: number): MappedStageRow {
   const hasModel = stage.model != null;
   return {
-    stage:          stage.stage.name,
-    model:          formatModelRef(stage.model),
-    inputTokens:    hasModel ? stage.billing.input_tokens : null,
-    outputTokens:   hasModel
+    stage:            stage.stage.name,
+    model:            formatModelRef(stage.model),
+    inputTokens:      hasModel ? stage.billing.input_tokens : null,
+    outputTokens:     hasModel
       ? stage.billing.output_tokens + stage.billing.reasoning_tokens
       : null,
-    runtimeSecs,
-    totalUsdMicros: stage.billing.total_usd_micros,
-    inFlight:       isInFlight(stage),
+    cacheReadTokens:  hasModel ? stage.billing.cache_read_tokens : null,
+    cacheWriteTokens: hasModel ? stage.billing.cache_write_tokens : null,
+    wallTimeMs,
+    totalUsdMicros:   stage.billing.total_usd_micros,
+    inFlight:         isInFlight(stage),
   };
+}
+
+/** Hover breakdown of the disjoint token buckets behind an `in / out` count. */
+function TokenBreakdown({
+  cacheReadTokens,
+  cacheWriteTokens,
+  inputTokens,
+  outputTokens,
+}: {
+  cacheReadTokens:  number;
+  cacheWriteTokens: number;
+  inputTokens:      number;
+  outputTokens:     number;
+}) {
+  const rows = [
+    { label: "Cache read", value: cacheReadTokens },
+    { label: "Cache creation", value: cacheWriteTokens },
+    { label: "Uncached", value: inputTokens },
+    { label: "Output", value: outputTokens },
+  ];
+  return (
+    <div className="min-w-44 py-0.5">
+      <div className="mb-1.5 border-b border-line pb-1 font-medium text-fg-2">
+        Tokens in / out
+      </div>
+      <dl className="grid grid-cols-[1fr_auto] gap-x-6 gap-y-1">
+        {rows.map((row) => (
+          <Fragment key={row.label}>
+            <dt className="text-fg-3">{row.label}</dt>
+            <dd className="text-right font-mono tabular-nums text-fg">
+              {formatTokens(row.value)}
+            </dd>
+          </Fragment>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+/**
+ * Renders an `input / output` token count. When the row has model usage,
+ * hovering the count reveals the cache breakdown.
+ */
+function TokensCell({
+  inputTokens,
+  outputTokens,
+  cacheReadTokens,
+  cacheWriteTokens,
+}: {
+  inputTokens:      number | null;
+  outputTokens:     number | null;
+  cacheReadTokens:  number | null;
+  cacheWriteTokens: number | null;
+}) {
+  const display = (
+    <>
+      {formatTokens(inputTokens)} <span className="text-fg-muted">/</span>{" "}
+      {formatTokens(outputTokens)}
+    </>
+  );
+  if (
+    inputTokens == null ||
+    outputTokens == null ||
+    cacheReadTokens == null ||
+    cacheWriteTokens == null
+  ) {
+    return display;
+  }
+  return (
+    <Tooltip
+      label={
+        <TokenBreakdown
+          cacheReadTokens={cacheReadTokens}
+          cacheWriteTokens={cacheWriteTokens}
+          inputTokens={inputTokens}
+          outputTokens={outputTokens}
+        />
+      }
+    >
+      <span>{display}</span>
+    </Tooltip>
+  );
 }
 
 export default function RunBilling({ params }: { params: { id: string } }) {
@@ -94,7 +181,7 @@ export default function RunBilling({ params }: { params: { id: string } }) {
   // don't reallocate them every tick.
   const completedRows = useMemo<MappedStageRow[]>(() => {
     if (!billing) return [];
-    return billing.stages.map((stage) => mapStageRow(stage, stage.runtime_secs));
+    return billing.stages.map((stage) => mapStageRow(stage, stage.timing.wall_time_ms));
   }, [billing]);
 
   // The model breakdown is server-derived and stable across ticks too.
@@ -102,11 +189,13 @@ export default function RunBilling({ params }: { params: { id: string } }) {
     if (!billing) return [];
     return billing.by_model
       .map((entry) => ({
-        model:          formatModelRef(entry.model) ?? EMPTY_VALUE,
-        stages:         entry.stages,
-        inputTokens:    entry.billing.input_tokens,
-        outputTokens:   entry.billing.output_tokens + entry.billing.reasoning_tokens,
-        totalUsdMicros: entry.billing.total_usd_micros,
+        model:            formatModelRef(entry.model) ?? EMPTY_VALUE,
+        stages:           entry.stages,
+        inputTokens:      entry.billing.input_tokens,
+        outputTokens:     entry.billing.output_tokens + entry.billing.reasoning_tokens,
+        cacheReadTokens:  entry.billing.cache_read_tokens,
+        cacheWriteTokens: entry.billing.cache_write_tokens,
+        totalUsdMicros:   entry.billing.total_usd_micros,
       }))
       .sort((a, b) => (b.totalUsdMicros ?? -1) - (a.totalUsdMicros ?? -1));
   }, [billing]);
@@ -117,21 +206,27 @@ export default function RunBilling({ params }: { params: { id: string } }) {
     if (!hasInFlight) return completedRows;
     return billing.stages.map((stage, idx) =>
       isInFlight(stage)
-        ? mapStageRow(stage, liveRuntimeSecs(stage, now))
+        ? mapStageRow(stage, liveWallTimeMs(stage, now))
         : completedRows[idx],
     );
   }, [billing, completedRows, hasInFlight, now]);
 
   // While ticking, sum the displayed row runtimes so the footer updates in
   // lock-step. Otherwise trust the server's authoritative total.
-  const totalRuntimeSecs = hasInFlight
-    ? rows.reduce((sum, row) => sum + row.runtimeSecs, 0)
-    : (billing?.totals.runtime_secs ?? 0);
+  const totalWallTimeMs = hasInFlight
+    ? rows.reduce((sum, row) => sum + row.wallTimeMs, 0)
+    : (billing?.totals.timing.wall_time_ms ?? 0);
 
   const hasLlmStages = (billing?.by_model.length ?? 0) > 0;
   const totalInput = hasLlmStages ? (billing?.totals.input_tokens ?? null) : null;
   const totalOutput = hasLlmStages && billing
     ? billing.totals.output_tokens + billing.totals.reasoning_tokens
+    : null;
+  const totalCacheRead = hasLlmStages
+    ? (billing?.totals.cache_read_tokens ?? null)
+    : null;
+  const totalCacheWrite = hasLlmStages
+    ? (billing?.totals.cache_write_tokens ?? null)
     : null;
   const totalUsdMicros = billing?.totals.total_usd_micros;
   const modelStageCount = modelBreakdown.reduce((sum, row) => sum + row.stages, 0);
@@ -173,11 +268,15 @@ export default function RunBilling({ params }: { params: { id: string } }) {
                   {row.model ?? EMPTY_VALUE}
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-xs tabular-nums text-fg-3">
-                  {formatTokens(row.inputTokens)} <span className="text-fg-muted">/</span>{" "}
-                  {formatTokens(row.outputTokens)}
+                  <TokensCell
+                    inputTokens={row.inputTokens}
+                    outputTokens={row.outputTokens}
+                    cacheReadTokens={row.cacheReadTokens}
+                    cacheWriteTokens={row.cacheWriteTokens}
+                  />
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-xs text-fg-3">
-                  {formatDurationSecs(row.runtimeSecs)}
+                  {formatDurationMs(row.wallTimeMs)}
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-xs text-fg-3">
                   {formatUsdMicrosOrDash(row.totalUsdMicros)}
@@ -190,11 +289,15 @@ export default function RunBilling({ params }: { params: { id: string } }) {
               <td className="px-4 py-3 font-medium text-fg">Total</td>
               <td />
               <td className="px-4 py-3 text-right font-mono text-xs tabular-nums font-medium text-fg">
-                {formatTokens(totalInput)} <span className="text-fg-muted">/</span>{" "}
-                {formatTokens(totalOutput)}
+                <TokensCell
+                  inputTokens={totalInput}
+                  outputTokens={totalOutput}
+                  cacheReadTokens={totalCacheRead}
+                  cacheWriteTokens={totalCacheWrite}
+                />
               </td>
               <td className="px-4 py-3 text-right font-mono text-xs font-medium text-fg">
-                {formatDurationSecs(totalRuntimeSecs)}
+                {formatDurationMs(totalWallTimeMs)}
               </td>
               <td className="px-4 py-3 text-right font-mono text-xs font-medium text-fg">
                 {formatUsdMicrosOrDash(totalUsdMicros)}
@@ -225,8 +328,12 @@ export default function RunBilling({ params }: { params: { id: string } }) {
                       {row.stages}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-xs tabular-nums text-fg-3">
-                      {formatTokens(row.inputTokens)} <span className="text-fg-muted">/</span>{" "}
-                      {formatTokens(row.outputTokens)}
+                      <TokensCell
+                        inputTokens={row.inputTokens}
+                        outputTokens={row.outputTokens}
+                        cacheReadTokens={row.cacheReadTokens}
+                        cacheWriteTokens={row.cacheWriteTokens}
+                      />
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-xs text-fg-3">
                       {formatUsdMicrosOrDash(row.totalUsdMicros)}
@@ -241,8 +348,12 @@ export default function RunBilling({ params }: { params: { id: string } }) {
                     {modelStageCount}
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-xs tabular-nums font-medium text-fg">
-                    {formatTokens(totalInput)} <span className="text-fg-muted">/</span>{" "}
-                    {formatTokens(totalOutput)}
+                    <TokensCell
+                      inputTokens={totalInput}
+                      outputTokens={totalOutput}
+                      cacheReadTokens={totalCacheRead}
+                      cacheWriteTokens={totalCacheWrite}
+                    />
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-xs font-medium text-fg">
                     {formatUsdMicrosOrDash(totalUsdMicros)}

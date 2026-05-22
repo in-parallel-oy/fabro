@@ -12,15 +12,19 @@ import type {
   PaginatedRunList,
   PaginatedRunStageList,
   PaginatedWorkflowListResponse,
+  ProviderList,
+  PullRequestResponse,
   RunArtifactListResponse,
   RunBilling,
   RunProjection,
   Run,
   SandboxDetails,
+  SecretListResponse,
   SandboxFileListResponse,
   SandboxServiceListResponse,
   ServerSettings,
   SystemInfoResponse,
+  SystemResourcesResponse,
   VncPreviewResponse,
   WorkflowDetailResponse,
   WorkflowSettings,
@@ -36,9 +40,11 @@ import {
   generatedAxios,
   humanInTheLoopApi,
   insightsApi,
+  modelsApi,
   runInternalsApi,
   runOutputsApi,
   runsApi,
+  secretsApi,
   settingsApi,
   systemApi,
   workflowsApi,
@@ -83,11 +89,19 @@ export function useAuthSessions() {
   );
 }
 
-export function useSystemInfo() {
+export function useSystemInfo(refreshInterval?: number) {
   return useSWR<SystemInfoResponse>(
     queryKeys.system.info(),
     () => apiData(() => systemApi.getSystemInfo()),
-    immutableOptions,
+    refreshInterval ? { ...immutableOptions, refreshInterval } : immutableOptions,
+  );
+}
+
+export function useSystemResources() {
+  return useSWR<SystemResourcesResponse>(
+    queryKeys.system.resources(),
+    () => apiData(() => systemApi.getSystemResources()),
+    { refreshInterval: 5_000 },
   );
 }
 
@@ -277,6 +291,15 @@ export function useRunQuestions(id: string | undefined, enabled: boolean) {
   );
 }
 
+// Fetches live pull request details from GitHub. The header popover mounts the
+// consumer of this hook only on hover, so the request stays lazy.
+export function useRunPullRequest(id: string | undefined) {
+  return useSWR<PullRequestResponse | null>(
+    id ? queryKeys.runs.pullRequest(id) : null,
+    () => apiNullableData(() => runsApi.getRunPullRequest(id!)),
+  );
+}
+
 export function useRunStageEvents(id: string | undefined, stageId: string | undefined) {
   return useSWR<EventEnvelope[]>(
     id && stageId ? queryKeys.runs.stageEvents(id, stageId) : null,
@@ -363,5 +386,20 @@ export function useServerSettings() {
     queryKeys.settings.server(),
     () => apiData(() => settingsApi.retrieveServerSettings()),
     immutableOptions,
+  );
+}
+
+export function useProviders() {
+  return useSWR<ProviderList>(
+    queryKeys.providers.list(),
+    () => apiData(() => modelsApi.listProviders()),
+    immutableOptions,
+  );
+}
+
+export function useSecrets() {
+  return useSWR<SecretListResponse>(
+    queryKeys.secrets.list(),
+    () => apiData(() => secretsApi.listSecrets()),
   );
 }

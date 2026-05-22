@@ -9,6 +9,7 @@ import * as Start from "./routes/start";
 import * as ChatsLayout from "./routes/chats-layout";
 import * as ChatsNew from "./routes/chats-new";
 import * as ChatsDetail from "./routes/chats-detail";
+import * as AskFabro from "./routes/ask-fabro";
 import * as Automations from "./routes/automations";
 import * as AutomationDetail from "./routes/automation-detail";
 import * as AutomationDefinition from "./routes/automation-definition";
@@ -34,6 +35,10 @@ import * as InsightsNew from "./routes/insights-new";
 import * as Settings from "./routes/settings";
 import * as SettingsGeneral from "./routes/settings-general";
 import * as SettingsIntegrations from "./routes/settings-integrations";
+import * as SettingsModels from "./routes/settings-models";
+import * as SettingsSecrets from "./routes/settings-secrets";
+import * as SettingsSecretsNew from "./routes/settings-secrets-new";
+import * as SettingsResources from "./routes/settings-resources";
 import * as SettingsSecurity from "./routes/settings-security";
 import * as SettingsStorage from "./routes/settings-storage";
 import * as SettingsLiveEvents from "./routes/settings-live-events";
@@ -100,6 +105,7 @@ export const routes: RouteObject[] = [
               route(":chatId", ChatsDetail),
             ],
           }),
+          route("ask-fabro", AskFabro),
           route("automations", Automations),
           route("automations/:name", AutomationDetail, {
             children: [
@@ -135,8 +141,12 @@ export const routes: RouteObject[] = [
             children: [
               indexRoute(SettingsGeneral),
               route("integrations", SettingsIntegrations),
+              route("models", SettingsModels),
+              route("secrets", SettingsSecrets),
+              route("secrets/new", SettingsSecretsNew),
               route("security", SettingsSecurity),
               route("storage", SettingsStorage),
+              route("resources", SettingsResources),
               route("live-events", SettingsLiveEvents),
             ],
           }),

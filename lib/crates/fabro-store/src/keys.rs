@@ -1,6 +1,6 @@
 use std::fmt::{self, Write};
 
-use fabro_types::{RunBlobId, RunId};
+use fabro_types::{RunBlobId, RunId, SessionId};
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct SlateKey(String);
@@ -59,8 +59,23 @@ pub(crate) fn run_event_key(run_id: &RunId, seq: u32, epoch_ms: i64) -> SlateKey
         .with(format!("{seq:06}-{epoch_ms}"))
 }
 
+pub(crate) fn run_event_seq_prefix(run_id: &RunId, seq: u32) -> SlateKey {
+    SlateKey::new("runs")
+        .with(run_id)
+        .with("events")
+        .with(format!("{seq:06}-"))
+}
+
 pub(crate) fn blobs_prefix() -> SlateKey {
     SlateKey::new("blobs").with("sha256").into_prefix()
+}
+
+pub(crate) fn sessions_by_id_prefix() -> SlateKey {
+    SlateKey::new("sessions").with("by-id").into_prefix()
+}
+
+pub(crate) fn session_by_id_key(session_id: &SessionId) -> SlateKey {
+    SlateKey::new("sessions").with("by-id").with(session_id)
 }
 
 // --- Parsing ---

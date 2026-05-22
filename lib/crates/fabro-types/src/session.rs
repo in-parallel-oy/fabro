@@ -1,91 +1,9 @@
-use std::fmt;
-use std::str::FromStr;
-
 use chrono::{DateTime, Utc};
-use serde::de::Error as _;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString, IntoStaticStr};
-use ulid::Ulid;
 
-macro_rules! ulid_id {
-    ($name:ident) => {
-        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-        pub struct $name(Ulid);
-
-        impl $name {
-            pub fn new() -> Self {
-                Self(Ulid::new())
-            }
-
-            pub fn created_at(&self) -> DateTime<Utc> {
-                self.0.datetime().into()
-            }
-        }
-
-        impl Default for $name {
-            fn default() -> Self {
-                Self::new()
-            }
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                self.0.fmt(f)
-            }
-        }
-
-        impl FromStr for $name {
-            type Err = ulid::DecodeError;
-
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
-                Ok(Self(Ulid::from_str(s)?))
-            }
-        }
-
-        impl From<Ulid> for $name {
-            fn from(value: Ulid) -> Self {
-                Self(value)
-            }
-        }
-
-        impl From<$name> for Ulid {
-            fn from(value: $name) -> Self {
-                value.0
-            }
-        }
-
-        impl From<$name> for String {
-            fn from(value: $name) -> Self {
-                value.to_string()
-            }
-        }
-
-        impl From<&$name> for String {
-            fn from(value: &$name) -> Self {
-                value.to_string()
-            }
-        }
-
-        impl Serialize for $name {
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: Serializer,
-            {
-                serializer.serialize_str(&self.to_string())
-            }
-        }
-
-        impl<'de> Deserialize<'de> for $name {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-            where
-                D: Deserializer<'de>,
-            {
-                let value = String::deserialize(deserializer)?;
-                value.parse().map_err(D::Error::custom)
-            }
-        }
-    };
-}
+use crate::RunId;
+use crate::id::ulid_id;
 
 ulid_id!(SessionId);
 ulid_id!(TurnId);
@@ -122,8 +40,6 @@ pub enum SessionStatus {
     Idle,
     Running,
     Failed,
-    Closed,
-    Deleted,
 }
 
 impl SessionStatus {
@@ -132,54 +48,37 @@ impl SessionStatus {
     }
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, EnumString, IntoStaticStr,
-)]
-#[serde(rename_all = "snake_case")]
-#[strum(serialize_all = "snake_case")]
-pub enum TurnStatus {
-    Running,
-    Succeeded,
-    Failed,
-    Interrupted,
-}
-
-impl TurnStatus {
-    pub fn as_str(self) -> &'static str {
-        self.into()
-    }
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionTurn {
+    pub id:         TurnId,
+    pub started_at: DateTime<Utc>,
+    pub input:      String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionRecord {
-    pub id:              SessionId,
-    pub title:           Option<String>,
-    pub status:          SessionStatus,
-    pub working_dir:     Option<String>,
-    pub provider:        Option<String>,
-    pub model:           Option<String>,
-    pub permissions:     PermissionLevel,
-    pub created_at:      DateTime<Utc>,
-    pub updated_at:      DateTime<Utc>,
-    pub deleted_at:      Option<DateTime<Utc>>,
+    pub id:          SessionId,
+    pub run_id:      RunId,
+    pub title:       Option<String>,
+    pub status:      SessionStatus,
+    pub model:       Option<String>,
     #[serde(default)]
-    pub runtime_context: Vec<SessionMessage>,
+    pub active_turn: Option<SessionTurn>,
+    pub created_at:  DateTime<Utc>,
+    pub updated_at:  DateTime<Utc>,
 }
 
 impl SessionRecord {
-    pub fn new(id: SessionId, now: DateTime<Utc>) -> Self {
+    pub fn new(id: SessionId, run_id: RunId, now: DateTime<Utc>) -> Self {
         Self {
             id,
+            run_id,
             title: None,
             status: SessionStatus::Idle,
-            working_dir: None,
-            provider: None,
             model: None,
-            permissions: PermissionLevel::ReadWrite,
+            active_turn: None,
             created_at: now,
             updated_at: now,
-            deleted_at: None,
-            runtime_context: Vec::new(),
         }
     }
 }
@@ -187,11 +86,12 @@ impl SessionRecord {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionSummary {
     pub id:          SessionId,
+    pub run_id:      RunId,
     pub title:       Option<String>,
     pub status:      SessionStatus,
-    pub working_dir: Option<String>,
-    pub provider:    Option<String>,
     pub model:       Option<String>,
+    #[serde(default)]
+    pub active_turn: Option<SessionTurn>,
     pub created_at:  DateTime<Utc>,
     pub updated_at:  DateTime<Utc>,
 }
@@ -200,11 +100,11 @@ impl From<&SessionRecord> for SessionSummary {
     fn from(record: &SessionRecord) -> Self {
         Self {
             id:          record.id,
+            run_id:      record.run_id,
             title:       record.title.clone(),
             status:      record.status,
-            working_dir: record.working_dir.clone(),
-            provider:    record.provider.clone(),
             model:       record.model.clone(),
+            active_turn: record.active_turn.clone(),
             created_at:  record.created_at,
             updated_at:  record.updated_at,
         }
@@ -212,51 +112,21 @@ impl From<&SessionRecord> for SessionSummary {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TurnRecord {
-    pub id:           TurnId,
-    pub session_id:   SessionId,
-    pub input:        String,
-    pub status:       TurnStatus,
-    pub output:       Option<String>,
-    pub error:        Option<String>,
-    pub created_at:   DateTime<Utc>,
-    pub updated_at:   DateTime<Utc>,
-    pub completed_at: Option<DateTime<Utc>>,
+pub struct SessionDetail {
+    #[serde(flatten)]
+    pub record:   SessionRecord,
+    #[serde(default)]
+    pub messages: Vec<SessionMessage>,
+    pub last_seq: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SessionEventEnvelope {
-    pub seq:        u32,
-    pub session_id: SessionId,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub turn_id:    Option<TurnId>,
-    pub event:      String,
-    pub properties: serde_json::Value,
-    pub ts:         DateTime<Utc>,
-}
-
-impl SessionEventEnvelope {
-    pub fn new(
-        session_id: SessionId,
-        turn_id: Option<TurnId>,
-        event: impl Into<String>,
-        properties: serde_json::Value,
-        ts: DateTime<Utc>,
-    ) -> Self {
+impl SessionDetail {
+    pub fn new(record: SessionRecord, messages: Vec<SessionMessage>, last_seq: u32) -> Self {
         Self {
-            seq: 0,
-            session_id,
-            turn_id,
-            event: event.into(),
-            properties,
-            ts,
+            record,
+            messages,
+            last_seq,
         }
-    }
-
-    #[must_use]
-    pub fn with_seq(mut self, seq: u32) -> Self {
-        self.seq = seq;
-        self
     }
 }
 
@@ -306,5 +176,18 @@ impl SessionMessage {
             content: content.into(),
             timestamp,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::SessionStatus;
+
+    #[test]
+    fn session_status_rejects_removed_terminal_states() {
+        assert!(serde_json::from_value::<SessionStatus>(json!("closed")).is_err());
+        assert!(serde_json::from_value::<SessionStatus>(json!("deleted")).is_err());
     }
 }

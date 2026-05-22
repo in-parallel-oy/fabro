@@ -16,7 +16,7 @@ tags:
   - name: Runs
     description: Run management operations
   - name: Sessions
-    description: Persistent Fabro agent sessions
+    description: Ask Fabro sessions bound to runs
   - name: Human-in-the-Loop
     description: Questions, answers, and steering for runs
   - name: Run Outputs
@@ -815,28 +815,51 @@ paths:
 
   # ── Sessions ──────────────────────────────────────────────────────────
 
-  /api/v1/sessions:
+  /api/v1/runs/{id}/sessions:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
     get:
-      operationId: listSessions
+      operationId: listRunSessions
       tags: [Sessions]
-      summary: List sessions
+      summary: List run sessions
+      parameters:
+        - name: page[limit]
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: page[offset]
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [updated_desc, created_desc]
+            default: updated_desc
       responses:
         "200":
-          description: Durable session summaries
+          description: Ask Fabro sessions for the run
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PaginatedSessionList"
     post:
-      operationId: createSession
+      operationId: createRunSession
       tags: [Sessions]
-      summary: Create session
+      summary: Create run session
+      description: Creates a read-only Ask Fabro session bound to the run.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateSessionRequest"
+              $ref: "#/components/schemas/CreateRunSessionRequest"
       responses:
         "201":
           description: Session created
@@ -867,11 +890,11 @@ paths:
       summary: Get session
       responses:
         "200":
-          description: Session record
+          description: Session detail
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SessionRecord"
+                $ref: "#/components/schemas/SessionDetail"
         "404":
           description: Session not found
           headers:
@@ -881,30 +904,83 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-    patch:
-      operationId: updateSession
-      tags: [Sessions]
-      summary: Update session
-      requestBody:
+  /api/v1/sessions/{id}/events:
+    parameters:
+      - name: id
+        in: path
         required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateSessionRequest"
+        schema:
+          $ref: "#/components/schemas/SessionId"
+    get:
+      operationId: listSessionEvents
+      tags: [Sessions]
+      summary: List session events
+      description: Returns run event envelopes filtered to this session's durable `run.session.*` events. `since_seq` uses the owning run event sequence.
+      parameters:
+        - name: since_seq
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 1000
       responses:
         "200":
-          description: Updated session record
+          description: Session-scoped run events
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SessionRecord"
-    delete:
-      operationId: deleteSession
+                $ref: "#/components/schemas/PaginatedEventList"
+        "404":
+          description: Session not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/sessions/{id}/attach:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/SessionId"
+    get:
+      operationId: attachSessionEvents
       tags: [Sessions]
-      summary: Delete session
+      summary: Attach to session events
+      description: Replays and streams this session's durable `run.session.*` events from the owning run event log. The stream remains open until the client disconnects or the server shuts down.
+      parameters:
+        - name: since_seq
+          in: query
+          schema:
+            type: integer
+            minimum: 1
       responses:
-        "204":
-          description: Session deleted
+        "200":
+          description: Streamed session-scoped run events
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "404":
+          description: Session not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/sessions/{id}/turns:
     parameters:
@@ -913,17 +989,6 @@ paths:
         required: true
         schema:
           $ref: "#/components/schemas/SessionId"
-    get:
-      operationId: listSessionTurns
-      tags: [Sessions]
-      summary: List session turns
-      responses:
-        "200":
-          description: Session turns
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PaginatedTurnList"
     post:
       operationId: submitSessionTurn
       tags: [Sessions]
@@ -938,6 +1003,11 @@ paths:
       responses:
         "200":
           description: Streamed session events
+          headers:
+            x-fabro-turn-id:
+              description: Durable turn id accepted for this streamed turn.
+              schema:
+                $ref: "#/components/schemas/TurnId"
           content:
             text/event-stream:
               schema:
@@ -965,39 +1035,10 @@ paths:
           headers:
             x-request-id:
               $ref: "#/components/headers/XRequestId"
-          content:
-            application/json:
+            x-fabro-active-turn-id:
+              description: Durable id of the currently active turn.
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/sessions/{id}/turns/{turnId}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          $ref: "#/components/schemas/SessionId"
-      - name: turnId
-        in: path
-        required: true
-        schema:
-          $ref: "#/components/schemas/TurnId"
-    get:
-      operationId: getSessionTurn
-      tags: [Sessions]
-      summary: Get session turn
-      responses:
-        "200":
-          description: Turn record
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TurnRecord"
-        "404":
-          description: Turn not found
-          headers:
-            x-request-id:
-              $ref: "#/components/headers/XRequestId"
+                $ref: "#/components/schemas/TurnId"
           content:
             application/json:
               schema:
@@ -1025,9 +1066,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SessionEventEnvelope"
+                $ref: "#/components/schemas/EventEnvelope"
         "404":
-          description: Session turn not found
+          description: Session not found
           headers:
             x-request-id:
               $ref: "#/components/headers/XRequestId"
@@ -1036,7 +1077,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: Turn is already terminal or is not active for this session
+          description: Turn is not active for this session
           headers:
             x-request-id:
               $ref: "#/components/headers/XRequestId"
@@ -1044,36 +1085,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/sessions/{id}/events:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          $ref: "#/components/schemas/SessionId"
-    get:
-      operationId: listSessionEvents
-      tags: [Sessions]
-      summary: List or stream session events
-      description: Returns JSON replay by default. When the `Accept` header includes `text/event-stream`, replays durable events from `since_seq` or `Last-Event-ID`, then stays attached for live events.
-      parameters:
-        - name: since_seq
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-      responses:
-        "200":
-          description: Durable session events or live SSE stream
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PaginatedSessionEventList"
-            text/event-stream:
-              schema:
-                type: string
 
   # ── Runs ──────────────────────────────────────────────────────────────
 
@@ -1448,9 +1459,9 @@ paths:
       description: |
         Send a mid-run steering message to the live agent session(s) of a
         running run. Set `interrupt=true` to atomically interrupt the active
-        API-mode agent round first, then deliver this message as the next
+        steerable agent round first, then deliver this message as the next
         user turn. Without `interrupt=true`, the message is appended to the
-        steering queue and may buffer until the next API-mode agent session.
+        steering queue and may buffer until the next steerable agent session.
       parameters:
         - $ref: "#/components/parameters/RunId"
       requestBody:
@@ -1484,7 +1495,7 @@ paths:
           description: |
             Run is not currently steerable. Returned when the run is in a
             terminal state, blocked (use the answer endpoint instead), or
-            all currently running agent stages are CLI-mode.
+            active agent sessions have no live control channel.
           headers:
             x-request-id:
               $ref: "#/components/headers/XRequestId"
@@ -1502,13 +1513,269 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/runs/{id}/pair:
+    get:
+      operationId: getRunPairStatus
+      tags: [Human-in-the-Loop]
+      summary: Get Run Pair Status
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "200":
+          description: Current pair and active pairable targets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunPairStatusResponse"
+        "404":
+          description: Run not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: startRunPair
+      tags: [Human-in-the-Loop]
+      summary: Start Run Pair
+      description: Starts pairing with exactly one selected active API-mode agent target.
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PairStartRequest"
+      responses:
+        "200":
+          description: Pair mode installed for the selected target
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairRecord"
+        "400":
+          description: Invalid request body
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Run not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Run is not pairable, already paired, or selected target is not active/pairable
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Worker control channel unavailable
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/runs/{id}/pair/{pair_id}:
+    get:
+      operationId: getRunPair
+      tags: [Human-in-the-Loop]
+      summary: Get Run Pair
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+        - name: pair_id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/PairId"
+      responses:
+        "200":
+          description: Pair record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairRecord"
+        "404":
+          description: Run or pair not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: endRunPair
+      tags: [Human-in-the-Loop]
+      summary: End Run Pair
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+        - name: pair_id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/PairId"
+      responses:
+        "200":
+          description: Pair ended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairRecord"
+        "404":
+          description: Run or pair not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Pair is not current or active
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Worker control channel unavailable
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/runs/{id}/pair/{pair_id}/messages:
+    post:
+      operationId: sendRunPairMessage
+      tags: [Human-in-the-Loop]
+      summary: Send Run Pair Message
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+        - name: pair_id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/PairId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PairMessageRequest"
+      responses:
+        "202":
+          description: Pair message accepted by the runtime
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairMessageRecord"
+        "400":
+          description: Invalid request body
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Run or pair not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Pair is not current/active, target is gone, or message was rejected
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Worker control channel unavailable
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/runs/{id}/pair/{pair_id}/transcript:
+    get:
+      operationId: getRunPairTranscript
+      tags: [Human-in-the-Loop]
+      summary: Get Run Pair Transcript
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+        - name: pair_id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/PairId"
+        - $ref: "#/components/parameters/SinceSeq"
+        - $ref: "#/components/parameters/EventLimit"
+      responses:
+        "200":
+          description: Compact transcript entries for the pair window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairTranscriptResponse"
+        "400":
+          description: Invalid query parameter
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Run or pair not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/runs/{id}/interrupt:
     post:
       operationId: interruptRun
       tags: [Human-in-the-Loop]
       summary: Interrupt Run
       description: |
-        Interrupt the active API-mode agent round without sending steering
+        Interrupt the active steerable agent round without sending steering
         text. The agent keeps its steering lease and waits for a later steer
         message before starting another LLM round.
       parameters:
@@ -1529,8 +1796,8 @@ paths:
           description: |
             Run is not currently interruptible. Returned when the run is in a
             terminal state, blocked (use the answer endpoint instead), has no
-            active API-mode agent session, or all currently running agent
-            stages are CLI-mode.
+            active steerable agent session, or active agent sessions have no
+            live control channel.
           headers:
             x-request-id:
               $ref: "#/components/headers/XRequestId"
@@ -2373,6 +2640,54 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Run not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/runs/{id}/events/{seq}:
+    get:
+      operationId: getRunEventDetail
+      tags: [Run Internals]
+      summary: Get Run Event Detail
+      description: Returns one stored run event by source event sequence with content fields separated and truncated.
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+        - name: seq
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+        - name: max_content_length
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200000
+            default: 20000
+      responses:
+        "200":
+          description: Run event detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunEventDetailResponse"
+        "400":
+          description: Invalid query parameter
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Run or event not found
           headers:
             x-request-id:
               $ref: "#/components/headers/XRequestId"
@@ -3620,6 +3935,20 @@ paths:
               schema:
                 $ref: "#/components/schemas/SystemInfoResponse"
 
+  /api/v1/system/resources:
+    get:
+      operationId: getSystemResources
+      tags: [System]
+      summary: Retrieve System Resources
+      description: Returns server-visible CPU, memory, and storage filesystem resource usage.
+      responses:
+        "200":
+          description: System resource usage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemResourcesResponse"
+
   /api/v1/system/df:
     get:
       operationId: getSystemDiskUsage
@@ -3863,6 +4192,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/providers:
+    get:
+      operationId: listProviders
+      tags: [Models]
+      summary: List Providers
+      description: Returns LLM providers from the catalog with effective config and configured status.
+      responses:
+        "200":
+          description: Provider list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderList"
 
   # ── Completions ───────────────────────────────────────────────────────
 
@@ -4662,6 +5005,405 @@ components:
         meta:
           $ref: "#/components/schemas/PaginationMeta"
 
+    PairId:
+      type: string
+      description: Durable run pair identifier.
+      example: 01HZX6M29F1CD5YYMHT1F5D7WQ
+
+    PairMessageId:
+      type: string
+      description: Durable pair message identifier.
+      example: 01HZX6M4D7Y1QW0Q0P6V8Z4DR5
+
+    PairStatus:
+      type: string
+      enum: [active, ended, failed]
+
+    PairTarget:
+      type: object
+      additionalProperties: false
+      required:
+        - stage_id
+        - node_label
+      properties:
+        stage_id:
+          type: string
+          example: code@1
+        node_label:
+          type: string
+          example: Code
+
+    PairRecord:
+      type: object
+      required:
+        - pair_id
+        - run_id
+        - status
+        - started_at
+        - target
+      properties:
+        pair_id:
+          $ref: "#/components/schemas/PairId"
+        run_id:
+          type: string
+        status:
+          $ref: "#/components/schemas/PairStatus"
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: ["string", "null"]
+          format: date-time
+        failure_reason:
+          type: ["string", "null"]
+        target:
+          $ref: "#/components/schemas/PairTarget"
+
+    RunPairStatusResponse:
+      type: object
+      required:
+        - run_id
+        - targets
+      properties:
+        run_id:
+          type: string
+        current_pair:
+          oneOf:
+            - $ref: "#/components/schemas/PairRecord"
+            - type: "null"
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/PairTarget"
+
+    PairStartRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - stage_id
+      properties:
+        stage_id:
+          type: string
+          example: code@1
+
+    PairMessageRequest:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 8192
+        client_message_id:
+          type: string
+
+    PairMessageRecord:
+      type: object
+      required:
+        - message_id
+        - pair_id
+        - run_id
+        - stage_id
+        - text
+        - accepted_at
+      properties:
+        message_id:
+          $ref: "#/components/schemas/PairMessageId"
+        client_message_id:
+          type: ["string", "null"]
+        pair_id:
+          $ref: "#/components/schemas/PairId"
+        run_id:
+          type: string
+        stage_id:
+          type: string
+          example: code@1
+        text:
+          type: string
+        accepted_at:
+          type: string
+          format: date-time
+
+    PairTranscriptResponse:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/PairTranscriptEntry"
+        meta:
+          type: object
+          required:
+            - next_since_seq
+            - has_more
+          properties:
+            next_since_seq:
+              type: integer
+              minimum: 1
+            has_more:
+              type: boolean
+
+    PairTranscriptEntry:
+      oneOf:
+        - $ref: "#/components/schemas/PairTranscriptUserMessage"
+        - $ref: "#/components/schemas/PairTranscriptSystemMessage"
+        - $ref: "#/components/schemas/PairTranscriptAssistantMessage"
+        - $ref: "#/components/schemas/PairTranscriptToolCall"
+        - $ref: "#/components/schemas/PairTranscriptError"
+        - $ref: "#/components/schemas/PairTranscriptWarning"
+      discriminator:
+        propertyName: kind
+
+    PairTranscriptUserMessage:
+      type: object
+      required: [kind, seq, event_id, ts, pair_id, target, message_id, text]
+      properties:
+        kind:
+          type: string
+          enum: [user_message]
+        seq:
+          type: integer
+          minimum: 1
+        event_id:
+          type: string
+        ts:
+          type: string
+          format: date-time
+        pair_id:
+          $ref: "#/components/schemas/PairId"
+        target:
+          $ref: "#/components/schemas/PairTarget"
+        message_id:
+          $ref: "#/components/schemas/PairMessageId"
+        client_message_id:
+          type: ["string", "null"]
+        text:
+          type: string
+
+    PairTranscriptSystemMessage:
+      type: object
+      required: [kind, seq, event_id, ts, pair_id, target, system_message_kind, text]
+      properties:
+        kind:
+          type: string
+          enum: [system_message]
+        seq:
+          type: integer
+          minimum: 1
+        event_id:
+          type: string
+        ts:
+          type: string
+          format: date-time
+        pair_id:
+          $ref: "#/components/schemas/PairId"
+        target:
+          $ref: "#/components/schemas/PairTarget"
+        system_message_kind:
+          type: string
+          enum: [human_joined, human_left]
+        text:
+          type: string
+
+    PairTranscriptAssistantMessage:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - seq
+        - event_id
+        - ts
+        - pair_id
+        - target
+        - text
+        - tool_call_count
+      properties:
+        kind:
+          type: string
+          enum: [assistant_message]
+        seq:
+          type: integer
+          format: uint32
+        event_id:
+          type: string
+        ts:
+          type: string
+          format: date-time
+        pair_id:
+          $ref: "#/components/schemas/PairId"
+        target:
+          $ref: "#/components/schemas/PairTarget"
+        text:
+          type: string
+        tool_call_count:
+          type: integer
+          minimum: 0
+
+    PairTranscriptToolCall:
+      type: object
+      required: [kind, seq, event_id, ts, pair_id, target, tool_call_id, tool_name, status, summary, is_error, truncated, detail_ref]
+      properties:
+        kind:
+          type: string
+          enum: [tool_call]
+        seq:
+          type: integer
+          minimum: 1
+        event_id:
+          type: string
+        ts:
+          type: string
+          format: date-time
+        pair_id:
+          $ref: "#/components/schemas/PairId"
+        target:
+          $ref: "#/components/schemas/PairTarget"
+        tool_call_id:
+          type: string
+        tool_name:
+          type: string
+        status:
+          type: string
+          enum: [started, completed]
+        summary:
+          type: string
+        is_error:
+          type: boolean
+        truncated:
+          type: boolean
+        detail_ref:
+          $ref: "#/components/schemas/PairTranscriptDetailRef"
+
+    PairTranscriptError:
+      type: object
+      required: [kind, seq, event_id, ts, pair_id, target, message, detail_ref]
+      properties:
+        kind:
+          type: string
+          enum: [error]
+        seq:
+          type: integer
+          minimum: 1
+        event_id:
+          type: string
+        ts:
+          type: string
+          format: date-time
+        pair_id:
+          $ref: "#/components/schemas/PairId"
+        target:
+          $ref: "#/components/schemas/PairTarget"
+        message:
+          type: string
+        detail_ref:
+          $ref: "#/components/schemas/PairTranscriptDetailRef"
+
+    PairTranscriptWarning:
+      type: object
+      required: [kind, seq, event_id, ts, pair_id, target, warning_kind, message, detail_ref]
+      properties:
+        kind:
+          type: string
+          enum: [warning]
+        seq:
+          type: integer
+          minimum: 1
+        event_id:
+          type: string
+        ts:
+          type: string
+          format: date-time
+        pair_id:
+          $ref: "#/components/schemas/PairId"
+        target:
+          $ref: "#/components/schemas/PairTarget"
+        warning_kind:
+          type: string
+        message:
+          type: string
+        detail_ref:
+          $ref: "#/components/schemas/PairTranscriptDetailRef"
+
+    PairTranscriptDetailRef:
+      type: object
+      required: [seq]
+      properties:
+        seq:
+          type: integer
+          minimum: 1
+        tool_call_id:
+          type: string
+
+    RunEventDetailResponse:
+      type: object
+      required:
+        - event
+        - properties
+        - truncated
+        - redacted
+        - max_content_length
+      properties:
+        event:
+          type: object
+          required:
+            - seq
+            - id
+            - ts
+            - run_id
+            - event
+          properties:
+            seq:
+              type: integer
+              minimum: 1
+            id:
+              type: string
+            ts:
+              type: string
+              format: date-time
+            run_id:
+              type: string
+            event:
+              type: string
+            actor:
+              $ref: "#/components/schemas/Principal"
+            session_id:
+              type: string
+            node_id:
+              type: string
+            node_label:
+              type: string
+            stage_id:
+              type: string
+            tool_call_id:
+              type: string
+        properties:
+          type: object
+          additionalProperties: true
+        content:
+          type: object
+          required: [kind, value]
+          properties:
+            kind:
+              type: string
+              enum:
+                - text
+                - tool_output
+                - tool_arguments
+                - error
+                - details
+            value:
+              type: string
+        truncated:
+          type: boolean
+        redacted:
+          type: boolean
+        max_content_length:
+          type: integer
+
     SessionId:
       description: Durable session identifier.
       type: string
@@ -4674,11 +5416,23 @@ components:
 
     SessionStatus:
       type: string
-      enum: [idle, running, failed, closed, deleted]
+      enum: [idle, running, failed]
 
-    TurnStatus:
-      type: string
-      enum: [running, succeeded, failed, interrupted]
+    SessionTurn:
+      description: Currently active durable session turn.
+      type: object
+      required:
+        - id
+        - started_at
+        - input
+      properties:
+        id:
+          $ref: "#/components/schemas/TurnId"
+        started_at:
+          type: string
+          format: date-time
+        input:
+          type: string
 
     SessionMessage:
       description: Persisted full-fidelity session transcript message.
@@ -4709,161 +5463,118 @@ components:
           items: {}
 
     SessionRecord:
-      description: Durable session metadata and compactable runtime context.
+      description: Ask Fabro session metadata derived from the owning run event stream.
       type: object
       required:
         - id
+        - run_id
         - status
-        - permissions
+        - active_turn
         - created_at
         - updated_at
-        - runtime_context
       properties:
         id:
           $ref: "#/components/schemas/SessionId"
+        run_id:
+          type: string
         title:
           type: ["string", "null"]
         status:
           $ref: "#/components/schemas/SessionStatus"
-        working_dir:
-          type: ["string", "null"]
-        provider:
-          type: ["string", "null"]
         model:
           type: ["string", "null"]
-        permissions:
-          $ref: "#/components/schemas/PermissionLevel"
+        active_turn:
+          oneOf:
+            - $ref: "#/components/schemas/SessionTurn"
+            - type: "null"
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
-        deleted_at:
+
+    SessionSummary:
+      description: List projection of an Ask Fabro session.
+      type: object
+      required:
+        - id
+        - run_id
+        - status
+        - active_turn
+        - created_at
+        - updated_at
+      properties:
+        id:
+          $ref: "#/components/schemas/SessionId"
+        run_id:
+          type: string
+        title:
           type: ["string", "null"]
+        status:
+          $ref: "#/components/schemas/SessionStatus"
+        model:
+          type: ["string", "null"]
+        active_turn:
+          oneOf:
+            - $ref: "#/components/schemas/SessionTurn"
+            - type: "null"
+        created_at:
+          type: string
           format: date-time
-        runtime_context:
+        updated_at:
+          type: string
+          format: date-time
+
+    SessionDetail:
+      description: Session metadata plus durable transcript projection.
+      type: object
+      required:
+        - id
+        - run_id
+        - status
+        - active_turn
+        - created_at
+        - updated_at
+        - messages
+        - last_seq
+      properties:
+        id:
+          $ref: "#/components/schemas/SessionId"
+        run_id:
+          type: string
+        title:
+          type: ["string", "null"]
+        status:
+          $ref: "#/components/schemas/SessionStatus"
+        model:
+          type: ["string", "null"]
+        active_turn:
+          oneOf:
+            - $ref: "#/components/schemas/SessionTurn"
+            - type: "null"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        messages:
           type: array
           items:
             $ref: "#/components/schemas/SessionMessage"
-
-    PermissionLevel:
-      description: Agent tool permission level applied to a session.
-      type: string
-      enum:
-        - read-only
-        - read-write
-        - full
-
-    SessionSummary:
-      description: List projection of a durable session.
-      type: object
-      required:
-        - id
-        - status
-        - created_at
-        - updated_at
-      properties:
-        id:
-          $ref: "#/components/schemas/SessionId"
-        title:
-          type: ["string", "null"]
-        status:
-          $ref: "#/components/schemas/SessionStatus"
-        working_dir:
-          type: ["string", "null"]
-        provider:
-          type: ["string", "null"]
-        model:
-          type: ["string", "null"]
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-
-    TurnRecord:
-      description: One externally submitted input plus terminal output metadata. Full resumable context is stored on SessionRecord.runtime_context.
-      type: object
-      required:
-        - id
-        - session_id
-        - input
-        - status
-        - created_at
-        - updated_at
-      properties:
-        id:
-          $ref: "#/components/schemas/TurnId"
-        session_id:
-          $ref: "#/components/schemas/SessionId"
-        input:
-          type: string
-        status:
-          $ref: "#/components/schemas/TurnStatus"
-        output:
-          type: ["string", "null"]
-        error:
-          type: ["string", "null"]
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-        completed_at:
-          type: ["string", "null"]
-          format: date-time
-
-    SessionEventEnvelope:
-      description: Append-only durable session event envelope.
-      type: object
-      required:
-        - seq
-        - session_id
-        - event
-        - properties
-        - ts
-      properties:
-        seq:
+        last_seq:
           type: integer
           minimum: 0
-        session_id:
-          $ref: "#/components/schemas/SessionId"
-        turn_id:
-          oneOf:
-            - $ref: "#/components/schemas/TurnId"
-            - type: "null"
-        event:
-          type: string
-          example: turn.running
-        properties: {}
-        ts:
-          type: string
-          format: date-time
 
-    CreateSessionRequest:
+    CreateRunSessionRequest:
       type: object
-      required:
-        - permissions
       properties:
         title:
-          type: string
-        working_dir:
-          type: string
-        provider:
           type: string
         model:
           type: string
-        permissions:
-          $ref: "#/components/schemas/PermissionLevel"
-
-    UpdateSessionRequest:
-      type: object
-      properties:
-        title:
-          type: string
+          description: Catalog model ID or alias, or provider-qualified provider/model reference. Stored as the canonical catalog model ID.
 
     SubmitTurnRequest:
       type: object
@@ -4872,6 +5583,8 @@ components:
       properties:
         input:
           type: string
+        turn_id:
+          $ref: "#/components/schemas/TurnId"
 
     PaginatedSessionList:
       description: Paginated list of sessions.
@@ -4884,34 +5597,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SessionSummary"
-        meta:
-          $ref: "#/components/schemas/PaginationMeta"
-
-    PaginatedTurnList:
-      description: Paginated list of turns.
-      type: object
-      required:
-        - data
-        - meta
-      properties:
-        data:
-          type: array
-          items:
-            $ref: "#/components/schemas/TurnRecord"
-        meta:
-          $ref: "#/components/schemas/PaginationMeta"
-
-    PaginatedSessionEventList:
-      description: Paginated list of session events.
-      type: object
-      required:
-        - data
-        - meta
-      properties:
-        data:
-          type: array
-          items:
-            $ref: "#/components/schemas/SessionEventEnvelope"
         meta:
           $ref: "#/components/schemas/PaginationMeta"
 
@@ -5027,6 +5712,69 @@ components:
             $ref: "#/components/schemas/Model"
         meta:
           $ref: "#/components/schemas/PaginationMeta"
+
+    ProviderList:
+      description: List of LLM providers from the catalog.
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Provider"
+
+    Provider:
+      description: An LLM provider from the catalog with effective config and configured status.
+      type: object
+      required:
+        - id
+        - display_name
+        - adapter
+        - priority
+        - model_count
+        - configured
+      properties:
+        id:
+          $ref: "#/components/schemas/ProviderId"
+        display_name:
+          type: string
+          description: Human-readable provider name.
+          example: "Anthropic"
+        adapter:
+          type: string
+          enum: [anthropic, openai, gemini, openai_compatible]
+          description: Protocol adapter the provider speaks.
+          example: "anthropic"
+        base_url:
+          type: ["string", "null"]
+          description: Operator-set base URL override, if any.
+        api_key_url:
+          type: ["string", "null"]
+          description: URL where an operator can obtain an API key for this provider.
+        priority:
+          type: integer
+          format: int32
+          description: Catalog ordering priority; higher sorts first.
+        aliases:
+          type: array
+          items:
+            type: string
+          description: Alternative identifiers that resolve to this provider.
+        model_count:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of catalog models belonging to this provider.
+        default_model:
+          type: ["string", "null"]
+          description: Catalog default model ID for this provider, if any.
+        configured:
+          type: boolean
+          description: |
+            Whether credential material is present for this provider on the
+            server when this response was produced. Does NOT imply requests
+            will succeed.
 
     ProviderId:
       description: LLM provider identifier.
@@ -6506,6 +7254,8 @@ components:
           type: string
         auth_method:
           $ref: "#/components/schemas/AuthMethod"
+        avatar_url:
+          type: ["string", "null"]
 
     PrincipalWorker:
       type: object
@@ -6982,11 +7732,13 @@ components:
           type: ["string", "null"]
           format: date-time
           description: Wall-clock time the latest attempt of this stage started, if known.
-        duration_ms:
-          type: ["integer", "null"]
-          format: uint64
-          minimum: 0
-          description: Wall-clock duration of the stage's latest terminal attempt, if known.
+        timing:
+          oneOf:
+            - $ref: "#/components/schemas/StageTiming"
+            - type: "null"
+          description: |
+            Per-attempt timing breakdown for the latest terminal attempt:
+            wall time plus the active inference/tool breakdown.
         usage:
           $ref: "#/components/schemas/BilledTokenCounts"
         model:
@@ -7142,17 +7894,15 @@ components:
       required:
         - stage_id
         - stage_label
-        - duration_ms
+        - timing
         - retries
       properties:
         stage_id:
           type: string
         stage_label:
           type: string
-        duration_ms:
-          type: integer
-          format: uint64
-          minimum: 0
+        timing:
+          $ref: "#/components/schemas/StageTiming"
         billing_usd_micros:
           type: ["integer", "null"]
           format: int64
@@ -7167,7 +7917,7 @@ components:
       required:
         - timestamp
         - status
-        - duration_ms
+        - timing
         - stages
         - total_retries
         - diff
@@ -7177,10 +7927,8 @@ components:
           format: date-time
         status:
           $ref: "#/components/schemas/StageOutcome"
-        duration_ms:
-          type: integer
-          format: uint64
-          minimum: 0
+        timing:
+          $ref: "#/components/schemas/RunTiming"
         failure:
           oneOf:
             - $ref: "#/components/schemas/RunFailure"
@@ -7307,7 +8055,9 @@ components:
         - models
         - source_directory
         - timestamps
+        - timing
         - billing
+        - ask_fabro
         - diff
         - pull_request
         - current_question
@@ -7363,10 +8113,19 @@ components:
           type: ["string", "null"]
         timestamps:
           $ref: "#/components/schemas/RunTimestamps"
+        timing:
+          oneOf:
+            - $ref: "#/components/schemas/RunTiming"
+            - type: "null"
+          description: |
+            Run-level timing rollup. Wall time is the run's clock duration;
+            active timing sums work across stage visits.
         billing:
           oneOf:
             - $ref: "#/components/schemas/RunBillingSummary"
             - type: "null"
+        ask_fabro:
+          $ref: "#/components/schemas/AskFabro"
         diff:
           oneOf:
             - $ref: "#/components/schemas/DiffSummary"
@@ -7384,9 +8143,30 @@ components:
         links:
           $ref: "#/components/schemas/RunLinks"
 
+    AskFabro:
+      description: Readiness and defaults for starting an Ask Fabro session on this run.
+      type: object
+      required:
+        - available
+        - unavailable_reason
+        - default_model
+      properties:
+        available:
+          type: boolean
+        unavailable_reason:
+          type: ["string", "null"]
+          enum:
+            - feature_disabled
+            - no_sandbox
+            - sandbox_not_ready
+            - llm_unconfigured
+            - null
+        default_model:
+          type: ["string", "null"]
+
     WorkflowRef:
       type: object
-      required: [slug, name, graph_name]
+      required: [slug, name, graph_name, node_count, edge_count]
       properties:
         slug:
           type: ["string", "null"]
@@ -7394,6 +8174,14 @@ components:
           type: ["string", "null"]
         graph_name:
           type: ["string", "null"]
+        node_count:
+          type: integer
+          format: int64
+          description: Number of nodes in the workflow graph.
+        edge_count:
+          type: integer
+          format: int64
+          description: Number of edges in the workflow graph.
 
     AutomationRef:
       type: object
@@ -7459,11 +8247,6 @@ components:
         completed_at:
           type: ["string", "null"]
           format: date-time
-        duration_ms:
-          type: ["integer", "null"]
-          format: int64
-        elapsed_secs:
-          type: ["number", "null"]
 
     RunBillingSummary:
       type: object
@@ -7603,10 +8386,12 @@ components:
           example: unit-tests
         status:
           $ref: "#/components/schemas/CheckRunStatus"
-        duration_secs:
-          type: number
-          description: Duration of the check run in seconds.
-          example: 154.0
+        wall_time_ms:
+          type: integer
+          format: uint64
+          minimum: 0
+          description: Wall-clock duration of the check run in milliseconds.
+          example: 154000
 
     # ── Reusable Sub-Schemas ───────────────────────────────────────────
 
@@ -8002,20 +8787,75 @@ components:
           format: uri
           example: https://github.com/fabro-sh/fabro/pull/123
 
-    RunTimings:
-      description: Timing information for a run.
+    StageTiming:
+      description: |
+        Timing breakdown for one stage visit. Fields are all milliseconds.
+        `wall_time_ms` is elapsed clock time; `inference_time_ms` is Fabro-
+        observed LLM request/stream elapsed time; `tool_time_ms` is tool or
+        command execution elapsed time; `active_time_ms` equals
+        `inference_time_ms + tool_time_ms`.
       type: object
       required:
-        - elapsed_secs
+        - wall_time_ms
+        - active_time_ms
       properties:
-        elapsed_secs:
-          type: number
-          description: Wall-clock time elapsed in seconds.
-          example: 420.0
-        elapsed_warning:
-          type: boolean
-          description: Whether the elapsed time exceeds the expected threshold.
-          example: false
+        wall_time_ms:
+          type: integer
+          format: uint64
+          minimum: 0
+          example: 1500
+        inference_time_ms:
+          type: integer
+          format: uint64
+          minimum: 0
+          default: 0
+          example: 900
+        tool_time_ms:
+          type: integer
+          format: uint64
+          minimum: 0
+          default: 0
+          example: 200
+        active_time_ms:
+          type: integer
+          format: uint64
+          minimum: 0
+          description: Equals `inference_time_ms + tool_time_ms`.
+          example: 1100
+
+    RunTiming:
+      description: |
+        Timing rollup for an entire run. Active fields sum work across stage
+        visits, so `active_time_ms` can exceed `wall_time_ms` when parallel
+        branches run concurrently.
+      type: object
+      required:
+        - wall_time_ms
+        - active_time_ms
+      properties:
+        wall_time_ms:
+          type: integer
+          format: uint64
+          minimum: 0
+          example: 420000
+        inference_time_ms:
+          type: integer
+          format: uint64
+          minimum: 0
+          default: 0
+          example: 120000
+        tool_time_ms:
+          type: integer
+          format: uint64
+          minimum: 0
+          default: 0
+          example: 60000
+        active_time_ms:
+          type: integer
+          format: uint64
+          minimum: 0
+          description: Equals `inference_time_ms + tool_time_ms`.
+          example: 180000
 
     SandboxProvider:
       description: Sandbox execution provider.
@@ -8095,7 +8935,7 @@ components:
         - reasoning_tokens
         - cache_read_tokens
         - cache_write_tokens
-        - runtime_secs
+        - timing
       properties:
         runs:
           type: integer
@@ -8130,10 +8970,12 @@ components:
           format: int64
           description: Total billed USD amount in micros.
           example: 20340000
-        runtime_secs:
-          type: number
-          description: Total runtime in seconds.
-          example: 3501.0
+        timing:
+          $ref: "#/components/schemas/RunTiming"
+          description: |
+            Aggregate timing rollup across every completed run. Active timing
+            sums work across stage visits, so `active_time_ms` can exceed
+            `wall_time_ms`.
 
     BillingStageRef:
       description: Reference to a workflow node in a billing stage row.
@@ -8255,10 +9097,12 @@ components:
           $ref: "#/components/schemas/StageHandler"
         status:
           $ref: "#/components/schemas/StageState"
-        duration_secs:
-          type: number
-          description: Time spent in this stage, in seconds.
-          example: 154.0
+        wall_time_ms:
+          type: integer
+          format: uint64
+          minimum: 0
+          description: Wall-clock time the latest attempt spent in this stage, in milliseconds.
+          example: 154000
         node_id:
           type: string
           description: Node id in the workflow graph; multiple stages with different visits share the same node_id.
@@ -8611,13 +9455,13 @@ components:
     # ── Billing Schemas ──────────────────────────────────────────────────
 
     RunBillingStage:
-      description: Token counts and billed totals for one workflow node within a run. Rows are grouped by node; billing and runtime sum every visit of that node.
+      description: Token counts and billed totals for one workflow node within a run. Rows are grouped by node; billing and timing sum every visit of that node.
       type: object
       required:
         - stage
         - model
         - billing
-        - runtime_secs
+        - timing
       properties:
         stage:
           $ref: "#/components/schemas/BillingStageRef"
@@ -8628,10 +9472,11 @@ components:
             - type: "null"
         billing:
           $ref: "#/components/schemas/BilledTokenCounts"
-        runtime_secs:
-          type: number
-          description: Wall-clock runtime in seconds, summed across every visit of this node.
-          example: 154.0
+        timing:
+          $ref: "#/components/schemas/StageTiming"
+          description: |
+            Per-node timing summed across every visit. `wall_time_ms` is the
+            sum of visit wall times; the active breakdown sums work timing.
         started_at:
           type: ["string", "null"]
           format: date-time
@@ -8647,7 +9492,7 @@ components:
       description: Aggregate billing totals across all stages of a run.
       type: object
       required:
-        - runtime_secs
+        - timing
         - input_tokens
         - output_tokens
         - total_tokens
@@ -8655,10 +9500,11 @@ components:
         - cache_read_tokens
         - cache_write_tokens
       properties:
-        runtime_secs:
-          type: number
-          description: Total wall-clock runtime in seconds.
-          example: 389.0
+        timing:
+          $ref: "#/components/schemas/RunTiming"
+          description: |
+            Run-level timing rollup. `wall_time_ms` is summed across stage
+            visits; active timing sums work across visits.
         input_tokens:
           type: integer
           description: Total input tokens consumed.
@@ -10166,6 +11012,175 @@ components:
           type: integer
           format: int64
           description: Runs currently queued or executing.
+
+    SystemResourcesResponse:
+      description: Server-visible runtime resource usage for the active Fabro process environment.
+      type: object
+      required: [sampled_at, cpu, memory, disk, notes]
+      properties:
+        sampled_at:
+          type: string
+          format: date-time
+          description: Timestamp when the sample was collected.
+        cpu:
+          $ref: "#/components/schemas/SystemCpuResources"
+        memory:
+          $ref: "#/components/schemas/SystemMemoryResources"
+        disk:
+          $ref: "#/components/schemas/SystemDiskResources"
+        notes:
+          type: array
+          description: Human-readable caveats about unavailable or scoped metrics.
+          items:
+            type: string
+
+    SystemCpuResources:
+      description: CPU resources visible to the Fabro server process.
+      type: object
+      required:
+        - supported
+        - scope
+        - unavailable_reason
+        - logical_cpus
+        - usage_percent
+        - sample_window_ms
+      properties:
+        supported:
+          type: boolean
+          description: Whether CPU metrics are available on this platform.
+        scope:
+          $ref: "#/components/schemas/SystemCpuResourceScope"
+        unavailable_reason:
+          type: ["string", "null"]
+          description: Reason metrics are unavailable when unsupported.
+        logical_cpus:
+          type: ["integer", "null"]
+          format: int64
+          description: Logical CPUs visible to the server process.
+        usage_percent:
+          type: ["number", "null"]
+          format: double
+          description: CPU usage percentage, null until a delta sample is available.
+        sample_window_ms:
+          type: ["integer", "null"]
+          format: int64
+          description: Elapsed milliseconds since the previous CPU sample, null until a delta sample is available.
+
+    SystemCpuResourceScope:
+      description: Scope for CPU resource metrics.
+      type: string
+      enum: [server_environment]
+
+    SystemMemoryResources:
+      description: Memory resources visible to the Fabro server process.
+      type: object
+      required:
+        - supported
+        - scope
+        - unavailable_reason
+        - total_bytes
+        - used_bytes
+        - available_bytes
+        - used_percent
+        - host_total_bytes
+      properties:
+        supported:
+          type: boolean
+          description: Whether memory metrics are available on this platform.
+        scope:
+          $ref: "#/components/schemas/SystemMemoryResourceScope"
+        unavailable_reason:
+          type: ["string", "null"]
+          description: Reason metrics are unavailable when unsupported.
+        total_bytes:
+          type: ["integer", "null"]
+          format: int64
+          description: Total memory for the reported scope.
+        used_bytes:
+          type: ["integer", "null"]
+          format: int64
+          description: Used memory for the reported scope.
+        available_bytes:
+          type: ["integer", "null"]
+          format: int64
+          description: Available memory for the reported scope.
+        used_percent:
+          type: ["number", "null"]
+          format: double
+          description: Used memory percentage for the reported scope.
+        host_total_bytes:
+          type: ["integer", "null"]
+          format: int64
+          description: Host total memory, included even when reporting a cgroup scope.
+
+    SystemMemoryResourceScope:
+      description: "`cgroup` when Linux cgroup limits are available, otherwise `host`."
+      type: string
+      enum: [host, cgroup]
+
+    SystemDiskResources:
+      description: Filesystem resources for the configured Fabro storage root.
+      type: object
+      required:
+        - supported
+        - scope
+        - unavailable_reason
+        - storage_path
+        - mount_point
+        - filesystem
+        - total_bytes
+        - used_bytes
+        - available_bytes
+        - used_percent
+        - fabro_managed_bytes
+        - fabro_reclaimable_bytes
+      properties:
+        supported:
+          type: boolean
+          description: Whether storage filesystem metrics are available.
+        scope:
+          $ref: "#/components/schemas/SystemDiskResourceScope"
+        unavailable_reason:
+          type: ["string", "null"]
+          description: Reason metrics are unavailable when unsupported.
+        storage_path:
+          type: string
+          description: Configured Fabro storage directory.
+        mount_point:
+          type: ["string", "null"]
+          description: Mount point for the filesystem containing the storage directory.
+        filesystem:
+          type: ["string", "null"]
+          description: Filesystem name reported by the operating system.
+        total_bytes:
+          type: ["integer", "null"]
+          format: int64
+          description: Total bytes on the storage filesystem.
+        used_bytes:
+          type: ["integer", "null"]
+          format: int64
+          description: Used bytes on the storage filesystem.
+        available_bytes:
+          type: ["integer", "null"]
+          format: int64
+          description: Available bytes on the storage filesystem.
+        used_percent:
+          type: ["number", "null"]
+          format: double
+          description: Used percentage on the storage filesystem.
+        fabro_managed_bytes:
+          type: integer
+          format: int64
+          description: Bytes managed by Fabro under the storage root.
+        fabro_reclaimable_bytes:
+          type: integer
+          format: int64
+          description: Bytes reclaimable through Fabro pruning.
+
+    SystemDiskResourceScope:
+      description: Scope for disk resource metrics.
+      type: string
+      enum: [storage_filesystem]
 
     SystemRepairRunsResponse:
       description: Runs that need manual repair or deletion because they cannot be loaded.

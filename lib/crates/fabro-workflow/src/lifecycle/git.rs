@@ -956,7 +956,14 @@ mod tests {
         let node = graph.get_node("build").unwrap();
         let mut state = ExecutionState::new(&graph).unwrap();
         state.increment_visits("build");
-        let result = WfNodeResult::new(Outcome::success(), Duration::from_millis(10), 1, 1);
+        let result = WfNodeResult::new(
+            Outcome::success(),
+            Duration::from_millis(10),
+            Duration::ZERO,
+            Duration::ZERO,
+            1,
+            1,
+        );
 
         lifecycle
             .on_checkpoint(&node, &result, Some("exit"), &state)
@@ -999,7 +1006,14 @@ mod tests {
         let node = graph.get_node("build").unwrap();
         let mut state = ExecutionState::new(&graph).unwrap();
         state.increment_visits("build");
-        let result = WfNodeResult::new(Outcome::success(), Duration::from_millis(10), 1, 1);
+        let result = WfNodeResult::new(
+            Outcome::success(),
+            Duration::from_millis(10),
+            Duration::ZERO,
+            Duration::ZERO,
+            1,
+            1,
+        );
 
         lifecycle
             .on_checkpoint(&node, &result, Some("exit"), &state)
@@ -1060,7 +1074,14 @@ mod tests {
         let node = graph.get_node("build").unwrap();
         let mut state = ExecutionState::new(&graph).unwrap();
         state.increment_visits("build");
-        let result = WfNodeResult::new(Outcome::success(), Duration::from_millis(10), 1, 1);
+        let result = WfNodeResult::new(
+            Outcome::success(),
+            Duration::from_millis(10),
+            Duration::ZERO,
+            Duration::ZERO,
+            1,
+            1,
+        );
 
         lifecycle
             .on_checkpoint(&node, &result, Some("exit"), &state)
@@ -1127,7 +1148,14 @@ mod tests {
         let node = graph.get_node("build").unwrap();
         let mut state = ExecutionState::new(&graph).unwrap();
         state.increment_visits("build");
-        let result = WfNodeResult::new(Outcome::success(), Duration::from_millis(10), 1, 1);
+        let result = WfNodeResult::new(
+            Outcome::success(),
+            Duration::from_millis(10),
+            Duration::ZERO,
+            Duration::ZERO,
+            1,
+            1,
+        );
 
         lifecycle
             .on_checkpoint(&node, &result, Some("exit"), &state)
@@ -1189,18 +1217,32 @@ mod tests {
         let node = graph.get_node("build").unwrap();
         let mut checkpoint_state = ExecutionState::new(&graph).unwrap();
         checkpoint_state.increment_visits("build");
-        let result = WfNodeResult::new(Outcome::success(), Duration::from_millis(10), 1, 1);
+        let result = WfNodeResult::new(
+            Outcome::success(),
+            Duration::from_millis(10),
+            Duration::ZERO,
+            Duration::ZERO,
+            1,
+            1,
+        );
         lifecycle
             .on_checkpoint(&node, &result, Some("exit"), &checkpoint_state)
             .await
             .unwrap();
+        let finalize_sandbox: Arc<dyn fabro_agent::Sandbox> = Arc::new(
+            fabro_agent::LocalSandbox::new(repo_dir.path().to_path_buf()),
+        );
+        let finalize_locations = crate::services::RunLocations::for_sandbox(
+            None,
+            finalize_sandbox.as_ref(),
+            repo_dir.path().join(".fabro/run"),
+        );
         let finalize_services = RunServices::new(
             RunStoreHandle::new(Arc::new(FailingStateStore)),
             Arc::clone(&lifecycle.emitter),
-            Arc::new(fabro_agent::LocalSandbox::new(
-                repo_dir.path().to_path_buf(),
-            )),
+            finalize_sandbox,
             None,
+            finalize_locations,
             tokio_util::sync::CancellationToken::new(),
             fabro_model::ProviderId::anthropic(),
             "claude-sonnet-4-6".to_string(),
@@ -1213,7 +1255,7 @@ mod tests {
         let conclusion = Conclusion {
             timestamp:            chrono::Utc::now(),
             status:               StageOutcome::Succeeded,
-            duration_ms:          10,
+            timing:               fabro_types::RunTiming::wall_only(10),
             failure:              None,
             final_git_commit_sha: None,
             stages:               Vec::new(),

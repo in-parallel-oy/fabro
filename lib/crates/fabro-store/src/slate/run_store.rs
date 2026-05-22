@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use bytes::Bytes;
 use chrono::Utc;
-use fabro_types::{RunBlobId, RunEvent, RunId};
+use fabro_types::{RunBlobId, RunEvent, RunId, SessionId};
 use futures::Stream;
 use slatedb::{Db, DbRead};
 use tokio::sync::{Mutex, broadcast, mpsc};
@@ -235,6 +235,10 @@ impl RunDatabase {
 
 impl RunDatabase {
     pub async fn append_event(&self, payload: &EventPayload) -> Result<u32> {
+        Ok(self.append_event_envelope(payload).await?.seq)
+    }
+
+    pub async fn append_event_envelope(&self, payload: &EventPayload) -> Result<EventEnvelope> {
         if self.read_only {
             return Err(Error::ReadOnly);
         }
@@ -262,7 +266,7 @@ impl RunDatabase {
             match Self::build_cached_projection(&self.inner.db, &self.inner.run_id).await {
                 Ok(Some(entry)) => {
                     self.inner.shared_projection_cache.replace(entry).await;
-                    return Ok(seq);
+                    return Ok(event);
                 }
                 Ok(None) => {
                     self.inner
@@ -289,7 +293,7 @@ impl RunDatabase {
             );
             return Err(err);
         }
-        Ok(seq)
+        Ok(event)
     }
 
     pub async fn list_events(&self) -> Result<Vec<EventEnvelope>> {
@@ -305,6 +309,10 @@ impl RunDatabase {
             return Ok(events);
         }
         list_events_from_with_limit(&self.inner.db, &self.inner.run_id, start_seq, limit).await
+    }
+
+    pub async fn get_event(&self, seq: u32) -> Result<Option<EventEnvelope>> {
+        get_event(&self.inner.db, &self.inner.run_id, seq).await
     }
 
     /// Returns up to `limit + 1` events for the given stage visit,
@@ -325,6 +333,25 @@ impl RunDatabase {
             &self.inner.db,
             &self.inner.run_id,
             stage_id,
+            start_seq,
+            limit,
+        )
+        .await
+    }
+
+    /// Returns up to `limit + 1` durable Ask Fabro session events for the given
+    /// session, starting at `start_seq`. The extra item lets callers compute
+    /// `has_more` without a second read.
+    pub async fn list_events_for_session_from_with_limit(
+        &self,
+        session_id: SessionId,
+        start_seq: u32,
+        limit: usize,
+    ) -> Result<Vec<EventEnvelope>> {
+        list_events_for_session_from_with_limit(
+            &self.inner.db,
+            &self.inner.run_id,
+            session_id,
             start_seq,
             limit,
         )
@@ -478,6 +505,22 @@ where
     Ok(events)
 }
 
+async fn get_event<R>(db: &R, run_id: &RunId, seq: u32) -> Result<Option<EventEnvelope>>
+where
+    R: DbRead + Sync,
+{
+    let mut iter = db
+        .scan_prefix(keys::run_event_seq_prefix(run_id, seq))
+        .await?;
+    let Some(entry) = iter.next().await? else {
+        return Ok(None);
+    };
+    Ok(Some(EventEnvelope {
+        seq,
+        event: serde_json::from_slice(&entry.value)?,
+    }))
+}
+
 async fn list_events_for_stage_from_with_limit<R>(
     db: &R,
     run_id: &RunId,
@@ -546,6 +589,57 @@ where
     Ok(events)
 }
 
+async fn list_events_for_session_from_with_limit<R>(
+    db: &R,
+    run_id: &RunId,
+    session_id: SessionId,
+    start_seq: u32,
+    limit: usize,
+) -> Result<Vec<EventEnvelope>>
+where
+    R: DbRead + Sync,
+{
+    #[derive(serde::Deserialize)]
+    struct SessionEventProbe<'a> {
+        #[serde(default, borrow)]
+        session_id: Option<&'a str>,
+        #[serde(rename = "event", default, borrow)]
+        event_name: Option<&'a str>,
+    }
+
+    let session_id_string = session_id.to_string();
+    let max_events = limit.saturating_add(1);
+    let mut iter = db.scan_prefix(keys::run_events_prefix(run_id)).await?;
+    let mut events = Vec::new();
+    while let Some(entry) = iter.next().await? {
+        let key = key_to_string(&entry.key)?;
+        let Some(seq) = keys::parse_event_seq(&key) else {
+            continue;
+        };
+        if seq < start_seq {
+            continue;
+        }
+
+        let probe: SessionEventProbe = serde_json::from_slice(&entry.value)?;
+        if probe.session_id != Some(session_id_string.as_str())
+            || !probe
+                .event_name
+                .is_some_and(|name| name.starts_with("run.session."))
+        {
+            continue;
+        }
+
+        let event: RunEvent = serde_json::from_slice(&entry.value)?;
+        if event.body.is_run_session_event() {
+            events.push(EventEnvelope { seq, event });
+            if events.len() >= max_events {
+                break;
+            }
+        }
+    }
+    Ok(events)
+}
+
 async fn list_blobs<R>(db: &R) -> Result<Vec<RunBlobId>>
 where
     R: DbRead + Sync,
@@ -573,7 +667,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use fabro_types::{Graph, RunId, StageId, WorkflowSettings};
+    use fabro_types::{Graph, RunId, SessionId, StageId, WorkflowSettings};
     use object_store::memory::InMemory;
     use serde_json::json;
 
@@ -598,6 +692,24 @@ mod tests {
 
     fn stage_prompt_payload(run_id: &RunId, idx: u32, node_id: Option<&str>) -> EventPayload {
         stage_prompt_payload_for_stage(run_id, idx, node_id, None)
+    }
+
+    fn session_message_payload(run_id: &RunId, idx: u32, session_id: SessionId) -> EventPayload {
+        EventPayload::new(
+            json!({
+                "id": format!("evt-session-{idx}"),
+                "ts": "2026-04-09T12:00:00Z",
+                "run_id": run_id.to_string(),
+                "session_id": session_id.to_string(),
+                "event": "run.session.user_message",
+                "properties": {
+                    "turn_id": fabro_types::TurnId::new().to_string(),
+                    "text": format!("message {idx}"),
+                },
+            }),
+            run_id,
+        )
+        .unwrap()
     }
 
     fn run_created_payload(run_id: &RunId) -> EventPayload {
@@ -802,5 +914,52 @@ mod tests {
 
         let seqs: Vec<u32> = events.iter().map(|e| e.seq).collect();
         assert_eq!(seqs, vec![3]);
+    }
+
+    #[tokio::test]
+    async fn list_events_for_session_returns_only_matching_run_session_events() {
+        let run = fresh_run().await;
+        let run_id = run.run_id();
+        let session_id = SessionId::new();
+        let other_session_id = SessionId::new();
+        run.append_event(&stage_prompt_payload(&run_id, 1, Some("noise")))
+            .await
+            .unwrap();
+        run.append_event(&session_message_payload(&run_id, 2, session_id))
+            .await
+            .unwrap();
+        run.append_event(&session_message_payload(&run_id, 3, other_session_id))
+            .await
+            .unwrap();
+        run.append_event(&session_message_payload(&run_id, 4, session_id))
+            .await
+            .unwrap();
+
+        let events = run
+            .list_events_for_session_from_with_limit(session_id, 1, 100)
+            .await
+            .unwrap();
+
+        let seqs: Vec<u32> = events.iter().map(|e| e.seq).collect();
+        assert_eq!(seqs, vec![3, 5]);
+    }
+
+    #[tokio::test]
+    async fn list_events_for_session_returns_limit_plus_one_for_has_more_signal() {
+        let run = fresh_run().await;
+        let run_id = run.run_id();
+        let session_id = SessionId::new();
+        for idx in 1..=5 {
+            run.append_event(&session_message_payload(&run_id, idx, session_id))
+                .await
+                .unwrap();
+        }
+
+        let events = run
+            .list_events_for_session_from_with_limit(session_id, 1, 2)
+            .await
+            .unwrap();
+
+        assert_eq!(events.len(), 3);
     }
 }

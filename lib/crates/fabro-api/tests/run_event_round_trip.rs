@@ -77,6 +77,88 @@ fn run_event_round_trips_run_steer() {
 }
 
 #[test]
+fn run_event_round_trips_pair_lifecycle_events() {
+    let value = json!({
+        "id": "evt_pair_started",
+        "ts": "2026-05-18T12:00:00Z",
+        "run_id": fixtures::RUN_1,
+        "event": "run.pair.started",
+        "actor": { "kind": "system", "system_kind": "engine" },
+        "properties": {
+            "pair_id": "01HZX6M29F1CD5YYMHT1F5D7WQ",
+            "target": {
+                "stage_id": "code@1",
+                "node_label": "Code"
+            }
+        }
+    });
+
+    let event: RunEvent = serde_json::from_value(value.clone()).unwrap();
+    let serialized = serde_json::to_value(&event).unwrap();
+    assert_eq!(serialized, value);
+
+    let body = &serialized["properties"];
+    let body_text = body.to_string();
+    assert!(body_text.contains("stage_id"));
+    assert!(!body_text.contains("agent_session_id"));
+    assert!(!body_text.contains("session_id"));
+    assert!(!body_text.contains("provider"));
+    assert!(!body_text.contains("model"));
+    assert!(!body_text.contains("\"node_id\""));
+    assert!(!body_text.contains("\"visit\""));
+
+    assert_run_event_round_trip(json!({
+        "id": "evt_pair_ended",
+        "ts": "2026-05-18T12:05:00Z",
+        "run_id": fixtures::RUN_1,
+        "event": "run.pair.ended",
+        "properties": {
+            "pair_id": "01HZX6M29F1CD5YYMHT1F5D7WQ",
+            "reason": "user_requested"
+        }
+    }));
+}
+
+#[test]
+fn run_event_round_trips_agent_pair_messages() {
+    assert_run_event_round_trip(json!({
+        "id": "evt_pair_user",
+        "ts": "2026-05-18T12:01:00Z",
+        "run_id": fixtures::RUN_1,
+        "event": "agent.pair.user_message",
+        "node_id": "code",
+        "node_label": "Code",
+        "stage_id": "code@1",
+        "session_id": "ses_01",
+        "actor": { "kind": "system", "system_kind": "engine" },
+        "properties": {
+            "pair_id": "01HZX6M29F1CD5YYMHT1F5D7WQ",
+            "message_id": "01HZX6M4D7Y1QW0Q0P6V8Z4DR5",
+            "client_message_id": "client-1",
+            "text": "Can you inspect the failing test?",
+            "visit": 1
+        }
+    }));
+
+    assert_run_event_round_trip(json!({
+        "id": "evt_pair_system",
+        "ts": "2026-05-18T12:01:01Z",
+        "run_id": fixtures::RUN_1,
+        "event": "agent.pair.system_message",
+        "node_id": "code",
+        "node_label": "Code",
+        "stage_id": "code@1",
+        "session_id": "ses_01",
+        "properties": {
+            "pair_id": "01HZX6M29F1CD5YYMHT1F5D7WQ",
+            "kind": "human_joined",
+            "text": "A human has joined this workflow run for live pairing. Wait for their next message before continuing.",
+            "visit": 1
+        }
+    }));
+}
+
+#[test]
 fn run_event_round_trips_agent_interrupt_injected() {
     let value = json!({
         "id": "evt_interrupt_injected",
@@ -94,6 +176,26 @@ fn run_event_round_trips_agent_interrupt_injected() {
     });
 
     assert_run_event_round_trip(value);
+}
+
+#[test]
+fn run_event_turn_failed_defaults_code_for_legacy_payloads() {
+    let value = json!({
+        "id": "evt_session_failed",
+        "ts": "2026-05-20T12:00:00Z",
+        "run_id": fixtures::RUN_1,
+        "event": "run.session.turn.failed",
+        "session_id": "01HZX6M0P7SE4VJ9Y3X2B8E9QF",
+        "properties": {
+            "turn_id": "01HZX6M29F1CD5YYMHT1F5D7WQ",
+            "error": "provider unavailable"
+        }
+    });
+
+    let event: ApiRunEvent = serde_json::from_value(value).unwrap();
+    let round_trip = serde_json::to_value(event).unwrap();
+    assert_eq!(round_trip["properties"]["code"], "agent_error");
+    assert_eq!(round_trip["properties"]["retryable"], false);
 }
 
 #[test]

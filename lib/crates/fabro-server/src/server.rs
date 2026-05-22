@@ -30,15 +30,17 @@ pub use fabro_api::types::{
     DeleteSecretRequest, DiskUsageResponse, DiskUsageRunRow, DiskUsageSummaryRow, ForkRequest,
     ForkResponse, LinkRunPullRequestRequest, MergeRunPullRequestRequest,
     MergeRunPullRequestResponse, ModelReference, PaginatedEventList, PaginatedRunList,
-    PaginationMeta, PreflightResponse, PreviewUrlRequest, PreviewUrlResponse, PruneRunEntry,
-    PruneRunsRequest, PruneRunsResponse, RenderWorkflowGraphDirection, RenderWorkflowGraphRequest,
-    RewindRequest, RewindResponse, RunArtifactEntry, RunArtifactListResponse, RunBilling,
-    RunBillingStage, RunBillingTotals, RunError, RunManifest, RunStage, SandboxDetails,
-    SandboxFileEntry, SandboxFileListResponse, SandboxService, SandboxServiceListResponse,
-    SshAccessRequest, SshAccessResponse, StageHandler, StageState, StartRunRequest,
-    SubmitAnswerRequest, SystemFeatures, SystemInfoResponse, SystemRepairRunIssue,
-    SystemRepairRunsResponse, SystemRunCounts, TimelineEntryResponse, VncPreviewResponse,
-    WriteBlobResponse,
+    PaginationMeta, PreflightResponse, PreviewUrlRequest, PreviewUrlResponse, Provider,
+    ProviderList, PruneRunEntry, PruneRunsRequest, PruneRunsResponse, RenderWorkflowGraphDirection,
+    RenderWorkflowGraphRequest, RewindRequest, RewindResponse, RunArtifactEntry,
+    RunArtifactListResponse, RunBilling, RunBillingStage, RunBillingTotals, RunError, RunManifest,
+    RunStage, SandboxDetails, SandboxFileEntry, SandboxFileListResponse, SandboxService,
+    SandboxServiceListResponse, SshAccessRequest, SshAccessResponse, StageHandler, StageState,
+    StartRunRequest, SubmitAnswerRequest, SystemCpuResourceScope, SystemCpuResources,
+    SystemDiskResourceScope, SystemDiskResources, SystemFeatures, SystemInfoResponse,
+    SystemMemoryResourceScope, SystemMemoryResources, SystemRepairRunIssue,
+    SystemRepairRunsResponse, SystemResourcesResponse, SystemRunCounts, TimelineEntryResponse,
+    VncPreviewResponse, WriteBlobResponse,
 };
 use fabro_auth::{CredentialSource, VaultCredentialSource, auth_issue_message};
 #[cfg(test)]
@@ -70,7 +72,7 @@ use fabro_slack::{blocks as slack_blocks, connection as slack_connection};
 use fabro_static::EnvVars;
 use fabro_store::{
     ArtifactKey, ArtifactStore, Database, EventEnvelope, EventPayload, NodeArtifact,
-    PendingInterviewRecord, SessionStore, StageArtifactEntry, StageId,
+    PendingInterviewRecord, StageArtifactEntry, StageId,
 };
 #[cfg(test)]
 use fabro_types::BlockedReason;
@@ -80,7 +82,8 @@ use fabro_types::settings::server::{
 };
 use fabro_types::settings::{InterpString, RunNamespace};
 use fabro_types::{
-    EventBody, InterviewQuestionRecord, Principal, PullRequestLink, QuestionType, RunBlobId,
+    AgentBackend, AskFabro, AskFabroUnavailableReason, EventBody, InterviewQuestionRecord, PairId,
+    PairMessageId, PairTarget, Principal, PullRequestLink, QuestionType, RunBlobId,
     RunControlAction, RunEvent, RunId, ServerSettings, SessionCapability,
 };
 use fabro_util::error::{
@@ -129,19 +132,21 @@ use crate::ip_allowlist::{IpAllowlistConfig, ip_allowlist_middleware};
 use crate::jwt_auth::{self, AuthMode};
 use crate::principal_middleware::{
     AuthContextSlot, RequestAuth, RequestAuthContext, RequireRunBlob, RequireRunScoped,
-    RequireRunStageScoped, RequireStageArtifact, RequiredUser, principal_middleware,
+    RequireRunScopedOrRunTools, RequireRunStageScoped, RequireStageArtifact, RequiredUser,
+    principal_middleware,
 };
 use crate::request_id::{self, RequestId};
 use crate::run_files::{FilesInFlight, new_files_in_flight};
 use crate::server_secrets::{LlmClientResult, ServerSecrets};
 use crate::spawn_env::{apply_render_graph_env, apply_worker_env};
-use crate::worker_token::{WorkerTokenKeys, issue_worker_token};
+use crate::worker_token::{WorkerScopeSet, WorkerTokenKeys, issue_worker_token_with_scopes};
 use crate::{
     canonical_host, demo, diagnostics, run_manifest, security_headers, static_files,
     vault_legacy_migration, web_auth,
 };
 
 mod handler;
+mod resource_sampler;
 mod session_runtime;
 
 pub(crate) use handler::events::EventListParams;
@@ -168,6 +173,15 @@ pub struct PaginationParams {
     pub limit:  u32,
     #[serde(rename = "page[offset]", default)]
     pub offset: u32,
+}
+
+pub(crate) fn paginate_items<T>(items: Vec<T>, pagination: &PaginationParams) -> (Vec<T>, bool) {
+    let limit = pagination.limit.clamp(1, 100) as usize;
+    let offset = pagination.offset.min(MAX_PAGE_OFFSET) as usize;
+    let mut data: Vec<_> = items.into_iter().skip(offset).take(limit + 1).collect();
+    let has_more = data.len() > limit;
+    data.truncate(limit);
+    (data, has_more)
 }
 
 #[derive(serde::Deserialize)]
@@ -202,14 +216,16 @@ struct ManagedRun {
     // Populated when running:
     answer_transport: Option<RunAnswerTransport>,
     accepted_questions: HashSet<String>,
-    /// Stage IDs of currently steerable API-mode (SDK) agent sessions,
-    /// keyed to the session id that owns the active lease. Used by the
-    /// steerability predicate.
-    active_api_stages: HashMap<StageId, String>,
-    /// Stage IDs of currently running non-steerable agent sessions, observed
-    /// from CLI/ACP start/completion events plus `stage.completed`/
-    /// `stage.failed` backstops.
-    active_non_steerable_agent_stages: HashSet<StageId>,
+    /// Stage IDs of currently steerable live agent sessions, keyed to the
+    /// session id that owns the active lease. Used by the steerability
+    /// predicate for steer/interrupt controls.
+    active_steerable_stages: HashMap<StageId, String>,
+    /// API-mode session targets eligible for live pair control. ACP sessions
+    /// can be steerable but are intentionally excluded from pairing.
+    active_api_targets: HashMap<StageId, PairTarget>,
+    /// Stage IDs of currently running agent sessions that have no live
+    /// steering capability, keyed to the session id that owns the marker.
+    active_non_steerable_stages: HashMap<StageId, String>,
     event_tx: Option<broadcast::Sender<RunEvent>>,
     checkpoint: Option<Checkpoint>,
     cancel_tx: Option<oneshot::Sender<()>>,
@@ -245,9 +261,9 @@ struct ModelBillingTotals {
 /// In-memory aggregate billing counters, reset on server restart.
 #[derive(Default)]
 struct BillingAccumulator {
-    total_runs:         i64,
-    total_runtime_secs: f64,
-    by_model:           HashMap<ModelRef, ModelBillingTotals>,
+    total_runs:   i64,
+    total_timing: fabro_types::RunTiming,
+    by_model:     HashMap<ModelRef, ModelBillingTotals>,
 }
 
 pub(crate) type RegistryFactoryOverride =
@@ -268,6 +284,13 @@ enum RunAnswerTransport {
 enum AnswerTransportError {
     Closed,
     Timeout,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PairTransportError {
+    Closed,
+    Timeout,
+    Control(fabro_workflow::PairControlError),
 }
 
 impl RunAnswerTransport {
@@ -358,6 +381,73 @@ impl RunAnswerTransport {
                 steering_hub.interrupt_then_steer(&text, Some(&actor));
                 Ok(())
             }
+        }
+    }
+
+    async fn start_pair(
+        &self,
+        run_id: RunId,
+        pair_id: PairId,
+        target: PairTarget,
+        actor: Principal,
+    ) -> Result<(), PairTransportError> {
+        match self {
+            Self::Subprocess { control_tx } => {
+                let message = WorkerControlEnvelope::start_pair(run_id, pair_id, target, actor);
+                timeout(WORKER_CONTROL_ENQUEUE_TIMEOUT, control_tx.send(message))
+                    .await
+                    .map_err(|_| PairTransportError::Timeout)?
+                    .map_err(|_| PairTransportError::Closed)
+            }
+            Self::InProcess { steering_hub, .. } => steering_hub
+                .start_pair(run_id, pair_id, target, Some(actor))
+                .map(|_| ())
+                .map_err(PairTransportError::Control),
+        }
+    }
+
+    async fn send_pair_message(
+        &self,
+        pair_id: PairId,
+        message_id: PairMessageId,
+        text: String,
+        client_message_id: Option<String>,
+        actor: Principal,
+    ) -> Result<(), PairTransportError> {
+        match self {
+            Self::Subprocess { control_tx } => {
+                let message = WorkerControlEnvelope::pair_message(
+                    pair_id,
+                    message_id,
+                    text.clone(),
+                    client_message_id.clone(),
+                    actor,
+                );
+                timeout(WORKER_CONTROL_ENQUEUE_TIMEOUT, control_tx.send(message))
+                    .await
+                    .map_err(|_| PairTransportError::Timeout)?
+                    .map_err(|_| PairTransportError::Closed)
+            }
+            Self::InProcess { steering_hub, .. } => steering_hub
+                .send_pair_message(pair_id, message_id, text, client_message_id, Some(actor))
+                .map(|_| ())
+                .map_err(PairTransportError::Control),
+        }
+    }
+
+    async fn end_pair(&self, pair_id: PairId, actor: Principal) -> Result<(), PairTransportError> {
+        match self {
+            Self::Subprocess { control_tx } => {
+                let message = WorkerControlEnvelope::end_pair(pair_id, actor);
+                timeout(WORKER_CONTROL_ENQUEUE_TIMEOUT, control_tx.send(message))
+                    .await
+                    .map_err(|_| PairTransportError::Timeout)?
+                    .map_err(|_| PairTransportError::Closed)
+            }
+            Self::InProcess { steering_hub, .. } => steering_hub
+                .end_pair(pair_id, Some(actor))
+                .map(|_| ())
+                .map_err(PairTransportError::Control),
         }
     }
 }
@@ -515,11 +605,11 @@ pub struct AppState {
     runs: Mutex<HashMap<RunId, ManagedRun>>,
     aggregate_billing: Mutex<BillingAccumulator>,
     store: Arc<Database>,
-    session_store: SessionStore,
     session_runtimes: SessionRuntimeManager,
     artifact_store: ArtifactStore,
     worker_tokens: WorkerTokenKeys,
     started_at: Instant,
+    resource_sampler: resource_sampler::ResourceSampler,
     max_concurrent_runs: usize,
     scheduler_notify: Notify,
     global_event_tx: broadcast::Sender<EventEnvelope>,
@@ -549,6 +639,43 @@ pub struct AppState {
 }
 
 type PullRequestCreateLocks = Arc<Mutex<HashMap<RunId, Arc<AsyncMutex<()>>>>>;
+
+struct AskFabroReadiness {
+    feature_enabled: bool,
+    default_model:   Option<String>,
+}
+
+impl AskFabroReadiness {
+    fn decorate(&self, mut run: fabro_types::Run) -> fabro_types::Run {
+        run.ask_fabro = self.ask_fabro_for(&run);
+        run
+    }
+
+    fn ask_fabro_for(&self, run: &fabro_types::Run) -> AskFabro {
+        let unavailable_reason = if !self.feature_enabled {
+            Some(AskFabroUnavailableReason::FeatureDisabled)
+        } else if run.sandbox.is_none() {
+            Some(AskFabroUnavailableReason::NoSandbox)
+        } else if run
+            .sandbox
+            .as_ref()
+            .and_then(|sandbox| sandbox.runtime.as_ref())
+            .is_none()
+        {
+            Some(AskFabroUnavailableReason::SandboxNotReady)
+        } else if self.default_model.is_none() {
+            Some(AskFabroUnavailableReason::LlmUnconfigured)
+        } else {
+            None
+        };
+
+        AskFabro {
+            available: unavailable_reason.is_none(),
+            unavailable_reason,
+            default_model: self.default_model.clone(),
+        }
+    }
+}
 
 struct PullRequestCreateGuard {
     locks:  PullRequestCreateLocks,
@@ -622,7 +749,7 @@ fn accumulate_billing_rollup(
     rollup: &fabro_workflow::ProjectionBillingRollup,
 ) {
     accumulator.total_runs += 1;
-    accumulator.total_runtime_secs += rollup.runtime_ms as f64 / 1000.0;
+    accumulator.total_timing = accumulator.total_timing.saturating_add(&rollup.timing);
     for model in &rollup.by_model {
         let entry = accumulator.by_model.entry(model.model.clone()).or_default();
         entry.stages += model.stages;
@@ -634,7 +761,7 @@ pub(crate) fn run_stage_from_stage_id(
     stage_id: &StageId,
     name: impl Into<String>,
     status: StageState,
-    duration_secs: Option<f64>,
+    wall_time_ms: Option<u64>,
     started_at: Option<chrono::DateTime<chrono::Utc>>,
     handler: StageHandler,
 ) -> RunStage {
@@ -643,7 +770,7 @@ pub(crate) fn run_stage_from_stage_id(
         name: name.into(),
         handler,
         status,
-        duration_secs,
+        wall_time_ms,
         node_id: stage_id.node_id().to_string(),
         visit: std::num::NonZeroU32::new(stage_id.visit())
             .expect("StageId stores a non-zero visit"),
@@ -714,6 +841,11 @@ impl AppState {
         resolve_llm_client_from_source(self.llm_source.as_ref(), self.catalog()).await
     }
 
+    pub(crate) async fn configured_llm_provider_ids(&self) -> Vec<ProviderId> {
+        let catalog = self.catalog();
+        self.llm_source.configured_providers(catalog.as_ref()).await
+    }
+
     pub(crate) async fn ready_llm_provider_ids(&self) -> Vec<ProviderId> {
         match self.resolve_llm_client().await {
             Ok(result) => result.provider_ids(),
@@ -721,6 +853,46 @@ impl AppState {
                 warn!(error = ?err, "Failed to resolve LLM client while checking ready providers");
                 Vec::new()
             }
+        }
+    }
+
+    pub(crate) async fn decorate_run_summary(&self, run: fabro_types::Run) -> fabro_types::Run {
+        self.ask_fabro_readiness().await.decorate(run)
+    }
+
+    pub(crate) async fn decorate_run_summaries(
+        &self,
+        runs: Vec<fabro_types::Run>,
+    ) -> Vec<fabro_types::Run> {
+        let readiness = self.ask_fabro_readiness().await;
+        runs.into_iter()
+            .map(|run| readiness.decorate(run))
+            .collect()
+    }
+
+    async fn ask_fabro_readiness(&self) -> AskFabroReadiness {
+        let feature_enabled = self.server_settings().features.session_sandboxes;
+        if !feature_enabled {
+            return AskFabroReadiness {
+                feature_enabled,
+                default_model: None,
+            };
+        }
+
+        let provider_ids = self.ready_llm_provider_ids().await;
+        let default_model = if provider_ids.is_empty() {
+            None
+        } else {
+            Some(
+                self.catalog()
+                    .default_for_configured_ids(&provider_ids)
+                    .id
+                    .clone(),
+            )
+        };
+        AskFabroReadiness {
+            feature_enabled,
+            default_model,
         }
     }
 
@@ -762,10 +934,6 @@ impl AppState {
     /// without cross-module state coupling on the `AppState` field layout.
     pub(crate) fn store_ref(&self) -> &Arc<Database> {
         &self.store
-    }
-
-    pub(crate) fn session_store(&self) -> &SessionStore {
-        &self.session_store
     }
 
     pub(crate) fn session_runtimes(&self) -> &SessionRuntimeManager {
@@ -1387,6 +1555,12 @@ fn build_disk_usage_response(
         }
     }
 
+    // Measure the whole storage tree so the managed total can't drift as new
+    // subdirectories are added. "other" is the residual (database, artifacts,
+    // sessions, vaults) — everything that isn't an enumerated run or log file.
+    let managed_size = dir_size(storage_dir);
+    let other_size = managed_size.saturating_sub(total_run_size + total_log_size);
+
     Ok(DiskUsageResponse {
         summary:                 vec![
             DiskUsageSummaryRow {
@@ -1403,8 +1577,15 @@ fn build_disk_usage_response(
                 size_bytes:        Some(to_i64(total_log_size)),
                 reclaimable_bytes: Some(to_i64(total_log_size)),
             },
+            DiskUsageSummaryRow {
+                type_:             Some("other".to_string()),
+                count:             None,
+                active:            None,
+                size_bytes:        Some(to_i64(other_size)),
+                reclaimable_bytes: Some(0),
+            },
         ],
-        total_size_bytes:        Some(to_i64(total_run_size + total_log_size)),
+        total_size_bytes:        Some(to_i64(managed_size)),
         total_reclaimable_bytes: Some(to_i64(reclaimable_run_size + total_log_size)),
         runs:                    verbose.then_some(run_rows),
     })
@@ -1592,15 +1773,6 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
     ));
     let (global_event_tx, _) = broadcast::channel(4096);
     let current_server_settings = Arc::new(resolved_settings.server_settings);
-    let session_store = SessionStore::new(
-        PathBuf::from(resolve_interp_string(
-            &current_server_settings.server.storage.root,
-        )?)
-        .join("sessions"),
-    );
-    session_store
-        .recover_stale_running_state(chrono::Utc::now())
-        .context("recovering stale session runtime state")?;
     let current_manifest_run_defaults = Arc::new(resolved_settings.manifest_run_defaults);
     let current_manifest_run_settings = resolved_settings.manifest_run_settings;
     let current_catalog = Arc::new(
@@ -1637,11 +1809,11 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
         runs: Mutex::new(HashMap::new()),
         aggregate_billing: Mutex::new(BillingAccumulator::default()),
         store,
-        session_store,
         session_runtimes: SessionRuntimeManager::new(),
         artifact_store,
         worker_tokens,
         started_at: Instant::now(),
+        resource_sampler: resource_sampler::ResourceSampler::new(),
         max_concurrent_runs,
         scheduler_notify: Notify::new(),
         global_event_tx,
@@ -2045,8 +2217,9 @@ fn octet_stream_response(bytes: Bytes) -> Response {
 fn clear_live_run_state(run: &mut ManagedRun) {
     run.answer_transport = None;
     run.accepted_questions.clear();
-    run.active_api_stages.clear();
-    run.active_non_steerable_agent_stages.clear();
+    run.active_api_targets.clear();
+    run.active_steerable_stages.clear();
+    run.active_non_steerable_stages.clear();
     run.event_tx = None;
     run.cancel_tx = None;
     run.cancel_token = None;
@@ -2150,7 +2323,13 @@ pub(crate) async fn reconcile_incomplete_runs_on_startup(
             "Fabro server restarted before the run reached a terminal state.".to_string(),
         );
         let failure_event = workflow_event::Event::workflow_run_failed_from_error(
-            &error, 0, reason, None, None, None, None,
+            &error,
+            fabro_types::RunTiming::default(),
+            reason,
+            None,
+            None,
+            None,
+            None,
         );
         workflow_event::append_event(&run_store, &summary.id, &failure_event).await?;
         reconciled += 1;
@@ -2195,7 +2374,13 @@ async fn persist_shutdown_run_failures(
             "Fabro server shut down before the run reached a terminal state.".to_string(),
         );
         let failure_event = workflow_event::Event::workflow_run_failed_from_error(
-            &error, 0, reason, None, None, None, None,
+            &error,
+            fabro_types::RunTiming::default(),
+            reason,
+            None,
+            None,
+            None,
+            None,
         );
         workflow_event::append_event(&run_store, &run_id, &failure_event).await?;
     }
@@ -2267,7 +2452,7 @@ async fn persist_cancelled_run_status(state: &AppState, run_id: RunId) -> anyhow
 
     let failure_event = workflow_event::Event::workflow_run_failed_from_error(
         &WorkflowError::Cancelled,
-        0,
+        fabro_types::RunTiming::default(),
         FailureReason::Cancelled,
         None,
         None,
@@ -2303,7 +2488,7 @@ async fn fail_run_before_execution(
         Ok(run_store) => {
             let failure_event = workflow_event::Event::workflow_run_failed_from_error(
                 &WorkflowError::engine(message.clone()),
-                0,
+                fabro_types::RunTiming::default(),
                 reason,
                 None,
                 None,
@@ -2360,8 +2545,9 @@ fn managed_run(
         enqueued_at: Instant::now(),
         answer_transport: None,
         accepted_questions: HashSet::new(),
-        active_api_stages: HashMap::new(),
-        active_non_steerable_agent_stages: HashSet::new(),
+        active_api_targets: HashMap::new(),
+        active_steerable_stages: HashMap::new(),
+        active_non_steerable_stages: HashMap::new(),
         event_tx: None,
         checkpoint: None,
         cancel_tx: None,
@@ -2466,8 +2652,9 @@ fn update_live_run_from_event(state: &AppState, run_id: RunId, event: &RunEvent)
                 reason: props.reason,
             };
             managed_run.error = None;
-            managed_run.active_api_stages.clear();
-            managed_run.active_non_steerable_agent_stages.clear();
+            managed_run.active_api_targets.clear();
+            managed_run.active_steerable_stages.clear();
+            managed_run.active_non_steerable_stages.clear();
         }
         EventBody::RunFailed(props) => {
             managed_run.status = RunStatus::Failed {
@@ -2477,21 +2664,43 @@ fn update_live_run_from_event(state: &AppState, run_id: RunId, event: &RunEvent)
                 &props.failure.detail.message,
                 &props.failure.detail.causes,
             ));
-            managed_run.active_api_stages.clear();
-            managed_run.active_non_steerable_agent_stages.clear();
+            managed_run.active_api_targets.clear();
+            managed_run.active_steerable_stages.clear();
+            managed_run.active_non_steerable_stages.clear();
         }
-        // Track API-mode steerable sessions. Activated/deactivated are
-        // leased by session id so stale deactivations cannot clear a newer
+        // Track active agent sessions by steerability. Activated/deactivated
+        // are leased by session id so stale deactivations cannot clear a newer
         // binding for the same stage.
-        EventBody::AgentSessionActivated(props)
-            if props.capabilities.contains(&SessionCapability::Steer) =>
-        {
+        EventBody::AgentSessionActivated(props) => {
             if let (Some(stage_id), Some(session_id)) =
                 (event.stage_id.as_ref(), event.session_id.as_ref())
             {
-                managed_run
-                    .active_api_stages
-                    .insert(stage_id.clone(), session_id.clone());
+                if props.capabilities.contains(&SessionCapability::Steer) {
+                    managed_run
+                        .active_steerable_stages
+                        .insert(stage_id.clone(), session_id.clone());
+                    managed_run.active_non_steerable_stages.remove(stage_id);
+                    let acp_provider: &'static str = AgentBackend::Acp.into();
+                    if props.provider.as_deref() == Some(acp_provider) {
+                        managed_run.active_api_targets.remove(stage_id);
+                    } else {
+                        managed_run
+                            .active_api_targets
+                            .insert(stage_id.clone(), PairTarget {
+                                stage_id:   stage_id.clone(),
+                                node_label: event
+                                    .node_label
+                                    .clone()
+                                    .unwrap_or_else(|| stage_id.node_id().to_string()),
+                            });
+                    }
+                } else {
+                    managed_run
+                        .active_non_steerable_stages
+                        .insert(stage_id.clone(), session_id.clone());
+                    managed_run.active_steerable_stages.remove(stage_id);
+                    managed_run.active_api_targets.remove(stage_id);
+                }
             }
         }
         EventBody::AgentSessionDeactivated(_) => {
@@ -2499,41 +2708,33 @@ fn update_live_run_from_event(state: &AppState, run_id: RunId, event: &RunEvent)
                 (event.stage_id.as_ref(), event.session_id.as_ref())
             {
                 if managed_run
-                    .active_api_stages
+                    .active_steerable_stages
                     .get(stage_id)
                     .is_some_and(|current| current == session_id)
                 {
-                    managed_run.active_api_stages.remove(stage_id);
+                    managed_run.active_steerable_stages.remove(stage_id);
+                    managed_run.active_api_targets.remove(stage_id);
+                }
+                if managed_run
+                    .active_non_steerable_stages
+                    .get(stage_id)
+                    .is_some_and(|current| current == session_id)
+                {
+                    managed_run.active_non_steerable_stages.remove(stage_id);
                 }
             }
         }
-        // Track non-steerable agent stages. ACP started/completed are
-        // coarser and sometimes fail to emit terminal events on error paths;
-        // stage.completed/stage.failed below are the backstops.
-        EventBody::AgentAcpStarted(_) => {
-            if let Some(stage_id) = event.stage_id.as_ref() {
-                managed_run
-                    .active_non_steerable_agent_stages
-                    .insert(stage_id.clone());
-            }
-        }
+        // ACP sessions are steerable via `agent.session.activated`; terminal
+        // ACP events and stage lifecycle events are still backstops for cleanup.
         EventBody::AgentAcpCompleted(_)
         | EventBody::AgentAcpCancelled(_)
-        | EventBody::AgentAcpTimedOut(_) => {
+        | EventBody::AgentAcpTimedOut(_)
+        | EventBody::StageCompleted(_)
+        | EventBody::StageFailed(_) => {
             if let Some(stage_id) = &event.stage_id {
-                managed_run
-                    .active_non_steerable_agent_stages
-                    .remove(stage_id);
-            }
-        }
-        // Stage lifecycle backstop: cover both completion and failure
-        // paths so a failing ACP stage doesn't strand its entry.
-        EventBody::StageCompleted(_) | EventBody::StageFailed(_) => {
-            if let Some(stage_id) = &event.stage_id {
-                managed_run.active_api_stages.remove(stage_id);
-                managed_run
-                    .active_non_steerable_agent_stages
-                    .remove(stage_id);
+                managed_run.active_api_targets.remove(stage_id);
+                managed_run.active_steerable_stages.remove(stage_id);
+                managed_run.active_non_steerable_stages.remove(stage_id);
             }
         }
         _ => {}
@@ -2587,7 +2788,13 @@ async fn append_worker_exit_failure(
         format!("Worker exited before emitting a terminal run event: {wait_status}"),
     );
     let failure_event = workflow_event::Event::workflow_run_failed_from_error(
-        &error, 0, reason, None, None, None, None,
+        &error,
+        fabro_types::RunTiming::default(),
+        reason,
+        None,
+        None,
+        None,
+        None,
     );
 
     if let Err(err) = workflow_event::append_event(run_store, &run_id, &failure_event).await {
@@ -2616,8 +2823,12 @@ fn worker_command(
         )
     })?;
     let server_target = daemon.bind.to_target();
-    let worker_token = issue_worker_token(state.worker_token_keys(), &run_id)
-        .map_err(|_| anyhow::anyhow!("failed to sign worker token"))?;
+    let worker_token = issue_worker_token_with_scopes(
+        state.worker_token_keys(),
+        &run_id,
+        WorkerScopeSet::run_worker_with_agent_run_tools(),
+    )
+    .map_err(|_| anyhow::anyhow!("failed to sign worker token"))?;
     let server_destination = resolved_log_destination(state)?;
     let worker_stdout = match server_destination {
         LogDestination::Stdout => Stdio::inherit(),
@@ -3081,6 +3292,7 @@ async fn execute_run_in_process(state: Arc<AppState>, run_id: RunId) {
         catalog: state.catalog(),
         on_node: None,
         registry_override,
+        fabro_run_tools: None,
     };
 
     let execution = async {
@@ -3122,7 +3334,7 @@ async fn execute_run_in_process(state: Arc<AppState>, run_id: RunId) {
                 .expect("aggregate_billing lock poisoned");
             accumulate_billing_rollup(
                 &mut agg,
-                &fabro_workflow::billing_rollup_from_projection(projection),
+                &fabro_workflow::billing_rollup_from_projection(projection, None),
             );
         }
     }
@@ -3243,7 +3455,7 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
             let message = format!("Failed to spawn worker: {err}");
             let failure_event = workflow_event::Event::workflow_run_failed_from_error(
                 &WorkflowError::engine_with_anyhow("Failed to spawn worker", err),
-                0,
+                fabro_types::RunTiming::default(),
                 FailureReason::LaunchFailed,
                 None,
                 None,
@@ -3263,7 +3475,7 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
         let _ = child.start_kill();
         let failure_event = workflow_event::Event::workflow_run_failed_from_error(
             &WorkflowError::engine(message.clone()),
-            0,
+            fabro_types::RunTiming::default(),
             FailureReason::LaunchFailed,
             None,
             None,
@@ -3291,7 +3503,7 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
         let _ = child.start_kill();
         let failure_event = workflow_event::Event::workflow_run_failed_from_error(
             &WorkflowError::engine(message.clone()),
-            0,
+            fabro_types::RunTiming::default(),
             FailureReason::LaunchFailed,
             None,
             None,
@@ -3310,7 +3522,7 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
         let _ = child.start_kill();
         let failure_event = workflow_event::Event::workflow_run_failed_from_error(
             &WorkflowError::engine(message.clone()),
-            0,
+            fabro_types::RunTiming::default(),
             FailureReason::LaunchFailed,
             None,
             None,
@@ -3342,7 +3554,7 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
             let _ = child.start_kill();
             let failure_event = workflow_event::Event::workflow_run_failed_from_error(
                 &WorkflowError::engine_with_source("Worker wait failed", err),
-                0,
+                fabro_types::RunTiming::default(),
                 FailureReason::Terminated,
                 None,
                 None,
@@ -3407,7 +3619,7 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
             .expect("aggregate_billing lock poisoned");
         accumulate_billing_rollup(
             &mut agg,
-            &fabro_workflow::billing_rollup_from_projection(&final_state),
+            &fabro_workflow::billing_rollup_from_projection(&final_state, None),
         );
     }
 

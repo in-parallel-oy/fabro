@@ -2,9 +2,10 @@ use std::collections::BTreeMap;
 
 use ::fabro_types::{
     BilledTokenCounts, BlockedReason, CommandTermination, DiffSummary, FailureReason,
-    ForkSourceRef, GitContext, ParallelBranchId, Principal, PullRequestLink, RunBlobId, RunFailure,
-    RunId, RunNoticeLevel, RunProvenance, SandboxProvider, StageId, SuccessReason,
-    run_event as fabro_types,
+    ForkSourceRef, GitContext, PairId, PairMessageId, PairSystemMessageKind, PairTarget,
+    ParallelBranchId, Principal, PullRequestLink, RunBlobId, RunFailure, RunId, RunNoticeLevel,
+    RunPairEndedReason, RunPairFailedReason, RunProvenance, RunTiming, SandboxProvider, StageId,
+    StageTiming, SuccessReason, run_event as fabro_types,
 };
 use fabro_agent::{AgentEvent, SandboxEvent};
 use serde::{Deserialize, Serialize};
@@ -79,6 +80,25 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         actor: Option<Principal>,
     },
+    RunPairStarted {
+        pair_id: PairId,
+        target:  PairTarget,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actor:   Option<Principal>,
+    },
+    RunPairEnded {
+        pair_id: PairId,
+        reason:  RunPairEndedReason,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actor:   Option<Principal>,
+    },
+    RunPairFailed {
+        pair_id: PairId,
+        reason:  RunPairFailedReason,
+        message: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actor:   Option<Principal>,
+    },
     RunBlocked {
         blocked_reason: BlockedReason,
     },
@@ -130,7 +150,7 @@ pub enum Event {
         actor:              Option<Principal>,
     },
     WorkflowRunCompleted {
-        duration_ms:          u64,
+        timing:               RunTiming,
         artifact_count:       usize,
         #[serde(default)]
         status:               String,
@@ -148,7 +168,7 @@ pub enum Event {
     },
     WorkflowRunFailed {
         failure:              RunFailure,
-        duration_ms:          u64,
+        timing:               RunTiming,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         final_git_commit_sha: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -206,7 +226,7 @@ pub enum Event {
         node_id: String,
         name: String,
         index: usize,
-        duration_ms: u64,
+        timing: StageTiming,
         status: String,
         preferred_label: Option<String>,
         suggested_next_ids: Vec<String>,
@@ -233,15 +253,15 @@ pub enum Event {
         max_attempts: usize,
     },
     StageFailed {
-        node_id:     String,
-        name:        String,
-        index:       usize,
-        failure:     FailureDetail,
-        will_retry:  bool,
-        duration_ms: u64,
-        billing:     Option<BilledModelUsage>,
+        node_id:    String,
+        name:       String,
+        index:      usize,
+        failure:    FailureDetail,
+        will_retry: bool,
+        timing:     StageTiming,
+        billing:    Option<BilledModelUsage>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:       Option<Principal>,
+        actor:      Option<Principal>,
     },
     StageRetrying {
         node_id:      String,
@@ -546,7 +566,7 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         model:             Option<String>,
     },
-    /// A stage has a currently steerable API-mode session binding.
+    /// A stage has a currently steerable live session binding.
     AgentSessionActivated {
         node_id:      String,
         visit:        u32,
@@ -559,7 +579,7 @@ pub enum Event {
         model:        Option<String>,
         capabilities: Vec<fabro_types::SessionCapability>,
     },
-    /// A stage's steerable API-mode session binding ended.
+    /// A stage's steerable live session binding ended.
     AgentSessionDeactivated {
         node_id:    String,
         visit:      u32,
@@ -571,7 +591,7 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent_session_id: Option<String>,
     },
-    /// A run-level interrupt was delivered to a concrete API-mode agent
+    /// A run-level interrupt was delivered to a concrete steerable agent
     /// session/stage.
     AgentInterruptInjected {
         node_id:    String,
@@ -579,6 +599,26 @@ pub enum Event {
         session_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         actor:      Option<Principal>,
+    },
+    AgentPairUserMessage {
+        node_id:           String,
+        visit:             u32,
+        session_id:        String,
+        pair_id:           PairId,
+        message_id:        PairMessageId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        client_message_id: Option<String>,
+        text:              String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actor:             Option<Principal>,
+    },
+    AgentPairSystemMessage {
+        node_id:    String,
+        visit:      u32,
+        session_id: String,
+        pair_id:    PairId,
+        kind:       PairSystemMessageKind,
+        text:       String,
     },
     /// A steer arrived with no active session and was parked in the run-wide
     /// pending buffer. The actor (steer author) is lifted to top-level.
@@ -684,7 +724,7 @@ impl Event {
     #[must_use]
     pub fn workflow_run_failed_from_error(
         error: &Error,
-        duration_ms: u64,
+        timing: RunTiming,
         reason: FailureReason,
         final_git_commit_sha: Option<String>,
         final_patch: Option<String>,
@@ -693,7 +733,7 @@ impl Event {
     ) -> Self {
         Self::WorkflowRunFailed {
             failure: run_failure_from_error(error, reason),
-            duration_ms,
+            timing,
             final_git_commit_sha,
             final_patch,
             diff_summary,
@@ -748,6 +788,29 @@ impl Event {
             }
             Self::RunSteer { text, .. } => {
                 info!(text_len = text.len(), "Run steer accepted");
+            }
+            Self::RunPairStarted {
+                pair_id, target, ..
+            } => {
+                info!(
+                    %pair_id,
+                    stage_id = %target.stage_id,
+                    node_label = %target.node_label,
+                    "Run pairing started",
+                );
+            }
+            Self::RunPairEnded {
+                pair_id, reason, ..
+            } => {
+                info!(%pair_id, ?reason, "Run pairing ended");
+            }
+            Self::RunPairFailed {
+                pair_id,
+                reason,
+                message,
+                ..
+            } => {
+                warn!(%pair_id, ?reason, message, "Run pairing failed");
             }
             Self::RunBlocked { blocked_reason } => {
                 info!(?blocked_reason, "Run blocked");
@@ -810,20 +873,23 @@ impl Event {
                 info!(%previous_parent_id, ?actor, "Run parent unlinked");
             }
             Self::WorkflowRunCompleted {
-                duration_ms,
+                timing,
                 artifact_count,
                 status,
                 ..
             } => {
                 info!(
-                    duration_ms,
-                    artifact_count, status, "Workflow run completed"
+                    wall_time_ms = timing.wall_time_ms,
+                    active_time_ms = timing.active_time_ms,
+                    inference_time_ms = timing.inference_time_ms,
+                    tool_time_ms = timing.tool_time_ms,
+                    artifact_count,
+                    status,
+                    "Workflow run completed"
                 );
             }
             Self::WorkflowRunFailed {
-                failure,
-                duration_ms,
-                ..
+                failure, timing, ..
             } => {
                 let detail = &failure.detail;
                 let tail =
@@ -840,7 +906,8 @@ impl Event {
                     exec_stderr_tail_bytes = tail.stderr_bytes,
                     exec_stdout_truncated = tail.stdout_truncated,
                     exec_stderr_truncated = tail.stderr_truncated,
-                    duration_ms,
+                    wall_time_ms = timing.wall_time_ms,
+                    active_time_ms = timing.active_time_ms,
                     "Workflow run failed"
                 );
             }
@@ -951,7 +1018,7 @@ impl Event {
                 node_id,
                 name,
                 index,
-                duration_ms,
+                timing,
                 status,
                 attempt,
                 max_attempts,
@@ -961,7 +1028,10 @@ impl Event {
                     node_id,
                     stage = name.as_str(),
                     index,
-                    duration_ms,
+                    wall_time_ms = timing.wall_time_ms,
+                    active_time_ms = timing.active_time_ms,
+                    inference_time_ms = timing.inference_time_ms,
+                    tool_time_ms = timing.tool_time_ms,
                     status,
                     attempt,
                     max_attempts,
@@ -1361,6 +1431,26 @@ impl Event {
                 ..
             } => {
                 debug!(node_id, visit, session_id, "Agent interrupt injected");
+            }
+            Self::AgentPairUserMessage {
+                node_id,
+                visit,
+                session_id,
+                pair_id,
+                text,
+                ..
+            } => {
+                debug!(node_id, visit, session_id, %pair_id, text_len = text.len(), "Agent pair user message accepted");
+            }
+            Self::AgentPairSystemMessage {
+                node_id,
+                visit,
+                session_id,
+                pair_id,
+                kind,
+                ..
+            } => {
+                debug!(node_id, visit, session_id, %pair_id, ?kind, "Agent pair system message queued");
             }
             Self::AgentSteerBuffered { .. } => {
                 debug!("Steer buffered (no active session)");

@@ -8,12 +8,26 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use fabro_config::{Storage, envfile};
 use fabro_static::EnvVars;
+use fabro_util::dev_token;
 use fabro_vault::{SecretType as VaultSecretType, Vault};
 
+#[derive(Debug, Clone, Copy)]
 pub struct PendingSettingsWrite<'a> {
     pub path:              &'a Path,
     pub contents:          &'a str,
     pub previous_contents: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingDevTokenWrite {
+    path:  PathBuf,
+    token: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreparedInstallDevToken {
+    pub token: String,
+    pub write: Option<PendingDevTokenWrite>,
 }
 
 pub const OBJECT_STORE_MANAGED_COMMENT: &str = "managed by fabro-install: object-store";
@@ -26,6 +40,16 @@ pub struct VaultSecretWrite {
     pub value:       String,
     pub secret_type: VaultSecretType,
     pub description: Option<String>,
+}
+
+pub struct InstallPersistencePlan<'a> {
+    pub storage_dir:         &'a Path,
+    pub settings_write:      Option<PendingSettingsWrite<'a>>,
+    pub server_env_writes:   Vec<envfile::EnvFileUpdate>,
+    pub server_env_removals: Vec<envfile::EnvFileRemoval>,
+    pub dev_token_write:     Option<PendingDevTokenWrite>,
+    pub vault_writes:        Vec<VaultSecretWrite>,
+    pub vault_removals:      Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,6 +123,21 @@ pub fn default_web_url() -> String {
     "http://127.0.0.1:32276".to_string()
 }
 
+pub fn prepare_dev_token_write_for_install(path: &Path) -> Result<PreparedInstallDevToken> {
+    if let Some(token) = dev_token::read_dev_token_for_install(path)? {
+        return Ok(PreparedInstallDevToken { token, write: None });
+    }
+
+    let token = dev_token::generate_dev_token();
+    Ok(PreparedInstallDevToken {
+        token: token.clone(),
+        write: Some(PendingDevTokenWrite {
+            path: path.to_path_buf(),
+            token,
+        }),
+    })
+}
+
 fn root_table_mut(doc: &mut toml::Value) -> Result<&mut toml::Table> {
     doc.as_table_mut()
         .context("settings.toml root is not a table")
@@ -136,28 +175,14 @@ fn github_integration_table(doc: &mut toml::Value) -> Result<&mut toml::Table> {
         .context("settings.toml [server.integrations.github] is not a table")
 }
 
-pub fn merge_server_settings(
-    doc: &mut toml::Value,
-    web_url: &str,
-    listen_config: &InstallListenConfig,
-) -> Result<()> {
+fn set_server_listen(doc: &mut toml::Value, listen_config: &InstallListenConfig) -> Result<()> {
     let root = root_table_mut(doc)?;
-    root.insert("_version".to_string(), toml::Value::Integer(1));
-
     let server = ensure_table(root, "server")?;
-
-    let api = ensure_table(server, "api")?;
-    api.insert(
-        "url".to_string(),
-        toml::Value::String(format!("{web_url}/api/v1")),
-    );
-
-    let listen = ensure_table(server, "listen")?;
+    let mut listen = toml::Table::default();
     match listen_config {
         InstallListenConfig::Tcp(address) => {
             listen.insert("type".to_string(), toml::Value::String("tcp".to_string()));
             listen.insert("address".to_string(), toml::Value::String(address.clone()));
-            listen.remove("path");
         }
         InstallListenConfig::Unix(path) => {
             listen.insert("type".to_string(), toml::Value::String("unix".to_string()));
@@ -165,9 +190,44 @@ pub fn merge_server_settings(
                 "path".to_string(),
                 toml::Value::String(path.display().to_string()),
             );
-            listen.remove("address");
         }
     }
+    server.insert("listen".to_string(), toml::Value::Table(listen));
+    Ok(())
+}
+
+fn set_cli_target_http(doc: &mut toml::Value, web_url: &str) -> Result<()> {
+    let root = root_table_mut(doc)?;
+    let cli = ensure_table(root, "cli")?;
+    let mut target = toml::Table::default();
+    target.insert("type".to_string(), toml::Value::String("http".to_string()));
+    target.insert("url".to_string(), toml::Value::String(web_url.to_string()));
+    cli.insert("target".to_string(), toml::Value::Table(target));
+    Ok(())
+}
+
+pub fn merge_server_settings(
+    doc: &mut toml::Value,
+    web_url: &str,
+    listen_config: &InstallListenConfig,
+) -> Result<()> {
+    {
+        let root = root_table_mut(doc)?;
+        root.insert("_version".to_string(), toml::Value::Integer(1));
+
+        let server = ensure_table(root, "server")?;
+
+        let api = ensure_table(server, "api")?;
+        api.insert(
+            "url".to_string(),
+            toml::Value::String(format!("{web_url}/api/v1")),
+        );
+    }
+
+    set_server_listen(doc, listen_config)?;
+
+    let root = root_table_mut(doc)?;
+    let server = ensure_table(root, "server")?;
 
     let web = ensure_table(server, "web")?;
     web.insert("enabled".to_string(), toml::Value::Boolean(true));
@@ -179,10 +239,7 @@ pub fn merge_server_settings(
         toml::Value::Array(vec![toml::Value::String("dev-token".to_string())]),
     );
 
-    let cli = ensure_table(root, "cli")?;
-    let target = ensure_table(cli, "target")?;
-    target.insert("type".to_string(), toml::Value::String("http".to_string()));
-    target.insert("url".to_string(), toml::Value::String(web_url.to_string()));
+    set_cli_target_http(doc, web_url)?;
 
     Ok(())
 }
@@ -403,7 +460,7 @@ pub fn write_sandbox_settings(
     Ok(())
 }
 
-fn restore_optional_file(path: &Path, previous_contents: Option<&str>) -> Result<()> {
+pub fn restore_optional_file(path: &Path, previous_contents: Option<&str>) -> Result<()> {
     match previous_contents {
         Some(contents) => {
             if let Some(parent) = path.parent() {
@@ -423,6 +480,24 @@ fn restore_optional_file(path: &Path, previous_contents: Option<&str>) -> Result
     }
 
     Ok(())
+}
+
+pub fn rollback_dev_token_write(write: &PendingDevTokenWrite) -> Result<()> {
+    match std::fs::remove_file(&write.path) {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => {
+            return Err(anyhow::Error::new(err)
+                .context(format!("removing dev token {}", write.path.display())));
+        }
+    }
+
+    Ok(())
+}
+
+fn write_pending_dev_token(write: &PendingDevTokenWrite) -> Result<()> {
+    dev_token::write_dev_token(&write.path, &write.token)
+        .with_context(|| format!("writing dev token {}", write.path.display()))
 }
 
 fn persist_server_env_secrets(
@@ -446,13 +521,23 @@ fn persist_server_env_secrets(
     .with_context(|| format!("updating server env file {}", env_path.display()))
 }
 
-fn persist_vault_secrets_direct(storage_dir: &Path, secrets: &[VaultSecretWrite]) -> Result<()> {
-    if secrets.is_empty() {
+fn persist_vault_secrets_direct(
+    storage_dir: &Path,
+    secrets: &[VaultSecretWrite],
+    removals: &[String],
+) -> Result<()> {
+    if secrets.is_empty() && removals.is_empty() {
         return Ok(());
     }
 
     let vault_path = Storage::new(storage_dir).secrets_path();
     let mut vault = Vault::load(vault_path).map_err(anyhow::Error::from)?;
+    for name in removals {
+        match vault.remove(name) {
+            Ok(()) | Err(fabro_vault::Error::NotFound(_)) => {}
+            Err(err) => return Err(err.into()),
+        }
+    }
     for secret in secrets {
         vault
             .set(
@@ -466,6 +551,108 @@ fn persist_vault_secrets_direct(storage_dir: &Path, secrets: &[VaultSecretWrite]
     Ok(())
 }
 
+fn direct_persistence_error(err: anyhow::Error, rollback_failures: &[String]) -> anyhow::Error {
+    if rollback_failures.is_empty() {
+        err.context("persisting install outputs directly")
+    } else {
+        err.context(format!(
+            "persisting install outputs directly; rollback failures: {}",
+            rollback_failures.join("; ")
+        ))
+    }
+}
+
+fn rollback_direct_persistence(
+    settings_write: Option<&PendingSettingsWrite<'_>>,
+    vault_path: &Path,
+    previous_vault: Option<&str>,
+    dev_token_write: Option<&PendingDevTokenWrite>,
+) -> Vec<String> {
+    let mut failures = Vec::new();
+
+    if let Some(write) = settings_write {
+        if let Err(err) = restore_optional_file(write.path, write.previous_contents) {
+            failures.push(err.to_string());
+        }
+    }
+    if let Err(err) = restore_optional_file(vault_path, previous_vault) {
+        failures.push(err.to_string());
+    }
+    if let Some(write) = dev_token_write {
+        if let Err(err) = rollback_dev_token_write(write) {
+            failures.push(err.to_string());
+        }
+    }
+
+    failures
+}
+
+impl InstallPersistencePlan<'_> {
+    pub fn persist_direct(&self) -> std::result::Result<(), PersistInstallOutputsError> {
+        let server_env_report = persist_server_env_secrets(
+            self.storage_dir,
+            &self.server_env_writes,
+            &self.server_env_removals,
+        )
+        .map_err(|err| PersistInstallOutputsError::new(err, false, Vec::new()))?;
+        let removed_env_keys = server_env_report.removed_keys;
+
+        if let Some(write) = self.settings_write.as_ref() {
+            if let Some(parent) = write.path.parent() {
+                std::fs::create_dir_all(parent)
+                    .with_context(|| format!("creating settings directory {}", parent.display()))
+                    .map_err(|err| {
+                        PersistInstallOutputsError::new(err, true, removed_env_keys.clone())
+                    })?;
+            }
+            std::fs::write(write.path, write.contents)
+                .with_context(|| format!("writing settings file {}", write.path.display()))
+                .map_err(|err| {
+                    PersistInstallOutputsError::new(err, true, removed_env_keys.clone())
+                })?;
+        }
+
+        let vault_path = Storage::new(self.storage_dir).secrets_path();
+        let previous_vault = std::fs::read_to_string(&vault_path).ok();
+
+        if let Err(err) =
+            persist_vault_secrets_direct(self.storage_dir, &self.vault_writes, &self.vault_removals)
+        {
+            let rollback_failures = rollback_direct_persistence(
+                self.settings_write.as_ref(),
+                &vault_path,
+                previous_vault.as_deref(),
+                self.dev_token_write.as_ref(),
+            );
+            let error = direct_persistence_error(err, &rollback_failures);
+            return Err(PersistInstallOutputsError::new(
+                error,
+                true,
+                removed_env_keys,
+            ));
+        }
+
+        if let Some(write) = self.dev_token_write.as_ref() {
+            if let Err(err) = write_pending_dev_token(write) {
+                let rollback_failures = rollback_direct_persistence(
+                    self.settings_write.as_ref(),
+                    &vault_path,
+                    previous_vault.as_deref(),
+                    Some(write),
+                );
+                let error = direct_persistence_error(err, &rollback_failures);
+                return Err(PersistInstallOutputsError::new(
+                    error,
+                    true,
+                    removed_env_keys,
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
 pub fn persist_install_outputs_direct(
     storage_dir: &Path,
     server_env_writes: &[envfile::EnvFileUpdate],
@@ -473,65 +660,35 @@ pub fn persist_install_outputs_direct(
     vault_secrets: &[VaultSecretWrite],
     settings_write: Option<&PendingSettingsWrite<'_>>,
 ) -> std::result::Result<(), PersistInstallOutputsError> {
-    let server_env_report =
-        persist_server_env_secrets(storage_dir, server_env_writes, server_env_removals)
-            .map_err(|err| PersistInstallOutputsError::new(err, false, Vec::new()))?;
-    let removed_env_keys = server_env_report.removed_keys;
-
-    if let Some(write) = settings_write {
-        if let Some(parent) = write.path.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("creating settings directory {}", parent.display()))
-                .map_err(|err| {
-                    PersistInstallOutputsError::new(err, true, removed_env_keys.clone())
-                })?;
-        }
-        std::fs::write(write.path, write.contents)
-            .with_context(|| format!("writing settings file {}", write.path.display()))
-            .map_err(|err| PersistInstallOutputsError::new(err, true, removed_env_keys.clone()))?;
+    InstallPersistencePlan {
+        storage_dir,
+        settings_write: settings_write.copied(),
+        server_env_writes: server_env_writes.to_vec(),
+        server_env_removals: server_env_removals.to_vec(),
+        dev_token_write: None,
+        vault_writes: vault_secrets.to_vec(),
+        vault_removals: Vec::new(),
     }
-
-    let vault_path = Storage::new(storage_dir).secrets_path();
-    let previous_vault = std::fs::read_to_string(&vault_path).ok();
-
-    if let Err(err) = persist_vault_secrets_direct(storage_dir, vault_secrets) {
-        let mut rollback_failures = Vec::new();
-        if let Some(write) = settings_write {
-            if let Err(restore_err) = restore_optional_file(write.path, write.previous_contents) {
-                rollback_failures.push(restore_err.to_string());
-            }
-        }
-        if let Err(restore_err) = restore_optional_file(&vault_path, previous_vault.as_deref()) {
-            rollback_failures.push(restore_err.to_string());
-        }
-        let error = if rollback_failures.is_empty() {
-            err.context("persisting install outputs directly")
-        } else {
-            err.context(format!(
-                "persisting install outputs directly; rollback failures: {}",
-                rollback_failures.join("; ")
-            ))
-        };
-        return Err(PersistInstallOutputsError::new(
-            error,
-            true,
-            removed_env_keys,
-        ));
-    }
-
-    Ok(())
+    .persist_direct()
 }
 
 #[cfg(test)]
 mod tests {
-    use fabro_config::{ServerSettingsBuilder, Storage, envfile};
+    use std::path::PathBuf;
+
+    use fabro_config::{ServerSettingsBuilder, Storage, UserSettingsBuilder, envfile};
+    use fabro_types::settings::cli::CliTargetSettings;
+    use fabro_util::dev_token::{
+        generate_dev_token, read_dev_token_file, validate_dev_token_format, write_dev_token,
+    };
     use fabro_vault::{SecretType as VaultSecretType, Vault};
 
     use super::{
         InstallListenConfig, InstallObjectStoreCredentialMode, InstallObjectStoreSelection,
-        InstallSandboxSelection, OBJECT_STORE_ACCESS_KEY_ID_ENV, OBJECT_STORE_MANAGED_COMMENT,
-        OBJECT_STORE_SECRET_ACCESS_KEY_ENV, PendingSettingsWrite, VaultSecretWrite,
-        default_web_url, merge_server_settings, persist_install_outputs_direct,
+        InstallPersistencePlan, InstallSandboxSelection, OBJECT_STORE_ACCESS_KEY_ID_ENV,
+        OBJECT_STORE_MANAGED_COMMENT, OBJECT_STORE_SECRET_ACCESS_KEY_ENV, PendingSettingsWrite,
+        VaultSecretWrite, default_web_url, merge_server_settings, persist_install_outputs_direct,
+        prepare_dev_token_write_for_install, set_cli_target_http, set_server_listen,
         write_github_app_settings, write_object_store_settings, write_sandbox_settings,
     };
 
@@ -595,6 +752,141 @@ name = "custom"
                 .and_then(|project| project.get("name"))
                 .and_then(toml::Value::as_str),
             Some("custom")
+        );
+    }
+
+    #[test]
+    fn merge_server_settings_replaces_stale_unix_cli_target_fields() {
+        let mut doc: toml::Value = toml::from_str(
+            r#"
+_version = 1
+
+[cli.target]
+type = "unix"
+path = "/tmp/fabro.sock"
+"#,
+        )
+        .unwrap();
+
+        merge_server_settings(
+            &mut doc,
+            &default_web_url(),
+            &InstallListenConfig::Tcp("127.0.0.1:32276".to_string()),
+        )
+        .unwrap();
+
+        let target = doc
+            .get("cli")
+            .and_then(toml::Value::as_table)
+            .and_then(|cli| cli.get("target"))
+            .and_then(toml::Value::as_table)
+            .expect("cli.target should be a table");
+        assert_eq!(
+            target.get("type").and_then(toml::Value::as_str),
+            Some("http")
+        );
+        assert_eq!(
+            target.get("url").and_then(toml::Value::as_str),
+            Some(default_web_url().as_str())
+        );
+        assert!(!target.contains_key("path"));
+
+        let toml_str = toml::to_string_pretty(&doc).expect("settings should serialize");
+        let settings = UserSettingsBuilder::from_toml(&toml_str).expect("settings should resolve");
+        assert!(matches!(
+            settings.cli.target,
+            Some(CliTargetSettings::Http { .. })
+        ));
+    }
+
+    #[test]
+    fn set_cli_target_http_replaces_the_full_tagged_enum_table() {
+        let mut doc: toml::Value = toml::from_str(
+            r#"
+_version = 1
+
+[cli.target]
+type = "unix"
+path = "/tmp/fabro.sock"
+stale = "remove-me"
+"#,
+        )
+        .unwrap();
+
+        set_cli_target_http(&mut doc, &default_web_url()).unwrap();
+
+        let target = doc
+            .get("cli")
+            .and_then(toml::Value::as_table)
+            .and_then(|cli| cli.get("target"))
+            .and_then(toml::Value::as_table)
+            .expect("cli.target should be a table");
+        assert_eq!(target.len(), 2);
+        assert_eq!(
+            target.get("type").and_then(toml::Value::as_str),
+            Some("http")
+        );
+        assert_eq!(
+            target.get("url").and_then(toml::Value::as_str),
+            Some(default_web_url().as_str())
+        );
+    }
+
+    #[test]
+    fn set_server_listen_replaces_stale_variant_fields_in_both_directions() {
+        let mut doc: toml::Value = toml::from_str(
+            r#"
+_version = 1
+
+[server.listen]
+type = "tcp"
+address = "127.0.0.1:32276"
+path = "/tmp/stale.sock"
+stale = "remove-me"
+"#,
+        )
+        .unwrap();
+
+        set_server_listen(
+            &mut doc,
+            &InstallListenConfig::Unix(PathBuf::from("/tmp/fabro.sock")),
+        )
+        .unwrap();
+        let listen = doc
+            .get("server")
+            .and_then(toml::Value::as_table)
+            .and_then(|server| server.get("listen"))
+            .and_then(toml::Value::as_table)
+            .expect("server.listen should be a table");
+        assert_eq!(listen.len(), 2);
+        assert_eq!(
+            listen.get("type").and_then(toml::Value::as_str),
+            Some("unix")
+        );
+        assert_eq!(
+            listen.get("path").and_then(toml::Value::as_str),
+            Some("/tmp/fabro.sock")
+        );
+
+        set_server_listen(
+            &mut doc,
+            &InstallListenConfig::Tcp("0.0.0.0:32276".to_string()),
+        )
+        .unwrap();
+        let listen = doc
+            .get("server")
+            .and_then(toml::Value::as_table)
+            .and_then(|server| server.get("listen"))
+            .and_then(toml::Value::as_table)
+            .expect("server.listen should be a table");
+        assert_eq!(listen.len(), 2);
+        assert_eq!(
+            listen.get("type").and_then(toml::Value::as_str),
+            Some("tcp")
+        );
+        assert_eq!(
+            listen.get("address").and_then(toml::Value::as_str),
+            Some("0.0.0.0:32276")
         );
     }
 
@@ -703,6 +995,205 @@ name = "custom"
         assert_eq!(
             server_env.get("SESSION_SECRET").map(String::as_str),
             Some("session")
+        );
+    }
+
+    #[test]
+    fn install_persistence_plan_direct_writes_and_removes_vault_secrets() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::new(dir.path());
+        let mut vault = Vault::load(storage.secrets_path()).unwrap();
+        vault
+            .set("REMOVE_ME", "old", VaultSecretType::Token, None)
+            .unwrap();
+        vault
+            .set("KEEP_ME", "keep", VaultSecretType::Token, None)
+            .unwrap();
+
+        InstallPersistencePlan {
+            storage_dir:         dir.path(),
+            settings_write:      None,
+            server_env_writes:   Vec::new(),
+            server_env_removals: Vec::new(),
+            dev_token_write:     None,
+            vault_writes:        vec![VaultSecretWrite {
+                name:        "NEW_SECRET".to_string(),
+                value:       "new".to_string(),
+                secret_type: VaultSecretType::Token,
+                description: None,
+            }],
+            vault_removals:      vec!["REMOVE_ME".to_string()],
+        }
+        .persist_direct()
+        .unwrap();
+
+        let vault = Vault::load(storage.secrets_path()).unwrap();
+        assert_eq!(vault.get("REMOVE_ME"), None);
+        assert_eq!(vault.get("KEEP_ME"), Some("keep"));
+        assert_eq!(vault.get("NEW_SECRET"), Some("new"));
+    }
+
+    #[test]
+    fn install_persistence_plan_direct_restores_settings_and_vault_on_secret_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::new(dir.path());
+        let settings_path = dir.path().join("settings.toml");
+        std::fs::write(&settings_path, "_version = 1\n[server]\n").unwrap();
+        let vault_path = storage.secrets_path();
+        let mut vault = Vault::load(vault_path.clone()).unwrap();
+        vault
+            .set("REMOVE_ME", "old", VaultSecretType::Token, None)
+            .unwrap();
+
+        let result = InstallPersistencePlan {
+            storage_dir:         dir.path(),
+            settings_write:      Some(PendingSettingsWrite {
+                path:              &settings_path,
+                contents:          "_version = 1\n[server]\nfoo = \"bar\"\n",
+                previous_contents: Some("_version = 1\n[server]\n"),
+            }),
+            server_env_writes:   vec![envfile::EnvFileUpdate {
+                key:     "SESSION_SECRET".to_string(),
+                value:   "session".to_string(),
+                comment: None,
+            }],
+            server_env_removals: Vec::new(),
+            dev_token_write:     None,
+            vault_writes:        vec![VaultSecretWrite {
+                name:        "bad-secret-name".to_string(),
+                value:       "boom".to_string(),
+                secret_type: VaultSecretType::Token,
+                description: None,
+            }],
+            vault_removals:      vec!["REMOVE_ME".to_string()],
+        }
+        .persist_direct();
+
+        assert!(result.is_err());
+        assert_eq!(
+            std::fs::read_to_string(&settings_path).unwrap(),
+            "_version = 1\n[server]\n"
+        );
+        let vault = Vault::load(vault_path).unwrap();
+        assert_eq!(vault.get("REMOVE_ME"), Some("old"));
+        assert_eq!(vault.get("bad-secret-name"), None);
+        let server_env = envfile::read_env_file(&storage.runtime_directory().env_path()).unwrap();
+        assert_eq!(
+            server_env.get("SESSION_SECRET").map(String::as_str),
+            Some("session")
+        );
+    }
+
+    #[test]
+    fn prepare_dev_token_write_for_install_missing_file_stages_without_writing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = Storage::new(dir.path())
+            .runtime_directory()
+            .dev_token_path();
+
+        let prepared = prepare_dev_token_write_for_install(&path).unwrap();
+
+        assert!(validate_dev_token_format(&prepared.token));
+        assert!(
+            prepared.write.is_some(),
+            "missing token file should stage a write"
+        );
+        assert!(
+            !path.exists(),
+            "preparing a token must not create the token file"
+        );
+    }
+
+    #[test]
+    fn prepare_dev_token_write_for_install_reuses_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = Storage::new(dir.path())
+            .runtime_directory()
+            .dev_token_path();
+        let token = generate_dev_token();
+        write_dev_token(&path, &token).unwrap();
+
+        let prepared = prepare_dev_token_write_for_install(&path).unwrap();
+
+        assert_eq!(prepared.token, token);
+        assert!(
+            prepared.write.is_none(),
+            "existing valid token should not be rewritten"
+        );
+    }
+
+    #[test]
+    fn prepare_dev_token_write_for_install_rejects_invalid_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = Storage::new(dir.path())
+            .runtime_directory()
+            .dev_token_path();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "not-a-valid-token").unwrap();
+
+        let err = prepare_dev_token_write_for_install(&path).unwrap_err();
+
+        assert!(err.to_string().contains("invalid dev token format"));
+    }
+
+    #[test]
+    fn install_persistence_plan_direct_writes_staged_dev_token_on_success() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::new(dir.path());
+        let path = storage.runtime_directory().dev_token_path();
+        let prepared = prepare_dev_token_write_for_install(&path).unwrap();
+        let token = prepared.token.clone();
+
+        InstallPersistencePlan {
+            storage_dir:         dir.path(),
+            settings_write:      None,
+            server_env_writes:   Vec::new(),
+            server_env_removals: Vec::new(),
+            dev_token_write:     prepared.write,
+            vault_writes:        Vec::new(),
+            vault_removals:      Vec::new(),
+        }
+        .persist_direct()
+        .unwrap();
+
+        assert_eq!(read_dev_token_file(&path).as_deref(), Some(token.as_str()));
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600);
+        }
+    }
+
+    #[test]
+    fn install_persistence_plan_direct_does_not_leave_staged_dev_token_on_vault_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Storage::new(dir.path());
+        let path = storage.runtime_directory().dev_token_path();
+        let prepared = prepare_dev_token_write_for_install(&path).unwrap();
+
+        let result = InstallPersistencePlan {
+            storage_dir:         dir.path(),
+            settings_write:      None,
+            server_env_writes:   Vec::new(),
+            server_env_removals: Vec::new(),
+            dev_token_write:     prepared.write,
+            vault_writes:        vec![VaultSecretWrite {
+                name:        "bad-secret-name".to_string(),
+                value:       "boom".to_string(),
+                secret_type: VaultSecretType::Token,
+                description: None,
+            }],
+            vault_removals:      Vec::new(),
+        }
+        .persist_direct();
+
+        assert!(result.is_err());
+        assert!(
+            !path.exists(),
+            "failed persistence should not leave a newly staged dev token file"
         );
     }
 

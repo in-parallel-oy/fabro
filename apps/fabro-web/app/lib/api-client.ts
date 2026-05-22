@@ -10,10 +10,13 @@ import {
   HumanInTheLoopApi,
   InsightsApi,
   InstallApi,
+  ModelsApi,
   RunInternalsApi,
   RunInternalsApiAxiosParamCreator,
   RunOutputsApi,
   RunsApi,
+  SecretsApi,
+  SessionsApi,
   SettingsApi,
   SystemApi,
   WorkflowsApi,
@@ -87,6 +90,11 @@ export const installApi = new InstallApi(
   "",
   generatedAxios,
 );
+export const modelsApi = new ModelsApi(
+  generatedApiConfiguration,
+  "",
+  generatedAxios,
+);
 export const runInternalsApi = new RunInternalsApi(
   generatedApiConfiguration,
   "",
@@ -98,6 +106,16 @@ export const runOutputsApi = new RunOutputsApi(
   generatedAxios,
 );
 export const runsApi = new RunsApi(
+  generatedApiConfiguration,
+  "",
+  generatedAxios,
+);
+export const secretsApi = new SecretsApi(
+  generatedApiConfiguration,
+  "",
+  generatedAxios,
+);
+export const sessionsApi = new SessionsApi(
   generatedApiConfiguration,
   "",
   generatedAxios,
@@ -180,6 +198,34 @@ function apiErrorFromAxios(error: unknown): ApiError | null {
     requestId,
     body: response.data ?? null,
   });
+}
+
+export async function apiErrorFromFetchResponse(response: Response): Promise<ApiError | null> {
+  if (response.ok) return null;
+
+  const body = await readFetchErrorBody(response);
+  const requestId = requestIdFromHeaders(response.headers) ?? extractRequestId(body);
+  return new ApiError({
+    status: response.status,
+    message: extractErrorDetail(body) ?? (response.statusText || `HTTP ${response.status}`),
+    requestId,
+    body,
+  });
+}
+
+async function readFetchErrorBody(response: Response): Promise<unknown> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    return response.json().catch(() => null);
+  }
+
+  const text = await response.text().catch(() => "");
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
 }
 
 function extractErrorDetail(body: unknown): string | null {

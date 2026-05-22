@@ -35,6 +35,7 @@ export const queryKeys = {
   },
   system: {
     info: () => ["system", "info"] as const,
+    resources: () => ["system", "resources"] as const,
     attachUrl: () => "/api/v1/attach",
   },
   boards: {
@@ -73,6 +74,7 @@ export const queryKeys = {
       ["runs", "sandbox-file", id, path] as const,
     sandboxVnc: (id: string) => ["runs", "sandbox-vnc", id] as const,
     sandboxServices: (id: string) => ["runs", "sandbox-services", id] as const,
+    pullRequest: (id: string) => ["runs", "pull-request", id] as const,
     preview: (id: string) => ["runs", "preview", id] as const,
     cancel: (id: string) => ["runs", "cancel", id] as const,
     archive: (id: string) => ["runs", "archive", id] as const,
@@ -91,5 +93,11 @@ export const queryKeys = {
   },
   settings: {
     server: () => ["settings", "server"] as const,
+  },
+  providers: {
+    list: () => ["providers", "list"] as const,
+  },
+  secrets: {
+    list: () => ["secrets", "list"] as const,
   },
 };

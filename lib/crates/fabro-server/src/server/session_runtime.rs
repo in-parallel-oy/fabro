@@ -2,11 +2,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use fabro_agent::Session;
-use fabro_types::{SessionEventEnvelope, SessionId, TurnId};
-use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, broadcast};
+use fabro_types::{SessionId, TurnId};
+use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use tokio_util::sync::CancellationToken;
-
-const SESSION_EVENT_BROADCAST_CAPACITY: usize = 1024;
 
 #[derive(Default)]
 pub(crate) struct SessionRuntimeManager {
@@ -22,11 +20,6 @@ impl SessionRuntimeManager {
         self.entry(session_id)
     }
 
-    pub(crate) fn has_active_turn(&self, session_id: SessionId) -> bool {
-        self.existing_entry(session_id)
-            .is_some_and(|entry| entry.has_active_turn())
-    }
-
     pub(crate) fn reserve_turn(
         &self,
         session_id: SessionId,
@@ -38,8 +31,10 @@ impl SessionRuntimeManager {
                 .active_turn
                 .lock()
                 .expect("session active turn lock poisoned");
-            if active.is_some() {
-                return Err(StartTurnError::ActiveTurn);
+            if let Some(active) = active.as_ref() {
+                return Err(StartTurnError::ActiveTurn {
+                    turn_id: active.turn_id,
+                });
             }
             *active = Some(ActiveTurn {
                 turn_id,
@@ -73,37 +68,6 @@ impl SessionRuntimeManager {
         Ok(PendingTurnInterrupt { entry, turn_id })
     }
 
-    pub(crate) fn subscribe_events(
-        &self,
-        session_id: SessionId,
-    ) -> broadcast::Receiver<SessionEventEnvelope> {
-        self.load_or_create_runtime(session_id).live_tx.subscribe()
-    }
-
-    pub(crate) fn broadcast_event(&self, event: &SessionEventEnvelope) {
-        let Some(entry) = self.existing_entry(event.session_id) else {
-            return;
-        };
-        let _ = entry.live_tx.send(event.clone());
-    }
-
-    pub(crate) async fn unload_idle(&self, session_id: SessionId) -> bool {
-        let entry = {
-            let mut entries = self.entries.lock().expect("session runtime map poisoned");
-            let Some(entry) = entries.get(&session_id) else {
-                return true;
-            };
-            if entry.has_active_turn() {
-                return false;
-            }
-            entries
-                .remove(&session_id)
-                .expect("session runtime entry should exist")
-        };
-        entry.clear_session().await;
-        true
-    }
-
     fn entry(&self, session_id: SessionId) -> Arc<SessionRuntimeEntry> {
         let mut entries = self.entries.lock().expect("session runtime map poisoned");
         Arc::clone(
@@ -126,17 +90,14 @@ pub(crate) struct SessionRuntimeEntry {
     session:     AsyncMutex<Option<Session>>,
     initialized: Mutex<bool>,
     active_turn: Mutex<Option<ActiveTurn>>,
-    live_tx:     broadcast::Sender<SessionEventEnvelope>,
 }
 
 impl SessionRuntimeEntry {
     fn new() -> Self {
-        let (live_tx, _) = broadcast::channel(SESSION_EVENT_BROADCAST_CAPACITY);
         Self {
-            session: AsyncMutex::new(None),
+            session:     AsyncMutex::new(None),
             initialized: Mutex::new(false),
             active_turn: Mutex::new(None),
-            live_tx,
         }
     }
 
@@ -165,13 +126,6 @@ impl SessionRuntimeEntry {
             .lock()
             .expect("session initialized lock poisoned") = false;
     }
-
-    fn has_active_turn(&self) -> bool {
-        self.active_turn
-            .lock()
-            .expect("session active turn lock poisoned")
-            .is_some()
-    }
 }
 
 struct ActiveTurn {
@@ -182,7 +136,7 @@ struct ActiveTurn {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StartTurnError {
-    ActiveTurn,
+    ActiveTurn { turn_id: TurnId },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

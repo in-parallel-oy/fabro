@@ -1,12 +1,11 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use fabro_agent::SessionControlHandle;
 use fabro_types::{SessionCapability, StageId};
 
 use crate::error::Error;
 use crate::event::{Emitter, Event};
-use crate::steering_hub::SteeringHub;
+use crate::steering_hub::{ActiveControlHandle, SteeringHub};
 
 pub struct ActivationLease {
     stage_id:   StageId,
@@ -30,12 +29,18 @@ pub struct ActivationLeaseOptions {
 impl ActivationLease {
     pub fn activate(
         options: ActivationLeaseOptions,
-        handle: &SessionControlHandle,
+        handle: &Arc<dyn ActiveControlHandle>,
     ) -> Result<Arc<Self>, Error> {
-        if !options
-            .hub
-            .attach_handle(&options.stage_id, &options.session_id, handle)
-        {
+        let attached = if let Some(pair_handle) = handle.pair_handle() {
+            options
+                .hub
+                .attach_pairable_handle(&options.stage_id, &options.session_id, pair_handle)
+        } else {
+            options
+                .hub
+                .attach_handle(&options.stage_id, &options.session_id, Arc::clone(handle))
+        };
+        if !attached {
             return Err(Error::Precondition(format!(
                 "stage {} already has a different active agent session",
                 options.stage_id
@@ -51,7 +56,9 @@ impl ActivationLease {
             model:        options.model,
             capabilities: options.capabilities,
         });
-        options.hub.drain_pending_into(&options.stage_id, handle);
+        options
+            .hub
+            .drain_pending_into(&options.stage_id, handle.as_ref());
 
         Ok(Arc::new(Self {
             stage_id:   options.stage_id,
@@ -69,7 +76,7 @@ impl ActivationLease {
         self.hub.detach(&self.stage_id, &self.session_id);
     }
 
-    pub fn release_if_no_pending_control_work(&self, handle: &SessionControlHandle) -> bool {
+    pub fn release_if_no_pending_control_work(&self, handle: &dyn ActiveControlHandle) -> bool {
         if self.released.load(Ordering::Acquire) {
             return true;
         }
@@ -81,6 +88,13 @@ impl ActivationLease {
         }
         self.mark_released();
         true
+    }
+
+    pub fn is_pair_active(&self) -> bool {
+        !self.released.load(Ordering::Acquire)
+            && self
+                .hub
+                .pair_is_active_for(&self.stage_id, &self.session_id)
     }
 
     fn mark_released(&self) -> bool {
@@ -145,6 +159,10 @@ mod tests {
         }
     }
 
+    fn control_handle(handle: &SessionControlHandle) -> Arc<dyn ActiveControlHandle> {
+        Arc::new(handle.clone())
+    }
+
     #[test]
     fn activate_emits_activated_before_draining_pending() {
         let emitter = Arc::new(Emitter::new(RunId::new()));
@@ -161,7 +179,7 @@ mod tests {
                 Arc::clone(&hub),
                 Arc::clone(&emitter),
             ),
-            &handle,
+            &control_handle(&handle),
         )
         .unwrap();
 
@@ -189,7 +207,7 @@ mod tests {
                 Arc::clone(&hub),
                 Arc::clone(&emitter),
             ),
-            &handle_a,
+            &control_handle(&handle_a),
         )
         .unwrap();
         let result = ActivationLease::activate(
@@ -199,7 +217,7 @@ mod tests {
                 Arc::clone(&hub),
                 Arc::clone(&emitter),
             ),
-            &handle_b,
+            &control_handle(&handle_b),
         );
 
         assert!(result.is_err());
@@ -230,7 +248,7 @@ mod tests {
                 Arc::clone(&hub),
                 Arc::clone(&emitter),
             ),
-            &handle,
+            &control_handle(&handle),
         )
         .unwrap();
         lease.release();

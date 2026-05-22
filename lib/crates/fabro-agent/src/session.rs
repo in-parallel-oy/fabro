@@ -15,7 +15,7 @@ use fabro_llm::{Error as LlmError, retry};
 use fabro_mcp::config::{McpServerSettings, McpTransport};
 use fabro_mcp::connection_manager::McpConnectionManager;
 use fabro_model::{AgentProfileKind, Catalog, ModelRef, Speed};
-use fabro_types::{Principal, SessionRecord, SessionStatus};
+use fabro_types::{Principal, SessionMessage, SessionRecord, SteeringMessage};
 use futures::StreamExt;
 use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast};
 use tokio::time;
@@ -41,9 +41,41 @@ use crate::subagent::{SubAgentCallbackEvent, SubAgentEventCallback, SubAgentMana
 use crate::tool_execution::execute_tool_calls;
 use crate::types::{AgentEvent, Message, SessionEvent, SessionState};
 
-/// One queued steering message: text + the principal that authored it (None
-/// for direct internal callers like loop-detection).
-pub type SteeringItem = (String, Option<Principal>);
+/// One queued external control item for a live session.
+#[derive(Debug, Clone)]
+pub enum SteeringItem {
+    /// Existing steering behavior: inject a user-role guidance message that
+    /// remains visibly distinct from a paired user's message.
+    Steering {
+        text:  String,
+        actor: Option<Principal>,
+    },
+    User {
+        text: String,
+    },
+    System {
+        text: String,
+    },
+}
+
+impl SteeringItem {
+    #[must_use]
+    pub fn actor(&self) -> Option<&Principal> {
+        match self {
+            Self::Steering { actor, .. } => actor.as_ref(),
+            Self::User { .. } | Self::System { .. } => None,
+        }
+    }
+}
+
+impl From<SteeringMessage> for SteeringItem {
+    fn from(message: SteeringMessage) -> Self {
+        Self::Steering {
+            text:  message.text,
+            actor: message.actor,
+        }
+    }
+}
 
 #[derive(Default)]
 struct ControlState {
@@ -97,7 +129,7 @@ impl SessionControlHandle {
     /// Push a steering message onto the queue and wake a session waiting
     /// after a pure interrupt.
     pub fn steer(&self, text: String, actor: Option<Principal>) {
-        self.enqueue((text, actor));
+        self.enqueue(SteeringItem::Steering { text, actor });
     }
 
     /// Cancel the current round and, if no steering text is queued, park the
@@ -115,7 +147,14 @@ impl SessionControlHandle {
 
     /// Atomically apply interrupt semantics, then enqueue steering text.
     pub fn interrupt_then_steer(&self, text: String, actor: Option<Principal>) {
-        self.interrupt_then_enqueue((text, actor));
+        self.interrupt_then_enqueue(SteeringItem::Steering { text, actor });
+    }
+
+    pub fn park_for_steer(&self) {
+        let mut control = self.control.lock().expect("control state lock poisoned");
+        if control.queue.is_empty() {
+            control.waiting_for_steer = true;
+        }
     }
 
     /// Direct enqueue used by callers such as the hub flushing buffered
@@ -134,19 +173,24 @@ impl SessionControlHandle {
     /// single lock acquisition.
     #[must_use]
     pub fn enqueue_bounded(&self, item: SteeringItem, cap: usize) -> Option<SteeringItem> {
-        let evicted = {
+        self.push_bounded(item, cap)
+    }
+
+    /// Push `item` only when the queue is below `cap`. Unlike
+    /// `enqueue_bounded`, this preserves all existing queued work and returns
+    /// whether the item was accepted.
+    #[must_use]
+    pub fn try_enqueue_bounded(&self, item: SteeringItem, cap: usize) -> bool {
+        {
             let mut control = self.control.lock().expect("control state lock poisoned");
-            let evicted = if control.queue.len() >= cap {
-                control.queue.pop_front()
-            } else {
-                None
-            };
+            if control.queue.len() >= cap {
+                return false;
+            }
             control.queue.push_back(item);
             control.waiting_for_steer = false;
-            evicted
-        };
+        }
         self.notify.notify_waiters();
-        evicted
+        true
     }
 
     /// Interrupt the current round and push `item` while enforcing a FIFO cap.
@@ -156,6 +200,12 @@ impl SessionControlHandle {
         item: SteeringItem,
         cap: usize,
     ) -> Option<SteeringItem> {
+        let evicted = self.push_bounded(item, cap);
+        self.cancel_round();
+        evicted
+    }
+
+    fn push_bounded(&self, item: SteeringItem, cap: usize) -> Option<SteeringItem> {
         let evicted = {
             let mut control = self.control.lock().expect("control state lock poisoned");
             let evicted = if control.queue.len() >= cap {
@@ -163,12 +213,10 @@ impl SessionControlHandle {
             } else {
                 None
             };
-            control.waiting_for_steer = true;
-            control.queue.push_back(item);
             control.waiting_for_steer = false;
+            control.queue.push_back(item);
             evicted
         };
-        self.cancel_round();
         self.notify.notify_waiters();
         evicted
     }
@@ -333,6 +381,7 @@ impl Session {
 
     pub fn from_record(
         record: &SessionRecord,
+        runtime_context: &[SessionMessage],
         llm_client: Client,
         provider_profile: Arc<dyn AgentProfile>,
         sandbox: Arc<dyn Sandbox>,
@@ -347,31 +396,11 @@ impl Session {
             subagent_manager,
         );
         session.id = record.id.to_string();
-        session.history =
-            History::from_session_messages(&record.runtime_context).map_err(|err| {
-                Error::InvalidState(format!("invalid persisted session context: {err}"))
-            })?;
-        session.state = match record.status {
-            SessionStatus::Closed | SessionStatus::Deleted => SessionState::Closed,
-            SessionStatus::Running | SessionStatus::Failed | SessionStatus::Idle => {
-                SessionState::Idle
-            }
-        };
+        session.history = History::from_session_messages(runtime_context).map_err(|err| {
+            Error::InvalidState(format!("invalid persisted session context: {err}"))
+        })?;
+        session.state = SessionState::Idle;
         Ok(session)
-    }
-
-    #[must_use]
-    pub fn to_record(&self, mut record: SessionRecord) -> SessionRecord {
-        record.status = match self.state {
-            SessionState::Closed => SessionStatus::Closed,
-            SessionState::Thinking | SessionState::Executing => SessionStatus::Running,
-            SessionState::Idle => SessionStatus::Idle,
-        };
-        record.provider = Some(self.provider_id().to_string());
-        record.model = Some(self.model().to_string());
-        record.runtime_context = self.history.to_session_messages();
-        record.updated_at = chrono::Utc::now();
-        record
     }
 
     pub fn set_tool_env_provider(&mut self, provider: Arc<dyn ToolEnvProvider>) {
@@ -1519,16 +1548,32 @@ impl Session {
                 .expect("control state lock poisoned");
             control.queue.drain(..).collect()
         };
-        for (text, actor) in messages {
-            self.history.push(Message::Steering {
-                content:   text.clone(),
-                timestamp: SystemTime::now(),
-            });
-            self.event_emitter
-                .emit(self.id.clone(), AgentEvent::SteeringInjected {
-                    text,
-                    actor,
-                });
+        for item in messages {
+            match item {
+                SteeringItem::Steering { text, actor } => {
+                    self.history.push(Message::Steering {
+                        content:   text.clone(),
+                        timestamp: SystemTime::now(),
+                    });
+                    self.event_emitter
+                        .emit(self.id.clone(), AgentEvent::SteeringInjected {
+                            text,
+                            actor,
+                        });
+                }
+                SteeringItem::User { text } => {
+                    self.history.push(Message::User {
+                        content:   text.clone(),
+                        timestamp: SystemTime::now(),
+                    });
+                }
+                SteeringItem::System { text } => {
+                    self.history.push(Message::System {
+                        content:   text.clone(),
+                        timestamp: SystemTime::now(),
+                    });
+                }
+            }
         }
     }
 
