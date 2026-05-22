@@ -25,6 +25,12 @@ pub struct OAuthTokens {
     pub access_token:  String,
     pub refresh_token: Option<String>,
     pub expires_at:    DateTime<Utc>,
+    /// Raw OIDC `id_token` JWT, when the provider issues one. Codex's
+    /// `auth.json` requires it to reconstruct ChatGPT account claims; the
+    /// access token alone is not enough. Optional + `default` so vault entries
+    /// written before this field deserialize cleanly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id_token:      Option<String>,
 }
 
 pub(crate) fn expires_at_from_now(expires_in: Option<u64>) -> DateTime<Utc> {
@@ -83,6 +89,7 @@ mod tests {
                 access_token: "access".to_string(),
                 refresh_token: Some("refresh".to_string()),
                 expires_at,
+                id_token: None,
             },
             config:     OAuthConfig {
                 auth_url:     "https://auth.openai.com".to_string(),

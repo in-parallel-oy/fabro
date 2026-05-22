@@ -497,6 +497,7 @@ mod tests {
                 access_token: "expired-access".to_string(),
                 refresh_token: Some("refresh-token".to_string()),
                 expires_at,
+                id_token: None,
             },
             config:     OAuthConfig {
                 auth_url: "https://auth.openai.com".to_string(),

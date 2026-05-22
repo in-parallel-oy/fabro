@@ -24,6 +24,11 @@ pub async fn refresh_oauth_credential(
                 .refresh_token
                 .or_else(|| credential.tokens.refresh_token.clone()),
             expires_at:    expires_at_from_now(response.expires_in),
+            // Refresh responses may omit a fresh id_token; keep the prior one
+            // so the vaulted credential never loses its ChatGPT account claims.
+            id_token:      response
+                .id_token
+                .or_else(|| credential.tokens.id_token.clone()),
         },
         config:     credential.config.clone(),
         account_id: credential.account_id.clone(),

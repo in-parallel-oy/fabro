@@ -47,7 +47,8 @@ enum LegacyAuthDetails {
     },
     CodexOauth {
         tokens:     OAuthTokens,
-        config:     OAuthConfig,
+        // Boxed to keep this deserialize-only enum's variants balanced in size.
+        config:     Box<OAuthConfig>,
         #[serde(default)]
         account_id: Option<String>,
     },
@@ -169,7 +170,7 @@ fn legacy_credential_entry(name: &str, entry: &Value) -> Option<(String, Value)>
         } if credential.provider == "openai" && name == "openai_codex" => {
             let credential = OAuthCredential {
                 tokens,
-                config,
+                config: *config,
                 account_id,
             };
             let value = serde_json::to_string(&credential).ok()?;

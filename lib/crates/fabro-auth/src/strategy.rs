@@ -18,7 +18,9 @@ pub enum LoginResult {
     },
     OAuth {
         provider:   ProviderId,
-        credential: OAuthCredential,
+        // Boxed to keep the enum small: `OAuthCredential` is far larger than the
+        // `ApiKey` variant. Matches `ResolvedSecret::OAuth`'s boxing in resolve.
+        credential: Box<OAuthCredential>,
     },
 }
 

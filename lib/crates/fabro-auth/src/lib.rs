@@ -11,7 +11,7 @@ mod vault_source;
 
 pub mod strategies;
 
-pub use codex_auth::codex_auth_json;
+pub use codex_auth::{CodexAuthMaterial, codex_auth_json};
 pub use context::{AuthContextRequest, AuthContextResponse};
 pub use credential::{ApiKeyHeader, OAuthConfig, OAuthCredential, OAuthTokens};
 pub use credential_source::{CredentialSource, ResolvedCredentials};

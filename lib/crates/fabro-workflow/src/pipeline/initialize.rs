@@ -21,6 +21,7 @@ use shlex::try_quote;
 use tokio::process::Command as TokioCommand;
 use tokio::runtime::Handle;
 use tokio::sync::RwLock as AsyncRwLock;
+use tokio::task::spawn_blocking;
 use tokio::time::timeout as tokio_timeout;
 
 use super::types::{InitOptions, Initialized, LlmSpec, Persisted, SandboxEnvSpec};
@@ -78,6 +79,11 @@ fn build_sandbox_env(
     // fabro server vault. Explicit toml/devcontainer values still win
     // because we only insert when the key is absent.
     if !env.contains_key("CLAUDE_CODE_OAUTH_TOKEN") {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "operator daemon process env is an intentional first-choice source for the \
+                      Claude OAuth token; the vault is the documented fallback"
+        )]
         let resolved = std::env::var("CLAUDE_CODE_OAUTH_TOKEN")
             .ok()
             .filter(|v| !v.is_empty())
@@ -136,9 +142,17 @@ fn build_sandbox_env(
 /// the result is owned by the sandbox's default (non-root) user with 0600
 /// perms — `write_file` uploads as root, which codex can read but not
 /// refresh-persist.
+///
+/// If building the file required refreshing the credential (stale access token
+/// or a credential predating the stored `id_token`), the rotated credential is
+/// persisted back to the vault *before* the file is written. The vault is the
+/// single, write-back-aware rotation owner; the sandbox file deliberately
+/// carries no usable refresh token, so codex cannot rotate it from inside the
+/// run and strand the vault copy.
 async fn inject_codex_auth(
     sandbox: &dyn Sandbox,
     credential: &fabro_auth::OAuthCredential,
+    vault: Option<&Arc<AsyncRwLock<Vault>>>,
 ) -> anyhow::Result<()> {
     const AUTH_PATH: &str = "/home/dev/.codex/auth.json";
     const TMP_PATH: &str = "/tmp/.fabro-codex-auth.json";
@@ -151,15 +165,40 @@ async fn inject_codex_auth(
         return Ok(());
     }
 
-    let json = fabro_auth::codex_auth_json(credential).await?;
+    let material = fabro_auth::codex_auth_json(credential).await?;
+
+    // Persist a rotated credential before writing the file: if the vault write
+    // fails we abort without leaving the run holding a token the vault no longer
+    // knows about (which would strand the next run on a consumed refresh token).
+    if let (Some(refreshed), Some(vault)) = (material.refreshed, vault) {
+        let vault = Arc::clone(vault);
+        spawn_blocking(move || {
+            let mut guard = vault.blocking_write();
+            fabro_auth::vault_set_oauth(
+                &mut guard,
+                fabro_auth::OPENAI_CODEX_VAULT_SECRET_NAME,
+                &refreshed,
+            )
+            .map(|_| ())
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("vault write task panicked: {e}"))?
+        .map_err(|e| anyhow::anyhow!("vault write failed: {e}"))?;
+    }
+
     sandbox
-        .write_file(TMP_PATH, &json)
+        .write_file(TMP_PATH, &material.auth_json)
         .await
         .map_err(|e| anyhow::anyhow!("write_file failed: {e}"))?;
 
+    // The temp file is uploaded as root (write_file runs as root) into sticky
+    // /tmp, so the non-root `dev` user that runs this command can read it (for
+    // the cp) but cannot unlink it. Make the cleanup best-effort: the real
+    // target — `auth.json`, now owned by dev with 0600 — is already in place,
+    // and the root-owned temp is discarded with the ephemeral container.
     let cmd = format!(
         "set -e; mkdir -p /home/dev/.codex; cp {TMP_PATH} {AUTH_PATH}; \
-         chmod 600 {AUTH_PATH}; rm -f {TMP_PATH}"
+         chmod 600 {AUTH_PATH}; rm -f {TMP_PATH} 2>/dev/null || true"
     );
     let result = sandbox
         .exec_command(&cmd, 30_000, None, None, None)
@@ -540,9 +579,8 @@ pub async fn initialize(
         let claude = guard.get("CLAUDE_CODE_OAUTH_TOKEN").map(str::to_string);
         // Best-effort: a schema/decode error just means codex auth is skipped,
         // not that the whole run fails.
-        let codex =
-            fabro_auth::vault_get_oauth(&guard, fabro_auth::OPENAI_CODEX_VAULT_SECRET_NAME)
-                .unwrap_or(None);
+        let codex = fabro_auth::vault_get_oauth(&guard, fabro_auth::OPENAI_CODEX_VAULT_SECRET_NAME)
+            .unwrap_or(None);
         (claude, codex)
     } else {
         (None, None)
@@ -559,7 +597,9 @@ pub async fn initialize(
     // credential so codex-acp nodes can authenticate. Best-effort: a failure
     // here only disables codex nodes, so warn and continue.
     if let Some(credential) = vault_codex_credential {
-        if let Err(err) = inject_codex_auth(sandbox.as_ref(), &credential).await {
+        if let Err(err) =
+            inject_codex_auth(sandbox.as_ref(), &credential, options.vault.as_ref()).await
+        {
             options.emitter.notice(
                 RunNoticeLevel::Warn,
                 RunNoticeCode::CodexAuthInjectionFailed,

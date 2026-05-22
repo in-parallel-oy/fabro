@@ -92,6 +92,7 @@ mod tests {
                 access_token:  "access".to_string(),
                 refresh_token: Some("refresh".to_string()),
                 expires_at:    Utc::now() + Duration::hours(1),
+                id_token:      None,
             },
             config:     OAuthConfig {
                 auth_url:     "https://auth.openai.com".to_string(),

@@ -299,18 +299,19 @@ impl AuthStrategy for CodexDeviceStrategy {
 
                 Ok(LoginResult::OAuth {
                     provider:   fabro_model::ProviderId::openai(),
-                    credential: OAuthCredential {
+                    credential: Box::new(OAuthCredential {
                         tokens:     OAuthTokens {
                             access_token:  token_response.access_token,
                             refresh_token: token_response.refresh_token,
                             expires_at:    expires_at_from_now(token_response.expires_in),
+                            id_token:      token_response.id_token.clone(),
                         },
                         config:     self.config.clone(),
                         account_id: token_response
                             .id_token
                             .as_deref()
                             .and_then(extract_chatgpt_account_id),
-                    },
+                    }),
                 })
             }
         }
@@ -541,7 +542,7 @@ mod tests {
         };
         let OAuthCredential {
             tokens, account_id, ..
-        } = credential;
+        } = *credential;
         assert_eq!(tokens.access_token, "new-access-token");
         assert_eq!(tokens.refresh_token.as_deref(), Some("new-refresh-token"));
         assert_eq!(account_id.as_deref(), Some("acct_123"));

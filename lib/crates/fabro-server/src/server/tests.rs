@@ -228,6 +228,7 @@ fn openai_oauth_credential() -> fabro_auth::OAuthCredential {
             access_token:  "access".to_string(),
             refresh_token: Some("refresh".to_string()),
             expires_at:    Utc::now() + ChronoDuration::hours(1),
+            id_token:      None,
         },
         config:     fabro_auth::OAuthConfig {
             auth_url:     "https://auth.openai.com".to_string(),
