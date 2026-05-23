@@ -1354,6 +1354,7 @@ mod runs {
                 Some(72_000),
                 None,
                 StageHandler::Command,
+                None,
             ),
             run_stage_from_stage_id(
                 &StageId::new("propose-changes", 1),
@@ -1362,6 +1363,7 @@ mod runs {
                 Some(154_000),
                 None,
                 StageHandler::Agent,
+                None,
             ),
             run_stage_from_stage_id(
                 &StageId::new("review-changes", 1),
@@ -1370,6 +1372,7 @@ mod runs {
                 Some(45_000),
                 None,
                 StageHandler::Agent,
+                None,
             ),
             run_stage_from_stage_id(
                 &StageId::new("apply-changes", 1),
@@ -1378,6 +1381,7 @@ mod runs {
                 Some(118_000),
                 None,
                 StageHandler::Command,
+                None,
             ),
             run_stage_from_stage_id(
                 &StageId::new("apply-changes", 2),
@@ -1386,6 +1390,7 @@ mod runs {
                 None,
                 None,
                 StageHandler::Command,
+                None,
             ),
         ]
     }
@@ -1432,6 +1437,8 @@ mod runs {
                     mode:     None,
                     provider: None,
                     model:    None,
+                    reasoning_effort: None,
+                    speed: None,
                 }),
             ),
             make_envelope(
