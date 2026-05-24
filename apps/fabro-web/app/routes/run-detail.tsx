@@ -704,6 +704,7 @@ export default function RunDetail({ params }: { params: { id: string } }) {
         )}
 
         <ActionsMenu
+          runId={params.id}
           canSendInterrupt={statusKind === "running"}
           interruptPending={interruptMutation.isMutating}
           onSendInterrupt={() => void interruptMutation.trigger()}
@@ -977,6 +978,7 @@ function ConnectMenu() {
 }
 
 interface ActionsMenuProps {
+  runId: string;
   canSendInterrupt: boolean;
   interruptPending: boolean;
   onSendInterrupt: () => void;
@@ -1010,6 +1012,7 @@ interface ActionsMenuProps {
 
 function ActionsMenu(props: ActionsMenuProps) {
   const {
+    runId,
     canSendInterrupt, interruptPending, onSendInterrupt,
     canFocusSteer, onFocusSteer,
     canPreview, previewPending, onPreview,
@@ -1022,11 +1025,10 @@ function ActionsMenu(props: ActionsMenuProps) {
     canCancel, cancelPending, onCancel,
   } = props;
 
-  const hasOps =
-    canPreview || canSendInterrupt || canFocusSteer;
+  const [runIdCopied, setRunIdCopied] = useState(false);
+
   const hasLifecycle = canApprove || canRetry || canArchive || canUnarchive;
   const hasDestructive = canDeny || canCancel || canDelete;
-  const hasAny = hasOps || hasLifecycle || hasDestructive;
   const anyPending =
     previewPending ||
     approvePending ||
@@ -1038,8 +1040,6 @@ function ActionsMenu(props: ActionsMenuProps) {
     cancelPending ||
     interruptPending;
   const separators = actionMenuSeparatorVisibility({ hasLifecycle, hasDestructive });
-
-  if (!hasAny) return null;
 
   return (
     <Menu as="div" className="shrink-0">
@@ -1053,6 +1053,30 @@ function ActionsMenu(props: ActionsMenuProps) {
         anchor={{ to: "bottom end", gap: 4 }}
         className="z-20 w-44 origin-top-right rounded-md bg-panel py-1 outline-1 -outline-offset-1 outline-line-strong transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
       >
+        <MenuItem>
+          {({ close }) => (
+            <button
+              type="button"
+              onClick={async (event) => {
+                event.preventDefault();
+                try {
+                  await navigator.clipboard.writeText(runId);
+                  setRunIdCopied(true);
+                  window.setTimeout(() => {
+                    setRunIdCopied(false);
+                    close();
+                  }, 800);
+                } catch {
+                  close();
+                }
+              }}
+              className={MENU_ITEM_CLASS}
+            >
+              {runIdCopied ? "Copied!" : "Copy run ID"}
+            </button>
+          )}
+        </MenuItem>
+        <div className="my-1 h-px bg-line" role="separator" />
         {canPreview && (
           <MenuItem>
             <button
