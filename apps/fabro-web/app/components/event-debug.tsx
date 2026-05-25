@@ -321,10 +321,19 @@ export function EventSearchInput({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const [focused, setFocused] = useState(false);
+  const expanded = focused || value.length > 0;
+
   return (
-    <div className="relative w-full max-w-sm min-w-48 flex-1">
+    <div
+      className={`relative overflow-hidden rounded-md transition-[width] duration-200 ease-out focus-within:bg-panel focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-teal-500 ${
+        expanded
+          ? "w-72 bg-panel outline-1 -outline-offset-1 outline-line-strong"
+          : "w-7 hover:bg-overlay"
+      }`}
+    >
       <MagnifyingGlassIcon
-        className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-fg-muted"
+        className="pointer-events-none absolute left-2 top-1/2 z-10 size-3.5 -translate-y-1/2 text-fg-muted"
         aria-hidden="true"
       />
       <input
@@ -336,7 +345,15 @@ export function EventSearchInput({
         spellCheck={false}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="block w-full rounded-md bg-panel py-1.5 pl-8 pr-2.5 text-xs text-fg outline-1 -outline-offset-1 outline-line-strong placeholder:text-fg-muted focus:outline-2 focus:-outline-offset-1 focus:outline-teal-500 max-sm:text-base/5"
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            onChange("");
+            e.currentTarget.blur();
+          }
+        }}
+        className="block w-full cursor-pointer bg-transparent py-1.5 pl-8 pr-2.5 text-xs text-fg placeholder:text-fg-muted focus:cursor-text focus:outline-none max-sm:text-base/5"
       />
     </div>
   );

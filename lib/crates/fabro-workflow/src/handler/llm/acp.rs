@@ -128,6 +128,7 @@ impl AgentAcpBackend {
                         event:             AgentEvent::SteeringInjected { text, actor },
                         session_id:        Some(session_id.clone()),
                         parent_session_id: None,
+                        tool_call_id:      None,
                     },
                     &stage_scope,
                 );
@@ -268,14 +269,17 @@ impl AgentAcpBackend {
         };
         ActivationLease::activate(
             ActivationLeaseOptions {
-                stage_id:     StageId::new(node.id.clone(), stage_scope.visit),
-                session_id:   session_id.to_string(),
-                thread_id:    None,
-                provider:     Some(AgentBackend::Acp.to_string()),
-                model:        config_name.map(str::to_string),
-                capabilities: vec![SessionCapability::Steer],
-                hub:          Arc::clone(steering_hub),
-                emitter:      Arc::clone(emitter),
+                stage_id:         StageId::new(node.id.clone(), stage_scope.visit),
+                session_id:       session_id.to_string(),
+                thread_id:        None,
+                provider:         Some(AgentBackend::Acp.to_string()),
+                model:            config_name.map(str::to_string),
+                reasoning_effort: None,
+                speed:            None,
+                permission_level: None,
+                capabilities:     vec![SessionCapability::Steer],
+                hub:              Arc::clone(steering_hub),
+                emitter:          Arc::clone(emitter),
             },
             &(Arc::new(handle.clone()) as Arc<dyn ActiveControlHandle>),
         )
@@ -322,6 +326,11 @@ impl Default for AgentAcpBackend {
 #[async_trait]
 impl CodergenBackend for AgentAcpBackend {
     async fn run(&self, request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
+        if request.node.output_schema().is_some() {
+            return Err(Error::Validation(
+                "output_schema is not supported with backend=\"acp\" in this release".to_string(),
+            ));
+        }
         let stage_scope = StageScope::for_handler(request.context, &request.node.id);
         self.run_turn(
             request.node,
@@ -448,14 +457,15 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:         &node,
-                prompt:       "write hello",
-                context:      &context,
-                thread_id:    None,
-                emitter:      &emitter,
-                sandbox:      &sandbox,
-                tool_hooks:   None,
-                cancel_token: CancellationToken::new(),
+                node:               &node,
+                prompt:             "write hello",
+                context:            &context,
+                thread_id:          None,
+                emitter:            &emitter,
+                sandbox:            &sandbox,
+                tool_hooks:         None,
+                cancel_token:       CancellationToken::new(),
+                agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await
             .unwrap();
@@ -470,6 +480,56 @@ mod tests {
         };
         assert_eq!(text, "hello from acp");
         assert_eq!(files_touched, vec!["hello.txt"]);
+    }
+
+    #[tokio::test]
+    async fn acp_backend_rejects_output_schema_without_launching_process() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let launched_path = tempdir.path().join("launched");
+
+        let mut node = Node::new("work");
+        node.attrs
+            .insert("backend".to_string(), AttrValue::String("acp".to_string()));
+        node.attrs.insert(
+            "acp.command".to_string(),
+            AttrValue::String("sh -c 'touch launched'".to_string()),
+        );
+        node.attrs.insert(
+            "output_schema".to_string(),
+            AttrValue::String("routing".to_string()),
+        );
+
+        let backend = AgentAcpBackend::new();
+        let sandbox: Arc<dyn Sandbox> = Arc::new(LocalSandbox::new(tempdir.path().to_path_buf()));
+        let emitter = Arc::new(Emitter::default());
+        let context = Context::new();
+        let result = backend
+            .run(CodergenRunRequest {
+                node:               &node,
+                prompt:             "write hello",
+                context:            &context,
+                thread_id:          None,
+                emitter:            &emitter,
+                sandbox:            &sandbox,
+                tool_hooks:         None,
+                cancel_token:       CancellationToken::new(),
+                agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
+            })
+            .await;
+
+        let Err(error) = result else {
+            panic!("expected output_schema guardrail error");
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("output_schema is not supported with backend=\"acp\" in this release"),
+            "unexpected error: {error}",
+        );
+        assert!(
+            !launched_path.exists(),
+            "ACP process should not launch when output_schema is present",
+        );
     }
 
     #[tokio::test]
@@ -515,14 +575,15 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:         &node,
-                prompt:       "write hello",
-                context:      &context,
-                thread_id:    None,
-                emitter:      &emitter,
-                sandbox:      &sandbox,
-                tool_hooks:   None,
-                cancel_token: CancellationToken::new(),
+                node:               &node,
+                prompt:             "write hello",
+                context:            &context,
+                thread_id:          None,
+                emitter:            &emitter,
+                sandbox:            &sandbox,
+                tool_hooks:         None,
+                cancel_token:       CancellationToken::new(),
+                agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await
             .unwrap();
@@ -562,14 +623,15 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:         &node,
-                prompt:       "write hello",
-                context:      &context,
-                thread_id:    None,
-                emitter:      &emitter,
-                sandbox:      &sandbox,
-                tool_hooks:   None,
-                cancel_token: CancellationToken::new(),
+                node:               &node,
+                prompt:             "write hello",
+                context:            &context,
+                thread_id:          None,
+                emitter:            &emitter,
+                sandbox:            &sandbox,
+                tool_hooks:         None,
+                cancel_token:       CancellationToken::new(),
+                agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await
             .unwrap();
@@ -600,14 +662,15 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:         &node,
-                prompt:       "write hello",
-                context:      &context,
-                thread_id:    None,
-                emitter:      &emitter,
-                sandbox:      &sandbox_dyn,
-                tool_hooks:   None,
-                cancel_token: CancellationToken::new(),
+                node:               &node,
+                prompt:             "write hello",
+                context:            &context,
+                thread_id:          None,
+                emitter:            &emitter,
+                sandbox:            &sandbox_dyn,
+                tool_hooks:         None,
+                cancel_token:       CancellationToken::new(),
+                agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await;
         assert!(result.is_err());
@@ -649,14 +712,15 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:         &node,
-                prompt:       "cancel",
-                context:      &context,
-                thread_id:    None,
-                emitter:      &emitter,
-                sandbox:      &sandbox,
-                tool_hooks:   None,
-                cancel_token: CancellationToken::new(),
+                node:               &node,
+                prompt:             "cancel",
+                context:            &context,
+                thread_id:          None,
+                emitter:            &emitter,
+                sandbox:            &sandbox,
+                tool_hooks:         None,
+                cancel_token:       CancellationToken::new(),
+                agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await;
         let Err(err) = result else {
@@ -702,14 +766,15 @@ mod tests {
         let context = Context::new();
         backend
             .run(CodergenRunRequest {
-                node:         &node,
-                prompt:       "write hello",
-                context:      &context,
-                thread_id:    None,
-                emitter:      &emitter,
-                sandbox:      &sandbox,
-                tool_hooks:   None,
-                cancel_token: CancellationToken::new(),
+                node:               &node,
+                prompt:             "write hello",
+                context:            &context,
+                thread_id:          None,
+                emitter:            &emitter,
+                sandbox:            &sandbox,
+                tool_hooks:         None,
+                cancel_token:       CancellationToken::new(),
+                agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await
             .unwrap();
@@ -743,14 +808,15 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:         &node,
-                prompt:       "write hello",
-                context:      &context,
-                thread_id:    None,
-                emitter:      &emitter,
-                sandbox:      &sandbox_dyn,
-                tool_hooks:   None,
-                cancel_token: CancellationToken::new(),
+                node:               &node,
+                prompt:             "write hello",
+                context:            &context,
+                thread_id:          None,
+                emitter:            &emitter,
+                sandbox:            &sandbox_dyn,
+                tool_hooks:         None,
+                cancel_token:       CancellationToken::new(),
+                agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await;
         let Err(err) = result else {
@@ -795,14 +861,15 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:         &node,
-                prompt:       "write hello",
-                context:      &context,
-                thread_id:    None,
-                emitter:      &emitter,
-                sandbox:      &sandbox_dyn,
-                tool_hooks:   None,
-                cancel_token: CancellationToken::new(),
+                node:               &node,
+                prompt:             "write hello",
+                context:            &context,
+                thread_id:          None,
+                emitter:            &emitter,
+                sandbox:            &sandbox_dyn,
+                tool_hooks:         None,
+                cancel_token:       CancellationToken::new(),
+                agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await;
         let Err(err) = result else {

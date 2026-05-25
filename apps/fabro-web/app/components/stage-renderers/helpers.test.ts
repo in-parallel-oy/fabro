@@ -79,6 +79,36 @@ describe("parseHumanInterviewPairs", () => {
     expect(pairs[0].resolution).toBeNull();
   });
 
+  test("preserves option description and preview metadata from started events", () => {
+    const events: EventEnvelope[] = [
+      envelope(1, {
+        event: "interview.started",
+        properties: {
+          question_id: "q-1",
+          question: "Pick a path",
+          question_type: "multiple_choice",
+          options: [
+            {
+              key: "ship",
+              label: "Ship",
+              description: "Deploy the current patch",
+              preview: "diff preview",
+            },
+          ],
+        },
+      }),
+    ];
+
+    const pairs = parseHumanInterviewPairs(events);
+
+    expect(pairs[0].question.options[0]).toEqual({
+      key: "ship",
+      label: "Ship",
+      description: "Deploy the current patch",
+      preview: "diff preview",
+    });
+  });
+
   test("captures timeout and interrupted resolutions", () => {
     const events: EventEnvelope[] = [
       envelope(1, {
@@ -173,11 +203,11 @@ describe("parseFanInOutcome", () => {
     const events: EventEnvelope[] = [
       envelope(1, {
         event: "stage.prompt",
-        properties: { mode: "fan_in", text: "rank these" },
+        properties: { mode: "fan_in", text: "rank these", model: "claude-sonnet-4-6" },
       }),
       envelope(2, {
         event: "prompt.completed",
-        properties: { response: "branch-a wins", model: "claude-sonnet-4-6" },
+        properties: { response: "branch-a wins", model: "ignored-downstream-model" },
       }),
     ];
     const outcome = parseFanInOutcome(events, "Selected best candidate: branch-a");

@@ -36,7 +36,11 @@ const subscriptions = new Map<string, SharedEventSubscription>();
 const TERMINAL_EVENTS = new Set(["run.completed", "run.failed"]);
 const RUN_SUMMARY_EVENTS = new Set([
   "run.submitted",
-  "run.queued",
+  "run.start_requested",
+  "run.pending",
+  "run.approved",
+  "run.denied",
+  "run.runnable",
   "run.starting",
   "run.running",
   "run.paused",
@@ -73,6 +77,8 @@ export const STAGE_ACTIVITY_EVENT_TYPES = [
   "agent.tool.completed",
   "agent.steering.injected",
   "agent.interrupt.injected",
+  "agent.pair.user_message",
+  "agent.pair.system_message",
   "command.started",
   "command.completed",
 ] as const;
@@ -93,6 +99,13 @@ const STEERING_EVENTS = new Set([
   "agent.session.deactivated",
   "agent.steer.buffered",
   "agent.steer.dropped",
+]);
+// Todo / task mutation events refresh `getRunState` consumers (so per-stage
+// todo projections update live) and the run events list.
+const TODO_EVENTS = new Set([
+  "todo.created",
+  "todo.updated",
+  "todo.deleted",
 ]);
 
 export function queryKeysForRunEvent(
@@ -141,6 +154,7 @@ export function queryKeysForRunEvent(
     ];
     if (stageId) {
       keys.push(queryKeys.runs.stageEvents(runId, stageId));
+      keys.push(queryKeys.runs.stageContextWindow(runId, stageId));
     }
     return keys;
   }
@@ -149,12 +163,29 @@ export function queryKeysForRunEvent(
     const keys: Key[] = [queryKeys.runs.events(runId, 1000)];
     if (stageId) {
       keys.push(queryKeys.runs.stageEvents(runId, stageId));
+      keys.push(queryKeys.runs.stageContextWindow(runId, stageId));
     }
     return keys;
   }
 
   if (STAGE_ACTIVITY_EVENTS.has(event)) {
-    return stageId ? [queryKeys.runs.stageEvents(runId, stageId)] : [];
+    return stageId
+      ? [
+          queryKeys.runs.stageEvents(runId, stageId),
+          queryKeys.runs.stageContextWindow(runId, stageId),
+        ]
+      : [];
+  }
+
+  if (TODO_EVENTS.has(event)) {
+    const keys: Key[] = [
+      queryKeys.runs.state(runId),
+      queryKeys.runs.events(runId, 1000),
+    ];
+    if (stageId) {
+      keys.push(queryKeys.runs.stageEvents(runId, stageId));
+    }
+    return keys;
   }
 
   return [];

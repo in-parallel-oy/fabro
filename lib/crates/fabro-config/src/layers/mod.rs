@@ -1,6 +1,6 @@
 mod cli;
 mod combine;
-mod features;
+mod environment;
 mod llm;
 mod log_filter;
 mod maps;
@@ -16,7 +16,11 @@ pub use cli::{
     CliOutputLayer, CliTargetLayer, CliUpdatesLayer,
 };
 pub(crate) use combine::Combine;
-pub use features::FeaturesLayer;
+pub use environment::{
+    EnvironmentDockerfileLayer, EnvironmentImageLayer, EnvironmentLayer, EnvironmentLifecycleLayer,
+    EnvironmentNetworkLayer, EnvironmentResourcesLayer, EnvironmentVolumeLayer,
+    RunEnvironmentLayer,
+};
 pub use llm::{
     CostRates, CredentialRef, CredentialRefParseError, HeaderValueRef, LlmLayer, ModelControls,
     ModelCostTable, ModelFeatures as LlmModelFeatures, ModelLimits as LlmModelLimits,
@@ -26,21 +30,21 @@ pub use log_filter::LogFilter;
 pub use maps::{MergeMap, ReplaceMap, StickyMap};
 pub use project::ProjectLayer;
 pub use run::{
-    DaytonaDockerfileLayer, DaytonaSandboxLayer, DaytonaSnapshotLayer, DaytonaVolumeLayer,
-    DockerSandboxLayer, GitAuthorLayer, HookAgentMarker, HookEntry, HookTlsMode,
-    InterviewProviderLayer, InterviewsLayer, McpEntryLayer, ModelRefOrSplice,
-    NotificationProviderLayer, NotificationRouteLayer, PrepareStep, RunAgentLayer,
-    RunArtifactsLayer, RunCheckpointLayer, RunCloneLayer, RunExecutionLayer, RunGitLayer,
-    RunGoalLayer, RunIntegrationsGithubLayer, RunIntegrationsLayer, RunLayer, RunMetaBranchLayer,
-    RunModelControlsLayer, RunModelLayer, RunPrepareLayer, RunPullRequestLayer, RunRunBranchLayer,
-    RunSandboxLayer, RunScmLayer, ScmGitHubLayer, StringOrSplice,
+    GitAuthorLayer, HookAgentMarker, HookEntry, HookTlsMode, InterviewProviderLayer,
+    InterviewsLayer, McpEntryLayer, ModelRefOrSplice, NotificationProviderLayer,
+    NotificationRouteLayer, PrepareStep, RunAgentLayer, RunArtifactsLayer, RunCheckpointLayer,
+    RunCloneLayer, RunExecutionLayer, RunGitLayer, RunGoalLayer, RunIntegrationsGithubLayer,
+    RunIntegrationsLayer, RunLayer, RunMetaBranchLayer, RunModelControlsLayer, RunModelLayer,
+    RunPrepareLayer, RunPullRequestLayer, RunRunBranchLayer, RunScmLayer, ScmGitHubLayer,
+    StringOrSplice,
 };
 pub use server::{
     GithubIntegrationLayer, IntegrationWebhooksLayer, ObjectStoreLocalLayer, ObjectStoreS3Layer,
     ServerApiLayer, ServerArtifactsLayer, ServerAuthGithubLayer, ServerAuthLayer,
     ServerIntegrationsLayer, ServerIpAllowlistLayer, ServerIpAllowlistOverrideLayer, ServerLayer,
-    ServerListenLayer, ServerLoggingLayer, ServerSchedulerLayer, ServerSlateDbLayer,
-    ServerStorageLayer, ServerWebLayer, SlackIntegrationLayer,
+    ServerListenLayer, ServerLoggingLayer, ServerSandboxLayer, ServerSandboxProviderLayer,
+    ServerSandboxProvidersLayer, ServerSchedulerLayer, ServerSlateDbLayer, ServerStorageLayer,
+    ServerWebLayer, SlackIntegrationLayer,
 };
-pub(crate) use settings::SettingsLayer;
+pub use settings::SettingsLayer;
 pub use workflow::WorkflowLayer;

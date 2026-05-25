@@ -38,10 +38,11 @@ export const queryKeys = {
     resources: () => ["system", "resources"] as const,
     attachUrl: () => "/api/v1/attach",
   },
-  boards: {
-    runs: (includeArchived = false) => ["boards", "runs", includeArchived] as const,
-  },
   runs: {
+    all: (filters: object = {}) =>
+      ["runs", "all", filters] as const,
+    page: (opts: object = {}) =>
+      ["runs", "page", opts] as const,
     detail: (id: string) => ["runs", "detail", id] as const,
     state: (id: string) => ["runs", "state", id] as const,
     files: (id: string, selection: RunFileSelection = runFileScopeSelection()) =>
@@ -65,6 +66,8 @@ export const queryKeys = {
     events: (id: string, limit = 1000) => ["runs", "events", id, limit] as const,
     stageEvents: (id: string, stageId: string) =>
       ["runs", "stage-events", id, stageId] as const,
+    stageContextWindow: (id: string, stageId: string) =>
+      ["runs", "stage-context-window", id, stageId] as const,
     stageLog: (id: string, stageId: string, offset = 0, limit = 65_536) =>
       ["runs", "stage-log", id, stageId, offset, limit] as const,
     sandbox: (id: string) => ["runs", "sandbox", id] as const,
@@ -77,6 +80,9 @@ export const queryKeys = {
     pullRequest: (id: string) => ["runs", "pull-request", id] as const,
     preview: (id: string) => ["runs", "preview", id] as const,
     cancel: (id: string) => ["runs", "cancel", id] as const,
+    approve: (id: string) => ["runs", "approve", id] as const,
+    deny: (id: string) => ["runs", "deny", id] as const,
+    retry: (id: string) => ["runs", "retry", id] as const,
     archive: (id: string) => ["runs", "archive", id] as const,
     unarchive: (id: string) => ["runs", "unarchive", id] as const,
     updateTitle: (id: string) => ["runs", "update-title", id] as const,

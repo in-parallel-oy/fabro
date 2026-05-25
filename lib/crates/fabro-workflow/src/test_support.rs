@@ -7,6 +7,7 @@ use std::time::Duration;
 use fabro_agent::Sandbox;
 use fabro_auth::{CredentialSource, EnvCredentialSource};
 use fabro_graphviz::graph::Graph as GvGraph;
+use fabro_interview::AutoApproveInterviewer;
 use fabro_model::Catalog;
 use fabro_store::{ArtifactStore, Database, RunProjection};
 use object_store::local::LocalFileSystem;
@@ -127,11 +128,18 @@ async fn initialized(
         manifest_blob:    None,
         git:              run_options.pre_run_git.clone(),
         fork_source_ref:  run_options.fork_source_ref.clone(),
+        retried_from:     None,
         parent_id:        None,
         web_url:          None,
     })
     .await
     .expect("failed to seed run.created event in run store");
+    append_event(&run_store, &run_options.run_id, &Event::RunRunnable {
+        source: fabro_types::RunRunnableSource::StartRequested,
+        actor:  None,
+    })
+    .await
+    .expect("failed to seed run.runnable event in run store");
     append_event(&run_store, &run_options.run_id, &Event::RunStarting)
         .await
         .expect("failed to seed run.starting event in run store");
@@ -175,6 +183,7 @@ async fn initialized(
                     None,
                 ),
                 registry:        Arc::new(registry),
+                interviewer:     Arc::new(AutoApproveInterviewer::engine()),
                 git_state:       std::sync::RwLock::new(None),
                 base_env:        options.env,
                 github_token:    None,

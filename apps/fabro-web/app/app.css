@@ -295,4 +295,55 @@
     min-width: 100%;
     padding-right: 1rem;
   }
+  /* Shrink markdown headings for the narrow column. The assistant-ui defaults
+   * go up to 36px (h1), which dominates the sidebar. H1 stays distinct at
+   * 18px; H2/H3 read as bold body text; H4-H6 get no special styling. The
+   * default heading margins (mt-8/mb-8 = 32px) are also sized for the
+   * full-page Thread, so tighten them to suit the smaller type. */
+  .ask-fabro-sidebar .aui-md-h1 {
+    font-size: 1.125rem; /* 18px */
+    line-height: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+  }
+  .ask-fabro-sidebar .aui-md-h2,
+  .ask-fabro-sidebar .aui-md-h3 {
+    font-size: 0.875rem; /* 14px */
+    line-height: 1.5rem;
+    font-weight: 700;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+  }
+  .ask-fabro-sidebar .aui-md-h4,
+  .ask-fabro-sidebar .aui-md-h5,
+  .ask-fabro-sidebar .aui-md-h6 {
+    font-size: 0.875rem; /* 14px */
+    line-height: 1.5rem;
+    font-weight: 400;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+  }
+  /* Tighten paragraph spacing: the default 20px margins + 28px line-height
+   * are sized for the wide Thread. */
+  .ask-fabro-sidebar .aui-md-p {
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
+    line-height: 1.5rem;
+  }
+  /* Pull list indentation in (default ml-6 = 24px eats column width) and
+   * shrink the vertical margins. */
+  .ask-fabro-sidebar .aui-md-ul,
+  .ask-fabro-sidebar .aui-md-ol {
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
+    margin-left: 1.25rem;
+  }
+  /* Blockquote: default pl-6 (24px) is a large share of the narrow column. */
+  .ask-fabro-sidebar .aui-md-blockquote {
+    padding-left: 0.75rem;
+  }
+  /* Code blocks: trim the default p-4 (16px) padding. */
+  .ask-fabro-sidebar .aui-md-pre {
+    padding: 0.75rem;
+  }
 }

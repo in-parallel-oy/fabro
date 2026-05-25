@@ -1,5 +1,7 @@
 use fabro_types::settings::InterpString;
-use fabro_types::settings::run::{ApprovalMode, RunGoal, RunMode};
+use fabro_types::settings::run::{
+    ApprovalMode, EnvironmentNetworkMode, EnvironmentProvider, RunGoal, RunMode,
+};
 
 use crate::{SettingsLayer, WorkflowSettingsBuilder};
 
@@ -43,16 +45,23 @@ fn resolves_run_defaults_from_empty_settings() {
     assert_eq!(settings.execution.mode, RunMode::Normal);
     assert_eq!(settings.execution.approval, ApprovalMode::Prompt);
     assert_eq!(settings.prepare.timeout_ms, 300_000);
-    assert_eq!(settings.sandbox.provider, "docker");
-    assert!(settings.sandbox.stop_on_terminal);
-    let docker = settings
-        .sandbox
-        .docker
-        .as_ref()
-        .expect("defaults should provide docker settings");
-    assert_eq!(docker.image, "buildpack-deps:noble");
-    assert_eq!(docker.memory_limit, Some(4_000_000_000));
-    assert_eq!(docker.cpu_quota, Some(200_000));
+    assert_eq!(settings.environment.id, "default");
+    assert_eq!(settings.environment.provider, EnvironmentProvider::Docker);
+    assert_eq!(
+        settings.environment.image.reference.as_deref(),
+        Some("buildpack-deps:noble")
+    );
+    assert_eq!(settings.environment.resources.cpu, Some(2));
+    assert_eq!(
+        settings
+            .environment
+            .resources
+            .memory
+            .map(|size| size.as_bytes()),
+        Some(4_000_000_000)
+    );
+    assert!(!settings.environment.lifecycle.preserve);
+    assert!(settings.environment.lifecycle.stop_on_terminal);
     assert!(settings.clone.enabled);
     assert!(settings.run_branch.enabled);
     assert!(settings.run_branch.push);
@@ -62,94 +71,138 @@ fn resolves_run_defaults_from_empty_settings() {
 }
 
 #[test]
-fn resolves_daytona_volume_mounts() {
+fn resolves_named_daytona_environment_and_run_overrides() {
     let settings = WorkflowSettingsBuilder::from_toml(
         r#"
 _version = 1
 
-[run.sandbox]
+[run.environment]
+id = "fabro-dev"
+
+[run.environment.resources]
+memory = "32GB"
+
+[run.environment.lifecycle]
+preserve = true
+
+[environments.fabro-dev]
 provider = "daytona"
 
-[[run.sandbox.daytona.volumes]]
-volume_id = "vol_auth"
+[environments.fabro-dev.image]
+ref = "fabro-v11"
+
+[environments.fabro-dev.resources]
+cpu = 8
+memory = "16GB"
+disk = "20GB"
+
+[environments.fabro-dev.network]
+mode = "cidr_allow_list"
+allow = ["10.0.0.0/8"]
+
+[environments.fabro-dev.lifecycle]
+preserve = false
+stop_on_terminal = true
+auto_stop = "30m"
+
+[environments.fabro-dev.labels]
+repo = "fabro-sh/fabro"
+
+[[environments.fabro-dev.volumes]]
+id = "vol_auth"
 mount_path = "/home/daytona/.config"
 subpath = "agents"
+
+[environments.fabro-dev.env]
+NODE_ENV = "development"
 "#,
     )
-    .expect("daytona volume mount should resolve")
-    .run;
+    .expect("daytona environment should resolve");
 
-    let daytona = settings
-        .sandbox
-        .daytona
-        .as_ref()
-        .expect("daytona settings should resolve");
+    let environment = settings.run.environment;
 
-    assert_eq!(daytona.volumes.len(), 1);
-    assert_eq!(daytona.volumes[0].volume_id, "vol_auth");
-    assert_eq!(daytona.volumes[0].mount_path, "/home/daytona/.config");
-    assert_eq!(daytona.volumes[0].subpath.as_deref(), Some("agents"));
+    assert_eq!(environment.id, "fabro-dev");
+    assert_eq!(environment.provider, EnvironmentProvider::Daytona);
+    assert_eq!(environment.image.reference.as_deref(), Some("fabro-v11"));
+    assert_eq!(environment.resources.cpu, Some(8));
+    assert_eq!(
+        environment.resources.memory.map(|size| size.as_bytes()),
+        Some(32_000_000_000)
+    );
+    assert_eq!(
+        environment.resources.disk.map(|size| size.as_bytes()),
+        Some(20_000_000_000)
+    );
+    assert_eq!(
+        environment.network.mode,
+        EnvironmentNetworkMode::CidrAllowList
+    );
+    assert_eq!(environment.network.allow, vec!["10.0.0.0/8"]);
+    assert!(environment.lifecycle.preserve);
+    assert_eq!(
+        environment
+            .lifecycle
+            .auto_stop
+            .map(|duration| duration.as_std().as_secs()),
+        Some(1800)
+    );
+    assert_eq!(
+        environment.labels.get("repo").map(String::as_str),
+        Some("fabro-sh/fabro")
+    );
+    assert_eq!(environment.volumes.len(), 1);
+    assert_eq!(environment.volumes[0].id, "vol_auth");
+    assert_eq!(environment.volumes[0].mount_path, "/home/daytona/.config");
+    assert_eq!(environment.volumes[0].subpath.as_deref(), Some("agents"));
+    assert_eq!(
+        environment
+            .env
+            .get("NODE_ENV")
+            .map(InterpString::as_source)
+            .as_deref(),
+        Some("development")
+    );
 }
 
 #[test]
-fn resolves_docker_binds() {
+fn resolves_docker_environment_volume_read_only() {
+    // Mirrors narayan's per-run docker isolation: named-volume caches (rw)
+    // plus read-only seed volumes. `read_only` defaults to false when
+    // omitted. The Docker bridge turns these into bollard binds.
     let settings = WorkflowSettingsBuilder::from_toml(
         r#"
 _version = 1
 
-[run.sandbox]
+[run.environment]
+id = "narayan"
+
+[environments.narayan]
 provider = "docker"
 
-[run.sandbox.docker]
-binds = [
-  "{{ env.HOME }}/.claude:/home/dev/.claude:rw",
-  "/tmp/cache:/tmp/cache:ro",
-]
+[[environments.narayan.volumes]]
+id = "narayan-fabro-hex"
+mount_path = "/home/dev/.hex"
+
+[[environments.narayan.volumes]]
+id = "narayan-seed-build"
+mount_path = "/seed/_build"
+read_only = true
 "#,
     )
-    .expect("docker binds should resolve")
-    .run;
+    .expect("docker environment with volumes should resolve");
 
-    let docker = settings
-        .sandbox
-        .docker
-        .as_ref()
-        .expect("docker settings should resolve");
+    let environment = settings.run.environment;
 
-    assert_eq!(docker.binds.len(), 2);
-    assert_eq!(
-        docker.binds[0],
-        InterpString::parse("{{ env.HOME }}/.claude:/home/dev/.claude:rw")
+    assert_eq!(environment.provider, EnvironmentProvider::Docker);
+    assert_eq!(environment.volumes.len(), 2);
+    assert_eq!(environment.volumes[0].id, "narayan-fabro-hex");
+    assert_eq!(environment.volumes[0].mount_path, "/home/dev/.hex");
+    assert!(
+        !environment.volumes[0].read_only,
+        "read_only should default to false when omitted"
     );
-    assert_eq!(
-        docker.binds[1],
-        InterpString::parse("/tmp/cache:/tmp/cache:ro")
-    );
-}
-
-#[test]
-fn docker_binds_default_to_empty_when_omitted() {
-    let settings = WorkflowSettingsBuilder::from_toml(
-        r#"
-_version = 1
-
-[run.sandbox]
-provider = "docker"
-
-[run.sandbox.docker]
-image = "buildpack-deps:noble"
-"#,
-    )
-    .expect("docker without binds should resolve")
-    .run;
-
-    let docker = settings
-        .sandbox
-        .docker
-        .as_ref()
-        .expect("docker settings should resolve");
-
-    assert!(docker.binds.is_empty());
+    assert_eq!(environment.volumes[1].id, "narayan-seed-build");
+    assert!(environment.volumes[1].read_only);
 }
 
 #[test]
@@ -242,19 +295,19 @@ enabled = true
 }
 
 #[test]
-fn provider_skip_clone_is_rejected() {
-    let err = r"
+fn legacy_run_sandbox_is_rejected() {
+    let err = r#"
 _version = 1
 
-[run.sandbox.docker]
-skip_clone = true
-"
+[run.sandbox]
+provider = "local"
+"#
     .parse::<SettingsLayer>()
-    .expect_err("provider-level skip_clone should be unknown");
+    .expect_err("legacy run.sandbox should be unknown");
     let message = err.to_string();
     assert!(
-        message.contains("skip_clone") || message.contains("unknown field"),
-        "expected unknown-field error mentioning skip_clone, got: {message}"
+        message.contains("sandbox") || message.contains("unknown field"),
+        "expected unknown-field error mentioning sandbox, got: {message}"
     );
 }
 
@@ -350,31 +403,131 @@ fn resolves_explicit_stop_on_terminal_false() {
         r"
 _version = 1
 
-[run.sandbox]
+[run.environment.lifecycle]
 stop_on_terminal = false
 ",
     )
-    .expect("sandbox stop_on_terminal setting should resolve")
+    .expect("environment stop_on_terminal setting should resolve")
     .run;
 
-    assert!(!settings.sandbox.stop_on_terminal);
+    assert!(!settings.environment.lifecycle.stop_on_terminal);
 }
 
 #[test]
-fn resolves_minimal_local_provider_without_docker_table() {
+fn resolves_minimal_local_environment() {
     let settings = WorkflowSettingsBuilder::from_toml(
         r#"
 _version = 1
 
-[run.sandbox]
+[run.environment]
+id = "host"
+
+[environments.host]
 provider = "local"
 "#,
     )
-    .expect("minimal local sandbox settings should resolve")
+    .expect("minimal local environment settings should resolve")
     .run;
 
-    assert_eq!(settings.sandbox.provider, "local");
-    assert!(settings.sandbox.docker.is_some());
+    assert_eq!(settings.environment.id, "host");
+    assert_eq!(settings.environment.provider, EnvironmentProvider::Local);
+    assert!(settings.environment.image.reference.is_none());
+}
+
+#[test]
+fn missing_environment_slug_errors() {
+    let err = WorkflowSettingsBuilder::from_toml(
+        r#"
+_version = 1
+
+[run.environment]
+id = "missing"
+"#,
+    )
+    .expect_err("missing selected environment should error");
+
+    let message = err.to_string();
+    assert!(
+        message.contains("run.environment.id") && message.contains("missing"),
+        "expected missing environment diagnostic, got: {message}"
+    );
+}
+
+#[test]
+fn docker_cidr_allow_list_errors() {
+    let err = WorkflowSettingsBuilder::from_toml(
+        r#"
+_version = 1
+
+[run.environment]
+id = "locked"
+
+[environments.locked]
+provider = "docker"
+
+[environments.locked.network]
+mode = "cidr_allow_list"
+allow = ["10.0.0.0/8"]
+"#,
+    )
+    .expect_err("docker cannot enforce cidr allow list");
+
+    let message = err.to_string();
+    assert!(
+        message.contains("run.environment.network.mode") && message.contains("CIDR allow-list"),
+        "expected docker CIDR capability diagnostic, got: {message}"
+    );
+}
+
+#[test]
+fn local_blocked_network_errors() {
+    let err = WorkflowSettingsBuilder::from_toml(
+        r#"
+_version = 1
+
+[run.environment]
+id = "host"
+
+[environments.host]
+provider = "local"
+
+[environments.host.network]
+mode = "block"
+"#,
+    )
+    .expect_err("local cannot enforce blocked networking");
+
+    let message = err.to_string();
+    assert!(
+        message.contains("run.environment.network.mode")
+            && message.contains("local environments cannot enforce"),
+        "expected local blocked-network diagnostic, got: {message}"
+    );
+}
+
+#[test]
+fn daytona_dockerfile_without_image_ref_errors() {
+    let err = WorkflowSettingsBuilder::from_toml(
+        r#"
+_version = 1
+
+[run.environment]
+id = "cloud"
+
+[environments.cloud]
+provider = "daytona"
+
+[environments.cloud.image]
+dockerfile = { path = "Dockerfile" }
+"#,
+    )
+    .expect_err("daytona dockerfile needs a snapshot name");
+
+    let message = err.to_string();
+    assert!(
+        message.contains("image.ref"),
+        "expected daytona dockerfile/image.ref diagnostic, got: {message}"
+    );
 }
 
 #[test]
@@ -591,5 +744,178 @@ issues = "{{ env.GH_PERM_LEVEL }}"
         // Resolver does NOT eagerly resolve env tokens; the `InterpString`
         // form is preserved for late binding by the consumer.
         assert_eq!(issues.as_source(), "{{ env.GH_PERM_LEVEL }}");
+    }
+}
+
+mod run_agent_fabro_tools {
+    use crate::layers::Combine;
+    use crate::{SettingsLayer, WorkflowSettingsBuilder};
+
+    fn parse_settings(source: &str) -> SettingsLayer {
+        source
+            .parse::<SettingsLayer>()
+            .expect("fixture should parse via SettingsLayer")
+    }
+
+    #[test]
+    fn defaults_to_false_when_run_agent_is_absent() {
+        let settings = WorkflowSettingsBuilder::from_layer(&SettingsLayer::default())
+            .expect("empty settings should resolve")
+            .run;
+
+        assert!(!settings.agent.fabro_tools);
+    }
+
+    #[test]
+    fn resolves_true_from_run_agent_table() {
+        let settings = WorkflowSettingsBuilder::from_toml(
+            r"
+_version = 1
+
+[run.agent]
+fabro_tools = true
+",
+        )
+        .expect("run.agent.fabro_tools should resolve");
+
+        assert!(settings.run.agent.fabro_tools);
+    }
+
+    #[test]
+    fn resolves_explicit_false_from_run_agent_table() {
+        let settings = WorkflowSettingsBuilder::from_toml(
+            r"
+_version = 1
+
+[run.agent]
+fabro_tools = false
+",
+        )
+        .expect("run.agent.fabro_tools false should resolve");
+
+        assert!(!settings.run.agent.fabro_tools);
+    }
+
+    #[test]
+    fn higher_layer_false_overrides_lower_true() {
+        let workflow = parse_settings(
+            r"
+_version = 1
+
+[run.agent]
+fabro_tools = false
+",
+        );
+        let user = parse_settings(
+            r"
+_version = 1
+
+[run.agent]
+fabro_tools = true
+",
+        );
+        let merged = workflow.combine(user);
+
+        let settings = WorkflowSettingsBuilder::from_layer(&merged)
+            .expect("merged settings should resolve")
+            .run;
+
+        assert!(!settings.agent.fabro_tools);
+    }
+}
+
+mod run_checkpoint_skip_git_hooks {
+    //! Layer + resolver tests for `[run.checkpoint] skip_git_hooks`.
+
+    use crate::layers::Combine;
+    use crate::{SettingsLayer, WorkflowSettingsBuilder};
+
+    fn parse_settings(source: &str) -> SettingsLayer {
+        source
+            .parse::<SettingsLayer>()
+            .expect("fixture should parse via SettingsLayer")
+    }
+
+    #[test]
+    fn resolves_skip_git_hooks_true_when_set() {
+        let settings = WorkflowSettingsBuilder::from_toml(
+            r"
+_version = 1
+
+[run.checkpoint]
+skip_git_hooks = true
+",
+        )
+        .expect("settings should resolve")
+        .run;
+
+        assert!(settings.checkpoint.skip_git_hooks);
+    }
+
+    #[test]
+    fn resolves_skip_git_hooks_false_when_omitted() {
+        let settings = WorkflowSettingsBuilder::from_layer(&SettingsLayer::default())
+            .expect("empty settings should resolve")
+            .run;
+
+        assert!(!settings.checkpoint.skip_git_hooks);
+    }
+
+    #[test]
+    fn higher_layer_false_overrides_lower_layer_true() {
+        let workflow = parse_settings(
+            r"
+_version = 1
+
+[run.checkpoint]
+skip_git_hooks = false
+",
+        );
+        let user = parse_settings(
+            r"
+_version = 1
+
+[run.checkpoint]
+skip_git_hooks = true
+",
+        );
+        let merged = workflow.combine(user);
+
+        let settings = WorkflowSettingsBuilder::from_layer(&merged)
+            .expect("merged settings should resolve")
+            .run;
+
+        assert!(!settings.checkpoint.skip_git_hooks);
+    }
+
+    #[test]
+    fn exclude_globs_replace_behavior_preserved_when_skip_git_hooks_added() {
+        // Higher layer provides skip_git_hooks but no exclude_globs;
+        // exclude_globs should still inherit from the lower layer because the
+        // higher layer's list is empty.
+        let workflow = parse_settings(
+            r"
+_version = 1
+
+[run.checkpoint]
+skip_git_hooks = true
+",
+        );
+        let user = parse_settings(
+            r#"
+_version = 1
+
+[run.checkpoint]
+exclude_globs = ["**/lower/**"]
+"#,
+        );
+        let merged = workflow.combine(user);
+
+        let settings = WorkflowSettingsBuilder::from_layer(&merged)
+            .expect("merged settings should resolve")
+            .run;
+
+        assert_eq!(settings.checkpoint.exclude_globs, vec!["**/lower/**"]);
+        assert!(settings.checkpoint.skip_git_hooks);
     }
 }

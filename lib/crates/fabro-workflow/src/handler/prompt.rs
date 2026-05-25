@@ -3,15 +3,17 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use fabro_graphviz::graph::{Graph, Node};
+use fabro_types::StageModelUsage;
 
 use super::agent::{
-    CodergenBackend, CodergenResult, OneShotRequest, extract_status_fields, truncate,
+    CodergenBackend, CodergenResult, OneShotRequest, emit_stage_prompt, extract_status_fields,
+    truncate,
 };
 use super::llm::routing;
-use super::{EngineServices, Handler};
+use super::{EngineServices, Handler, structured_output};
 use crate::context::{Context, WorkflowContext, keys};
 use crate::error::Error;
-use crate::event::{Emitter, Event, StageScope};
+use crate::event::{Emitter, Event};
 use crate::outcome::Outcome;
 
 /// Handler for single-shot LLM calls (no tools, no agent loop).
@@ -94,29 +96,25 @@ impl Handler for PromptHandler {
             if docs.is_empty() {
                 None
             } else {
-                Some(docs.join("\n\n"))
+                Some(
+                    docs.into_iter()
+                        .map(|doc| doc.content)
+                        .collect::<Vec<_>>()
+                        .join("\n\n"),
+                )
             }
         } else {
             None
         };
 
-        let prompt_provider = node
-            .provider()
-            .map(String::from)
-            .or_else(|| Some(services.run.provider_id.to_string()));
-        let prompt_model = node.model().map(String::from);
-        let stage_scope = StageScope::for_handler(context, &node.id);
-        services.run.emitter.emit_scoped(
-            &Event::Prompt {
-                stage:    node.id.clone(),
-                visit:    stage_scope.visit,
-                text:     prompt.clone(),
-                mode:     Some("prompt".to_string()),
-                provider: prompt_provider.clone(),
-                model:    prompt_model.clone(),
-            },
-            &stage_scope,
-        );
+        let stage_scope = emit_stage_prompt(
+            services,
+            context,
+            node,
+            &prompt,
+            StageModelUsage::MODE_PROMPT,
+            self.backend.as_deref(),
+        )?;
 
         // 3. Call LLM backend (one_shot)
         let (response_text, stage_usage, backend_files_touched) =
@@ -193,7 +191,25 @@ impl Handler for PromptHandler {
             serde_json::json!(&response_text),
         );
 
-        extract_status_fields(&response_text, &mut outcome);
+        if let Some(schema) = structured_output::parse_node_output_schema(node)? {
+            match structured_output::validate_response_text(&schema, &response_text) {
+                Ok(validated) => {
+                    structured_output::apply_validated_output(
+                        node,
+                        &schema,
+                        &validated,
+                        &mut outcome,
+                    );
+                }
+                Err(_) => {
+                    return Ok(structured_output::exhausted_failure_outcome(
+                        node.output_retries(),
+                    ));
+                }
+            }
+        } else {
+            extract_status_fields(&response_text, &mut outcome);
+        }
         outcome.usage = stage_usage;
         outcome.files_touched = backend_files_touched;
 
@@ -207,6 +223,7 @@ mod tests {
     use std::time::Duration;
 
     use fabro_graphviz::graph::AttrValue;
+    use fabro_model::{ReasoningEffort, Speed};
     use fabro_store::{Database, RunDatabase, StageId};
     use fabro_types::fixtures;
     use object_store::memory::InMemory;
@@ -215,6 +232,7 @@ mod tests {
     use super::*;
     use crate::event::Emitter;
     use crate::handler::agent::CodergenRunRequest;
+    use crate::outcome::OutcomeExt;
 
     fn make_services() -> EngineServices {
         EngineServices::test_default()
@@ -268,6 +286,7 @@ mod tests {
                 manifest_blob:    None,
                 git:              None,
                 fork_source_ref:  None,
+                retried_from:     None,
                 parent_id:        None,
                 web_url:          None,
             },
@@ -332,6 +351,16 @@ mod tests {
                     last_file_touched: None,
                 })
             }
+
+            fn effective_request_controls(
+                &self,
+                _node: &Node,
+            ) -> Result<crate::handler::llm::api::EffectiveRequestControls, Error> {
+                Ok(crate::handler::llm::api::EffectiveRequestControls {
+                    reasoning_effort: Some(ReasoningEffort::High),
+                    speed:            Some(Speed::Fast),
+                })
+            }
         }
 
         let handler = PromptHandler::new(Some(Box::new(OneShotBackend)));
@@ -359,6 +388,102 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn prompt_handler_custom_output_schema_updates_output_context_key() {
+        struct CustomOutputBackend;
+
+        #[async_trait]
+        impl CodergenBackend for CustomOutputBackend {
+            async fn run(&self, _request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
+                panic!("run() should not be called for prompt handler");
+            }
+
+            async fn one_shot(
+                &self,
+                _request: OneShotRequest<'_>,
+            ) -> Result<CodergenResult, Error> {
+                Ok(CodergenResult::Text {
+                    text:              r#"{"passed": true}"#.to_string(),
+                    usage:             None,
+                    files_touched:     Vec::new(),
+                    last_file_touched: None,
+                })
+            }
+        }
+
+        let handler = PromptHandler::new(Some(Box::new(CustomOutputBackend)));
+        let mut node = Node::new("audit");
+        node.attrs.insert(
+            "output_schema".to_string(),
+            AttrValue::String(
+                r#"{"type":"object","required":["passed"],"properties":{"passed":{"type":"boolean"}}}"#
+                    .to_string(),
+            ),
+        );
+        let context = Context::new();
+        let graph = Graph::new("test");
+        let tmp = TempDir::new().unwrap();
+
+        let outcome = handler
+            .execute(&node, &context, &graph, tmp.path(), &make_services())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            outcome.context_updates.get("output.audit"),
+            Some(&serde_json::json!({"passed": true})),
+        );
+    }
+
+    #[tokio::test]
+    async fn prompt_handler_routing_output_schema_requires_valid_routing_json() {
+        struct BadRoutingBackend;
+
+        #[async_trait]
+        impl CodergenBackend for BadRoutingBackend {
+            async fn run(&self, _request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
+                panic!("run() should not be called for prompt handler");
+            }
+
+            async fn one_shot(
+                &self,
+                _request: OneShotRequest<'_>,
+            ) -> Result<CodergenResult, Error> {
+                Ok(CodergenResult::Text {
+                    text:              r#"{"outcome": 123}"#.to_string(),
+                    usage:             None,
+                    files_touched:     Vec::new(),
+                    last_file_touched: None,
+                })
+            }
+        }
+
+        let handler = PromptHandler::new(Some(Box::new(BadRoutingBackend)));
+        let mut node = Node::new("route");
+        node.attrs.insert(
+            "output_schema".to_string(),
+            AttrValue::String("routing".to_string()),
+        );
+        node.attrs
+            .insert("output_retries".to_string(), AttrValue::Integer(0));
+        let context = Context::new();
+        let graph = Graph::new("test");
+        let tmp = TempDir::new().unwrap();
+
+        let outcome = handler
+            .execute(&node, &context, &graph, tmp.path(), &make_services())
+            .await
+            .unwrap();
+
+        assert_eq!(outcome.status, crate::outcome::StageOutcome::Failed {
+            retry_requested: false,
+        });
+        assert_eq!(
+            outcome.failure_reason(),
+            Some("output schema validation failed after 0 repair attempt(s)")
+        );
+    }
+
+    #[tokio::test]
     async fn prompt_handler_projects_provider_used_from_prompt_events() {
         struct ProviderOneShotBackend;
 
@@ -377,6 +502,16 @@ mod tests {
                     usage:             None,
                     files_touched:     Vec::new(),
                     last_file_touched: None,
+                })
+            }
+
+            fn effective_request_controls(
+                &self,
+                _node: &Node,
+            ) -> Result<crate::handler::llm::api::EffectiveRequestControls, Error> {
+                Ok(crate::handler::llm::api::EffectiveRequestControls {
+                    reasoning_effort: Some(ReasoningEffort::High),
+                    speed:            Some(Speed::Fast),
                 })
             }
         }
@@ -400,7 +535,10 @@ mod tests {
 
         let state = run_store.state().await.unwrap();
         let node_state = state.stage(&StageId::new("classify", 1)).unwrap();
-        assert_eq!(node_state.provider_used.as_ref().unwrap()["mode"], "prompt");
+        let provider_used = node_state.provider_used.as_ref().unwrap();
+        assert_eq!(provider_used.mode, StageModelUsage::MODE_PROMPT);
+        assert_eq!(provider_used.reasoning_effort, Some(ReasoningEffort::High));
+        assert_eq!(provider_used.speed, Some(Speed::Fast));
     }
 
     struct OneShotCapturingBackend {

@@ -5,8 +5,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::error::{Error, InterruptReason};
 use crate::sandbox::Sandbox;
-use crate::tool_registry::RegisteredTool;
+use crate::tool_registry::{RegisteredTool, ToolSource};
 use crate::tools::required_str;
+use crate::types::{AgentEvent, SkillActivationSource};
 
 #[derive(Debug, Clone)]
 pub struct Skill {
@@ -176,7 +177,7 @@ pub fn make_use_skill_tool(skills: Arc<Vec<Skill>>) -> RegisteredTool {
                 "required": ["skill_name"]
             }),
         },
-        executor:   Arc::new(move |args, _ctx| {
+        executor:   Arc::new(move |args, ctx| {
             let skills = skills.clone();
             Box::pin(async move {
                 let name = required_str(&args, "skill_name")?;
@@ -184,9 +185,14 @@ pub fn make_use_skill_tool(skills: Arc<Vec<Skill>>) -> RegisteredTool {
                     .iter()
                     .find(|s| s.name == name)
                     .ok_or_else(|| format!("Unknown skill: {name}"))?;
+                ctx.emit_agent_event(AgentEvent::SkillActivated {
+                    skill_name: name.to_string(),
+                    source:     SkillActivationSource::Tool,
+                });
                 Ok(skill.template.clone())
             })
         }),
+        source:     ToolSource::Skill,
     }
 }
 
@@ -250,7 +256,7 @@ pub async fn discover_skills(
             if cancel_token.is_cancelled() {
                 return Err(Error::Interrupted(InterruptReason::Cancelled));
             }
-            let read_result = env.read_file(&path, None, None).await;
+            let read_result = env.read_file_text(&path).await;
             if cancel_token.is_cancelled() {
                 return Err(Error::Interrupted(InterruptReason::Cancelled));
             }
@@ -582,6 +588,10 @@ name: trimmed
             env,
             cancel: CancellationToken::new(),
             tool_env_provider: None,
+            session_id: None,
+            root_session_id: None,
+            tool_call_id: None,
+            agent_event_emitter: None,
         };
         let result = (tool.executor)(args, ctx).await;
         assert_eq!(
@@ -601,6 +611,10 @@ name: trimmed
             env,
             cancel: CancellationToken::new(),
             tool_env_provider: None,
+            session_id: None,
+            root_session_id: None,
+            tool_call_id: None,
+            agent_event_emitter: None,
         };
         let result = (tool.executor)(args, ctx).await;
         assert!(result.is_err());
@@ -618,6 +632,10 @@ name: trimmed
             env,
             cancel: CancellationToken::new(),
             tool_env_provider: None,
+            session_id: None,
+            root_session_id: None,
+            tool_call_id: None,
+            agent_event_emitter: None,
         };
         let result = (tool.executor)(args, ctx).await;
         assert!(result.is_err());

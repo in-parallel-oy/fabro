@@ -136,6 +136,66 @@ fn resolved_server_integrations_are_slack_only_for_chat() {
 }
 
 #[test]
+fn server_sandbox_defaults_all_providers_enabled() {
+    let settings = ServerSettingsBuilder::from_toml(
+        r#"
+_version = 1
+
+[server.auth]
+methods = ["dev-token"]
+"#,
+    )
+    .expect("server settings should resolve");
+
+    let sandbox = settings.server.sandbox;
+    assert!(sandbox.providers.local.enabled);
+    assert!(sandbox.providers.docker.enabled);
+    assert!(sandbox.providers.daytona.enabled);
+}
+
+#[test]
+fn server_sandbox_allows_partial_provider_overrides() {
+    let settings = ServerSettingsBuilder::from_toml(
+        r#"
+_version = 1
+
+[server.auth]
+methods = ["dev-token"]
+
+[server.sandbox.providers.daytona]
+enabled = false
+"#,
+    )
+    .expect("server settings should resolve");
+
+    let sandbox = settings.server.sandbox;
+    assert!(sandbox.providers.local.enabled);
+    assert!(sandbox.providers.docker.enabled);
+    assert!(!sandbox.providers.daytona.enabled);
+}
+
+#[test]
+fn parsing_rejects_unknown_server_sandbox_provider() {
+    let err = ServerSettingsBuilder::from_toml(
+        r#"
+_version = 1
+
+[server.auth]
+methods = ["dev-token"]
+
+[server.sandbox.providers.exe]
+enabled = true
+"#,
+    )
+    .expect_err("unknown sandbox provider should be rejected");
+
+    assert!(
+        err.to_string().contains("unknown field `exe`"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
 fn parsing_rejects_unknown_server_integrations() {
     let source = r"
 _version = 1
@@ -198,20 +258,13 @@ methods = ["dev-token"]
 
 [server.storage]
 root = "/srv/fabro"
-
-[features]
-session_sandboxes = true
 "#,
     );
 
     let context = fabro_config::ServerSettingsBuilder::from_layer(&settings)
         .expect("settings should resolve");
-    let user_settings = fabro_config::UserSettingsBuilder::from_layer(&settings)
-        .expect("user settings should resolve");
 
     assert_eq!(context.server.storage.root.as_source(), "/srv/fabro");
-    assert!(context.features.session_sandboxes);
-    assert_eq!(context.features, user_settings.features);
 }
 
 #[test]
@@ -227,9 +280,6 @@ methods = ["dev-token"]
 
 [server.storage]
 root = "/srv/from-home"
-
-[features]
-session_sandboxes = true
 "#,
     )
     .unwrap();
@@ -238,7 +288,6 @@ session_sandboxes = true
         let settings =
             fabro_config::ServerSettingsBuilder::load_default().expect("settings should resolve");
         assert_eq!(settings.server.storage.root.as_source(), "/srv/from-home");
-        assert!(settings.features.session_sandboxes);
     });
 }
 

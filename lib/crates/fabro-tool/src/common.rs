@@ -7,7 +7,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use fabro_api::types;
 use fabro_types::{
     PairId, PairMessageRecord, PairMessageRequest, PairRecord, PairTranscriptResponse, Run, RunId,
-    RunPairStatusResponse, RunStatus, StageId,
+    RunPairStatusResponse, StageId,
 };
 use fabro_util::exit::{self, ExitClass};
 use schemars::JsonSchema;
@@ -90,7 +90,7 @@ pub trait FabroToolBackend: Send + Sync {
     ) -> anyhow::Result<()>;
 
     async fn get_run_pair_status(&self, _run_id: &RunId) -> anyhow::Result<RunPairStatusResponse> {
-        Err(ToolError::message(format!("{FABRO_RUN_PAIR_TOOL_NAME} is not available")).into())
+        Err(pair_tool_unavailable_error())
     }
 
     async fn start_run_pair(
@@ -98,15 +98,15 @@ pub trait FabroToolBackend: Send + Sync {
         _run_id: &RunId,
         _stage_id: StageId,
     ) -> anyhow::Result<PairRecord> {
-        Err(ToolError::message(format!("{FABRO_RUN_PAIR_TOOL_NAME} is not available")).into())
+        Err(pair_tool_unavailable_error())
     }
 
     async fn get_run_pair(&self, _run_id: &RunId, _pair_id: &PairId) -> anyhow::Result<PairRecord> {
-        Err(ToolError::message(format!("{FABRO_RUN_PAIR_TOOL_NAME} is not available")).into())
+        Err(pair_tool_unavailable_error())
     }
 
     async fn end_run_pair(&self, _run_id: &RunId, _pair_id: &PairId) -> anyhow::Result<PairRecord> {
-        Err(ToolError::message(format!("{FABRO_RUN_PAIR_TOOL_NAME} is not available")).into())
+        Err(pair_tool_unavailable_error())
     }
 
     async fn send_run_pair_message(
@@ -115,7 +115,7 @@ pub trait FabroToolBackend: Send + Sync {
         _pair_id: &PairId,
         _request: PairMessageRequest,
     ) -> anyhow::Result<PairMessageRecord> {
-        Err(ToolError::message(format!("{FABRO_RUN_PAIR_TOOL_NAME} is not available")).into())
+        Err(pair_tool_unavailable_error())
     }
 
     async fn get_run_pair_transcript(
@@ -125,8 +125,12 @@ pub trait FabroToolBackend: Send + Sync {
         _since_seq: Option<u32>,
         _limit: Option<u32>,
     ) -> anyhow::Result<PairTranscriptResponse> {
-        Err(ToolError::message(format!("{FABRO_RUN_PAIR_TOOL_NAME} is not available")).into())
+        Err(pair_tool_unavailable_error())
     }
+}
+
+fn pair_tool_unavailable_error() -> anyhow::Error {
+    ToolError::message(format!("{FABRO_RUN_PAIR_TOOL_NAME} is not available")).into()
 }
 
 pub trait RunManifestBuilder: Send + Sync {
@@ -166,6 +170,7 @@ pub struct ToolDefinition {
 
 pub const FABRO_RUN_CREATE_TOOL_NAME: &str = "fabro_run_create";
 pub const FABRO_RUN_SEARCH_TOOL_NAME: &str = "fabro_run_search";
+pub const FABRO_RUN_GET_TOOL_NAME: &str = "fabro_run_get";
 pub const FABRO_RUN_INTERACT_TOOL_NAME: &str = "fabro_run_interact";
 pub const FABRO_RUN_GATHER_TOOL_NAME: &str = "fabro_run_gather";
 pub const FABRO_RUN_EVENTS_TOOL_NAME: &str = "fabro_run_events";
@@ -181,13 +186,21 @@ static TOOL_DEFINITIONS: LazyLock<Vec<ToolDefinition>> = LazyLock::new(|| {
             FABRO_RUN_SEARCH_TOOL_NAME,
             "Search Fabro workflow runs by id, parent, workflow, labels, status, archival state, and creation time.",
         ),
+        tool_definition::<crate::FabroRunGetParams>(
+            FABRO_RUN_GET_TOOL_NAME,
+            "Read-only inspection of a Fabro run: returns its summary, projection, and pending questions without mutating state.",
+        ),
         tool_definition::<crate::FabroRunInteractParams>(
             FABRO_RUN_INTERACT_TOOL_NAME,
-            "Get, start, message, interrupt, cancel, archive, unarchive, link or unlink a parent, inspect questions, or answer a Fabro run.",
+            "Control a Fabro run: start, message, interrupt, cancel, archive, unarchive, link or unlink a parent, inspect or answer questions. Use fabro_run_get for read-only inspection.",
         ),
         tool_definition::<crate::FabroRunGatherParams>(
             FABRO_RUN_GATHER_TOOL_NAME,
             "Wait for Fabro runs to reach terminal states, returning current state on timeout.",
+        ),
+        tool_definition::<crate::FabroRunPairParams>(
+            FABRO_RUN_PAIR_TOOL_NAME,
+            "Inspect, start, message, end, or read transcript for a live Fabro run pairing session.",
         ),
         tool_definition::<crate::FabroRunEventsParams>(
             FABRO_RUN_EVENTS_TOOL_NAME,
@@ -245,7 +258,7 @@ pub(crate) fn run_summary_result(run: &Run) -> RunSummaryResult {
         workflow_name:       run.workflow.name.clone(),
         workflow_graph_name: run.workflow.graph_name.clone(),
         workflow_slug:       run.workflow.slug.clone(),
-        status:              run_status_kind(run.lifecycle.status).to_string(),
+        status:              run.lifecycle.status.kind().to_string(),
         archived:            run.lifecycle.archived,
         created_at:          run.timestamps.created_at.to_rfc3339(),
         started_at:          run
@@ -279,10 +292,6 @@ pub(crate) fn parse_datetime_filter(name: &str, raw: &str) -> ToolResult<DateTim
     Ok(DateTime::from_naive_utc_and_offset(datetime, Utc))
 }
 
-pub(crate) fn run_status_kind(status: RunStatus) -> &'static str {
-    status.kind().into()
-}
-
 fn format_tool_error(err: &anyhow::Error) -> String {
     let mut rendered = format!("{err:#}");
     if exit::exit_class_for(err) == Some(ExitClass::AuthRequired)
@@ -296,9 +305,65 @@ fn format_tool_error(err: &anyhow::Error) -> String {
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
-    use fabro_types::{RunLifecycle, RunLinks, RunOrigin, RunTimestamps, WorkflowRef};
+    use fabro_types::{RunLifecycle, RunLinks, RunOrigin, RunStatus, RunTimestamps, WorkflowRef};
 
     use super::*;
+
+    fn shared_tool_names() -> Vec<&'static str> {
+        tool_definitions()
+            .iter()
+            .map(|definition| definition.name)
+            .collect()
+    }
+
+    #[test]
+    fn shared_tool_definitions_include_run_management_catalog() {
+        assert_eq!(shared_tool_names(), vec![
+            FABRO_RUN_CREATE_TOOL_NAME,
+            FABRO_RUN_SEARCH_TOOL_NAME,
+            FABRO_RUN_GET_TOOL_NAME,
+            FABRO_RUN_INTERACT_TOOL_NAME,
+            FABRO_RUN_GATHER_TOOL_NAME,
+            FABRO_RUN_PAIR_TOOL_NAME,
+            FABRO_RUN_EVENTS_TOOL_NAME,
+        ]);
+    }
+
+    #[test]
+    fn pair_tool_definition_exposes_pair_schema() {
+        let definition = tool_definitions()
+            .iter()
+            .find(|definition| definition.name == FABRO_RUN_PAIR_TOOL_NAME)
+            .expect("pair tool should be in the shared catalog");
+        let schema = &definition.parameters;
+        let schema_text = schema.to_string();
+
+        assert_eq!(
+            definition.description,
+            "Inspect, start, message, end, or read transcript for a live Fabro run pairing session."
+        );
+        for field in [
+            "action",
+            "run_id",
+            "pair_id",
+            "stage_id",
+            "text",
+            "client_message_id",
+            "since_seq",
+            "limit",
+        ] {
+            assert!(
+                schema.pointer(&format!("/properties/{field}")).is_some(),
+                "pair schema should expose {field}: {schema}"
+            );
+        }
+        for action in ["status", "start", "get", "message", "end", "transcript"] {
+            assert!(
+                schema_text.contains(&format!("\"{action}\"")),
+                "pair schema should expose action {action}: {schema}"
+            );
+        }
+    }
 
     #[test]
     fn run_summary_result_includes_parent_metadata() {
@@ -323,6 +388,7 @@ mod tests {
             labels:           HashMap::new(),
             lifecycle:        RunLifecycle {
                 status:          RunStatus::Submitted,
+                approval:        None,
                 pending_control: None,
                 queue_position:  None,
                 error:           None,
@@ -340,11 +406,13 @@ mod tests {
             },
             timing:           None,
             billing:          None,
+            size:             fabro_types::RunSize::default(),
             ask_fabro:        fabro_types::AskFabro::default(),
             diff:             None,
             pull_request:     None,
             current_question: None,
             superseded_by:    None,
+            retried_from:     None,
             links:            RunLinks { web: None },
         };
 

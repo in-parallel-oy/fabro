@@ -58,6 +58,10 @@ export interface Provider {
      * Whether credential material is present for this provider on the server when this response was produced. Does NOT imply requests will succeed.
      */
     'configured': boolean;
+    /**
+     * Suggested vault secret name for configuring this provider, derived from the first vault credential reference in the provider catalog. Null when the provider has no vault credential (e.g. no-auth or env-only providers). Used to prefill the create-secret form.
+     */
+    'expected_secret_name'?: string | null;
 }
 
 export const ProviderAdapterEnum = {

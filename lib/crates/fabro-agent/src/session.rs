@@ -14,8 +14,12 @@ use fabro_llm::types::{
 use fabro_llm::{Error as LlmError, retry};
 use fabro_mcp::config::{McpServerSettings, McpTransport};
 use fabro_mcp::connection_manager::McpConnectionManager;
+use fabro_mcp::http_transport;
 use fabro_model::{AgentProfileKind, Catalog, ModelRef, Speed};
-use fabro_types::{Principal, SessionMessage, SessionRecord, SteeringMessage};
+use fabro_types::{
+    AgentToolSummary, PermissionLevel, Principal, SessionMessage, SessionRecord,
+    StageContextWindowProjection, SteeringMessage,
+};
 use futures::StreamExt;
 use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast};
 use tokio::time;
@@ -25,21 +29,29 @@ use tracing::{debug, info, warn};
 use crate::agent_profile::AgentProfile;
 use crate::compaction::{check_context_usage, compact_context};
 use crate::config::SessionOptions;
+use crate::context_window::{
+    ContextWindowInput, build_local_snapshot, context_window_from_response_usage,
+};
 use crate::error::{Error, InterruptReason};
 use crate::event::Emitter;
 use crate::file_tracker::FileTracker;
 use crate::history::History;
 use crate::loop_detection::detect_loop;
-use crate::mcp_integration;
-use crate::memory::discover_memory;
+use crate::memory::{BUDGET_BYTES, MemoryDocument, discover_memory};
 use crate::profiles::EnvContext;
+use crate::question_tools::AgentToolRuntime;
 use crate::sandbox::Sandbox;
 use crate::skills::{
     ExpandedInput, Skill, default_skill_dirs, discover_skills, expand_skill, make_use_skill_tool,
 };
 use crate::subagent::{SubAgentCallbackEvent, SubAgentEventCallback, SubAgentManager};
 use crate::tool_execution::execute_tool_calls;
-use crate::types::{AgentEvent, Message, SessionEvent, SessionState};
+use crate::tool_registry::ToolDefinitionWithSource;
+use crate::types::{
+    AgentEvent, McpToolSummary, MemoryFileSummary, Message, SessionEvent, SessionState,
+    SkillActivationSource, SkillSummary,
+};
+use crate::{mcp_integration, task_reminder};
 
 /// One queued external control item for a live session.
 #[derive(Debug, Clone)]
@@ -291,28 +303,39 @@ impl ToolEnvProvider for StaticEnvProvider {
     }
 }
 
+struct BuiltRequest {
+    request:        Request,
+    context_window: StageContextWindowProjection,
+}
+
 pub struct Session {
-    id:                     String,
-    config:                 SessionOptions,
-    history:                History,
-    event_emitter:          Emitter,
-    state:                  SessionState,
-    llm_client:             Client,
-    provider_profile:       Arc<dyn AgentProfile>,
-    sandbox:                Arc<dyn Sandbox>,
-    control_state:          Arc<Mutex<ControlState>>,
-    control_notify:         Arc<Notify>,
-    followup_queue:         Arc<Mutex<VecDeque<String>>>,
-    cancel_token:           CancellationToken,
-    round_token:            Arc<RwLock<CancellationToken>>,
-    interrupt_reason:       Arc<Mutex<Option<InterruptReason>>>,
-    memory:                 Vec<String>,
-    env_context:            EnvContext,
-    skills:                 Vec<Skill>,
-    system_prompt:          String,
-    file_tracker:           FileTracker,
-    tool_env_provider:      Option<Arc<dyn ToolEnvProvider>>,
-    subagent_manager:       Option<Arc<AsyncMutex<SubAgentManager>>>,
+    id: String,
+    /// Root agent session ID for this session's agent tree. A root session
+    /// uses its own `id`; a subagent session inherits its parent's
+    /// `root_session_id` so todo tools that scope by root (Anthropic tasks)
+    /// share one list across all subagents.
+    root_session_id: String,
+    config: SessionOptions,
+    history: History,
+    event_emitter: Emitter,
+    state: SessionState,
+    llm_client: Client,
+    provider_profile: Arc<dyn AgentProfile>,
+    sandbox: Arc<dyn Sandbox>,
+    control_state: Arc<Mutex<ControlState>>,
+    control_notify: Arc<Notify>,
+    followup_queue: Arc<Mutex<VecDeque<String>>>,
+    cancel_token: CancellationToken,
+    round_token: Arc<RwLock<CancellationToken>>,
+    interrupt_reason: Arc<Mutex<Option<InterruptReason>>>,
+    memory: Vec<MemoryDocument>,
+    env_context: EnvContext,
+    skills: Vec<Skill>,
+    system_prompt: String,
+    activated_skill_context_observed: bool,
+    file_tracker: FileTracker,
+    tool_env_provider: Option<Arc<dyn ToolEnvProvider>>,
+    subagent_manager: Option<Arc<AsyncMutex<SubAgentManager>>>,
     completion_coordinator: Option<Arc<dyn CompletionCoordinator>>,
 }
 
@@ -325,8 +348,10 @@ impl Session {
         config: SessionOptions,
         subagent_manager: Option<Arc<AsyncMutex<SubAgentManager>>>,
     ) -> Self {
+        let id = uuid::Uuid::new_v4().to_string();
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            root_session_id: id.clone(),
+            id,
             config,
             history: History::default(),
             event_emitter: Emitter::new(),
@@ -344,6 +369,7 @@ impl Session {
             env_context: EnvContext::default(),
             skills: Vec::new(),
             system_prompt: String::new(),
+            activated_skill_context_observed: false,
             file_tracker: FileTracker::default(),
             tool_env_provider: None,
             subagent_manager,
@@ -396,6 +422,10 @@ impl Session {
             subagent_manager,
         );
         session.id = record.id.to_string();
+        // from_record represents a fresh root session by default; callers
+        // that materialize subagent sessions set the root explicitly via
+        // `set_root_session_id`.
+        session.root_session_id.clone_from(&session.id);
         session.history = History::from_session_messages(runtime_context).map_err(|err| {
             Error::InvalidState(format!("invalid persisted session context: {err}"))
         })?;
@@ -416,6 +446,19 @@ impl Session {
         &self.id
     }
 
+    /// Root agent session ID for this session's agent tree. Equal to
+    /// [`Self::id`] for the root agent.
+    #[must_use]
+    pub fn root_session_id(&self) -> &str {
+        &self.root_session_id
+    }
+
+    /// Override the root session ID. Used by subagent construction to
+    /// inherit the parent's root.
+    pub fn set_root_session_id(&mut self, root: impl Into<String>) {
+        self.root_session_id = root.into();
+    }
+
     #[must_use]
     pub fn profile_kind(&self) -> AgentProfileKind {
         self.provider_profile.profile_kind()
@@ -429,6 +472,49 @@ impl Session {
     #[must_use]
     pub fn model(&self) -> &str {
         self.provider_profile.model()
+    }
+
+    #[must_use]
+    pub fn reasoning_effort(&self) -> Option<ReasoningEffort> {
+        self.config.reasoning_effort
+    }
+
+    #[must_use]
+    pub fn speed(&self) -> Option<Speed> {
+        self.config.speed
+    }
+
+    #[must_use]
+    pub fn permission_level(&self) -> Option<PermissionLevel> {
+        self.config.permission_level
+    }
+
+    /// Effective tool list the model is exposed to after provider-profile
+    /// setup, optional registrations, MCP integration, and access-policy
+    /// filtering. This is the same path used to build outbound requests.
+    #[must_use]
+    pub fn effective_tools(&self) -> Vec<ToolDefinitionWithSource> {
+        self.provider_profile
+            .tool_registry()
+            .definitions_with_source_for_policy(
+                self.config.tool_access_policy.as_deref(),
+                self.config.tool_exposure_mode,
+            )
+    }
+
+    /// Public projection of `effective_tools()` for
+    /// `StageProjection.agent_tools` and the `agent.tools.available` event.
+    /// Sorted by name for deterministic snapshots; the underlying registry
+    /// stores tools in a `HashMap`.
+    #[must_use]
+    pub fn agent_tool_summaries(&self) -> Vec<AgentToolSummary> {
+        let mut summaries: Vec<_> = self
+            .effective_tools()
+            .iter()
+            .map(ToolDefinitionWithSource::to_agent_tool_summary)
+            .collect();
+        summaries.sort_by(|left, right| left.name.cmp(&right.name));
+        summaries
     }
 
     /// Initialize session by discovering project docs and capturing environment
@@ -465,16 +551,54 @@ impl Session {
         )
         .await?;
 
+        let provider_profile = self.provider_profile.profile_kind().to_string();
+
+        // Emit memory loaded event with file metadata. Contents are deliberately
+        // omitted so the durable event stream never carries file bytes.
+        let memory_files: Vec<MemoryFileSummary> = self
+            .memory
+            .iter()
+            .map(|doc| MemoryFileSummary {
+                path:         doc.path.clone(),
+                byte_count:   doc.byte_count,
+                loaded_bytes: doc.loaded_bytes,
+                truncated:    doc.truncated,
+            })
+            .collect();
+        let total_loaded_bytes = self.memory.iter().map(|doc| doc.loaded_bytes).sum();
+        self.event_emitter
+            .emit(self.id.clone(), AgentEvent::MemoryLoaded {
+                provider_profile: provider_profile.clone(),
+                files: memory_files,
+                total_loaded_bytes,
+                budget_bytes: BUDGET_BYTES,
+            });
+
         // Discover skills
         let skill_dirs = if let Some(dirs) = &self.config.skill_dirs {
             dirs.clone()
         } else {
             let skills_dir = fabro_util::Home::from_env().skills_dir();
             let skills_str = skills_dir.to_string_lossy().to_string();
-            default_skill_dirs(Some(&skills_str), self.config.git_root.as_deref())
+            default_skill_dirs(Some(&skills_str), Some(&doc_root))
         };
         self.skills = discover_skills(self.sandbox.as_ref(), &skill_dirs, &cancel_token).await?;
         debug!(skill_count = self.skills.len(), "Skills discovered");
+
+        let skill_summaries: Vec<SkillSummary> = self
+            .skills
+            .iter()
+            .map(|skill| SkillSummary {
+                name:        skill.name.clone(),
+                description: skill.description.clone(),
+            })
+            .collect();
+        self.event_emitter
+            .emit(self.id.clone(), AgentEvent::SkillsDiscovered {
+                provider_profile,
+                source_dirs: skill_dirs.clone(),
+                skills: skill_summaries,
+            });
 
         // Register use_skill tool when skills are available
         if !self.skills.is_empty() {
@@ -498,10 +622,19 @@ impl Session {
             for (server_name, result) in &results {
                 match result {
                     Ok(tool_count) => {
+                        let tools = manager
+                            .tool_summaries_for_server(server_name)
+                            .into_iter()
+                            .map(|(name, original_name)| McpToolSummary {
+                                name,
+                                original_name,
+                            })
+                            .collect();
                         self.event_emitter
                             .emit(self.id.clone(), AgentEvent::McpServerReady {
                                 server_name: server_name.clone(),
-                                tool_count:  *tool_count,
+                                tool_count: *tool_count,
+                                tools,
                             });
                     }
                     Err(e) => {
@@ -531,11 +664,15 @@ impl Session {
             "Environment context built"
         );
 
-        // Build system prompt once (static for the session lifetime)
+        // Build system prompt once (static for the session lifetime). Only
+        // the loaded memory text is passed to the profile; the document
+        // metadata is already surfaced via the `agent.memory.loaded` event.
+        let memory_contents: Vec<String> =
+            self.memory.iter().map(|doc| doc.content.clone()).collect();
         self.system_prompt = self.provider_profile.build_system_prompt(
             self.sandbox.as_ref(),
             &self.env_context,
-            &self.memory,
+            &memory_contents,
             self.config.user_instructions.as_deref(),
             &self.skills,
         );
@@ -557,13 +694,20 @@ impl Session {
                 return Err(Error::Interrupted(InterruptReason::Cancelled));
             }
             match &config.transport {
-                McpTransport::Sandbox { command, port, env } => {
+                McpTransport::Sandbox {
+                    protocol,
+                    command,
+                    port,
+                    env,
+                } => {
                     let port = *port;
                     match self
                         .start_sandbox_mcp_server(command, port, env, cancel_token)
                         .await?
                     {
                         Ok((url, headers)) => {
+                            let url = http_transport::sandbox_mcp_http_url(*protocol, &url)
+                                .map_err(|err| Error::InvalidState(err.to_string()))?;
                             info!(
                                 server = %config.name,
                                 url = %url,
@@ -571,7 +715,11 @@ impl Session {
                             );
                             resolved.push(McpServerSettings {
                                 name:                 config.name.clone(),
-                                transport:            McpTransport::Http { url, headers },
+                                transport:            McpTransport::Http {
+                                    protocol: *protocol,
+                                    url,
+                                    headers,
+                                },
                                 current_dir:          config.current_dir.clone(),
                                 clear_env:            config.clear_env,
                                 startup_timeout_secs: config.startup_timeout_secs,
@@ -1041,6 +1189,15 @@ impl Session {
     }
 
     pub async fn process_input(&mut self, input: &str) -> Result<(), Error> {
+        self.process_input_with_runtime(input, AgentToolRuntime::default())
+            .await
+    }
+
+    pub async fn process_input_with_runtime(
+        &mut self,
+        input: &str,
+        agent_tool_runtime: AgentToolRuntime,
+    ) -> Result<(), Error> {
         if self.state == SessionState::Closed {
             return Err(Error::SessionClosed);
         }
@@ -1064,7 +1221,7 @@ impl Session {
         });
 
         // Process the initial input, then drain any followups
-        let mut result = self.run_single_input(input).await;
+        let mut result = self.run_single_input(input, &agent_tool_runtime).await;
 
         if result.is_ok() {
             loop {
@@ -1074,7 +1231,7 @@ impl Session {
                     .expect("followup queue lock poisoned")
                     .pop_front();
                 let Some(followup) = followup else { break };
-                result = self.run_single_input(&followup).await;
+                result = self.run_single_input(&followup, &agent_tool_runtime).await;
                 if result.is_err() {
                     break;
                 }
@@ -1094,7 +1251,11 @@ impl Session {
         result
     }
 
-    async fn run_single_input(&mut self, input: &str) -> Result<(), Error> {
+    async fn run_single_input(
+        &mut self,
+        input: &str,
+        agent_tool_runtime: &AgentToolRuntime,
+    ) -> Result<(), Error> {
         const STREAM_CONSUME_RETRIES: usize = 3;
 
         if self.state == SessionState::Closed {
@@ -1113,9 +1274,11 @@ impl Session {
             expand_skill(&self.skills, input).map_err(Error::InvalidState)?
         };
         if let Some(ref name) = expanded.skill_name {
+            self.activated_skill_context_observed = true;
             self.event_emitter
-                .emit(self.id.clone(), AgentEvent::SkillExpanded {
+                .emit(self.id.clone(), AgentEvent::SkillActivated {
                     skill_name: name.clone(),
+                    source:     SkillActivationSource::Slash,
                 });
         }
         let expanded_input = expanded.text;
@@ -1194,8 +1357,12 @@ impl Session {
             // Pre-turn compaction: trim context before building the request
             self.compact_if_needed().await;
 
+            self.inject_task_reminder_if_needed();
+
             // Build request
-            let request = self.build_request();
+            let built_request = self.build_request();
+            let local_context_window = built_request.context_window.clone();
+            let request = built_request.request;
 
             // Emit AssistantTextStart before LLM call
             self.event_emitter
@@ -1246,12 +1413,12 @@ impl Session {
             // Set true if a steer-interrupt cancelled the round mid-stream so
             // we can clear partial output and `continue` after the loop.
             let mut steer_interrupted = false;
-            let mut emitted_anything = false;
+            let mut visible_output_present = false;
 
             'streamattempts: for stream_attempt in 0..=STREAM_CONSUME_RETRIES {
                 let mut accumulator = StreamAccumulator::new();
-                let mut emitted_text = String::new();
-                let mut emitted_reasoning = String::new();
+                let mut attempt_emitted_output = false;
+                let mut stream_error = None;
 
                 loop {
                     let chunk = tokio::select! {
@@ -1272,7 +1439,8 @@ impl Session {
                         Ok(event) => {
                             match &event {
                                 StreamEvent::TextDelta { ref delta, .. } => {
-                                    emitted_text.push_str(delta);
+                                    attempt_emitted_output = true;
+                                    visible_output_present = true;
                                     self.event_emitter.emit(
                                         self.id.clone(),
                                         AgentEvent::TextDelta {
@@ -1281,7 +1449,8 @@ impl Session {
                                     );
                                 }
                                 StreamEvent::ReasoningDelta { ref delta } => {
-                                    emitted_reasoning.push_str(delta);
+                                    attempt_emitted_output = true;
+                                    visible_output_present = true;
                                     self.event_emitter.emit(
                                         self.id.clone(),
                                         AgentEvent::ReasoningDelta {
@@ -1294,14 +1463,10 @@ impl Session {
                             accumulator.process(&event);
                         }
                         Err(err) => {
-                            return Err(self.emit_llm_error(err));
+                            stream_error = Some(err);
+                            break;
                         }
                     }
-                }
-
-                // Track whether anything was rendered this attempt.
-                if !emitted_text.is_empty() || !emitted_reasoning.is_empty() {
-                    emitted_anything = true;
                 }
 
                 // If terminal cancel fired, drop the stream and bail out.
@@ -1324,14 +1489,65 @@ impl Session {
                     break;
                 }
 
-                // No Finish event — retry if we have attempts left
-                if stream_attempt < STREAM_CONSUME_RETRIES {
-                    tracing::warn!(
-                        attempt = stream_attempt + 1,
-                        max = STREAM_CONSUME_RETRIES,
-                        "Stream ended without Finish event, retrying turn"
-                    );
-                    if !emitted_text.is_empty() || !emitted_reasoning.is_empty() {
+                if let Some(err) = stream_error {
+                    let can_retry = err.retryable() && stream_attempt < STREAM_CONSUME_RETRIES;
+                    let retry_attempt = u32::try_from(stream_attempt).unwrap_or(u32::MAX);
+                    let retry_delay = can_retry
+                        .then(|| retry::retry_delay(&retry_policy, &err, retry_attempt))
+                        .flatten();
+
+                    if let Some(delay) = retry_delay {
+                        tracing::warn!(
+                            attempt = stream_attempt + 1,
+                            max = STREAM_CONSUME_RETRIES,
+                            error = %err,
+                            delay_secs = delay.as_secs_f64(),
+                            "LLM stream failed mid-turn, retrying turn"
+                        );
+                        if attempt_emitted_output {
+                            self.event_emitter.emit(
+                                self.id.clone(),
+                                AgentEvent::AssistantOutputReplace {
+                                    text:      String::new(),
+                                    reasoning: None,
+                                },
+                            );
+                            visible_output_present = false;
+                        }
+                        if let Some(ref on_retry) = retry_policy.on_retry {
+                            on_retry(&err, retry_attempt, delay);
+                        }
+
+                        let delay_outcome = tokio::select! {
+                            biased;
+                            () = round_token.cancelled() => None,
+                            () = self.cancel_token.cancelled() => None,
+                            () = time::sleep(delay) => Some(()),
+                        };
+                        if delay_outcome.is_none() {
+                            steer_interrupted =
+                                round_token.is_cancelled() && !self.cancel_token.is_cancelled();
+                            break 'streamattempts;
+                        }
+
+                        let cancel_token_for_select = self.cancel_token.clone();
+                        let retry_outcome: Option<Result<StreamEventStream, Error>> = tokio::select! {
+                            biased;
+                            () = round_token.cancelled() => None,
+                            () = cancel_token_for_select.cancelled() => None,
+                            stream = self.open_stream_with_retry(&client, &request, &retry_policy) => Some(stream),
+                        };
+                        event_stream = if let Some(stream) = retry_outcome {
+                            stream?
+                        } else {
+                            steer_interrupted =
+                                round_token.is_cancelled() && !self.cancel_token.is_cancelled();
+                            break 'streamattempts;
+                        };
+                        continue 'streamattempts;
+                    }
+
+                    if visible_output_present {
                         self.event_emitter.emit(
                             self.id.clone(),
                             AgentEvent::AssistantOutputReplace {
@@ -1339,6 +1555,26 @@ impl Session {
                                 reasoning: None,
                             },
                         );
+                    }
+                    return Err(self.emit_llm_error(err));
+                }
+
+                // No Finish event — retry if we have attempts left
+                if stream_attempt < STREAM_CONSUME_RETRIES {
+                    tracing::warn!(
+                        attempt = stream_attempt + 1,
+                        max = STREAM_CONSUME_RETRIES,
+                        "Stream ended without Finish event, retrying turn"
+                    );
+                    if attempt_emitted_output {
+                        self.event_emitter.emit(
+                            self.id.clone(),
+                            AgentEvent::AssistantOutputReplace {
+                                text:      String::new(),
+                                reasoning: None,
+                            },
+                        );
+                        visible_output_present = false;
                     }
                     let cancel_token_for_select = self.cancel_token.clone();
                     let retry_outcome: Option<Result<StreamEventStream, Error>> = tokio::select! {
@@ -1361,7 +1597,7 @@ impl Session {
             // partial visible output, and re-iterate. The next turn's
             // top-of-loop drain delivers the steer as the next user message.
             if steer_interrupted {
-                if emitted_anything {
+                if visible_output_present {
                     self.event_emitter
                         .emit(self.id.clone(), AgentEvent::AssistantOutputReplace {
                             text:      String::new(),
@@ -1372,6 +1608,13 @@ impl Session {
             }
 
             let Some(response) = response else {
+                if visible_output_present {
+                    self.event_emitter
+                        .emit(self.id.clone(), AgentEvent::AssistantOutputReplace {
+                            text:      String::new(),
+                            reasoning: None,
+                        });
+                }
                 return Err(self.emit_llm_error(LlmError::Stream {
                     message: "Stream ended without a Finish event (after retries)".into(),
                     source:  None,
@@ -1389,6 +1632,10 @@ impl Session {
                 .cloned()
                 .collect();
             let usage = response.usage.clone();
+            let context_window = Some(context_window_from_response_usage(
+                &local_context_window,
+                &usage,
+            ));
 
             self.history.push(Message::Assistant {
                 content: text.clone(),
@@ -1415,6 +1662,7 @@ impl Session {
                     model,
                     usage: response.usage.clone(),
                     tool_call_count: tool_calls.len(),
+                    context_window,
                 });
 
             // Post-response compaction: trim context after appending assistant turn
@@ -1464,10 +1712,18 @@ impl Session {
                 &self.config,
                 &self.event_emitter,
                 &self.id,
+                &self.root_session_id,
                 self.tool_env_provider.as_ref(),
+                agent_tool_runtime,
             )
             .await;
             composite_watcher.abort();
+            if tool_calls
+                .iter()
+                .any(|tool_call| tool_call.name == "use_skill")
+            {
+                self.activated_skill_context_observed = true;
+            }
 
             // Track file operations from tool calls
             self.file_tracker
@@ -1512,31 +1768,34 @@ impl Session {
     }
 
     async fn compact_if_needed(&mut self) {
-        let over_threshold = check_context_usage(
+        let Some(estimate) = check_context_usage(
             &self.system_prompt,
             &self.history,
             self.provider_profile.as_ref(),
             self.config.compaction_threshold_percent,
             &self.event_emitter,
             &self.id,
-        );
-        if over_threshold && self.config.enable_context_compaction {
-            if let Err(e) = compact_context(
-                &mut self.history,
-                &self.llm_client,
-                self.provider_profile.as_ref(),
-                &self.system_prompt,
-                &self.file_tracker,
-                self.config.compaction_preserve_turns,
-                &self.event_emitter,
-                &self.id,
-            )
-            .await
-            {
-                self.event_emitter.emit(self.id.clone(), AgentEvent::Error {
-                    error: Error::InvalidState(format!("Context compaction failed: {e}")),
-                });
-            }
+        ) else {
+            return;
+        };
+        if !self.config.enable_context_compaction {
+            return;
+        }
+        if let Err(e) = compact_context(
+            &mut self.history,
+            &self.llm_client,
+            self.provider_profile.as_ref(),
+            &self.file_tracker,
+            self.config.compaction_preserve_turns,
+            estimate,
+            &self.event_emitter,
+            &self.id,
+        )
+        .await
+        {
+            self.event_emitter.emit(self.id.clone(), AgentEvent::Error {
+                error: Error::InvalidState(format!("Context compaction failed: {e}")),
+            });
         }
     }
 
@@ -1602,17 +1861,21 @@ impl Session {
         }
     }
 
-    fn build_request(&self) -> Request {
+    fn build_request(&self) -> BuiltRequest {
         let mut messages = Vec::new();
         if !self.system_prompt.trim().is_empty() {
             messages.push(LlmMessage::system(self.system_prompt.clone()));
         }
         messages.extend(self.history.convert_to_messages());
 
-        let tools = self.provider_profile.tools();
+        let tools_with_source = self.effective_tools();
+        let tools: Vec<_> = tools_with_source
+            .iter()
+            .map(|tool| tool.definition.clone())
+            .collect();
         let has_tools = !tools.is_empty();
 
-        Request {
+        let request = Request {
             model: self.provider_profile.model().to_string(),
             messages,
             provider: Some(self.provider_profile.provider_id().to_string()),
@@ -1634,6 +1897,38 @@ impl Session {
             speed: self.config.speed,
             metadata: None,
             provider_options: None,
+        };
+        let provider = self.provider_profile.provider_id().to_string();
+        let model = self.provider_profile.model().to_string();
+        let context_window = build_local_snapshot(ContextWindowInput {
+            request: &request,
+            tools: &tools_with_source,
+            system_prompt: &self.system_prompt,
+            memory: &self.memory,
+            skills: &self.skills,
+            activated_skill_context_observed: self.activated_skill_context_observed,
+            provider: &provider,
+            model: &model,
+            context_window_tokens: self.provider_profile.context_window_size(),
+        });
+        BuiltRequest {
+            request,
+            context_window,
+        }
+    }
+
+    fn inject_task_reminder_if_needed(&mut self) {
+        let tools: Vec<_> = self
+            .effective_tools()
+            .into_iter()
+            .map(|tool| tool.definition)
+            .collect();
+        let tool_names: Vec<&str> = tools.iter().map(|tool| tool.name.as_str()).collect();
+        if let Some(reminder) = task_reminder::maybe_reminder(&self.history, &tool_names) {
+            self.history.push(Message::System {
+                content:   reminder,
+                timestamp: SystemTime::now(),
+            });
         }
     }
 }
@@ -1672,16 +1967,50 @@ mod tests {
     use fabro_llm::error::{ProviderErrorDetail, ProviderErrorKind};
     use fabro_llm::provider::{ProviderAdapter, StreamEventStream};
     use fabro_llm::types::{
-        ContentPart, ReasoningEffort, Request, Response, Role, StreamEvent, ToolDefinition,
+        ContentPart, ReasoningEffort, Request, Response, Role, StreamEvent, TokenCounts, ToolCall,
+        ToolDefinition,
     };
+    use fabro_types::StageContextWindowCountMethod;
     use futures::stream;
     use tokio::time::{sleep, timeout};
 
     use super::*;
-    use crate::config::ToolApprovalAdapter;
+    use crate::config::{ToolAccess, ToolAccessPolicy, ToolApprovalAdapter, ToolExposureMode};
+    use crate::skills::{Skill, make_use_skill_tool};
     use crate::subagent::SubAgentStatus;
     use crate::test_support::*;
-    use crate::tool_registry::{RegisteredTool, ToolRegistry};
+    use crate::tool_registry::{RegisteredTool, ToolContext, ToolRegistry, ToolSource};
+
+    struct NamedToolAccessPolicy {
+        decisions: Vec<(&'static str, ToolAccess)>,
+    }
+
+    impl NamedToolAccessPolicy {
+        fn new(decisions: Vec<(&'static str, ToolAccess)>) -> Self {
+            Self { decisions }
+        }
+    }
+
+    impl ToolAccessPolicy for NamedToolAccessPolicy {
+        fn access_for_tool(&self, tool_name: &str) -> ToolAccess {
+            self.decisions
+                .iter()
+                .find_map(|(name, access)| (*name == tool_name).then_some(*access))
+                .unwrap_or(ToolAccess::Denied)
+        }
+    }
+
+    fn make_named_noop_tool(name: &str) -> RegisteredTool {
+        RegisteredTool {
+            definition: ToolDefinition {
+                name:        name.to_string(),
+                description: format!("Tool {name}"),
+                parameters:  serde_json::json!({"type": "object"}),
+            },
+            executor:   Arc::new(|_args, _ctx| Box::pin(async { Ok("ok".to_string()) })),
+            source:     ToolSource::Native,
+        }
+    }
 
     #[derive(Clone)]
     enum ScriptedStreamCall {
@@ -1877,6 +2206,7 @@ mod tests {
                     Ok("recorded".to_string())
                 })
             }),
+            source:     ToolSource::Native,
         };
 
         let mut registry = ToolRegistry::new();
@@ -2145,16 +2475,48 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e.event, AgentEvent::UserInput { .. }))
         );
-        assert!(
-            events
-                .iter()
-                .any(|e| matches!(e.event, AgentEvent::AssistantMessage { .. }))
+        let assistant_context_window = events.iter().find_map(|e| match &e.event {
+            AgentEvent::AssistantMessage { context_window, .. } => context_window.as_ref(),
+            _ => None,
+        });
+        let context_window =
+            assistant_context_window.expect("assistant message should carry context window data");
+        assert_eq!(
+            context_window.count_method,
+            StageContextWindowCountMethod::ResponseUsageScaledBreakdown
         );
         assert!(
             events
                 .iter()
                 .any(|e| matches!(e.event, AgentEvent::SessionEnded))
         );
+    }
+
+    #[tokio::test]
+    async fn assistant_message_context_window_uses_local_estimate_without_response_usage() {
+        let mut session = make_session(vec![response_with_usage(
+            text_response("Hello"),
+            TokenCounts::default(),
+        )])
+        .await;
+        let mut rx = session.subscribe();
+
+        session.process_input("Hi").await.unwrap();
+
+        let context_window = std::iter::from_fn(|| rx.try_recv().ok()).find_map(|event| {
+            if let AgentEvent::AssistantMessage { context_window, .. } = event.event {
+                context_window
+            } else {
+                None
+            }
+        });
+
+        let context_window = context_window.expect("assistant message should carry context window");
+        assert_eq!(
+            context_window.count_method,
+            StageContextWindowCountMethod::LocalEstimate
+        );
+        assert!(context_window.input_tokens > 0);
     }
 
     #[tokio::test]
@@ -2327,6 +2689,7 @@ mod tests {
                     Ok("done".to_string())
                 })
             }),
+            source:     ToolSource::Native,
         };
 
         let mut registry = ToolRegistry::new();
@@ -2603,6 +2966,7 @@ mod tests {
             executor:   Arc::new(|_args, _ctx| {
                 Box::pin(async move { Ok("should not reach".to_string()) })
             }),
+            source:     ToolSource::Native,
         });
 
         let responses = vec![
@@ -2644,6 +3008,7 @@ mod tests {
             executor:   Arc::new(|_args, _ctx| {
                 Box::pin(async move { Ok("tool executed".to_string()) })
             }),
+            source:     ToolSource::Native,
         });
 
         let responses = vec![
@@ -2749,6 +3114,162 @@ mod tests {
             matches!(request.messages.first(), Some(message) if message.role == Role::User),
             "first request message should be user input"
         );
+    }
+
+    #[tokio::test]
+    async fn request_exposes_all_registered_tools_when_no_access_policy_is_set() {
+        let provider = Arc::new(CapturingLlmProvider::new());
+        let provider_ref = provider.clone();
+        let client = make_client(provider as Arc<dyn ProviderAdapter>).await;
+        let mut registry = ToolRegistry::new();
+        registry.register(make_named_noop_tool("read_file"));
+        registry.register(make_named_noop_tool("write_file"));
+        let profile = Arc::new(TestProfile::with_tools(registry));
+        let env = Arc::new(MockSandbox::default());
+        let mut session = Session::new(client, profile, env, SessionOptions::default(), None);
+
+        session.process_input("test").await.unwrap();
+
+        let captured = provider_ref.captured_request.lock().unwrap();
+        let request = captured
+            .as_ref()
+            .expect("request should have been captured");
+        let tools = request.tools.as_ref().expect("tools should be exposed");
+        let tool_names: Vec<&str> = tools.iter().map(|tool| tool.name.as_str()).collect();
+        assert_eq!(tool_names.len(), 2);
+        assert!(tool_names.contains(&"read_file"));
+        assert!(tool_names.contains(&"write_file"));
+    }
+
+    #[tokio::test]
+    async fn request_injects_task_reminder_after_ten_unused_assistant_turns() {
+        let provider = Arc::new(CapturingLlmProvider::new());
+        let provider_ref = provider.clone();
+        let client = make_client(provider as Arc<dyn ProviderAdapter>).await;
+        let mut registry = ToolRegistry::new();
+        registry.register(make_named_noop_tool("TaskCreate"));
+        registry.register(make_named_noop_tool("TaskUpdate"));
+        let profile = Arc::new(TestProfile::with_tools(registry));
+        let env = Arc::new(MockSandbox::default());
+        let mut session = Session::new(client, profile, env, SessionOptions::default(), None);
+
+        for index in 0..10 {
+            session
+                .process_input(&format!("turn {index}"))
+                .await
+                .unwrap();
+        }
+        session.process_input("turn 10").await.unwrap();
+
+        let captured = provider_ref.captured_request.lock().unwrap();
+        let request = captured
+            .as_ref()
+            .expect("request should have been captured");
+        assert!(
+            request.messages.iter().any(|message| {
+                message.role == Role::System
+                    && message.text().contains("<system-reminder>")
+                    && message.text().contains("TaskCreate")
+                    && message.text().contains("TaskUpdate")
+            }),
+            "request should include task reminder system message"
+        );
+    }
+
+    #[tokio::test]
+    async fn request_omits_tools_denied_by_access_policy() {
+        let provider = Arc::new(CapturingLlmProvider::new());
+        let provider_ref = provider.clone();
+        let client = make_client(provider as Arc<dyn ProviderAdapter>).await;
+        let mut registry = ToolRegistry::new();
+        registry.register(make_named_noop_tool("read_file"));
+        registry.register(make_named_noop_tool("write_file"));
+        let profile = Arc::new(TestProfile::with_tools(registry));
+        let env = Arc::new(MockSandbox::default());
+        let config = SessionOptions {
+            tool_access_policy: Some(Arc::new(NamedToolAccessPolicy::new(vec![
+                ("read_file", ToolAccess::Allowed),
+                ("write_file", ToolAccess::Denied),
+            ]))),
+            tool_exposure_mode: ToolExposureMode::IncludeRequiresApproval,
+            ..SessionOptions::default()
+        };
+        let mut session = Session::new(client, profile, env, config, None);
+
+        session.process_input("test").await.unwrap();
+
+        let captured = provider_ref.captured_request.lock().unwrap();
+        let request = captured
+            .as_ref()
+            .expect("request should have been captured");
+        let tools = request.tools.as_ref().expect("tools should be exposed");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "read_file");
+    }
+
+    #[tokio::test]
+    async fn effective_tools_match_request_tool_filtering() {
+        let provider = Arc::new(CapturingLlmProvider::new());
+        let client = make_client(provider as Arc<dyn ProviderAdapter>).await;
+        let mut registry = ToolRegistry::new();
+        registry.register(make_named_noop_tool("read_file"));
+        registry.register(make_named_noop_tool("apply_patch"));
+        registry.register(make_named_noop_tool("shell"));
+        let profile = Arc::new(TestProfile::with_tools(registry));
+        let env = Arc::new(MockSandbox::default());
+        let config = SessionOptions {
+            tool_access_policy: Some(Arc::new(NamedToolAccessPolicy::new(vec![
+                ("read_file", ToolAccess::Allowed),
+                ("apply_patch", ToolAccess::RequiresApproval),
+                ("shell", ToolAccess::Denied),
+            ]))),
+            tool_exposure_mode: ToolExposureMode::IncludeRequiresApproval,
+            ..SessionOptions::default()
+        };
+        let session = Session::new(client, profile, env, config, None);
+
+        let tools = session.effective_tools();
+        let mut tool_names: Vec<&str> = tools
+            .iter()
+            .map(|tool| tool.definition.name.as_str())
+            .collect();
+        tool_names.sort_unstable();
+
+        assert_eq!(tool_names, vec!["apply_patch", "read_file"]);
+        assert!(tools.iter().all(|tool| tool.source == ToolSource::Native));
+    }
+
+    #[tokio::test]
+    async fn request_exposes_approval_required_tools_when_mode_allows_them() {
+        let provider = Arc::new(CapturingLlmProvider::new());
+        let provider_ref = provider.clone();
+        let client = make_client(provider as Arc<dyn ProviderAdapter>).await;
+        let mut registry = ToolRegistry::new();
+        registry.register(make_named_noop_tool("read_file"));
+        registry.register(make_named_noop_tool("shell"));
+        let profile = Arc::new(TestProfile::with_tools(registry));
+        let env = Arc::new(MockSandbox::default());
+        let config = SessionOptions {
+            tool_access_policy: Some(Arc::new(NamedToolAccessPolicy::new(vec![
+                ("read_file", ToolAccess::Allowed),
+                ("shell", ToolAccess::RequiresApproval),
+            ]))),
+            tool_exposure_mode: ToolExposureMode::IncludeRequiresApproval,
+            ..SessionOptions::default()
+        };
+        let mut session = Session::new(client, profile, env, config, None);
+
+        session.process_input("test").await.unwrap();
+
+        let captured = provider_ref.captured_request.lock().unwrap();
+        let request = captured
+            .as_ref()
+            .expect("request should have been captured");
+        let tools = request.tools.as_ref().expect("tools should be exposed");
+        let tool_names: Vec<&str> = tools.iter().map(|tool| tool.name.as_str()).collect();
+        assert_eq!(tool_names.len(), 2);
+        assert!(tool_names.contains(&"read_file"));
+        assert!(tool_names.contains(&"shell"));
     }
 
     #[tokio::test]
@@ -2949,25 +3470,60 @@ mod tests {
         assert_eq!(deltas[0], "Hello there!");
     }
 
-    #[tokio::test]
-    async fn stream_mid_stream_error() {
-        let provider = Arc::new(MockMidStreamErrorProvider {
-            partial_text: "partial".into(),
-            error:        LlmError::Stream {
-                message: "connection reset".into(),
-                source:  None,
-            },
-        });
-        let client = make_client(provider as Arc<dyn ProviderAdapter>).await;
-        let profile = Arc::new(TestProfile::new());
-        let env = Arc::new(MockSandbox::default());
-        let mut session = Session::new(client, profile, env, SessionOptions::default(), None);
+    #[tokio::test(start_paused = true)]
+    async fn stream_retries_retryable_mid_stream_error_and_records_recovered_response() {
+        let provider = Arc::new(ScriptedStreamProvider::new(vec![
+            ScriptedStreamCall::Events(vec![
+                Ok(StreamEvent::text_delta("partial", None)),
+                Err(LlmError::Stream {
+                    message: "connection reset".into(),
+                    source:  None,
+                }),
+            ]),
+            ScriptedStreamCall::Response(Box::new(text_response("Recovered"))),
+        ]));
+        let mut session = make_session_with_provider(provider.clone()).await;
+        let mut rx = session.subscribe();
 
-        let result = session.process_input("Hello").await;
-        assert!(matches!(result, Err(Error::Llm(LlmError::Stream { .. }))));
+        session.process_input("Hello").await.unwrap();
+
+        assert_eq!(provider.call_index.load(Ordering::SeqCst), 2);
+        assert_eq!(session.history().turns().len(), 2);
+        assert!(matches!(
+            session.history().turns().last(),
+            Some(Message::Assistant { content, .. }) if content == "Recovered"
+        ));
+
+        let mut observed = Vec::new();
+        let mut retry_count = 0;
+        while let Ok(event) = rx.try_recv() {
+            match event.event {
+                AgentEvent::TextDelta { delta } => observed.push(format!("delta:{delta}")),
+                AgentEvent::AssistantOutputReplace { text, reasoning } => {
+                    observed.push(format!("replace:{text}:{reasoning:?}"));
+                }
+                AgentEvent::LlmRetry { error, .. } => {
+                    retry_count += 1;
+                    assert!(error.retryable());
+                }
+                AgentEvent::AssistantMessage { text, .. } => {
+                    observed.push(format!("message:{text}"));
+                }
+                AgentEvent::Error { .. } => observed.push("error".to_string()),
+                _ => {}
+            }
+        }
+
+        assert_eq!(retry_count, 1);
+        assert_eq!(observed, vec![
+            "delta:partial".to_string(),
+            "replace::None".to_string(),
+            "delta:Recovered".to_string(),
+            "message:Recovered".to_string(),
+        ]);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn stream_quota_error_does_not_replay() {
         let quota_error = LlmError::Provider {
             kind:   ProviderErrorKind::QuotaExceeded,
@@ -2994,6 +3550,150 @@ mod tests {
             }))
         ));
         assert_eq!(provider.call_index.load(Ordering::SeqCst), 1);
+    }
+
+    async fn assert_non_retryable_mid_stream_provider_error_does_not_replay(
+        kind: ProviderErrorKind,
+    ) {
+        let llm_error = LlmError::Provider {
+            kind,
+            detail: Box::new(ProviderErrorDetail::new(
+                format!("deterministic provider error: {kind:?}"),
+                "mock",
+            )),
+        };
+        let provider = Arc::new(ScriptedStreamProvider::new(vec![
+            ScriptedStreamCall::Events(vec![
+                Ok(StreamEvent::text_delta("partial", None)),
+                Err(llm_error.clone()),
+            ]),
+            ScriptedStreamCall::Response(Box::new(text_response("should not replay"))),
+        ]));
+        let mut session = make_session_with_provider(provider.clone()).await;
+        let mut rx = session.subscribe();
+
+        let result = session.process_input("Hello").await;
+
+        assert!(matches!(
+            result,
+            Err(Error::Llm(LlmError::Provider {
+                kind: actual_kind,
+                ..
+            })) if actual_kind == kind
+        ));
+        assert_eq!(provider.call_index.load(Ordering::SeqCst), 1);
+        assert_eq!(session.history().turns().len(), 1);
+
+        let mut observed = Vec::new();
+        let mut retry_count = 0;
+        while let Ok(event) = rx.try_recv() {
+            match event.event {
+                AgentEvent::TextDelta { delta } => observed.push(format!("delta:{delta}")),
+                AgentEvent::AssistantOutputReplace { text, reasoning } => {
+                    observed.push(format!("replace:{text}:{reasoning:?}"));
+                }
+                AgentEvent::LlmRetry { .. } => retry_count += 1,
+                AgentEvent::Error { error } => {
+                    assert!(matches!(
+                        error,
+                        Error::Llm(LlmError::Provider {
+                            kind: actual_kind,
+                            ..
+                        }) if actual_kind == kind
+                    ));
+                    observed.push("error".to_string());
+                }
+                AgentEvent::AssistantMessage { .. } => observed.push("message".to_string()),
+                _ => {}
+            }
+        }
+
+        assert_eq!(retry_count, 0);
+        assert_eq!(observed, vec![
+            "delta:partial".to_string(),
+            "replace::None".to_string(),
+            "error".to_string(),
+        ]);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn stream_non_retryable_mid_stream_errors_do_not_replay() {
+        assert_non_retryable_mid_stream_provider_error_does_not_replay(
+            ProviderErrorKind::Authentication,
+        )
+        .await;
+        assert_non_retryable_mid_stream_provider_error_does_not_replay(
+            ProviderErrorKind::ContextLength,
+        )
+        .await;
+        assert_non_retryable_mid_stream_provider_error_does_not_replay(
+            ProviderErrorKind::QuotaExceeded,
+        )
+        .await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn stream_retry_exhaustion_emits_one_error_without_committing_assistant_or_tools() {
+        let retryable_error = LlmError::Stream {
+            message: "connection reset".into(),
+            source:  None,
+        };
+        let provider = Arc::new(ScriptedStreamProvider::new(vec![
+            ScriptedStreamCall::Events(vec![
+                Ok(StreamEvent::text_delta("partial", None)),
+                Ok(StreamEvent::ToolCallEnd {
+                    tool_call: ToolCall::new(
+                        "call_1",
+                        "echo",
+                        serde_json::json!({"text": "should not run"}),
+                    ),
+                }),
+                Err(retryable_error.clone()),
+            ]),
+        ]));
+        let mut session = make_session_with_provider(provider.clone()).await;
+        let mut rx = session.subscribe();
+
+        let result = session.process_input("Hello").await;
+
+        assert!(matches!(result, Err(Error::Llm(LlmError::Stream { .. }))));
+        assert_eq!(provider.call_index.load(Ordering::SeqCst), 4);
+        assert_eq!(session.history().turns().len(), 1);
+
+        let mut retry_count = 0;
+        let mut error_count = 0;
+        let mut replace_count = 0;
+        let mut assistant_message_count = 0;
+        let mut tool_started_count = 0;
+        let mut tool_completed_count = 0;
+        while let Ok(event) = rx.try_recv() {
+            match event.event {
+                AgentEvent::LlmRetry { error, .. } => {
+                    retry_count += 1;
+                    assert!(error.retryable());
+                }
+                AgentEvent::AssistantOutputReplace { text, reasoning } => {
+                    assert_eq!(text, "");
+                    assert!(reasoning.is_none());
+                    replace_count += 1;
+                }
+                AgentEvent::Error { error } => {
+                    assert!(matches!(error, Error::Llm(LlmError::Stream { .. })));
+                    error_count += 1;
+                }
+                AgentEvent::AssistantMessage { .. } => assistant_message_count += 1,
+                AgentEvent::ToolCallStarted { .. } => tool_started_count += 1,
+                AgentEvent::ToolCallCompleted { .. } => tool_completed_count += 1,
+                _ => {}
+            }
+        }
+
+        assert_eq!(retry_count, 3);
+        assert_eq!(replace_count, 4);
+        assert_eq!(error_count, 1);
+        assert_eq!(assistant_message_count, 0);
+        assert_eq!(tool_started_count, 0);
+        assert_eq!(tool_completed_count, 0);
     }
 
     #[tokio::test]
@@ -3137,13 +3837,25 @@ mod tests {
         assert!(found_auth_error_event, "expected auth error event");
     }
 
+    fn response_with_usage(mut response: Response, usage: TokenCounts) -> Response {
+        response.usage = usage;
+        response
+    }
+
+    fn response_with_input_tokens(response: Response, input_tokens: i64) -> Response {
+        response_with_usage(response, TokenCounts {
+            input_tokens,
+            ..TokenCounts::default()
+        })
+    }
+
     #[tokio::test]
     async fn compaction_triggered_when_over_threshold() {
         // Tiny context window to trigger compaction
         // Responses: [0] conversation response (stream), [1] summarization (complete),
         // [2] unused fallback
         let responses = vec![
-            text_response("OK"),
+            response_with_usage(text_response("OK"), TokenCounts::default()),
             text_response("Here is the summary of the conversation so far."),
             text_response("fallback"),
         ];
@@ -3189,6 +3901,90 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn compaction_uses_assistant_usage_baseline_for_short_response() {
+        let responses = vec![
+            response_with_input_tokens(text_response("OK"), 90),
+            text_response("Here is the summary of the conversation so far."),
+            text_response("fallback"),
+        ];
+
+        let provider = Arc::new(MockLlmProvider::new(responses));
+        let client = make_client(provider).await;
+        let registry = ToolRegistry::new();
+        let profile = Arc::new(TestProfile::with_context_window(registry, 100));
+        let env = Arc::new(MockSandbox::default());
+        let config = SessionOptions {
+            enable_context_compaction: true,
+            compaction_preserve_turns: 1,
+            ..Default::default()
+        };
+        let mut session = Session::new(client, profile, env, config, None);
+        let mut rx = session.subscribe();
+
+        session.process_input("hi").await.unwrap();
+
+        let mut started = None;
+        let mut found_completed = false;
+        while let Ok(event) = rx.try_recv() {
+            match event.event {
+                AgentEvent::CompactionStarted {
+                    estimated_tokens,
+                    context_window_size,
+                } => started = Some((estimated_tokens, context_window_size)),
+                AgentEvent::CompactionCompleted { .. } => found_completed = true,
+                _ => {}
+            }
+        }
+
+        assert_eq!(started, Some((90, 100)));
+        assert!(
+            found_completed,
+            "CompactionCompleted event should be emitted"
+        );
+    }
+
+    #[tokio::test]
+    async fn compaction_noop_does_not_emit_started() {
+        let large_input = "x".repeat(400);
+        let responses = vec![text_response("OK")];
+
+        let provider = Arc::new(MockLlmProvider::new(responses));
+        let client = make_client(provider).await;
+        let registry = ToolRegistry::new();
+        let profile = Arc::new(TestProfile::with_context_window(registry, 100));
+        let env = Arc::new(MockSandbox::default());
+        let config = SessionOptions {
+            enable_context_compaction: true,
+            compaction_preserve_turns: 10,
+            ..Default::default()
+        };
+        let mut session = Session::new(client, profile, env, config, None);
+        let mut rx = session.subscribe();
+
+        session.process_input(&large_input).await.unwrap();
+
+        let mut found_warning = false;
+        let mut found_compaction = false;
+        while let Ok(event) = rx.try_recv() {
+            match event.event {
+                AgentEvent::Warning { kind, .. } if kind == "context_window" => {
+                    found_warning = true;
+                }
+                AgentEvent::CompactionStarted { .. } | AgentEvent::CompactionCompleted { .. } => {
+                    found_compaction = true;
+                }
+                _ => {}
+            }
+        }
+
+        assert!(found_warning, "threshold should have been exceeded");
+        assert!(
+            !found_compaction,
+            "no-op compaction should not emit started or completed events"
+        );
+    }
+
+    #[tokio::test]
     async fn compaction_not_triggered_when_disabled() {
         let large_input = "x".repeat(400);
         let responses = vec![text_response("OK")];
@@ -3217,6 +4013,49 @@ mod tests {
             }
         }
         assert!(!found_compaction, "No compaction events when disabled");
+    }
+
+    #[tokio::test]
+    async fn compaction_disabled_blocks_api_usage_baseline_compaction() {
+        let responses = vec![response_with_input_tokens(text_response("OK"), 90)];
+
+        let provider = Arc::new(MockLlmProvider::new(responses));
+        let client = make_client(provider).await;
+        let registry = ToolRegistry::new();
+        let profile = Arc::new(TestProfile::with_context_window(registry, 100));
+        let env = Arc::new(MockSandbox::default());
+        let config = SessionOptions {
+            enable_context_compaction: false,
+            compaction_preserve_turns: 1,
+            ..Default::default()
+        };
+        let mut session = Session::new(client, profile, env, config, None);
+        let mut rx = session.subscribe();
+
+        session.process_input("hi").await.unwrap();
+
+        let mut found_api_usage_warning = false;
+        let mut found_compaction = false;
+        while let Ok(event) = rx.try_recv() {
+            match event.event {
+                AgentEvent::Warning { details, .. }
+                    if details["estimated_tokens"] == 90
+                        && details["estimate_method"] == "api_usage_plus_local_delta" =>
+                {
+                    found_api_usage_warning = true;
+                }
+                AgentEvent::CompactionStarted { .. } | AgentEvent::CompactionCompleted { .. } => {
+                    found_compaction = true;
+                }
+                _ => {}
+            }
+        }
+
+        assert!(
+            found_api_usage_warning,
+            "API usage baseline should still drive context warning"
+        );
+        assert!(!found_compaction, "compaction must remain disabled");
     }
 
     #[tokio::test]
@@ -3273,7 +4112,10 @@ mod tests {
         }
 
         let large_input = "x".repeat(400);
-        let responses = vec![text_response("OK")];
+        let responses = vec![response_with_usage(
+            text_response("OK"),
+            TokenCounts::default(),
+        )];
 
         let provider = Arc::new(StreamOnlyProvider {
             responses,
@@ -3315,7 +4157,7 @@ mod tests {
     async fn compaction_includes_structured_prompt_and_file_tracking() {
         use fabro_llm::types::ToolDefinition;
 
-        use crate::tool_registry::RegisteredTool;
+        use crate::tool_registry::{RegisteredTool, ToolSource};
 
         // Provider that captures complete() requests (compaction) while returning
         // canned responses for stream() calls.
@@ -3357,6 +4199,7 @@ mod tests {
             executor:   Arc::new(|_args, _ctx| {
                 Box::pin(async move { Ok("file contents".to_string()) })
             }),
+            source:     ToolSource::Native,
         };
 
         let mut registry = ToolRegistry::new();
@@ -3499,16 +4342,18 @@ mod tests {
         // Initialize starts the MCP server and registers tools
         session.initialize().await.unwrap();
 
-        // Verify McpServerReady event was emitted
+        // Verify McpServerReady event was emitted with deterministic tool
+        // summaries pulled from the connection manager.
         let mut mcp_ready = false;
         while let Ok(event) = rx.try_recv() {
             if let AgentEvent::McpServerReady {
-                server_name,
-                tool_count,
+                server_name, tools, ..
             } = &event.event
             {
                 assert_eq!(server_name, "test-echo");
-                assert_eq!(*tool_count, 1);
+                assert_eq!(tools.len(), 1);
+                assert_eq!(tools[0].name, "mcp__test_echo__echo");
+                assert_eq!(tools[0].original_name, "echo");
                 mcp_ready = true;
             }
         }
@@ -3589,6 +4434,7 @@ mod tests {
                     Ok("cancelled".to_string())
                 })
             }),
+            source:     ToolSource::Native,
         };
         let mut registry = ToolRegistry::new();
         registry.register(slow_tool);
@@ -3713,5 +4559,278 @@ mod tests {
                 .any(|e| matches!(e, AgentEvent::ProcessingEnd)),
             "ProcessingEnd event should be emitted when returning to Idle"
         );
+    }
+
+    async fn build_initialized_session(
+        sandbox: Arc<MockSandbox>,
+        config: SessionOptions,
+    ) -> Session {
+        let provider = Arc::new(MockLlmProvider::new(vec![text_response("ok")]));
+        let client = make_client(provider).await;
+        let profile = Arc::new(TestProfile::new());
+        Session::new(client, profile, sandbox, config, None)
+    }
+
+    #[tokio::test]
+    async fn initialize_emits_memory_loaded_with_file_metadata() {
+        let mut files = std::collections::HashMap::new();
+        files.insert("/home/test/AGENTS.md".into(), "Hello world".into());
+        let sandbox = Arc::new(MockSandbox {
+            files,
+            ..MockSandbox::linux()
+        });
+        let config = SessionOptions {
+            git_root: Some("/home/test".into()),
+            skill_dirs: Some(Vec::new()),
+            ..Default::default()
+        };
+        let mut session = build_initialized_session(sandbox, config).await;
+        let mut rx = session.subscribe();
+        session.initialize().await.unwrap();
+
+        let mut memory_event = None;
+        while let Ok(envelope) = rx.try_recv() {
+            if let AgentEvent::MemoryLoaded {
+                files,
+                budget_bytes,
+                provider_profile,
+                ..
+            } = envelope.event
+            {
+                memory_event = Some((files, budget_bytes, provider_profile));
+                break;
+            }
+        }
+        let (files, budget_bytes, provider_profile) =
+            memory_event.expect("MemoryLoaded should be emitted");
+        assert_eq!(provider_profile, "anthropic");
+        assert_eq!(budget_bytes, 32768);
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, "/home/test/AGENTS.md");
+        assert_eq!(files[0].byte_count, "Hello world".len());
+        assert_eq!(files[0].loaded_bytes, "Hello world".len());
+        assert!(!files[0].truncated);
+    }
+
+    #[tokio::test]
+    async fn initialize_emits_memory_loaded_event_with_empty_files_when_no_memory() {
+        let sandbox = Arc::new(MockSandbox::linux());
+        let config = SessionOptions {
+            git_root: Some("/home/test".into()),
+            skill_dirs: Some(Vec::new()),
+            ..Default::default()
+        };
+        let mut session = build_initialized_session(sandbox, config).await;
+        let mut rx = session.subscribe();
+        session.initialize().await.unwrap();
+
+        let mut saw_memory = false;
+        while let Ok(envelope) = rx.try_recv() {
+            if let AgentEvent::MemoryLoaded { files, .. } = envelope.event {
+                assert!(files.is_empty());
+                saw_memory = true;
+                break;
+            }
+        }
+        assert!(
+            saw_memory,
+            "MemoryLoaded must be emitted even when no memory files are loaded"
+        );
+    }
+
+    #[tokio::test]
+    async fn initialize_emits_skills_discovered_with_summaries() {
+        let mut files = std::collections::HashMap::new();
+        files.insert(
+            "/skills/commit/SKILL.md".into(),
+            "---\nname: commit\ndescription: Make a commit\n---\nDo commit".into(),
+        );
+        let sandbox = Arc::new(MockSandbox {
+            files,
+            glob_results: vec!["/skills/commit/SKILL.md".into()],
+            ..MockSandbox::linux()
+        });
+        let config = SessionOptions {
+            git_root: Some("/home/test".into()),
+            skill_dirs: Some(vec!["/skills".into()]),
+            ..Default::default()
+        };
+        let mut session = build_initialized_session(sandbox, config).await;
+        let mut rx = session.subscribe();
+        session.initialize().await.unwrap();
+
+        let mut got = None;
+        while let Ok(envelope) = rx.try_recv() {
+            if let AgentEvent::SkillsDiscovered {
+                provider_profile,
+                source_dirs,
+                skills,
+            } = envelope.event
+            {
+                got = Some((provider_profile, source_dirs, skills));
+                break;
+            }
+        }
+        let (provider_profile, source_dirs, skills) =
+            got.expect("SkillsDiscovered must be emitted");
+        assert_eq!(provider_profile, "anthropic");
+        assert_eq!(source_dirs, vec!["/skills".to_string()]);
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].name, "commit");
+        assert_eq!(skills[0].description, "Make a commit");
+    }
+
+    #[tokio::test]
+    async fn initialize_emits_skills_discovered_event_when_no_skills() {
+        let sandbox = Arc::new(MockSandbox::linux());
+        let config = SessionOptions {
+            git_root: Some("/home/test".into()),
+            skill_dirs: Some(Vec::new()),
+            ..Default::default()
+        };
+        let mut session = build_initialized_session(sandbox, config).await;
+        let mut rx = session.subscribe();
+        session.initialize().await.unwrap();
+
+        let mut saw_skills = false;
+        while let Ok(envelope) = rx.try_recv() {
+            if let AgentEvent::SkillsDiscovered { skills, .. } = envelope.event {
+                assert!(skills.is_empty());
+                saw_skills = true;
+                break;
+            }
+        }
+        assert!(
+            saw_skills,
+            "SkillsDiscovered must be emitted even when no skills are present"
+        );
+    }
+
+    #[tokio::test]
+    async fn slash_skill_expansion_emits_skill_activated_with_slash_source() {
+        let mut files = std::collections::HashMap::new();
+        files.insert(
+            "/skills/commit/SKILL.md".into(),
+            "---\nname: commit\ndescription: Make a commit\n---\nRun commit. {{user_input}}".into(),
+        );
+        let sandbox = Arc::new(MockSandbox {
+            files,
+            glob_results: vec!["/skills/commit/SKILL.md".into()],
+            ..MockSandbox::linux()
+        });
+        let config = SessionOptions {
+            git_root: Some("/home/test".into()),
+            skill_dirs: Some(vec!["/skills".into()]),
+            ..Default::default()
+        };
+        let provider = Arc::new(MockLlmProvider::new(vec![text_response("ok")]));
+        let client = make_client(provider).await;
+        let profile = Arc::new(TestProfile::new());
+        let mut session = Session::new(client, profile, sandbox, config, None);
+        session.initialize().await.unwrap();
+
+        let mut rx = session.subscribe();
+        session.process_input("/commit fix things").await.unwrap();
+
+        let mut activations: Vec<(String, SkillActivationSource)> = Vec::new();
+        while let Ok(envelope) = rx.try_recv() {
+            if let AgentEvent::SkillActivated { skill_name, source } = envelope.event {
+                activations.push((skill_name, source));
+            }
+        }
+        assert!(
+            activations
+                .iter()
+                .any(|(name, source)| name == "commit" && *source == SkillActivationSource::Slash),
+            "expected slash skill activation, got {activations:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn use_skill_tool_success_emits_skill_activated_with_tool_source() {
+        let mut files = std::collections::HashMap::new();
+        files.insert(
+            "/skills/commit/SKILL.md".into(),
+            "---\nname: commit\ndescription: Make a commit\n---\nRun commit.".into(),
+        );
+        let sandbox = Arc::new(MockSandbox {
+            files,
+            glob_results: vec!["/skills/commit/SKILL.md".into()],
+            ..MockSandbox::linux()
+        });
+        let config = SessionOptions {
+            git_root: Some("/home/test".into()),
+            skill_dirs: Some(vec!["/skills".into()]),
+            enable_loop_detection: false,
+            ..Default::default()
+        };
+        let responses = vec![
+            tool_call_response(
+                "use_skill",
+                "call_1",
+                serde_json::json!({"skill_name": "commit"}),
+            ),
+            text_response("done"),
+        ];
+        let provider = Arc::new(MockLlmProvider::new(responses));
+        let client = make_client(provider).await;
+        let profile = Arc::new(TestProfile::new());
+        let mut session = Session::new(client, profile, sandbox, config, None);
+        session.initialize().await.unwrap();
+
+        let mut rx = session.subscribe();
+        session.process_input("please commit").await.unwrap();
+
+        let mut tool_activations = 0;
+        while let Ok(envelope) = rx.try_recv() {
+            if let AgentEvent::SkillActivated { source, skill_name } = envelope.event {
+                if source == SkillActivationSource::Tool && skill_name == "commit" {
+                    tool_activations += 1;
+                }
+            }
+        }
+        assert_eq!(
+            tool_activations, 1,
+            "expected exactly one tool-sourced skill activation"
+        );
+    }
+
+    #[tokio::test]
+    async fn use_skill_tool_failed_lookup_does_not_emit_activation() {
+        let sandbox = Arc::new(MockSandbox::linux());
+        let config = SessionOptions {
+            git_root: Some("/home/test".into()),
+            skill_dirs: Some(Vec::new()),
+            ..Default::default()
+        };
+        let provider = Arc::new(MockLlmProvider::new(vec![text_response("ok")]));
+        let client = make_client(provider).await;
+        let profile = Arc::new(TestProfile::new());
+        let mut session = Session::new(client, profile, sandbox, config, None);
+        session.initialize().await.unwrap();
+
+        // Build a use_skill tool with an empty skill list, then invoke it
+        // directly with a missing name. We must NOT see a SkillActivated event.
+        let skills_arc = Arc::new(Vec::<Skill>::new());
+        let tool = make_use_skill_tool(skills_arc);
+        let mut rx = session.subscribe();
+        let env: Arc<dyn Sandbox> = Arc::new(MockSandbox::default());
+        let ctx = ToolContext {
+            env,
+            cancel: CancellationToken::new(),
+            tool_env_provider: None,
+            session_id: Some(session.id().to_string()),
+            root_session_id: Some(session.id().to_string()),
+            tool_call_id: None,
+            agent_event_emitter: None,
+        };
+        let result = (tool.executor)(serde_json::json!({"skill_name": "nope"}), ctx).await;
+        assert!(result.is_err());
+
+        while let Ok(envelope) = rx.try_recv() {
+            if matches!(envelope.event, AgentEvent::SkillActivated { .. }) {
+                panic!("failed use_skill should not emit SkillActivated");
+            }
+        }
     }
 }

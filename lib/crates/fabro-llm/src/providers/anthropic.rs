@@ -5,12 +5,13 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use fabro_model::{Catalog, ReasoningEffortFeature};
 use futures::stream;
 
-use crate::error::{Error, error_from_status_code};
+use crate::error::{Error, ProviderErrorDetail, ProviderErrorKind, error_from_status_code};
 use crate::provider::{ProviderAdapter, StreamEventStream};
 use crate::providers::common::{
     self as common, extract_system_prompt, parse_error_body, parse_rate_limit_headers,
     parse_retry_after, send_and_read_response,
 };
+use crate::token_count::{InputTokenCount, InputTokenCountMethod};
 use crate::types::{
     AdapterTimeout, ContentPart, FinishReason, Message, RateLimitInfo, ReasoningEffort, Request,
     Response, ResponseFormatType, Role, Speed, StreamEvent, ThinkingData, TokenCounts, ToolCall,
@@ -77,6 +78,10 @@ impl Adapter {
         format!("{}/messages", self.http.base_url)
     }
 
+    fn count_tokens_url(&self) -> String {
+        format!("{}/messages/count_tokens", self.http.base_url)
+    }
+
     /// Collect a streaming response into a single [`Response`].
     ///
     /// Used by non-Anthropic providers (e.g. Kimi) that require `stream=true`.
@@ -137,6 +142,33 @@ struct ApiRequest {
     stream:         bool,
 }
 
+#[derive(serde::Serialize)]
+struct CountTokensRequest {
+    model:       String,
+    messages:    Vec<ApiMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    system:      Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools:       Option<Vec<ApiToolDef>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking:    Option<serde_json::Value>,
+}
+
+impl From<ApiRequest> for CountTokensRequest {
+    fn from(request: ApiRequest) -> Self {
+        Self {
+            model:       request.model,
+            messages:    request.messages,
+            system:      request.system,
+            tools:       request.tools,
+            tool_choice: request.tool_choice,
+            thinking:    request.thinking,
+        }
+    }
+}
+
 /// Anthropic messages use structured content blocks, not plain strings.
 #[derive(serde::Serialize)]
 struct ApiMessage {
@@ -192,6 +224,11 @@ struct ApiUsage {
     cache_read_input_tokens:     Option<i64>,
     #[serde(default)]
     cache_creation_input_tokens: Option<i64>,
+}
+
+#[derive(serde::Deserialize)]
+struct CountTokensResponse {
+    input_tokens: i64,
 }
 
 fn token_counts_from_api_usage(usage: &ApiUsage) -> TokenCounts {
@@ -995,6 +1032,57 @@ fn process_sse_event(
     }
 }
 
+fn process_sse_event_for_provider(
+    event_type: &str,
+    data: &serde_json::Value,
+    acc: &mut StreamAccumulator,
+    provider_name: &str,
+) -> Result<Vec<StreamEvent>, Error> {
+    if event_type == "error" {
+        Err(stream_error_event_to_provider_error(data, provider_name))
+    } else {
+        Ok(process_sse_event(event_type, data, acc))
+    }
+}
+
+fn stream_error_event_to_provider_error(data: &serde_json::Value, provider_name: &str) -> Error {
+    let error = data.get("error").unwrap_or(data);
+    let message = error
+        .get("message")
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| data.get("message").and_then(serde_json::Value::as_str))
+        .unwrap_or("Unknown Anthropic stream error")
+        .to_string();
+    let error_code = error
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .map(String::from);
+
+    let kind = match error_code.as_deref() {
+        Some("rate_limit_error") => ProviderErrorKind::RateLimit,
+        Some("authentication_error") => ProviderErrorKind::Authentication,
+        Some("permission_error") => ProviderErrorKind::AccessDenied,
+        Some("not_found_error") => ProviderErrorKind::NotFound,
+        Some("invalid_request_error") => ProviderErrorKind::InvalidRequest,
+        Some("request_too_large") => ProviderErrorKind::ContextLength,
+        // `overloaded_error`, `api_error`, and unknown stream errors are
+        // transient provider-side failures.
+        _ => ProviderErrorKind::Server,
+    };
+
+    Error::Provider {
+        kind,
+        detail: Box::new(ProviderErrorDetail {
+            message,
+            provider: provider_name.to_string(),
+            status_code: None,
+            error_code,
+            retry_after: None,
+            raw: Some(data.clone()),
+        }),
+    }
+}
+
 // --- SSE reader ---
 
 enum SseResult {
@@ -1013,6 +1101,7 @@ struct SseReaderState {
     /// When true, `tool_use` events for the synthetic tool are converted to
     /// text events.
     json_schema_mode: bool,
+    provider_name:    String,
 }
 
 impl SseReaderState {
@@ -1021,12 +1110,14 @@ impl SseReaderState {
         rate_limit: Option<RateLimitInfo>,
         json_schema_mode: bool,
         stream_read_timeout: Option<std::time::Duration>,
+        provider_name: String,
     ) -> Self {
         Self {
             line_reader: super::common::LineReader::new(http_resp, stream_read_timeout),
             accumulator: StreamAccumulator::new(rate_limit),
             pending_events: std::collections::VecDeque::new(),
             json_schema_mode,
+            provider_name,
         }
     }
 
@@ -1275,6 +1366,67 @@ impl ProviderAdapter for Adapter {
         &self.provider_name
     }
 
+    async fn count_input_tokens(
+        &self,
+        request: &Request,
+    ) -> Result<Option<InputTokenCount>, Error> {
+        if self.provider_name != "anthropic" {
+            return Ok(None);
+        }
+
+        self.validate_request(request)?;
+        let (api_request, _req_builder) = build_api_request(self, request, false).await;
+        let count_request = CountTokensRequest::from(api_request);
+
+        let model_info = common::catalog_model(self.catalog.as_deref(), &request.model);
+        let supports_prompt_cache = model_info.is_some_and(|m| m.features.prompt_cache);
+        let auto_cache =
+            supports_prompt_cache && is_auto_cache_enabled(request.provider_options.as_ref());
+        let is_fast = request.speed == Some(Speed::Fast);
+        let include_1m_context = model_info.is_some_and(|m| m.context_window() >= 1_000_000);
+
+        let url = self.count_tokens_url();
+        let mut req = self.http.client.post(&url);
+        for (key, value) in &self.http.default_headers {
+            req = req.header(key, value);
+        }
+        if let Some(api_key) = &self.http.api_key {
+            req = req.header("x-api-key", api_key);
+        }
+        req = req.header("anthropic-version", "2023-06-01");
+        if let Some(beta_str) = build_beta_header(
+            request.provider_options.as_ref(),
+            auto_cache,
+            is_fast,
+            include_1m_context,
+        ) {
+            req = req.header("anthropic-beta", beta_str);
+        }
+
+        let mut req = req.json(&count_request);
+        if let Some(t) = self.http.request_timeout {
+            req = req.timeout(t);
+        }
+
+        let (body, _headers) = send_and_read_response(req, &self.provider_name, "type").await?;
+        let response: CountTokensResponse =
+            serde_json::from_str(&body).map_err(|e| Error::Configuration {
+                message: format!(
+                    "failed to parse {} token count response: {e}",
+                    self.provider_name
+                ),
+                source:  None,
+            })?;
+
+        Ok(Some(InputTokenCount {
+            input_tokens: response.input_tokens,
+            method:       InputTokenCountMethod::ProviderApi,
+            provider:     self.provider_name.clone(),
+            model:        request.model.clone(),
+            warnings:     vec![],
+        }))
+    }
+
     async fn complete(&self, request: &Request) -> Result<Response, Error> {
         self.validate_request(request)?;
 
@@ -1369,7 +1521,13 @@ impl ProviderAdapter for Adapter {
         let stream_read_timeout = self.http.stream_read_timeout;
 
         let stream = stream::unfold(
-            SseReaderState::new(http_resp, rate_limit, json_schema_mode, stream_read_timeout),
+            SseReaderState::new(
+                http_resp,
+                rate_limit,
+                json_schema_mode,
+                stream_read_timeout,
+                self.provider_name.clone(),
+            ),
             |mut state| async move {
                 loop {
                     // Drain any buffered events first.
@@ -1397,9 +1555,15 @@ impl ProviderAdapter for Adapter {
                                     ));
                                 }
                             };
-                            let events =
-                                process_sse_event(&event_type, &parsed, &mut state.accumulator);
-                            state.pending_events.extend(events);
+                            match process_sse_event_for_provider(
+                                &event_type,
+                                &parsed,
+                                &mut state.accumulator,
+                                &state.provider_name,
+                            ) {
+                                Ok(events) => state.pending_events.extend(events),
+                                Err(err) => return Some((Err(err), state)),
+                            }
                             // Loop to drain from pending_events.
                         }
                         SseResult::Done => return None,
@@ -1420,8 +1584,10 @@ impl ProviderAdapter for Adapter {
 #[cfg(test)]
 mod tests {
     use fabro_model::catalog::LlmCatalogSettings;
+    use httpmock::prelude::*;
 
     use super::*;
+    use crate::error::ProviderErrorKind;
     use crate::types::{AudioData, DocumentData, ReasoningEffort, ResponseFormat};
 
     #[test]
@@ -1577,6 +1743,72 @@ mod tests {
         assert_eq!(usage.reasoning_tokens, 0);
         assert_eq!(usage.total_tokens(), 11_250);
         assert_eq!(response.usage, *usage);
+    }
+
+    #[test]
+    fn stream_error_event_overloaded_becomes_retryable_server_error() {
+        let mut acc = StreamAccumulator::new(None);
+        let data = serde_json::json!({
+            "type": "error",
+            "error": {
+                "type": "overloaded_error",
+                "message": "Overloaded"
+            }
+        });
+
+        let err =
+            process_sse_event_for_provider("error", &data, &mut acc, "anthropic").unwrap_err();
+
+        assert!(err.retryable());
+        match err {
+            Error::Provider { kind, detail } => {
+                assert_eq!(kind, ProviderErrorKind::Server);
+                assert_eq!(detail.provider, "anthropic");
+                assert_eq!(detail.message, "Overloaded");
+                assert_eq!(detail.error_code.as_deref(), Some("overloaded_error"));
+                assert_eq!(detail.raw.as_ref(), Some(&data));
+            }
+            other => panic!("expected provider error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn stream_error_event_invalid_request_remains_non_retryable() {
+        let mut acc = StreamAccumulator::new(None);
+        let data = serde_json::json!({
+            "type": "error",
+            "error": {
+                "type": "invalid_request_error",
+                "message": "max_tokens is required"
+            }
+        });
+
+        let err =
+            process_sse_event_for_provider("error", &data, &mut acc, "anthropic").unwrap_err();
+
+        assert!(!err.retryable());
+        match err {
+            Error::Provider { kind, detail } => {
+                assert_eq!(kind, ProviderErrorKind::InvalidRequest);
+                assert_eq!(detail.error_code.as_deref(), Some("invalid_request_error"));
+            }
+            other => panic!("expected provider error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unknown_sse_events_remain_ignored() {
+        let mut acc = StreamAccumulator::new(None);
+        let data = serde_json::json!({
+            "type": "content_block_delta",
+            "delta": { "type": "text_delta", "text": "ignored" }
+        });
+
+        let events =
+            process_sse_event_for_provider("some_future_event", &data, &mut acc, "anthropic")
+                .unwrap();
+
+        assert!(events.is_empty());
     }
 
     #[test]
@@ -1811,6 +2043,90 @@ mod tests {
             api_request.system.is_none(),
             "whitespace-only system prompts should be omitted"
         );
+    }
+
+    #[tokio::test]
+    async fn count_input_tokens_posts_count_request_and_parses_response() {
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(POST)
+                .path("/messages/count_tokens")
+                .header("x-api-key", "test-key")
+                .header("anthropic-version", "2023-06-01");
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(serde_json::json!({"input_tokens": 123}));
+        });
+        let adapter = Adapter::new("test-key").with_base_url(server.base_url());
+        let request = Request {
+            messages: vec![Message::system("Be concise"), Message::user("Hello")],
+            tools: Some(vec![ToolDefinition::function(
+                "search",
+                "Search files",
+                serde_json::json!({"type": "object"}),
+            )]),
+            ..make_base_request()
+        };
+
+        let count = adapter
+            .count_input_tokens(&request)
+            .await
+            .unwrap()
+            .expect("anthropic should count tokens");
+
+        mock.assert();
+        assert_eq!(count.input_tokens, 123);
+        assert_eq!(count.method, InputTokenCountMethod::ProviderApi);
+    }
+
+    #[tokio::test]
+    async fn count_request_omits_generation_only_fields_for_reasoning_effort() {
+        let adapter = Adapter::new("test-key").with_catalog(catalog_with_anthropic_model(
+            r#"
+reasoning_effort = "levels"
+"#,
+        ));
+        let request = Request {
+            model: "test-claude".to_string(),
+            reasoning_effort: Some(ReasoningEffort::High),
+            temperature: Some(0.2),
+            top_p: Some(0.9),
+            metadata: Some(std::collections::HashMap::from([(
+                "trace".to_string(),
+                "abc".to_string(),
+            )])),
+            ..make_base_request()
+        };
+
+        let (api_request, _req_builder) = build_api_request(&adapter, &request, false).await;
+        assert!(api_request.output_config.is_some());
+        let body = serde_json::to_value(CountTokensRequest::from(api_request)).unwrap();
+
+        assert!(body.get("output_config").is_none());
+        assert!(body.get("max_tokens").is_none());
+        assert!(body.get("temperature").is_none());
+        assert!(body.get("top_p").is_none());
+        assert!(body.get("metadata").is_none());
+        assert!(body.get("stream").is_none());
+    }
+
+    #[tokio::test]
+    async fn count_request_includes_explicit_thinking_when_translated_request_has_it() {
+        let adapter = Adapter::new("test-key");
+        let request = Request {
+            provider_options: Some(serde_json::json!({
+                "anthropic": {
+                    "thinking": {"type": "enabled", "budget_tokens": 1024}
+                }
+            })),
+            ..make_base_request()
+        };
+
+        let (api_request, _req_builder) = build_api_request(&adapter, &request, false).await;
+        let body = serde_json::to_value(CountTokensRequest::from(api_request)).unwrap();
+
+        assert_eq!(body["thinking"]["type"], "enabled");
+        assert_eq!(body["thinking"]["budget_tokens"], 1024);
     }
 
     fn make_base_request() -> Request {

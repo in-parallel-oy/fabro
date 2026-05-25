@@ -22,20 +22,31 @@ import {
   useLocation,
   useMatches,
   useNavigate,
-  useSearchParams,
 } from "react-router";
 import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
 
 import AskFabroSidebar, {
   SIDEBAR_WIDTH,
 } from "../components/chats/ask-fabro-sidebar";
+import {
+  AskFabroUnavailableReasonEnum,
+  type AskFabro,
+} from "@qltysh/fabro-api-client";
 import { EditableRunTitle } from "../components/editable-run-title";
 import { GitPullRequestIcon } from "../components/icons";
 import { InterviewDock } from "../components/interview-dock";
 import { SteerBar, type SteerBarHandle } from "../components/steer-bar";
 import { ErrorState } from "../components/state";
 import { useToast } from "../components/toast";
-import { ConfirmDialog, HoverCard, SECONDARY_BUTTON_CLASS, Tooltip } from "../components/ui";
+import {
+  ConfirmDialog,
+  HoverCard,
+  PopoverHeader,
+  PopoverRow,
+  PopoverRows,
+  SECONDARY_BUTTON_CLASS,
+  Tooltip,
+} from "../components/ui";
 import {
   isRunStatus,
   mapRunToRunItem,
@@ -46,29 +57,41 @@ import type {
   PullRequestDetails,
   RepositoryRef,
   RunLifecycle,
+  RunTiming,
   WorkflowRef,
 } from "@qltysh/fabro-api-client";
 import { useAskFabroLayout } from "../lib/ask-fabro-layout";
+import { mutateRunListCaches } from "../lib/board-cache";
 import { useDemoMode } from "../lib/demo-mode";
 import { useSWRConfig } from "swr";
 import {
   useArchiveRun,
+  useApproveRun,
   useCancelRun,
+  useDenyRun,
   useInterruptRun,
   usePreviewRun,
+  useRetryRun,
   useUnarchiveRun,
   type LifecycleMutationResult,
   type PreviewMutationResult,
 } from "../lib/mutations";
-import { formatAbsoluteTs, formatRelativeTime } from "../lib/format";
+import {
+  formatAbsoluteTs,
+  formatDurationMs,
+  formatRelativeTime,
+  formatUsdMicros,
+} from "../lib/format";
 import { queryKeys } from "../lib/query-keys";
 import { useRunEvents } from "../lib/run-events";
 import { useRunToasts } from "../hooks/use-run-toasts";
 import { useRun, useRunPullRequest, useRunQuestions, useRunState } from "../lib/queries";
 import {
   canArchive,
+  canApprove,
   canCancel,
   canDelete,
+  canRetry,
   canUnarchive,
   deleteErrorMessage,
   deleteRun,
@@ -145,7 +168,14 @@ type ToastApi = Pick<ReturnType<typeof useToast>, "push" | "dismiss">;
 
 const INITIAL_LIFECYCLE_TOAST_STATE: LifecycleToastState = {
   activeArchiveToastId: null,
-  lastProcessed: { cancel: null, archive: null, unarchive: null },
+  lastProcessed: {
+    cancel:    null,
+    approve:   null,
+    deny:      null,
+    archive:   null,
+    unarchive: null,
+    retry:     null,
+  },
 };
 
 export function lifecycleActionVisibility(status: string | null | undefined) {
@@ -188,27 +218,6 @@ export function meta({ data }: any) {
 }
 
 // ---- Header hover-card popovers ----
-
-function PopoverHeader({ children }: { children: ReactNode }) {
-  return (
-    <div className="mb-1.5 border-b border-line pb-1 font-medium text-fg-2">
-      {children}
-    </div>
-  );
-}
-
-function PopoverRows({ children }: { children: ReactNode }) {
-  return <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">{children}</dl>;
-}
-
-function PopoverRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <>
-      <dt className="text-fg-3">{label}</dt>
-      <dd className="min-w-0 text-fg">{children}</dd>
-    </>
-  );
-}
 
 function humanizeFailureReason(reason: string): string {
   const spaced = reason.replace(/_/g, " ");
@@ -300,6 +309,36 @@ function WorkflowPopover({
   );
 }
 
+function DurationPopover({
+  timing,
+  createdAt,
+  completedAt,
+  now,
+}: {
+  timing: RunTiming;
+  createdAt: string;
+  completedAt: string | null;
+  now: number;
+}) {
+  const endMs = completedAt != null ? Date.parse(completedAt) : now;
+  const sinceCreatedMs = Math.max(0, endMs - Date.parse(createdAt));
+  return (
+    <>
+      <PopoverHeader>Duration</PopoverHeader>
+      <dl className="space-y-2">
+        <div>
+          <dt className="text-fg-3">Wall-clock since created</dt>
+          <dd className="mt-0.5 font-mono text-fg">{formatDurationMs(sinceCreatedMs)}</dd>
+        </div>
+        <div>
+          <dt className="text-fg-3">Active (inference + tools)</dt>
+          <dd className="mt-0.5 font-mono text-fg">{formatDurationMs(timing.active_time_ms)}</dd>
+        </div>
+      </dl>
+    </>
+  );
+}
+
 function prStateBadge(details: PullRequestDetails): { label: string; className: string } {
   if (details.merged) return { label: "Merged", className: "bg-mint/15 text-mint" };
   if (details.draft) return { label: "Draft", className: "bg-overlay-strong text-fg-3" };
@@ -360,19 +399,28 @@ export default function RunDetail({ params }: { params: { id: string } }) {
   const questionsQuery = useRunQuestions(params.id, isBlocked);
   const pendingQuestions = questionsQuery.data ?? [];
   const { pathname } = useLocation();
-  const [searchParams] = useSearchParams();
-  // The "Ask Fabro" assistant is gated behind ?ask=1 while the feature is in
-  // prototype: the trigger button and the docked sidebar only render then.
-  const askEnabled = searchParams.get("ask") === "1";
+  // Ask Fabro readiness is computed server-side per run: feature flag, the
+  // run's sandbox state, and whether any LLM provider is configured. The
+  // trigger button is always rendered for visibility; it disables when the
+  // server reports `available: false`, with a tooltip explaining why.
+  const askFabro = summary?.ask_fabro ?? null;
+  const askAvailable = askFabro?.available ?? false;
+  const askDefaultModel = askFabro?.default_model ?? null;
   const [askOpen, setAskOpen] = useState(false);
-  const sidebarWidth = askEnabled && askOpen ? SIDEBAR_WIDTH : 0;
-  const { setSidebarWidth } = useAskFabroLayout();
+  // User-chosen sidebar width; persists across open/close. Draggable between
+  // SIDEBAR_WIDTH and SIDEBAR_MAX_WIDTH via the sidebar's left-edge handle.
+  const [askWidth, setAskWidth] = useState(SIDEBAR_WIDTH);
+  const sidebarWidth = askAvailable && askOpen ? askWidth : 0;
+  const { setSidebarWidth, isResizing } = useAskFabroLayout();
   const matches = useMatches();
   const basePath = `/runs/${params.id}`;
   const previewMutation = usePreviewRun(params.id);
   const cancelMutation = useCancelRun(params.id);
+  const approveMutation = useApproveRun(params.id);
+  const denyMutation = useDenyRun(params.id);
   const archiveMutation = useArchiveRun(params.id);
   const unarchiveMutation = useUnarchiveRun(params.id);
+  const retryMutation = useRetryRun(params.id);
   const interruptMutation = useInterruptRun(params.id);
   const navigate = useNavigate();
   const { mutate } = useSWRConfig();
@@ -432,12 +480,40 @@ export default function RunDetail({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     lifecycleToastStateRef.current = handleLifecycleToastResult(
+      "approve",
+      approveMutation.data,
+      lifecycleToastStateRef.current,
+      { push, dismiss },
+    );
+  }, [approveMutation.data, dismiss, push]);
+
+  useEffect(() => {
+    lifecycleToastStateRef.current = handleLifecycleToastResult(
+      "deny",
+      denyMutation.data,
+      lifecycleToastStateRef.current,
+      { push, dismiss },
+    );
+  }, [denyMutation.data, dismiss, push]);
+
+  useEffect(() => {
+    lifecycleToastStateRef.current = handleLifecycleToastResult(
       "unarchive",
       unarchiveMutation.data,
       lifecycleToastStateRef.current,
       { push, dismiss },
     );
   }, [dismiss, push, unarchiveMutation.data]);
+
+  useEffect(() => {
+    lifecycleToastStateRef.current = handleLifecycleToastResult(
+      "retry",
+      retryMutation.data,
+      lifecycleToastStateRef.current,
+      { push, dismiss },
+      navigate,
+    );
+  }, [dismiss, navigate, push, retryMutation.data]);
 
   if (runQuery.isLoading && !run) {
     return <div className="py-12" />;
@@ -480,18 +556,29 @@ export default function RunDetail({ params }: { params: { id: string } }) {
       {run.workflow}
     </span>
   );
+  const totalUsdMicros = summary.billing?.total_usd_micros;
+  const sizeChip = totalUsdMicros != null && (
+    <Tooltip label={`Size ${summary.size} · ${formatUsdMicros(totalUsdMicros)} billed`}>
+      <span className="rounded bg-overlay px-1.5 py-0.5 font-mono text-xs font-bold text-fg-muted tabular-nums">
+        {summary.size}
+      </span>
+    </Tooltip>
+  );
 
   const visibility = lifecycleActionVisibility(run.lifecycleStatus);
   const previewPending = previewMutation.isMutating;
   const cancelPending = cancelMutation.isMutating;
+  const approvalActionVisible = canApprove(summary);
+  const approvePending = approveMutation.isMutating;
+  const denyPending = denyMutation.isMutating;
   const archivePending = archiveMutation.isMutating;
   const unarchivePending = unarchiveMutation.isMutating;
+  const retryPending = retryMutation.isMutating;
   const handleConfirmDelete = async () => {
     setDeletePending(true);
     try {
       await deleteRun(params.id);
-      void mutate(queryKeys.boards.runs());
-      void mutate(queryKeys.boards.runs(true));
+      mutateRunListCaches(mutate);
       push({ message: "Run deleted." });
       navigate("/runs");
     } catch (error) {
@@ -571,11 +658,22 @@ export default function RunDetail({ params }: { params: { id: string } }) {
             ) : (
               workflowChip
             )}
-            {run.elapsed && (
-              <span className="flex items-center gap-1.5 font-mono text-xs text-fg-muted">
-                <ClockIcon className="size-3.5" aria-hidden="true" />
-                {run.elapsed}
-              </span>
+            {run.elapsed && summary.timing && (
+              <HoverCard
+                content={
+                  <DurationPopover
+                    timing={summary.timing}
+                    createdAt={summary.timestamps.created_at}
+                    completedAt={summary.timestamps.completed_at}
+                    now={now}
+                  />
+                }
+              >
+                <span className="flex items-center gap-1.5 font-mono text-xs text-fg-muted">
+                  <ClockIcon className="size-3.5" aria-hidden="true" />
+                  {run.elapsed}
+                </span>
+              </HoverCard>
             )}
             {run.lastEventAt && (
               <Tooltip label={`Last event ${formatAbsoluteTs(run.lastEventAt)}`}>
@@ -585,10 +683,9 @@ export default function RunDetail({ params }: { params: { id: string } }) {
                 </span>
               </Tooltip>
             )}
+            {sizeChip}
           </div>
         </div>
-
-        {demoMode && <ConnectMenu />}
 
         {run.pullRequestUrl && run.number != null && (
           <HoverCard content={<PullRequestPopover runId={params.id} />}>
@@ -605,6 +702,7 @@ export default function RunDetail({ params }: { params: { id: string } }) {
         )}
 
         <ActionsMenu
+          runId={params.id}
           canSendInterrupt={statusKind === "running"}
           interruptPending={interruptMutation.isMutating}
           onSendInterrupt={() => void interruptMutation.trigger()}
@@ -621,6 +719,15 @@ export default function RunDetail({ params }: { params: { id: string } }) {
           canArchive={visibility.showArchive}
           archivePending={archivePending}
           onArchive={() => void archiveMutation.trigger()}
+          canApprove={approvalActionVisible}
+          approvePending={approvePending}
+          onApprove={() => void approveMutation.trigger()}
+          canDeny={approvalActionVisible}
+          denyPending={denyPending}
+          onDeny={() => void denyMutation.trigger()}
+          canRetry={!demoMode && canRetry(summary)}
+          retryPending={retryPending}
+          onRetry={() => void retryMutation.trigger()}
           canUnarchive={visibility.showUnarchive}
           unarchivePending={unarchivePending}
           onUnarchive={() => void unarchiveMutation.trigger()}
@@ -632,20 +739,11 @@ export default function RunDetail({ params }: { params: { id: string } }) {
           onCancel={() => void cancelMutation.trigger()}
         />
 
-        {askEnabled && (
-          <button
-            type="button"
-            onClick={() => setAskOpen(true)}
-            disabled={askOpen}
-            className={classNames(
-              SECONDARY_BUTTON_CLASS,
-              "disabled:cursor-not-allowed disabled:opacity-60",
-            )}
-          >
-            <SparklesIcon className="size-4 text-teal-300" aria-hidden="true" />
-            Ask Fabro
-          </button>
-        )}
+        <AskFabroTriggerButton
+          askFabro={askFabro}
+          askOpen={askOpen}
+          onToggle={() => setAskOpen((open) => !open)}
+        />
       </div>
 
       <ConfirmDialog
@@ -680,7 +778,7 @@ export default function RunDetail({ params }: { params: { id: string } }) {
               <Link
                 key={tab.name}
                 to={tabPath}
-                className={`border-b-2 pb-3 text-sm font-medium transition-colors ${
+                className={`border-b-2 pb-3.5 text-sm font-medium transition-colors ${
                   isActive
                     ? "border-teal-500 text-fg"
                     : "border-transparent text-fg-muted hover:border-line-strong hover:text-fg-3"
@@ -703,15 +801,19 @@ export default function RunDetail({ params }: { params: { id: string } }) {
       <div
         className={
           fullHeight
-            ? "mt-6 flex min-h-0 flex-1 flex-col"
-            : "mt-6 pb-[var(--fabro-interview-dock-clearance)]"
+            ? "pt-3 flex min-h-0 flex-1 flex-col"
+            : "pt-3 pb-[var(--fabro-interview-dock-clearance)]"
         }
       >
         <Outlet />
       </div>
 
       <div
-        className="fixed bottom-0 left-0 z-30 border-t border-line bg-page transition-[right] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        className={`fixed bottom-0 left-0 z-30 border-t border-line bg-page ${
+          isResizing
+            ? ""
+            : "transition-[right] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        }`}
         style={{ right: sidebarWidth }}
       >
         {hasPendingQuestions ? (
@@ -721,11 +823,18 @@ export default function RunDetail({ params }: { params: { id: string } }) {
         )}
       </div>
 
-      {askEnabled && (
+      {askAvailable && (
         // Docked below the top nav (h-16) and above the steer bar (z-30); the
         // sidebar animates its own width, so the wrapper collapses when closed.
         <div className="fixed top-16 right-0 bottom-0 z-40">
-          <AskFabroSidebar isOpen={askOpen} onClose={() => setAskOpen(false)} />
+          <AskFabroSidebar
+            isOpen={askOpen}
+            onClose={() => setAskOpen(false)}
+            runId={params.id}
+            defaultModel={askDefaultModel}
+            width={askWidth}
+            onWidthChange={setAskWidth}
+          />
         </div>
       )}
     </div>
@@ -738,11 +847,55 @@ function isLifecycleActionFailure(
   return "ok" in value && value.ok === false;
 }
 
+const ASK_FABRO_UNAVAILABLE_TOOLTIPS: Record<
+  AskFabroUnavailableReasonEnum,
+  string
+> = {
+  [AskFabroUnavailableReasonEnum.NO_SANDBOX]:        "Run sandbox isn't ready",
+  [AskFabroUnavailableReasonEnum.SANDBOX_NOT_READY]: "Run sandbox isn't ready",
+  [AskFabroUnavailableReasonEnum.LLM_UNCONFIGURED]:  "No LLM configured",
+};
+
+function AskFabroTriggerButton({
+  askFabro,
+  askOpen,
+  onToggle,
+}: {
+  askFabro: AskFabro | null;
+  askOpen: boolean;
+  onToggle: () => void;
+}) {
+  const available = askFabro?.available ?? false;
+  const disabled = !available;
+  const unavailableReason = askFabro?.unavailable_reason ?? null;
+  const button = (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={disabled}
+      aria-expanded={askOpen}
+      className={classNames(
+        SECONDARY_BUTTON_CLASS,
+        "disabled:cursor-not-allowed disabled:opacity-60",
+      )}
+    >
+      <SparklesIcon className="size-4 text-teal-300" aria-hidden="true" />
+      Ask Fabro
+    </button>
+  );
+  if (!available && unavailableReason) {
+    const tooltip = ASK_FABRO_UNAVAILABLE_TOOLTIPS[unavailableReason] ?? "Ask Fabro is unavailable";
+    return <Tooltip label={tooltip}>{button}</Tooltip>;
+  }
+  return button;
+}
+
 export function handleLifecycleToastResult(
   intent: LifecycleAction,
   result: RunDetailActionResult | undefined,
   state: LifecycleToastState,
   toastApi: ToastApi,
+  navigate?: (path: string) => void,
 ): LifecycleToastState {
   if (!result || result.intent !== intent) return state;
   if (state.lastProcessed[intent] === result) return state;
@@ -764,6 +917,22 @@ export function handleLifecycleToastResult(
     return nextState;
   }
 
+  if (intent === "approve") {
+    toastApi.push({ message: "Run approved." });
+    return nextState;
+  }
+
+  if (intent === "deny") {
+    toastApi.push({ message: "Run denied." });
+    return nextState;
+  }
+
+  if (intent === "retry") {
+    toastApi.push({ message: "Retry started." });
+    navigate?.(`/runs/${result.run.id}`);
+    return nextState;
+  }
+
   if (state.activeArchiveToastId) {
     toastApi.dismiss(state.activeArchiveToastId);
   }
@@ -779,34 +948,8 @@ export function handleLifecycleToastResult(
   return { ...nextState, activeArchiveToastId: null };
 }
 
-function ConnectMenu() {
-  return (
-    <Menu as="div" className="shrink-0">
-      <MenuButton className={ACTIONS_TRIGGER_CLASS}>
-        Connect
-        <ChevronDownIcon className="-mr-1 size-4 text-fg-muted" aria-hidden="true" />
-      </MenuButton>
-      <MenuItems
-        transition
-        anchor={{ to: "bottom end", gap: 4 }}
-        className="z-20 w-44 origin-top-right rounded-md bg-panel py-1 outline-1 -outline-offset-1 outline-line-strong transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
-      >
-        <MenuItem>
-          <button type="button" className={MENU_ITEM_CLASS}>
-            Preview
-          </button>
-        </MenuItem>
-        <MenuItem>
-          <button type="button" className={MENU_ITEM_CLASS}>
-            SSH
-          </button>
-        </MenuItem>
-      </MenuItems>
-    </Menu>
-  );
-}
-
 interface ActionsMenuProps {
+  runId: string;
   canSendInterrupt: boolean;
   interruptPending: boolean;
   onSendInterrupt: () => void;
@@ -818,6 +961,15 @@ interface ActionsMenuProps {
   canArchive: boolean;
   archivePending: boolean;
   onArchive: () => void;
+  canApprove: boolean;
+  approvePending: boolean;
+  onApprove: () => void;
+  canDeny: boolean;
+  denyPending: boolean;
+  onDeny: () => void;
+  canRetry: boolean;
+  retryPending: boolean;
+  onRetry: () => void;
   canUnarchive: boolean;
   unarchivePending: boolean;
   onUnarchive: () => void;
@@ -831,25 +983,34 @@ interface ActionsMenuProps {
 
 function ActionsMenu(props: ActionsMenuProps) {
   const {
+    runId,
     canSendInterrupt, interruptPending, onSendInterrupt,
     canFocusSteer, onFocusSteer,
     canPreview, previewPending, onPreview,
     canArchive, archivePending, onArchive,
+    canApprove, approvePending, onApprove,
+    canDeny, denyPending, onDeny,
+    canRetry, retryPending, onRetry,
     canUnarchive, unarchivePending, onUnarchive,
     canDelete, deletePending, onDelete,
     canCancel, cancelPending, onCancel,
   } = props;
 
-  const hasOps =
-    canPreview || canSendInterrupt || canFocusSteer;
-  const hasLifecycle = canArchive || canUnarchive;
-  const hasDestructive = canCancel || canDelete;
-  const hasAny = hasOps || hasLifecycle || hasDestructive;
-  const anyPending =
-    previewPending || archivePending || unarchivePending || deletePending || cancelPending || interruptPending;
-  const separators = actionMenuSeparatorVisibility({ hasLifecycle, hasDestructive });
+  const [runIdCopied, setRunIdCopied] = useState(false);
 
-  if (!hasAny) return null;
+  const hasLifecycle = canApprove || canRetry || canArchive || canUnarchive;
+  const hasDestructive = canDeny || canCancel || canDelete;
+  const anyPending =
+    previewPending ||
+    approvePending ||
+    retryPending ||
+    archivePending ||
+    unarchivePending ||
+    denyPending ||
+    deletePending ||
+    cancelPending ||
+    interruptPending;
+  const separators = actionMenuSeparatorVisibility({ hasLifecycle, hasDestructive });
 
   return (
     <Menu as="div" className="shrink-0">
@@ -863,6 +1024,30 @@ function ActionsMenu(props: ActionsMenuProps) {
         anchor={{ to: "bottom end", gap: 4 }}
         className="z-20 w-44 origin-top-right rounded-md bg-panel py-1 outline-1 -outline-offset-1 outline-line-strong transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
       >
+        <MenuItem>
+          {({ close }) => (
+            <button
+              type="button"
+              onClick={async (event) => {
+                event.preventDefault();
+                try {
+                  await navigator.clipboard.writeText(runId);
+                  setRunIdCopied(true);
+                  window.setTimeout(() => {
+                    setRunIdCopied(false);
+                    close();
+                  }, 800);
+                } catch {
+                  close();
+                }
+              }}
+              className={MENU_ITEM_CLASS}
+            >
+              {runIdCopied ? "Copied!" : "Copy run ID"}
+            </button>
+          )}
+        </MenuItem>
+        <div className="my-1 h-px bg-line" role="separator" />
         {canPreview && (
           <MenuItem>
             <button
@@ -898,6 +1083,30 @@ function ActionsMenu(props: ActionsMenuProps) {
         {separators.afterOperations && (
           <div className="my-1 h-px bg-line" role="separator" />
         )}
+        {canApprove && (
+          <MenuItem>
+            <button
+              type="button"
+              onClick={onApprove}
+              disabled={approvePending}
+              className={MENU_ITEM_CLASS}
+            >
+              {approvePending ? "Approving…" : "Approve"}
+            </button>
+          </MenuItem>
+        )}
+        {canRetry && (
+          <MenuItem>
+            <button
+              type="button"
+              onClick={onRetry}
+              disabled={retryPending}
+              className={MENU_ITEM_CLASS}
+            >
+              {retryPending ? "Retrying…" : "Retry"}
+            </button>
+          </MenuItem>
+        )}
         {canArchive && (
           <MenuItem>
             <button
@@ -924,6 +1133,18 @@ function ActionsMenu(props: ActionsMenuProps) {
         )}
         {separators.beforeDestructive && (
           <div className="my-1 h-px bg-line" role="separator" />
+        )}
+        {canDeny && (
+          <MenuItem>
+            <button
+              type="button"
+              onClick={onDeny}
+              disabled={denyPending}
+              className={MENU_ITEM_DANGER_CLASS}
+            >
+              {denyPending ? "Denying…" : "Deny"}
+            </button>
+          </MenuItem>
         )}
         {canCancel && (
           <MenuItem>

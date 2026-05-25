@@ -1,5 +1,6 @@
 import { ChevronRightIcon } from "@heroicons/react/20/solid";
 import type {
+  EnvironmentSettings,
   WorkflowDetailResponse as ApiWorkflowDetail,
   WorkflowSettings as WorkflowSettingsSnapshot,
 } from "@qltysh/fabro-api-client";
@@ -40,6 +41,26 @@ function sampleSettings({
   diskGb: number;
   prepareCommands?: string[];
 }): WorkflowSettingsSnapshot {
+  const environmentId = labels.project ?? snapshot;
+  const environment = {
+    provider: "daytona",
+    image: { ref: snapshot, dockerfile: null },
+    resources: {
+      cpu,
+      memory: `${memoryGb}GB`,
+      disk: `${diskGb}GB`,
+    },
+    network: { mode: "allow_all", allow: [] },
+    lifecycle: {
+      preserve: false,
+      stop_on_terminal: true,
+      auto_stop: `${autoStopInterval}m`,
+    },
+    labels,
+    volumes: [],
+    env: {},
+  } satisfies EnvironmentSettings;
+
   return {
     project: {
       name: null,
@@ -52,6 +73,9 @@ function sampleSettings({
       graph: "",
       metadata: {},
     },
+    environments: {
+      [environmentId]: environment,
+    },
     run: {
       goal: { type: "inline", value: goal },
       working_dir: null,
@@ -61,30 +85,11 @@ function sampleSettings({
       git: { author: null },
       prepare: { commands: prepareCommands, timeout_ms: 120_000 },
       execution: { mode: "normal", approval: "prompt" },
-      checkpoint: { exclude_globs: [] },
+      checkpoint: { exclude_globs: [], skip_git_hooks: false },
       clone: { enabled: true },
       run_branch: { enabled: true, push: true },
       meta_branch: { enabled: true, push: true },
-      sandbox: {
-        provider: "daytona",
-        preserve: false,
-        stop_on_terminal: true,
-        devcontainer: true,
-        env: {},
-        docker: null,
-        daytona: {
-          auto_stop_interval: autoStopInterval,
-          labels,
-          snapshot: {
-            name: snapshot,
-            cpu,
-            memory_gb: memoryGb,
-            disk_gb: diskGb,
-            dockerfile: null,
-          },
-          network: null,
-        },
-      },
+      environment: { id: environmentId, ...environment },
       notifications: {},
       interviews: { provider: null, slack: null },
       agent: { permissions: null, mcps: {} },
@@ -321,7 +326,7 @@ export default function AutomationDetail() {
   const workflowQuery = useWorkflow(name);
   const { pathname } = useLocation();
   const workflow = resolveWorkflow(name, workflowQuery.data);
-  const basePath = `/automations/${name}`;
+  const basePath = `/automation/${name}`;
 
   return (
     <div>

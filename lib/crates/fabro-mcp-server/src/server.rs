@@ -95,8 +95,30 @@ impl FabroMcpServer {
     }
 
     #[tool(
+        name = "fabro_run_get",
+        description = "Read-only inspection of a Fabro run: returns its summary, projection, and pending questions without mutating state."
+    )]
+    async fn fabro_run_get(
+        &self,
+        params: Parameters<run_tools::FabroRunGetParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let params = match run_tools::ValidatedRunGet::try_from(params.0) {
+            Ok(params) => params,
+            Err(err) => return Ok(error_result(&err)),
+        };
+        let backend = match self.backend().await {
+            Ok(backend) => backend,
+            Err(err) => return Ok(error_result(&err)),
+        };
+        match run_tools::run_get(backend, params).await {
+            Ok(result) => success_result(&result, run_tools::run_get_text(&result)),
+            Err(err) => Ok(error_result(&err)),
+        }
+    }
+
+    #[tool(
         name = "fabro_run_interact",
-        description = "Get, start, message, interrupt, cancel, archive, unarchive, link or unlink a parent, inspect questions, or answer a Fabro run."
+        description = "Control a Fabro run: start, message, interrupt, cancel, archive, unarchive, link or unlink a parent, inspect or answer questions. Use fabro_run_get for read-only inspection."
     )]
     async fn fabro_run_interact(
         &self,
@@ -256,5 +278,53 @@ mod tests {
         assert!(!schema_text.contains("\"model\""));
         assert!(!schema_text.contains("\"node_id\""));
         assert!(!schema_text.contains("\"visit\""));
+    }
+
+    #[test]
+    fn fabro_run_create_tool_advertises_string_and_object_run_specs() {
+        let settings = FabroMcpServerSettings {
+            cwd:            PathBuf::from("."),
+            config_path:    PathBuf::from("fabro.toml"),
+            client_factory: Arc::new(|| {
+                Box::pin(async { panic!("client should not be constructed while listing tools") })
+            }),
+        };
+        let server = FabroMcpServer::new(Arc::new(settings));
+        let tools = server.tool_router.list_all();
+        let tool = tools
+            .iter()
+            .find(|tool| tool.name.as_ref() == "fabro_run_create")
+            .expect("fabro_run_create should be registered");
+        let schema = Value::Object(tool.input_schema.as_ref().clone());
+        let variants = schema
+            .pointer("/properties/runs/items/anyOf")
+            .and_then(Value::as_array)
+            .expect("runs items should advertise string and object variants");
+
+        assert!(
+            variants.iter().any(|variant| variant["type"] == "string"),
+            "runs items should include workflow string shorthand: {schema}"
+        );
+        let object_variant = variants
+            .iter()
+            .find(|variant| variant["type"] == "object")
+            .unwrap_or_else(|| {
+                panic!("runs items should include object create spec variant: {schema}")
+            });
+        assert!(
+            object_variant.pointer("/properties/workflow").is_some(),
+            "object create spec should expose workflow property: {schema}"
+        );
+        assert!(
+            object_variant.pointer("/properties/goal_file").is_some(),
+            "object create spec should expose goal_file property: {schema}"
+        );
+        assert!(
+            object_variant
+                .get("required")
+                .and_then(Value::as_array)
+                .is_some_and(|required| required.iter().any(|name| name == "workflow")),
+            "object create spec should require workflow: {schema}"
+        );
     }
 }

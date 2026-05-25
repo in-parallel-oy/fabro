@@ -11,6 +11,7 @@ import * as ChatsNew from "./routes/chats-new";
 import * as ChatsDetail from "./routes/chats-detail";
 import * as AskFabro from "./routes/ask-fabro";
 import * as Automations from "./routes/automations";
+import * as AutomationsNew from "./routes/automations-new";
 import * as AutomationDetail from "./routes/automation-detail";
 import * as AutomationDefinition from "./routes/automation-definition";
 import * as AutomationDiagram from "./routes/automation-diagram";
@@ -36,6 +37,7 @@ import * as Settings from "./routes/settings";
 import * as SettingsGeneral from "./routes/settings-general";
 import * as SettingsIntegrations from "./routes/settings-integrations";
 import * as SettingsModels from "./routes/settings-models";
+import * as SettingsSandboxes from "./routes/settings-sandboxes";
 import * as SettingsSecrets from "./routes/settings-secrets";
 import * as SettingsSecretsNew from "./routes/settings-secrets-new";
 import * as SettingsResources from "./routes/settings-resources";
@@ -107,7 +109,8 @@ export const routes: RouteObject[] = [
           }),
           route("ask-fabro", AskFabro),
           route("automations", Automations),
-          route("automations/:name", AutomationDetail, {
+          route("automations/new", AutomationsNew),
+          route("automation/:name", AutomationDetail, {
             children: [
               indexRoute(AutomationDefinition),
               route("diagram", AutomationDiagram),
@@ -142,6 +145,7 @@ export const routes: RouteObject[] = [
               indexRoute(SettingsGeneral),
               route("integrations", SettingsIntegrations),
               route("models", SettingsModels),
+              route("sandboxes", SettingsSandboxes),
               route("secrets", SettingsSecrets),
               route("secrets/new", SettingsSecretsNew),
               route("security", SettingsSecurity),

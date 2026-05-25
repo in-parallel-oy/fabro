@@ -8,7 +8,11 @@ pub fn event_name(event: &Event) -> &'static str {
         Event::RunCreated { .. } => "run.created",
         Event::WorkflowRunStarted { .. } => "run.started",
         Event::RunSubmitted { .. } => "run.submitted",
-        Event::RunQueued => "run.queued",
+        Event::RunStartRequested { .. } => "run.start_requested",
+        Event::RunPending { .. } => "run.pending",
+        Event::RunApproved { .. } => "run.approved",
+        Event::RunDenied { .. } => "run.denied",
+        Event::RunRunnable { .. } => "run.runnable",
         Event::RunStarting => "run.starting",
         Event::RunRunning => "run.running",
         Event::RunInterrupt { .. } => "run.interrupt",
@@ -78,7 +82,6 @@ pub fn event_name(event: &Event) -> &'static str {
             AgentEvent::Warning { .. } => "agent.warning",
             AgentEvent::LoopDetected => "agent.loop.detected",
             AgentEvent::TurnLimitReached { .. } => "agent.turn.limit",
-            AgentEvent::SkillExpanded { .. } => "agent.skill.expanded",
             AgentEvent::SteeringInjected { .. } => "agent.steering.injected",
             AgentEvent::CompactionStarted { .. } => "agent.compaction.started",
             AgentEvent::CompactionCompleted { .. } => "agent.compaction.completed",
@@ -89,6 +92,12 @@ pub fn event_name(event: &Event) -> &'static str {
             AgentEvent::SubAgentClosed { .. } => "agent.sub.closed",
             AgentEvent::McpServerReady { .. } => "agent.mcp.ready",
             AgentEvent::McpServerFailed { .. } => "agent.mcp.failed",
+            AgentEvent::MemoryLoaded { .. } => "agent.memory.loaded",
+            AgentEvent::SkillsDiscovered { .. } => "agent.skills.discovered",
+            AgentEvent::SkillActivated { .. } => "agent.skill.activated",
+            AgentEvent::TodoCreated(_) => "todo.created",
+            AgentEvent::TodoUpdated(_) => "todo.updated",
+            AgentEvent::TodoDeleted(_) => "todo.deleted",
         },
         Event::SubgraphStarted { .. } => "subgraph.started",
         Event::SubgraphCompleted { .. } => "subgraph.completed",
@@ -130,6 +139,7 @@ pub fn event_name(event: &Event) -> &'static str {
         Event::CommandCompleted { .. } => "command.completed",
         Event::AgentSessionStarted { .. } => "agent.session.started",
         Event::AgentSessionActivated { .. } => "agent.session.activated",
+        Event::AgentToolsAvailable { .. } => "agent.tools.available",
         Event::AgentSessionDeactivated { .. } => "agent.session.deactivated",
         Event::AgentSessionEnded { .. } => "agent.session.ended",
         Event::AgentInterruptInjected { .. } => "agent.interrupt.injected",
@@ -188,8 +198,18 @@ mod tests {
                 },
                 session_id:        None,
                 parent_session_id: None,
+                tool_call_id:      None,
             }),
             "agent.sub.spawned"
+        );
+        assert_eq!(
+            event_name(&Event::AgentToolsAvailable {
+                node_id:    "code".to_string(),
+                visit:      1,
+                session_id: "session-1".to_string(),
+                tools:      Vec::new(),
+            }),
+            "agent.tools.available"
         );
     }
 

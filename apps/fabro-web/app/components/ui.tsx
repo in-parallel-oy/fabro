@@ -2,7 +2,7 @@
 // exposes the primary button, secondary button, input, error message, and
 // copy button so the auth and in-app surfaces can match.
 
-import { useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import {
@@ -155,16 +155,45 @@ export function ConfirmDialog({
 
 // Shared hover/focus state for `Tooltip` and `HoverCard`. Returns the trigger
 // props to spread and the trigger rect (only while open) for positioning.
-function useHoverAnchor() {
+// `openDelay` (ms) defers showing the card until the pointer has dwelled on
+// the trigger long enough — protects against fetch-on-mount popovers being
+// triggered by an incidental cursor sweep through a list.
+function useHoverAnchor(openDelay = 0) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLSpanElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearTimer = () => {
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+  const requestOpen = () => {
+    if (openDelay <= 0) {
+      setOpen(true);
+      return;
+    }
+    clearTimer();
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      setOpen(true);
+    }, openDelay);
+  };
+  const requestClose = () => {
+    clearTimer();
+    setOpen(false);
+  };
+
+  useEffect(() => clearTimer, []);
+
   const rect = open ? (triggerRef.current?.getBoundingClientRect() ?? null) : null;
   const triggerProps = {
     ref:          triggerRef,
-    onMouseEnter: () => setOpen(true),
-    onMouseLeave: () => setOpen(false),
-    onFocus:      () => setOpen(true),
-    onBlur:       () => setOpen(false),
+    onMouseEnter: requestOpen,
+    onMouseLeave: requestClose,
+    onFocus:      requestOpen,
+    onBlur:       requestClose,
   };
   return { open, rect, triggerProps };
 }
@@ -209,7 +238,7 @@ export function Tooltip({
 // viewport grow rightward from their left edge; triggers in the right half
 // grow leftward from their right edge — keeping the card on-screen without
 // measuring its width.
-function hoverCardStyle(rect: DOMRect): CSSProperties {
+export function hoverCardStyle(rect: DOMRect): CSSProperties {
   const margin = 12;
   const top = rect.bottom + 6;
   if (rect.left > window.innerWidth / 2) {
@@ -226,17 +255,21 @@ function hoverCardStyle(rect: DOMRect): CSSProperties {
 export function HoverCard({
   content,
   children,
+  className = "inline-flex",
+  openDelay = 0,
 }: {
   content: ReactNode;
   children: ReactNode;
+  className?: string;
+  openDelay?: number;
 }) {
-  const { open, rect, triggerProps } = useHoverAnchor();
+  const { open, rect, triggerProps } = useHoverAnchor(openDelay);
   const id = useId();
   const portalTarget = typeof document === "undefined" ? null : document.body;
 
   return (
     <>
-      <span {...triggerProps} aria-describedby={open ? id : undefined} className="inline-flex">
+      <span {...triggerProps} aria-describedby={open ? id : undefined} className={className}>
         {children}
       </span>
       {rect && portalTarget
@@ -252,6 +285,27 @@ export function HoverCard({
             portalTarget,
           )
         : null}
+    </>
+  );
+}
+
+export function PopoverHeader({ children }: { children: ReactNode }) {
+  return (
+    <div className="mb-1.5 border-b border-line pb-1 font-medium text-fg-2">
+      {children}
+    </div>
+  );
+}
+
+export function PopoverRows({ children }: { children: ReactNode }) {
+  return <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">{children}</dl>;
+}
+
+export function PopoverRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <>
+      <dt className="text-fg-3">{label}</dt>
+      <dd className="min-w-0 text-fg">{children}</dd>
     </>
   );
 }

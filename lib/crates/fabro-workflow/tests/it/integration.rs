@@ -124,23 +124,27 @@ fn load_run_checkpoint(run_dir: &Path) -> Result<Checkpoint, Box<dyn std::error:
                 let runtime = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()?;
-                let run_id = if uses_shared_store {
-                    run_dir
-                        .file_name()
-                        .ok_or("run dir should have file name")?
-                        .to_string_lossy()
-                        .rsplit('-')
-                        .next()
-                        .ok_or("run dir should contain run id suffix")?
-                        .parse()?
-                } else {
-                    runtime
-                        .block_on(store.list_runs(&fabro_store::ListRunsQuery::default()))?
-                        .into_iter()
-                        .next()
-                        .ok_or("test store should contain one run")?
-                        .id
-                };
+                let run_id =
+                    if uses_shared_store {
+                        run_dir
+                            .file_name()
+                            .ok_or("run dir should have file name")?
+                            .to_string_lossy()
+                            .rsplit('-')
+                            .next()
+                            .ok_or("run dir should contain run id suffix")?
+                            .parse()?
+                    } else {
+                        runtime
+                            .block_on(store.list_runs(
+                                &fabro_store::ListRunsQuery::default(),
+                                chrono::Utc::now(),
+                            ))?
+                            .into_iter()
+                            .next()
+                            .ok_or("test store should contain one run")?
+                            .id
+                    };
                 let run = runtime.block_on(store.open_run_reader(&run_id))?;
                 let state = runtime.block_on(async {
                     for attempt in 0..20 {
@@ -173,7 +177,9 @@ fn load_run_checkpoint(run_dir: &Path) -> Result<Checkpoint, Box<dyn std::error:
                 .parse()?
         } else {
             runtime
-                .block_on(store.list_runs(&fabro_store::ListRunsQuery::default()))?
+                .block_on(
+                    store.list_runs(&fabro_store::ListRunsQuery::default(), chrono::Utc::now()),
+                )?
                 .into_iter()
                 .next()
                 .ok_or("test store should contain one run")?
@@ -252,7 +258,9 @@ fn resolve_checkpoint_text(
                     .parse()?
             } else {
                 runtime
-                    .block_on(store.list_runs(&fabro_store::ListRunsQuery::default()))?
+                    .block_on(
+                        store.list_runs(&fabro_store::ListRunsQuery::default(), chrono::Utc::now()),
+                    )?
                     .into_iter()
                     .next()
                     .ok_or("test store should contain one run")?
@@ -9224,12 +9232,7 @@ impl RemoteMockEnv {
 
 #[async_trait::async_trait]
 impl fabro_agent::Sandbox for RemoteMockEnv {
-    async fn read_file(
-        &self,
-        _path: &str,
-        _offset: Option<usize>,
-        _limit: Option<usize>,
-    ) -> fabro_sandbox::Result<String> {
+    async fn read_file_bytes(&self, _path: &str) -> fabro_sandbox::Result<Vec<u8>> {
         Err("not implemented".into())
     }
 
@@ -11823,12 +11826,14 @@ impl Handler for KeepaliveHandler {
         while start.elapsed() < std::time::Duration::from_millis(self.total_ms) {
             tokio::time::sleep(std::time::Duration::from_millis(self.interval_ms)).await;
             services.run.emitter.emit(&Event::Prompt {
-                stage:    node.id.clone(),
-                visit:    1,
-                text:     "keepalive".to_string(),
-                mode:     None,
-                provider: None,
-                model:    None,
+                stage:            node.id.clone(),
+                visit:            1,
+                text:             "keepalive".to_string(),
+                mode:             None,
+                provider:         None,
+                model:            None,
+                reasoning_effort: None,
+                speed:            None,
             });
         }
         Ok(Outcome::success())

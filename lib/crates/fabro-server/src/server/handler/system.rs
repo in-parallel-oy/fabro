@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
+use chrono::Utc;
+
 use super::super::{
     AggregateBilling, AggregateBillingTotals, ApiError, AppState, BilledTokenCounts,
     BillingByModel, DfParams, FABRO_VERSION, GithubIntegrationStrategy, IntoResponse, Json, Path,
     PruneRunsRequest, PruneRunsResponse, Query, RequiredUser, Response, Router, RunStatus, State,
     StatusCode, SystemInfoResponse, SystemRepairRunIssue, SystemRepairRunsResponse,
     SystemRunCounts, build_disk_usage_response, build_prune_plan, delete_run_internal, diagnostics,
-    get, post, resolve_interp_string, resource_sampler, spawn_blocking, system_features,
-    system_sandbox_provider, to_i64,
+    get, post, resolve_interp_string, resource_sampler, spawn_blocking, system_sandbox_provider,
+    to_i64,
 };
 
 pub(super) fn routes() -> Router<Arc<AppState>> {
@@ -49,7 +51,8 @@ async fn get_system_info(_auth: RequiredUser, State(state): State<Arc<AppState>>
             .filter(|run| {
                 matches!(
                     run.status,
-                    RunStatus::Queued
+                    RunStatus::Pending { .. }
+                        | RunStatus::Runnable
                         | RunStatus::Starting
                         | RunStatus::Running
                         | RunStatus::Blocked { .. }
@@ -76,10 +79,6 @@ async fn get_system_info(_auth: RequiredUser, State(state): State<Arc<AppState>>
             active: Some(to_i64(active_runs)),
         }),
         sandbox_provider: Some(system_sandbox_provider(&manifest_run_settings)),
-        features:         Some(system_features(
-            server_settings.as_ref(),
-            &manifest_run_settings,
-        )),
     };
     (StatusCode::OK, Json(response)).into_response()
 }
@@ -101,7 +100,7 @@ async fn get_system_df(
     let storage_dir = state.server_storage_dir();
     let summaries = match state
         .store
-        .list_runs(&fabro_store::ListRunsQuery::default())
+        .list_runs(&fabro_store::ListRunsQuery::default(), Utc::now())
         .await
     {
         Ok(summaries) => summaries,
@@ -166,7 +165,7 @@ async fn prune_runs(
     let storage_dir = state.server_storage_dir();
     let summaries = match state
         .store
-        .list_runs(&fabro_store::ListRunsQuery::default())
+        .list_runs(&fabro_store::ListRunsQuery::default(), Utc::now())
         .await
     {
         Ok(summaries) => summaries,
@@ -208,8 +207,8 @@ async fn prune_runs(
     }
 
     for run_id in &prune_plan.run_ids {
-        if let Err(response) = delete_run_internal(&state, *run_id, true).await {
-            return response;
+        if let Err(error) = delete_run_internal(state.as_ref(), *run_id, true).await {
+            return error.into_response();
         }
     }
 

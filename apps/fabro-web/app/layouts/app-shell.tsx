@@ -10,11 +10,9 @@ import {
 import {
   Bars3Icon,
   BeakerIcon,
-  ChartBarIcon,
-  ChatBubbleLeftRightIcon,
+  ClockIcon,
   Cog6ToothIcon,
   PlayIcon,
-  SparklesIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { Link, Outlet, useLocation, useMatches } from "react-router";
@@ -26,23 +24,13 @@ import { useToggleDemoMode } from "../lib/mutations";
 import { useAuthMe } from "../lib/queries";
 
 const allNavigation = [
-  { name: "Automations", href: "/automations", icon: SparklesIcon, demoOnly: true },
-  {
-    name: "Chats",
-    href: "/chats/new",
-    icon: ChatBubbleLeftRightIcon,
-    demoOnly: true,
-    // /chats/new is the click target, but the entry stays active on any
-    // /chats/:id child route as well.
-    activePathPrefix: "/chats",
-  },
+  { name: "Automations", href: "/automations", icon: ClockIcon, demoOnly: true },
   { name: "Runs", href: "/runs", icon: PlayIcon, demoOnly: false },
-  { name: "Insights", href: "/insights", icon: ChartBarIcon, demoOnly: true },
   { name: "Settings", href: "/settings", icon: Cog6ToothIcon, demoOnly: false },
 ];
 
 function activeFor(item: (typeof allNavigation)[number], pathname: string): boolean {
-  return pathname.startsWith(item.activePathPrefix ?? item.href);
+  return pathname.startsWith(item.href);
 }
 
 export function getVisibleNavigation(demoMode: boolean) {
@@ -322,11 +310,12 @@ function ShellMain({
   fullHeight: boolean;
   maxWidth: string;
 }) {
-  const { sidebarWidth } = useAskFabroLayout();
+  const { sidebarWidth, isResizing } = useAskFabroLayout();
   return (
     <main
       className={classNames(
-        "transition-[padding] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+        !isResizing &&
+          "transition-[padding] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
         fullHeight && "min-h-0 flex-1",
       )}
       style={{ paddingRight: sidebarWidth }}

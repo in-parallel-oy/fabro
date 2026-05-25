@@ -160,7 +160,11 @@ impl miette::Diagnostic for SharedTemplateError {
 pub fn classify_failure_reason(reason: &str) -> FailureCategory {
     let lower = reason.to_lowercase();
 
-    if lower.contains("cancel") || lower.contains("interrupt") {
+    if lower.contains("interrupt")
+        || (lower.contains("cancel")
+            && !lower.contains("cancelling due to test failure")
+            && !lower.contains("canceling due to test failure"))
+    {
         return FailureCategory::Canceled;
     }
 
@@ -304,6 +308,9 @@ pub enum Error {
     #[error("Unsupported operation: {0}")]
     Unsupported(String),
 
+    #[error("{0}")]
+    OutputSchemaValidation(String),
+
     #[error("Pipeline cancelled")]
     Cancelled,
 }
@@ -428,8 +435,8 @@ impl Error {
     /// Retryable: Handler (transient handler failures), Engine (could be
     /// transient),            Io (network/disk issues are often transient),
     /// Llm (delegates to SdkError). Terminal:  Parse, Validation,
-    /// Stylesheet (configuration errors),            Checkpoint (storage
-    /// integrity), Cancelled (explicit cancellation).
+    /// OutputSchemaValidation, Stylesheet (configuration errors), Checkpoint
+    /// (storage integrity), Cancelled (explicit cancellation).
     #[must_use]
     pub fn is_retryable(&self) -> bool {
         match self {
@@ -444,6 +451,7 @@ impl Error {
             | Self::Precondition(_)
             | Self::RunNotFound(_)
             | Self::Unsupported(_)
+            | Self::OutputSchemaValidation(_)
             | Self::Cancelled => false,
         }
     }
@@ -461,7 +469,8 @@ impl Error {
             | Self::Template { .. }
             | Self::Stylesheet(_)
             | Self::Checkpoint(_)
-            | Self::Unsupported(_) => FailureCategory::Deterministic,
+            | Self::Unsupported(_)
+            | Self::OutputSchemaValidation(_) => FailureCategory::Deterministic,
             Self::Precondition(_) | Self::RunNotFound(_) => FailureCategory::Structural,
             Self::Handler { failure_class, .. } | Self::Engine { failure_class, .. } => {
                 *failure_class
@@ -1229,6 +1238,16 @@ mod tests {
         assert_eq!(
             classify_failure_reason("operation cancelled by user"),
             FailureCategory::Canceled
+        );
+    }
+
+    #[test]
+    fn classify_reason_nextest_canceling_due_to_test_failure_is_deterministic() {
+        assert_eq!(
+            classify_failure_reason(
+                "Script failed with exit code: 100\n\nCancelling due to test failure: 7 tests still running"
+            ),
+            FailureCategory::Deterministic
         );
     }
 

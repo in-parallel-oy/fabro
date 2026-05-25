@@ -3,11 +3,16 @@ use std::collections::{BTreeMap, HashMap};
 use std::num::NonZeroU32;
 
 use chrono::{DateTime, Utc};
+use fabro_model::{ReasoningEffort, Speed};
+use strum::{Display, EnumString, IntoStaticStr};
 
+use crate::run_event::{AgentSessionActivatedProps, StagePromptProps};
 use crate::{
-    BilledTokenCounts, Checkpoint, Conclusion, InterviewQuestionRecord, InvalidTransition,
-    ModelRef, PullRequestLink, RunControlAction, RunDiff, RunId, RunSandbox, RunSpec, RunStatus,
-    StageCompletion, StageHandler, StageId, StageState, StageTiming, StartRecord,
+    AgentBackend, AgentMcpToolSummary, AgentSkillActivationSource, AgentSkillSummary,
+    AgentToolSummary, BilledTokenCounts, Checkpoint, Conclusion, InterviewQuestionRecord,
+    InvalidTransition, ModelRef, PermissionLevel, PullRequestLink, RunApproval, RunControlAction,
+    RunDiff, RunId, RunSandbox, RunSpec, RunStatus, RunTiming, StageCompletion, StageHandler,
+    StageId, StageState, StageTiming, StartRecord, TodoListProjection,
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -22,6 +27,8 @@ pub struct RunProjection {
     pub start:              Option<StartRecord>,
     pub status:             RunStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval:           Option<RunApproval>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub archived_at:        Option<DateTime<Utc>>,
     pub status_updated_at:  DateTime<Utc>,
     pub last_event_at:      DateTime<Utc>,
@@ -31,6 +38,8 @@ pub struct RunProjection {
     pub sandbox:            Option<RunSandbox>,
     pub pull_request:       Option<PullRequestLink>,
     pub superseded_by:      Option<RunId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retried_from:       Option<RunId>,
     pub pending_interviews: BTreeMap<String, PendingInterviewRecord>,
     stages:                 HashMap<StageId, StageProjection>,
 }
@@ -49,13 +58,273 @@ pub struct CheckpointRecord {
     pub diff:       RunDiff,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StageModelUsage {
+    pub mode:             String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider:         Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model:            Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<ReasoningEffort>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed:            Option<Speed>,
+}
+
+impl StageModelUsage {
+    pub const MODE_PROMPT: &'static str = "prompt";
+    pub const MODE_AGENT: &'static str = "agent";
+    pub const MODE_ACP: &'static str = "acp";
+    pub const MODE_FAN_IN: &'static str = "fan_in";
+
+    /// Build the usage record from a `stage.prompt` event, returning `None`
+    /// when the event carried no model metadata.
+    #[must_use]
+    pub fn from_prompt_props(props: &StagePromptProps) -> Option<Self> {
+        let has_metadata = props.provider.is_some()
+            || props.model.is_some()
+            || props.reasoning_effort.is_some()
+            || props.speed.is_some();
+        has_metadata.then(|| Self {
+            mode:             props
+                .mode
+                .clone()
+                .unwrap_or_else(|| Self::MODE_PROMPT.to_string()),
+            provider:         props.provider.clone(),
+            model:            props.model.clone(),
+            reasoning_effort: props.reasoning_effort,
+            speed:            props.speed,
+        })
+    }
+
+    /// Build the usage record from an `agent.session.activated` event. The
+    /// mode is `Acp` when the activation came from an ACP control session and
+    /// `Agent` otherwise.
+    #[must_use]
+    pub fn from_agent_session_activated(props: &AgentSessionActivatedProps) -> Self {
+        let acp: &'static str = AgentBackend::Acp.into();
+        let mode = if props.provider.as_deref() == Some(acp) {
+            Self::MODE_ACP
+        } else {
+            Self::MODE_AGENT
+        };
+        Self {
+            mode:             mode.to_string(),
+            provider:         props.provider.clone(),
+            model:            props.model.clone(),
+            reasoning_effort: props.reasoning_effort,
+            speed:            props.speed,
+        }
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    Display,
+    EnumString,
+    IntoStaticStr,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum StageContextWindowCategory {
+    SystemPrompt,
+    Tools,
+    McpTools,
+    Skills,
+    Memory,
+    Conversation,
+    Other,
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    Display,
+    EnumString,
+    IntoStaticStr,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum StageContextWindowCountMethod {
+    ProviderApiScaledBreakdown,
+    ResponseUsageScaledBreakdown,
+    LocalEstimate,
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    Display,
+    EnumString,
+    IntoStaticStr,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum StageContextWindowStaleness {
+    Live,
+    Stored,
+    Unavailable,
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    Display,
+    EnumString,
+    IntoStaticStr,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum StageContextWindowUnavailableReason {
+    NotAgentStage,
+    NotObserved,
+    ProviderUnconfigured,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct StageContextWindowWarning {
+    pub code:    String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct StageContextWindowBreakdownItem {
+    pub category:      StageContextWindowCategory,
+    pub tokens:        u64,
+    pub usage_percent: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct StageContextWindowProjection {
+    pub provider:              String,
+    pub model:                 String,
+    pub context_window_tokens: u64,
+    pub input_tokens:          u64,
+    pub usage_percent:         f64,
+    pub count_method:          StageContextWindowCountMethod,
+    pub staleness:             StageContextWindowStaleness,
+    pub generated_at:          DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_seq:             Option<u32>,
+    #[serde(default)]
+    pub breakdown:             Vec<StageContextWindowBreakdownItem>,
+    #[serde(default)]
+    pub warnings:              Vec<StageContextWindowWarning>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct StageContextWindow {
+    pub stage_id:              StageId,
+    pub available:             bool,
+    #[serde(default)]
+    pub unavailable_reason:    Option<StageContextWindowUnavailableReason>,
+    #[serde(default)]
+    pub provider:              Option<String>,
+    #[serde(default)]
+    pub model:                 Option<String>,
+    #[serde(default)]
+    pub context_window_tokens: Option<u64>,
+    #[serde(default)]
+    pub input_tokens:          Option<u64>,
+    #[serde(default)]
+    pub usage_percent:         Option<f64>,
+    #[serde(default)]
+    pub count_method:          Option<StageContextWindowCountMethod>,
+    pub staleness:             StageContextWindowStaleness,
+    #[serde(default)]
+    pub generated_at:          Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub event_seq:             Option<u32>,
+    #[serde(default)]
+    pub breakdown:             Vec<StageContextWindowBreakdownItem>,
+    #[serde(default)]
+    pub warnings:              Vec<StageContextWindowWarning>,
+}
+
+impl StageContextWindow {
+    #[must_use]
+    pub fn available(stage_id: StageId, snapshot: &StageContextWindowProjection) -> Self {
+        Self {
+            stage_id,
+            available: true,
+            unavailable_reason: None,
+            provider: Some(snapshot.provider.clone()),
+            model: Some(snapshot.model.clone()),
+            context_window_tokens: Some(snapshot.context_window_tokens),
+            input_tokens: Some(snapshot.input_tokens),
+            usage_percent: Some(snapshot.usage_percent),
+            count_method: Some(snapshot.count_method),
+            staleness: snapshot.staleness,
+            generated_at: Some(snapshot.generated_at),
+            event_seq: snapshot.event_seq,
+            breakdown: snapshot.breakdown.clone(),
+            warnings: snapshot.warnings.clone(),
+        }
+    }
+
+    #[must_use]
+    pub fn unavailable(
+        stage_id: StageId,
+        reason: StageContextWindowUnavailableReason,
+        warning: impl Into<String>,
+    ) -> Self {
+        let message = warning.into();
+        Self {
+            stage_id,
+            available: false,
+            unavailable_reason: Some(reason),
+            provider: None,
+            model: None,
+            context_window_tokens: None,
+            input_tokens: None,
+            usage_percent: None,
+            count_method: None,
+            staleness: StageContextWindowStaleness::Unavailable,
+            generated_at: None,
+            event_seq: None,
+            breakdown: Vec::new(),
+            warnings: vec![StageContextWindowWarning {
+                code: reason.to_string(),
+                message,
+            }],
+        }
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StageProjection {
     pub first_event_seq:   NonZeroU32,
     pub prompt:            Option<String>,
     pub response:          Option<String>,
     pub completion:        Option<StageCompletion>,
-    pub provider_used:     Option<serde_json::Value>,
+    pub provider_used:     Option<StageModelUsage>,
     pub diff:              Option<String>,
     pub script_invocation: Option<serde_json::Value>,
     pub script_timing:     Option<serde_json::Value>,
@@ -82,7 +351,73 @@ pub struct StageProjection {
     pub usage:             BilledTokenCounts,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model:             Option<ModelRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub todos:             Option<TodoListProjection>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subagents:         Vec<SubAgentProjection>,
+    #[serde(default, skip_serializing_if = "SkillsProjection::is_empty")]
+    pub skills:            SkillsProjection,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permission_level:  Option<PermissionLevel>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub agent_tools:       Vec<AgentToolSummary>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mcp_servers:       Vec<McpServerProjection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_window:    Option<StageContextWindowProjection>,
     pub state:             StageState,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SubAgentProjection {
+    pub agent_id: String,
+    pub depth:    usize,
+    pub task:     String,
+    pub status:   SubAgentStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SubAgentStatus {
+    Running,
+    Completed { success: bool, turns_used: usize },
+    Failed { error: serde_json::Value },
+    Closed,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SkillsProjection {
+    pub available: Vec<AgentSkillSummary>,
+    pub activated: Vec<ActivatedSkill>,
+}
+
+impl SkillsProjection {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.available.is_empty() && self.activated.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ActivatedSkill {
+    pub name:   String,
+    pub source: AgentSkillActivationSource,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct McpServerProjection {
+    pub server_name: String,
+    pub tool_count:  usize,
+    pub status:      McpServerStatus,
+    /// True once any tool from this server has been invoked during the stage.
+    pub invoked:     bool,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum McpServerStatus {
+    Ready { tools: Vec<AgentMcpToolSummary> },
+    Failed { error: String },
 }
 
 /// Convert a 1-based event sequence number into the `NonZeroU32` form used for
@@ -103,6 +438,13 @@ impl StageProjection {
             timing: None,
             usage: BilledTokenCounts::default(),
             model: None,
+            todos: None,
+            subagents: Vec::new(),
+            skills: SkillsProjection::default(),
+            permission_level: None,
+            agent_tools: Vec::new(),
+            mcp_servers: Vec::new(),
+            context_window: None,
             provider_used: None,
             diff: None,
             script_invocation: None,
@@ -169,6 +511,7 @@ impl RunProjection {
             web_url: None,
             start: None,
             status: RunStatus::Submitted,
+            approval: None,
             archived_at: None,
             status_updated_at: created_at,
             last_event_at: created_at,
@@ -178,6 +521,7 @@ impl RunProjection {
             sandbox: None,
             pull_request: None,
             superseded_by: None,
+            retried_from: None,
             pending_interviews: BTreeMap::new(),
             stages: HashMap::new(),
         }
@@ -258,6 +602,33 @@ impl RunProjection {
 
     pub fn is_archived(&self) -> bool {
         self.archived_at.is_some()
+    }
+
+    /// Best-effort run timing for a run that has started but has not reached a
+    /// terminal conclusion yet.
+    ///
+    /// Run-level wall time ticks from `run.started` to `now`. Active time sums
+    /// inference and tool timing from stages that have already emitted a
+    /// terminal stage event. Stage projections do not currently track live
+    /// inference/tool time while a stage is still running, so active time steps
+    /// forward when each stage completes while wall time advances continuously.
+    #[must_use]
+    pub fn live_run_timing(&self, now: DateTime<Utc>) -> Option<RunTiming> {
+        let start = self.start.as_ref()?;
+        let wall_time_ms = u64::try_from(
+            now.signed_duration_since(start.start_time)
+                .num_milliseconds()
+                .max(0),
+        )
+        .expect("non-negative milliseconds fit in u64");
+        let active = self
+            .stages
+            .values()
+            .filter_map(|stage| stage.timing)
+            .fold(RunTiming::default(), |acc, timing| {
+                acc.saturating_add(&RunTiming::from(timing))
+            });
+        Some(active.with_wall_time(wall_time_ms))
     }
 
     pub fn current_checkpoint(&self) -> Option<&Checkpoint> {
@@ -376,9 +747,10 @@ mod iter_stages_tests {
     use std::num::NonZeroU32;
 
     use chrono::Utc;
+    use serde_json::json;
 
     use super::RunProjection;
-    use crate::{Graph, RunId, RunSpec, WorkflowSettings};
+    use crate::{Graph, RunId, RunSpec, StageProjection, WorkflowSettings};
 
     fn seq(n: u32) -> NonZeroU32 {
         NonZeroU32::new(n).unwrap()
@@ -447,6 +819,23 @@ mod iter_stages_tests {
             .map(|(stage_id, _)| stage_id.node_id().to_string())
             .collect();
         assert_eq!(order, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn stage_projection_defaults_missing_agent_tools_to_empty_and_omits_empty_list() {
+        let value = json!({
+            "first_event_seq": 1,
+            "state": "running"
+        });
+
+        let stage: StageProjection = serde_json::from_value(value).unwrap();
+        assert!(stage.agent_tools.is_empty());
+
+        let serialized = serde_json::to_value(stage).unwrap();
+        assert!(
+            serialized.as_object().unwrap().get("agent_tools").is_none(),
+            "empty agent_tools should be omitted from StageProjection JSON"
+        );
     }
 
     #[test]

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use base64::Engine;
@@ -11,8 +12,9 @@ use crate::provider::{
 };
 use crate::providers::common::{
     self as common, parse_error_body, parse_rate_limit_headers, parse_retry_after,
-    send_and_read_response,
+    send_and_read_response, send_and_read_response_with_operation,
 };
+use crate::token_count::{InputTokenCount, InputTokenCountMethod};
 use crate::types::{
     AdapterTimeout, ContentPart, FinishReason, Message, RateLimitInfo, Request, Response,
     ResponseFormat, ResponseFormatType, Role, StreamEvent, TokenCounts, ToolCall, ToolChoice,
@@ -190,6 +192,12 @@ struct ApiResponse {
 }
 
 #[derive(serde::Deserialize)]
+struct InputTokensResponse {
+    input_tokens: i64,
+    object:       String,
+}
+
+#[derive(serde::Deserialize)]
 struct ApiUsage {
     input_tokens:          i64,
     output_tokens:         i64,
@@ -306,6 +314,7 @@ fn provider_error_from_openai_error_json(error: &serde_json::Value) -> Error {
 async fn translate_input(messages: &[Message]) -> (Option<String>, Vec<serde_json::Value>) {
     let mut instructions_parts: Vec<String> = Vec::new();
     let mut input: Vec<serde_json::Value> = Vec::new();
+    let mut tool_call_types: HashMap<String, (String, String)> = HashMap::new();
 
     for msg in messages {
         match msg.role {
@@ -386,10 +395,6 @@ async fn translate_input(messages: &[Message]) -> (Option<String>, Vec<serde_jso
                             }));
                         }
                         ContentPart::ToolCall(tc) if !tc.name.is_empty() => {
-                            let args = tc
-                                .raw_arguments
-                                .as_ref()
-                                .map_or_else(|| tc.arguments.to_string(), Clone::clone);
                             // Use the item-level ID (fc_xxx) for the `id` field;
                             // fall back to tc.id if no provider_metadata was stored.
                             let item_id = tc
@@ -398,13 +403,38 @@ async fn translate_input(messages: &[Message]) -> (Option<String>, Vec<serde_jso
                                 .and_then(|m| m.get("id"))
                                 .and_then(serde_json::Value::as_str)
                                 .unwrap_or(&tc.id);
-                            input.push(serde_json::json!({
-                                "type": "function_call",
-                                "id": item_id,
-                                "call_id": tc.id,
-                                "name": tc.name,
-                                "arguments": args,
-                            }));
+                            tool_call_types
+                                .insert(tc.id.clone(), (tc.tool_type.clone(), tc.name.clone()));
+                            if tc.tool_type == "custom" {
+                                let raw_input = tc.raw_arguments.as_ref().map_or_else(
+                                    || {
+                                        tc.arguments.as_str().map_or_else(
+                                            || tc.arguments.to_string(),
+                                            str::to_string,
+                                        )
+                                    },
+                                    Clone::clone,
+                                );
+                                input.push(serde_json::json!({
+                                    "type": "custom_tool_call",
+                                    "id": item_id,
+                                    "call_id": tc.id,
+                                    "name": tc.name,
+                                    "input": raw_input,
+                                }));
+                            } else {
+                                let args = tc
+                                    .raw_arguments
+                                    .as_ref()
+                                    .map_or_else(|| tc.arguments.to_string(), Clone::clone);
+                                input.push(serde_json::json!({
+                                    "type": "function_call",
+                                    "id": item_id,
+                                    "call_id": tc.id,
+                                    "name": tc.name,
+                                    "arguments": args,
+                                }));
+                            }
                         }
                         ContentPart::Other { data, .. } if part.is_opaque_openai() => {
                             input.push(data.clone());
@@ -420,12 +450,24 @@ async fn translate_input(messages: &[Message]) -> (Option<String>, Vec<serde_jso
                             .content
                             .as_str()
                             .map_or_else(|| tr.content.to_string(), str::to_string);
-                        let mut item = serde_json::json!({
-                            "type": "function_call_output",
-                            "call_id": tr.tool_call_id,
-                            "output": output,
-                        });
-                        if tr.is_error {
+                        let is_custom = tool_call_types
+                            .get(&tr.tool_call_id)
+                            .is_some_and(|(tool_type, _)| tool_type == "custom")
+                            || msg.name.as_deref() == Some("apply_patch");
+                        let mut item = if is_custom {
+                            serde_json::json!({
+                                "type": "custom_tool_call_output",
+                                "call_id": tr.tool_call_id,
+                                "output": output,
+                            })
+                        } else {
+                            serde_json::json!({
+                                "type": "function_call_output",
+                                "call_id": tr.tool_call_id,
+                                "output": output,
+                            })
+                        };
+                        if tr.is_error && !is_custom {
                             item["status"] = serde_json::json!("incomplete");
                         }
                         input.push(item);
@@ -449,12 +491,21 @@ fn translate_tools(tools: &[ToolDefinition]) -> Vec<serde_json::Value> {
     tools
         .iter()
         .map(|t| {
-            serde_json::json!({
-                "type": "function",
-                "name": t.name,
-                "description": t.description,
-                "parameters": t.parameters,
-            })
+            if t.is_custom() {
+                serde_json::json!({
+                    "type": "custom",
+                    "name": t.name,
+                    "description": t.description,
+                    "format": t.custom_format().cloned().unwrap_or_else(|| serde_json::json!({})),
+                })
+            } else {
+                serde_json::json!({
+                    "type": "function",
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.parameters,
+                })
+            }
         })
         .collect()
 }
@@ -586,6 +637,34 @@ async fn build_request_body_with_catalog(
     body
 }
 
+fn filter_input_tokens_request_body(body: &serde_json::Value) -> serde_json::Value {
+    const ALLOWED_FIELDS: &[&str] = &[
+        "conversation",
+        "input",
+        "instructions",
+        "model",
+        "parallel_tool_calls",
+        "previous_response_id",
+        "reasoning",
+        "text",
+        "tool_choice",
+        "tools",
+        "truncation",
+    ];
+
+    let Some(source) = body.as_object() else {
+        return serde_json::json!({});
+    };
+
+    let mut filtered = serde_json::Map::new();
+    for field in ALLOWED_FIELDS {
+        if let Some(value) = source.get(*field) {
+            filtered.insert((*field).to_string(), value.clone());
+        }
+    }
+    serde_json::Value::Object(filtered)
+}
+
 /// Parse output items from the Responses API into content parts.
 fn parse_output(output: &[serde_json::Value]) -> (Vec<ContentPart>, bool) {
     let mut parts = Vec::new();
@@ -651,6 +730,37 @@ fn parse_output(output: &[serde_json::Value]) -> (Vec<ContentPart>, bool) {
                 let mut tc = ToolCall::new(call_id, name, arguments);
                 tc.raw_arguments = Some(args_str.to_string());
                 // Preserve item-level ID (fc_xxx) for Responses API round-trip
+                if !item_id.is_empty() {
+                    tc.provider_metadata = Some(serde_json::json!({"id": item_id}));
+                }
+                parts.push(ContentPart::ToolCall(tc));
+            }
+            Some("custom_tool_call") => {
+                let item_id = item
+                    .get("id")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("");
+                let call_id = item
+                    .get("call_id")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or(item_id)
+                    .to_string();
+                let name = item
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                if name.is_empty() {
+                    continue;
+                }
+                has_tool_calls = true;
+                let raw_input = item
+                    .get("input")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("");
+                let mut tc = ToolCall::new(call_id, name, serde_json::json!(raw_input));
+                tc.tool_type = "custom".to_string();
+                tc.raw_arguments = Some(raw_input.to_string());
                 if !item_id.is_empty() {
                     tc.provider_metadata = Some(serde_json::json!({"id": item_id}));
                 }
@@ -773,7 +883,10 @@ fn process_sse_event(
         "response.created" => handle_response_created(state, &json),
         "response.output_text.delta" => handle_text_delta(state, &json, &mut events),
         "response.function_call_arguments.delta" => {
-            handle_tool_call_delta(state, &json, &mut events);
+            handle_tool_call_delta(state, &json, &mut events, "function");
+        }
+        "response.custom_tool_call_input.delta" => {
+            handle_tool_call_delta(state, &json, &mut events, "custom");
         }
         "response.output_item.done" => handle_output_item_done(state, &json, &mut events),
         "response.completed" | "response.incomplete" => {
@@ -845,6 +958,7 @@ fn handle_tool_call_delta(
     state: &mut SseStreamState,
     json: &serde_json::Value,
     events: &mut Vec<StreamEvent>,
+    tool_type: &str,
 ) {
     let Some(delta) = json.get("delta").and_then(serde_json::Value::as_str) else {
         return;
@@ -871,6 +985,9 @@ fn handle_tool_call_delta(
     if let Some(idx) = tc_index {
         if let Some(ref mut raw) = state.tool_calls[idx].raw_arguments {
             raw.push_str(delta);
+            if tool_type == "custom" {
+                state.tool_calls[idx].arguments = serde_json::json!(raw.clone());
+            }
         }
     } else {
         let name = json
@@ -878,7 +995,16 @@ fn handle_tool_call_delta(
             .and_then(serde_json::Value::as_str)
             .unwrap_or("")
             .to_string();
-        let mut tc = ToolCall::new(lookup_id, name, serde_json::json!({}));
+        let mut tc = ToolCall::new(
+            lookup_id,
+            name,
+            if tool_type == "custom" {
+                serde_json::json!(delta)
+            } else {
+                serde_json::json!({})
+            },
+        );
+        tc.tool_type = tool_type.to_string();
         tc.raw_arguments = Some(delta.to_string());
         // Preserve item-level ID (fc_xxx) for Responses API round-trip
         if !item_id.is_empty() && item_id != *lookup_id {
@@ -897,6 +1023,7 @@ fn handle_tool_call_delta(
 
     events.push(StreamEvent::ToolCallDelta {
         tool_call: ToolCall {
+            tool_type: tool_type.to_string(),
             raw_arguments: Some(delta.to_string()),
             ..current_tc
         },
@@ -963,6 +1090,46 @@ fn handle_output_item_done(
 
             if let Some(existing) = state.tool_calls.iter_mut().find(|t| t.id == call_id) {
                 existing.name.clone_from(&name);
+                existing.arguments = tc.arguments.clone();
+                existing.raw_arguments.clone_from(&tc.raw_arguments);
+                existing.provider_metadata.clone_from(&tc.provider_metadata);
+            } else {
+                state.tool_calls.push(tc.clone());
+            }
+
+            events.push(StreamEvent::ToolCallEnd { tool_call: tc });
+        }
+        Some("custom_tool_call") => {
+            let item = json.get("item").unwrap_or(json);
+            let item_id = item
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            let call_id = item
+                .get("call_id")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or(item_id)
+                .to_string();
+            let name = item
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let raw_input = item
+                .get("input")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+
+            let mut tc = ToolCall::new(&call_id, &name, serde_json::json!(raw_input));
+            tc.tool_type = "custom".to_string();
+            tc.raw_arguments = Some(raw_input.to_string());
+            if !item_id.is_empty() {
+                tc.provider_metadata = Some(serde_json::json!({"id": item_id}));
+            }
+
+            if let Some(existing) = state.tool_calls.iter_mut().find(|t| t.id == call_id) {
+                existing.name.clone_from(&name);
+                existing.tool_type = "custom".to_string();
                 existing.arguments = tc.arguments.clone();
                 existing.raw_arguments.clone_from(&tc.raw_arguments);
                 existing.provider_metadata.clone_from(&tc.provider_metadata);
@@ -1077,6 +1244,57 @@ impl ProviderAdapter for Adapter {
             validate_tool_choice(self, tc)?;
         }
         Ok(())
+    }
+
+    async fn count_input_tokens(
+        &self,
+        request: &Request,
+    ) -> Result<Option<InputTokenCount>, Error> {
+        self.validate_request(request)?;
+        let request_body = build_request_body_with_catalog(
+            request,
+            false,
+            self.codex_mode,
+            self.catalog.as_deref(),
+        )
+        .await;
+        let request_body = filter_input_tokens_request_body(&request_body);
+        let url = format!("{}/responses/input_tokens", self.http.base_url);
+
+        let mut req = self.build_request(&url).json(&request_body);
+        if let Some(t) = self.http.request_timeout {
+            req = req.timeout(t);
+        }
+        let (body, _headers) = send_and_read_response_with_operation(
+            req,
+            &self.provider_name,
+            "type",
+            "input_token_count",
+        )
+        .await?;
+        let response: InputTokensResponse =
+            serde_json::from_str(&body).map_err(|e| Error::Configuration {
+                message: format!("failed to parse OpenAI input token response: {e}"),
+                source:  None,
+            })?;
+
+        if response.object != "response.input_tokens" {
+            return Err(Error::Configuration {
+                message: format!(
+                    "failed to parse OpenAI input token response: unexpected object '{}'",
+                    response.object
+                ),
+                source:  None,
+            });
+        }
+
+        Ok(Some(InputTokenCount {
+            input_tokens: response.input_tokens,
+            method:       InputTokenCountMethod::ProviderApi,
+            provider:     self.provider_name.clone(),
+            model:        request.model.clone(),
+            warnings:     vec![],
+        }))
     }
 
     async fn complete(&self, request: &Request) -> Result<Response, Error> {
@@ -1199,13 +1417,18 @@ impl ProviderAdapter for Adapter {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
 
     use httpmock::prelude::*;
+    use tracing::field::{Field, Visit};
+    use tracing::{Event, Subscriber, subscriber};
+    use tracing_subscriber::layer::{Context as SubscriberContext, SubscriberExt};
+    use tracing_subscriber::{Layer, Registry};
 
     use super::*;
     use crate::error::ProviderErrorKind;
     use crate::providers::common::LineReader;
-    use crate::types::{AudioData, DocumentData};
+    use crate::types::{AudioData, DocumentData, ReasoningEffort, ToolResult};
 
     fn minimal_request() -> Request {
         Request {
@@ -1223,6 +1446,67 @@ mod tests {
             speed:            None,
             metadata:         None,
             provider_options: None,
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct CapturedLogEvents(Arc<Mutex<Vec<CapturedLogEvent>>>);
+
+    #[derive(Clone, Debug, Default)]
+    struct CapturedLogEvent {
+        message: Option<String>,
+        fields:  HashMap<String, String>,
+    }
+
+    struct CaptureLayer {
+        events: CapturedLogEvents,
+    }
+
+    impl<S> Layer<S> for CaptureLayer
+    where
+        S: Subscriber,
+    {
+        fn on_event(&self, event: &Event<'_>, _ctx: SubscriberContext<'_, S>) {
+            let mut visitor = LogFieldVisitor::default();
+            event.record(&mut visitor);
+            self.events.0.lock().unwrap().push(CapturedLogEvent {
+                message: visitor.message,
+                fields:  visitor.fields,
+            });
+        }
+    }
+
+    #[derive(Default)]
+    struct LogFieldVisitor {
+        message: Option<String>,
+        fields:  HashMap<String, String>,
+    }
+
+    impl LogFieldVisitor {
+        fn record_value(&mut self, field: &Field, value: String) {
+            if field.name() == "message" {
+                self.message = Some(value);
+            } else {
+                self.fields.insert(field.name().to_string(), value);
+            }
+        }
+    }
+
+    impl Visit for LogFieldVisitor {
+        fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+            self.record_value(field, format!("{value:?}"));
+        }
+
+        fn record_str(&mut self, field: &Field, value: &str) {
+            self.record_value(field, value.to_string());
+        }
+
+        fn record_u64(&mut self, field: &Field, value: u64) {
+            self.record_value(field, value.to_string());
+        }
+
+        fn record_i64(&mut self, field: &Field, value: i64) {
+            self.record_value(field, value.to_string());
         }
     }
 
@@ -1302,6 +1586,161 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn filter_input_tokens_request_body_keeps_only_count_fields() {
+        let mut metadata = HashMap::new();
+        metadata.insert("trace".to_string(), "abc".to_string());
+
+        let mut request = minimal_request();
+        request.tools = Some(vec![ToolDefinition::function(
+            "search",
+            "Search files",
+            serde_json::json!({"type": "object"}),
+        )]);
+        request.reasoning_effort = Some(ReasoningEffort::Low);
+        request.response_format = Some(ResponseFormat {
+            kind:        ResponseFormatType::JsonSchema,
+            json_schema: Some(serde_json::json!({"type": "object"})),
+            strict:      true,
+        });
+        request.temperature = Some(0.2);
+        request.top_p = Some(0.9);
+        request.max_tokens = Some(32);
+        request.stop_sequences = Some(vec!["END".to_string()]);
+        request.metadata = Some(metadata);
+
+        let body = build_request_body(&request, true, false).await;
+        let filtered = filter_input_tokens_request_body(&body);
+
+        assert_eq!(
+            filtered,
+            serde_json::json!({
+                "input": [{"type": "message", "content": [{"text": "Hello", "type": "input_text"}], "role": "user"}],
+                "model": "gpt-4o",
+                "reasoning": {"effort": "low"},
+                "text": {"format": {"name": "response", "schema": {"type": "object"}, "strict": true, "type": "json_schema"}},
+                "tools": [{"description": "Search files", "name": "search", "parameters": {"type": "object"}, "type": "function"}]
+            })
+        );
+        assert!(filtered.get("store").is_none());
+        assert!(filtered.get("include").is_none());
+        assert!(filtered.get("stream").is_none());
+        assert!(filtered.get("max_output_tokens").is_none());
+        assert!(filtered.get("metadata").is_none());
+        assert!(filtered.get("temperature").is_none());
+        assert!(filtered.get("top_p").is_none());
+        assert!(filtered.get("stop").is_none());
+    }
+
+    #[tokio::test]
+    async fn filter_input_tokens_request_body_preserves_codex_serialization() {
+        let body = build_request_body(&minimal_request(), false, true).await;
+        let filtered = filter_input_tokens_request_body(&body);
+
+        assert_eq!(filtered["instructions"], "");
+        assert!(filtered.get("input").is_some());
+        assert!(filtered.get("model").is_some());
+        assert!(filtered.get("max_output_tokens").is_none());
+        assert!(filtered.get("include").is_none());
+    }
+
+    #[tokio::test]
+    async fn count_input_tokens_posts_count_request_and_parses_response() {
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(POST).path("/responses/input_tokens");
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(serde_json::json!({
+                    "object": "response.input_tokens",
+                    "input_tokens": 789
+                }));
+        });
+        let adapter = Adapter::new("sk-test").with_base_url(server.base_url());
+
+        let count = adapter
+            .count_input_tokens(&minimal_request())
+            .await
+            .unwrap()
+            .expect("openai should count tokens");
+
+        mock.assert();
+        assert_eq!(count.input_tokens, 789);
+        assert_eq!(count.method, InputTokenCountMethod::ProviderApi);
+    }
+
+    #[tokio::test]
+    async fn count_input_tokens_logs_operation_on_provider_error() {
+        let events = CapturedLogEvents::default();
+        let subscriber = Registry::default().with(CaptureLayer {
+            events: events.clone(),
+        });
+        let _guard = subscriber::set_default(subscriber);
+
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(POST).path("/responses/input_tokens");
+            then.status(403)
+                .header("content-type", "application/json")
+                .json_body(serde_json::json!({
+                    "error": {
+                        "message": "input token counts are not enabled",
+                        "type": "permission_error",
+                        "code": "insufficient_permissions"
+                    }
+                }));
+        });
+        let adapter = Adapter::new("sk-test").with_base_url(server.base_url());
+
+        let err = adapter
+            .count_input_tokens(&minimal_request())
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, Error::Provider {
+            kind: ProviderErrorKind::AccessDenied,
+            ..
+        }));
+
+        let captured = events.0.lock().unwrap();
+        let event = captured
+            .iter()
+            .find(|event| event.message.as_deref() == Some("Provider returned error"))
+            .expect("provider error log should be captured");
+
+        assert_eq!(
+            event.fields.get("provider").map(String::as_str),
+            Some("openai")
+        );
+        assert_eq!(event.fields.get("status").map(String::as_str), Some("403"));
+        assert_eq!(
+            event.fields.get("operation").map(String::as_str),
+            Some("input_token_count")
+        );
+    }
+
+    #[tokio::test]
+    async fn count_input_tokens_rejects_wrong_response_object() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(POST).path("/responses/input_tokens");
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(serde_json::json!({
+                    "object": "other",
+                    "input_tokens": 789
+                }));
+        });
+        let adapter = Adapter::new("sk-test").with_base_url(server.base_url());
+
+        let err = adapter
+            .count_input_tokens(&minimal_request())
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, Error::Configuration { .. }));
+    }
+
+    #[tokio::test]
     async fn build_request_body_includes_encrypted_reasoning_for_stateless_requests() {
         let request = minimal_request();
 
@@ -1311,6 +1750,49 @@ mod tests {
             body["include"],
             serde_json::json!(["reasoning.encrypted_content"])
         );
+    }
+
+    #[tokio::test]
+    async fn build_request_body_emits_custom_apply_patch_tool() {
+        let mut request = minimal_request();
+        request.tools = Some(vec![
+            ToolDefinition::custom(
+                "apply_patch",
+                "Use the `apply_patch` tool to edit files. This is a FREEFORM tool, so do not wrap the patch in JSON.",
+                serde_json::json!({
+                    "type": "grammar",
+                    "syntax": "lark",
+                    "definition": "start: begin_patch hunk+ end_patch",
+                }),
+            ),
+            ToolDefinition::function(
+                "read_file",
+                "Read file",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {"file_path": {"type": "string"}},
+                    "required": ["file_path"],
+                }),
+            ),
+        ]);
+
+        let body = build_request_body(&request, false, false).await;
+        let tools = body["tools"].as_array().expect("tools should be present");
+        let apply_patch = tools
+            .iter()
+            .find(|tool| tool["name"] == "apply_patch")
+            .expect("apply_patch tool should be present");
+        let read_file = tools
+            .iter()
+            .find(|tool| tool["name"] == "read_file")
+            .expect("read_file tool should be present");
+
+        assert_eq!(apply_patch["type"], "custom");
+        assert_eq!(apply_patch["format"]["type"], "grammar");
+        assert_eq!(apply_patch["format"]["syntax"], "lark");
+        assert!(apply_patch.get("parameters").is_none());
+        assert_eq!(read_file["type"], "function");
+        assert_eq!(read_file["parameters"]["type"], "object");
     }
 
     #[tokio::test]
@@ -1465,6 +1947,38 @@ mod tests {
                     .as_ref()
                     .expect("provider_metadata should be set");
                 assert_eq!(meta["id"], "fc_abc123");
+            }
+            other => panic!("expected ToolCall, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_output_preserves_custom_tool_call_raw_input() {
+        let patch = "*** Begin Patch\n*** Add File: hello.txt\n+hello\n*** End Patch\n";
+        let output = vec![serde_json::json!({
+            "type": "custom_tool_call",
+            "id": "ctc_abc123",
+            "call_id": "call_xyz789",
+            "name": "apply_patch",
+            "input": patch,
+        })];
+
+        let (parts, has_tool_calls) = parse_output(&output);
+
+        assert!(has_tool_calls);
+        assert_eq!(parts.len(), 1);
+        match &parts[0] {
+            ContentPart::ToolCall(tc) => {
+                assert_eq!(tc.id, "call_xyz789");
+                assert_eq!(tc.name, "apply_patch");
+                assert_eq!(tc.tool_type, "custom");
+                assert_eq!(tc.arguments, serde_json::json!(patch));
+                assert_eq!(tc.raw_arguments.as_deref(), Some(patch));
+                let meta = tc
+                    .provider_metadata
+                    .as_ref()
+                    .expect("provider metadata should preserve item id");
+                assert_eq!(meta["id"], "ctc_abc123");
             }
             other => panic!("expected ToolCall, got {other:?}"),
         }
@@ -1711,6 +2225,85 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn custom_tool_call_history_round_trips_through_translate_input() {
+        let patch = "*** Begin Patch\n*** Delete File: stale.txt\n*** End Patch\n";
+        let mut tc = ToolCall::new("call_001", "apply_patch", serde_json::json!(patch));
+        tc.tool_type = "custom".to_string();
+        tc.raw_arguments = Some(patch.to_string());
+        tc.provider_metadata = Some(serde_json::json!({"id": "ctc_def456"}));
+
+        let msg = Message {
+            role:         Role::Assistant,
+            content:      vec![ContentPart::ToolCall(tc)],
+            name:         None,
+            tool_call_id: None,
+        };
+
+        let (_, input) = translate_input(&[msg]).await;
+
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["type"], "custom_tool_call");
+        assert_eq!(input[0]["id"], "ctc_def456");
+        assert_eq!(input[0]["call_id"], "call_001");
+        assert_eq!(input[0]["name"], "apply_patch");
+        assert_eq!(input[0]["input"], patch);
+    }
+
+    #[tokio::test]
+    async fn custom_tool_result_history_round_trips_through_translate_input() {
+        let msg = Message {
+            role:         Role::Tool,
+            content:      vec![ContentPart::ToolResult(ToolResult::success(
+                "call_001",
+                serde_json::json!("Success. Updated the following files:\nA hello.txt\n"),
+            ))],
+            name:         Some("apply_patch".to_string()),
+            tool_call_id: Some("call_001".to_string()),
+        };
+
+        let (_, input) = translate_input(&[msg]).await;
+
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["type"], "custom_tool_call_output");
+        assert_eq!(input[0]["call_id"], "call_001");
+        assert_eq!(
+            input[0]["output"],
+            "Success. Updated the following files:\nA hello.txt\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn custom_tool_result_history_uses_prior_custom_call_without_tool_message_name() {
+        let patch = "*** Begin Patch\n*** Add File: hello.txt\n+hello\n*** End Patch\n";
+        let mut tc = ToolCall::new("call_001", "apply_patch", serde_json::json!(patch));
+        tc.tool_type = "custom".to_string();
+        tc.raw_arguments = Some(patch.to_string());
+        tc.provider_metadata = Some(serde_json::json!({"id": "ctc_def456"}));
+
+        let assistant_msg = Message {
+            role:         Role::Assistant,
+            content:      vec![ContentPart::ToolCall(tc)],
+            name:         None,
+            tool_call_id: None,
+        };
+        let tool_msg = Message::tool_result(
+            "call_001",
+            serde_json::json!("Success. Updated the following files:\nA hello.txt\n"),
+            false,
+        );
+
+        let (_, input) = translate_input(&[assistant_msg, tool_msg]).await;
+
+        assert_eq!(input.len(), 2);
+        assert_eq!(input[1]["type"], "custom_tool_call_output");
+        assert_eq!(input[1]["call_id"], "call_001");
+        assert_eq!(
+            input[1]["output"],
+            "Success. Updated the following files:\nA hello.txt\n"
+        );
+    }
+
+    #[tokio::test]
     async fn build_request_body_includes_stop_sequences() {
         let mut request = minimal_request();
         request.stop_sequences = Some(vec!["END".to_string(), "STOP".to_string()]);
@@ -1780,6 +2373,84 @@ mod tests {
         assert_eq!(state.usage.reasoning_tokens, 300);
         assert_eq!(state.usage.cache_write_tokens, 0);
         assert_eq!(state.usage.total_tokens(), 700);
+    }
+
+    #[test]
+    fn custom_tool_call_streaming_delta_accumulates_raw_input() {
+        let mut state = empty_sse_state();
+        let first = r#"{
+            "type": "response.custom_tool_call_input.delta",
+            "item_id": "ctc_abc",
+            "call_id": "call_001",
+            "delta": "*** Begin"
+        }"#;
+        let second = r#"{
+            "type": "response.custom_tool_call_input.delta",
+            "item_id": "ctc_abc",
+            "call_id": "call_001",
+            "delta": " Patch\n"
+        }"#;
+
+        let first_events = process_sse_event(
+            &mut state,
+            Some("response.custom_tool_call_input.delta"),
+            first,
+        )
+        .expect("first custom delta should parse");
+        let second_events = process_sse_event(
+            &mut state,
+            Some("response.custom_tool_call_input.delta"),
+            second,
+        )
+        .expect("second custom delta should parse");
+
+        assert!(matches!(
+            first_events.iter().find(|event| matches!(event, StreamEvent::ToolCallStart { .. })),
+            Some(StreamEvent::ToolCallStart { tool_call })
+                if tool_call.id == "call_001" && tool_call.tool_type == "custom"
+        ));
+        assert!(matches!(
+            second_events.last(),
+            Some(StreamEvent::ToolCallDelta { tool_call })
+                if tool_call.raw_arguments.as_deref() == Some(" Patch\n")
+                    && tool_call.tool_type == "custom"
+        ));
+        assert_eq!(
+            state.tool_calls[0].raw_arguments.as_deref(),
+            Some("*** Begin Patch\n")
+        );
+    }
+
+    #[test]
+    fn custom_tool_call_output_item_done_emits_tool_call_end() {
+        let mut state = empty_sse_state();
+        let patch = "*** Begin Patch\n*** Add File: hello.txt\n+hello\n*** End Patch\n";
+        let data = serde_json::json!({
+            "type": "response.output_item.done",
+            "item": {
+                "type": "custom_tool_call",
+                "id": "ctc_abc",
+                "call_id": "call_001",
+                "name": "apply_patch",
+                "input": patch,
+            }
+        });
+
+        let events = process_sse_event(
+            &mut state,
+            Some("response.output_item.done"),
+            &data.to_string(),
+        )
+        .expect("custom output item should parse");
+
+        assert!(matches!(
+            events.last(),
+            Some(StreamEvent::ToolCallEnd { tool_call })
+                if tool_call.id == "call_001"
+                    && tool_call.name == "apply_patch"
+                    && tool_call.tool_type == "custom"
+                    && tool_call.raw_arguments.as_deref() == Some(patch)
+        ));
     }
 
     #[test]

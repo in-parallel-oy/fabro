@@ -64,6 +64,45 @@ fn format_output_snapshot(output: &Output, filters: &[(String, String)]) -> Stri
     )
 }
 
+fn normalize_attach_json_progress_event(mut event: Value) -> Value {
+    if let Some(properties) = event.get_mut("properties").and_then(Value::as_object_mut) {
+        if properties.contains_key("manifest_blob") {
+            properties.insert(
+                "manifest_blob".to_string(),
+                Value::String("[BLOB_ID]".to_string()),
+            );
+        }
+        if properties.contains_key("definition_blob") {
+            properties.insert(
+                "definition_blob".to_string(),
+                Value::String("[BLOB_ID]".to_string()),
+            );
+        }
+    }
+    // Strip v2-shape server/version fields that the bridge emits,
+    // since the test fixture's socket path is randomised per run.
+    if let Some(settings) = event
+        .pointer_mut("/properties/settings")
+        .and_then(Value::as_object_mut)
+    {
+        settings.remove("_version");
+        settings.remove("server");
+        settings.remove("version");
+    }
+    if let Some(target) = event
+        .pointer_mut("/properties/settings/cli/target")
+        .and_then(Value::as_object_mut)
+    {
+        if target.contains_key("path") {
+            target.insert(
+                "path".to_string(),
+                Value::String("[CLI_SOCKET]".to_string()),
+            );
+        }
+    }
+    event
+}
+
 fn wait_for_output_signal(
     child: &mut std::process::Child,
     stdout: &mut impl Read,
@@ -161,7 +200,7 @@ fn start_detached_human_run(
         .args([
             "run",
             "--detach",
-            "--sandbox",
+            "--environment",
             "local",
             "--provider",
             "openai",
@@ -391,7 +430,7 @@ fn attach_advances_when_pending_question_is_answered_elsewhere() {
         .args([
             "run",
             "--detach",
-            "--sandbox",
+            "--environment",
             "local",
             "--provider",
             "openai",
@@ -516,7 +555,7 @@ fn attach_before_completion_streams_to_finished_state() {
         "--detach",
         "--provider",
         "openai",
-        "--sandbox",
+        "--environment",
         "local",
         "slow.fabro",
     ]);
@@ -637,7 +676,7 @@ fn attach_json_errors_without_prompting_for_human_input() {
         .args([
             "run",
             "--detach",
-            "--sandbox",
+            "--environment",
             "local",
             "--provider",
             "openai",
@@ -734,44 +773,7 @@ fn attach_json_errors_without_prompting_for_human_input() {
         .lines()
         .filter(|line| !line.trim().is_empty())
         .map(|line| serde_json::from_str(line).expect("attach JSON output should be JSONL"))
-        .map(|mut event: Value| {
-            if let Some(properties) = event.get_mut("properties").and_then(Value::as_object_mut) {
-                if properties.contains_key("manifest_blob") {
-                    properties.insert(
-                        "manifest_blob".to_string(),
-                        Value::String("[BLOB_ID]".to_string()),
-                    );
-                }
-                if properties.contains_key("definition_blob") {
-                    properties.insert(
-                        "definition_blob".to_string(),
-                        Value::String("[BLOB_ID]".to_string()),
-                    );
-                }
-            }
-            // Strip v2-shape server/version fields that the bridge emits,
-            // since the test fixture's socket path is randomised per run.
-            if let Some(settings) = event
-                .pointer_mut("/properties/settings")
-                .and_then(Value::as_object_mut)
-            {
-                settings.remove("_version");
-                settings.remove("server");
-                settings.remove("version");
-            }
-            if let Some(target) = event
-                .pointer_mut("/properties/settings/cli/target")
-                .and_then(Value::as_object_mut)
-            {
-                if target.contains_key("path") {
-                    target.insert(
-                        "path".to_string(),
-                        Value::String("[CLI_SOCKET]".to_string()),
-                    );
-                }
-            }
-            event
-        })
+        .map(normalize_attach_json_progress_event)
         .collect();
     fabro_json_snapshot!(context, &progress, @r#"
     [
@@ -917,6 +919,7 @@ fn attach_json_errors_without_prompting_for_human_input() {
             },
             "run": {
               "agent": {
+                "fabro_tools": false,
                 "mcps": {},
                 "permissions": null
               },
@@ -924,10 +927,36 @@ fn attach_json_errors_without_prompting_for_human_input() {
                 "include": []
               },
               "checkpoint": {
-                "exclude_globs": []
+                "exclude_globs": [],
+                "skip_git_hooks": false
               },
               "clone": {
                 "enabled": true
+              },
+              "environment": {
+                "env": {},
+                "id": "local",
+                "image": {
+                  "dockerfile": null,
+                  "ref": null
+                },
+                "labels": {},
+                "lifecycle": {
+                  "auto_stop": null,
+                  "preserve": false,
+                  "stop_on_terminal": true
+                },
+                "network": {
+                  "allow": [],
+                  "mode": "allow_all"
+                },
+                "provider": "local",
+                "resources": {
+                  "cpu": null,
+                  "disk": null,
+                  "memory": null
+                },
+                "volumes": []
               },
               "execution": {
                 "approval": "prompt",
@@ -975,21 +1004,6 @@ fn attach_json_errors_without_prompting_for_human_input() {
                 "enabled": true,
                 "push": true
               },
-              "sandbox": {
-                "daytona": null,
-                "devcontainer": false,
-                "docker": {
-                  "cpu_quota": 200000,
-                  "env_vars": {},
-                  "image": "buildpack-deps:noble",
-                  "memory_limit": 4000000000,
-                  "network_mode": null
-                },
-                "env": {},
-                "preserve": false,
-                "provider": "local",
-                "stop_on_terminal": true
-              },
               "scm": {
                 "github": null,
                 "owner": null,
@@ -1024,9 +1038,38 @@ fn attach_json_errors_without_prompting_for_human_input() {
         "ts": "[TIMESTAMP]"
       },
       {
-        "event": "run.queued",
+        "actor": {
+          "auth_method": "dev_token",
+          "identity": {
+            "issuer": "fabro:dev",
+            "subject": "dev"
+          },
+          "kind": "user",
+          "login": "dev"
+        },
+        "event": "run.start_requested",
         "id": "[EVENT_ID]",
-        "properties": {},
+        "properties": {
+          "resume": false
+        },
+        "run_id": "[ULID]",
+        "ts": "[TIMESTAMP]"
+      },
+      {
+        "actor": {
+          "auth_method": "dev_token",
+          "identity": {
+            "issuer": "fabro:dev",
+            "subject": "dev"
+          },
+          "kind": "user",
+          "login": "dev"
+        },
+        "event": "run.runnable",
+        "id": "[EVENT_ID]",
+        "properties": {
+          "source": "start_requested"
+        },
         "run_id": "[ULID]",
         "ts": "[TIMESTAMP]"
       },
@@ -1154,10 +1197,10 @@ fn attach_json_errors_without_prompting_for_human_input() {
           },
           "status": "succeeded",
           "timing": {
-            "active_time_ms": 0,
-            "inference_time_ms": 0,
-            "tool_time_ms": 0,
-            "wall_time_ms": 0
+            "active_time_ms": "[ACTIVE_TIME_MS]",
+            "inference_time_ms": "[INFERENCE_TIME_MS]",
+            "tool_time_ms": "[TOOL_TIME_MS]",
+            "wall_time_ms": "[WALL_TIME_MS]"
           }
         },
         "run_id": "[ULID]",

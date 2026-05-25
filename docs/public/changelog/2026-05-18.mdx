@@ -59,9 +59,11 @@ OpenAI Codex OAuth credentials now live under `vault:OPENAI_CODEX`, and provider
 <Accordion title="Fixes">
 - Server-created detached runs now persist inferred project and workflow names in run metadata
 - Manifest preparation now prefers explicit `[workflow].name`, then graph name, then workflow slug when backfilling names
+- Legacy vault records created before the explicit credential schema split now migrate correctly at server startup
 </Accordion>
 
 <Accordion title="Improvements">
 - Provider catalogs now check process environment credentials first, then same-name vault entries where configured
 - Web stage model extraction now follows the new API/ACP event contract
+- Settings are now split into General, Integrations, Security, and Storage pages instead of one oversized overview
 </Accordion>

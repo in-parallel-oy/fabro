@@ -6,10 +6,11 @@ use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
 use crate::config::{SessionOptions, ToolHookCallback, ToolHookDecision};
-use crate::event::Emitter;
+use crate::event::{Emitter, SessionBoundEmitter};
+use crate::question_tools::{self, AgentToolRuntime, is_question_tool};
 use crate::sandbox::Sandbox;
 use crate::session::ToolEnvProvider;
-use crate::tool_registry::{RegisteredTool, ToolContext, ToolRegistry};
+use crate::tool_registry::{AgentEventEmitter, RegisteredTool, ToolContext, ToolRegistry};
 use crate::truncation::truncate_tool_output;
 use crate::types::AgentEvent;
 
@@ -29,8 +30,27 @@ pub async fn execute_tool_calls(
     config: &SessionOptions,
     emitter: &Emitter,
     session_id: &str,
+    root_session_id: &str,
     tool_env_provider: Option<&Arc<dyn ToolEnvProvider>>,
+    agent_tool_runtime: &AgentToolRuntime,
 ) -> Vec<ToolResult> {
+    if tool_calls.iter().any(|tc| is_question_tool(&tc.name)) {
+        return execute_question_tool_round(
+            tool_calls,
+            registry,
+            env,
+            tool_hooks,
+            cancel_token,
+            config,
+            emitter,
+            session_id,
+            root_session_id,
+            tool_env_provider,
+            agent_tool_runtime,
+        )
+        .await;
+    }
+
     if parallel && tool_calls.len() > 1 {
         execute_tool_calls_parallel(
             tool_calls,
@@ -41,7 +61,9 @@ pub async fn execute_tool_calls(
             config,
             emitter,
             session_id,
+            root_session_id,
             tool_env_provider,
+            agent_tool_runtime,
         )
         .await
     } else {
@@ -54,7 +76,9 @@ pub async fn execute_tool_calls(
             config,
             emitter,
             session_id,
+            root_session_id,
             tool_env_provider,
+            agent_tool_runtime,
         )
         .await
     }
@@ -73,7 +97,9 @@ async fn execute_tool_calls_sequential(
     config: &SessionOptions,
     emitter: &Emitter,
     session_id: &str,
+    root_session_id: &str,
     tool_env_provider: Option<&Arc<dyn ToolEnvProvider>>,
+    agent_tool_runtime: &AgentToolRuntime,
 ) -> Vec<ToolResult> {
     let mut results = Vec::new();
     for tc in tool_calls {
@@ -82,7 +108,7 @@ async fn execute_tool_calls_sequential(
             continue;
         }
 
-        let result = execute_and_emit_one_tool(
+        let result = execute_and_emit_one_tool_with_runtime(
             tc,
             registry,
             env.clone(),
@@ -91,7 +117,9 @@ async fn execute_tool_calls_sequential(
             config,
             emitter,
             session_id,
+            root_session_id,
             tool_env_provider,
+            agent_tool_runtime,
         )
         .await;
         results.push(result);
@@ -112,9 +140,12 @@ async fn execute_tool_calls_parallel(
     config: &SessionOptions,
     emitter: &Emitter,
     session_id: &str,
+    root_session_id: &str,
     tool_env_provider: Option<&Arc<dyn ToolEnvProvider>>,
+    agent_tool_runtime: &AgentToolRuntime,
 ) -> Vec<ToolResult> {
     let tool_env_provider = tool_env_provider.cloned();
+    let agent_tool_runtime = agent_tool_runtime.clone();
     let futures: Vec<_> = tool_calls
         .iter()
         .map(|tc| {
@@ -124,21 +155,31 @@ async fn execute_tool_calls_parallel(
             let cancel_token = cancel_token.clone();
             let tc = tc.clone();
             let session_id = session_id.to_owned();
+            let root_session_id = root_session_id.to_owned();
             let tool_hooks = tool_hooks.cloned();
             let tool_env_provider = tool_env_provider.clone();
+            let agent_tool_runtime = agent_tool_runtime.clone();
+            let access_denial = config.tool_access_denial_reason(&tc.name);
             // Look up the tool before spawning since ToolRegistry is not Send.
-            let registered_tool = registry.get(&tc.name).cloned();
+            let registered_tool = if access_denial.is_none() {
+                registry.get(&tc.name).cloned()
+            } else {
+                None
+            };
             async move {
                 execute_and_emit_one_tool_with_lookup(
                     &tc,
                     registered_tool.as_ref(),
+                    access_denial,
                     env,
                     tool_hooks.as_ref(),
                     cancel_token.child_token(),
                     &config,
                     &emitter,
                     &session_id,
+                    &root_session_id,
                     tool_env_provider.as_ref(),
+                    &agent_tool_runtime,
                 )
                 .await
             }
@@ -146,6 +187,107 @@ async fn execute_tool_calls_parallel(
         .collect();
 
     future::join_all(futures).await
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Question-tool round handling needs the same execution context as normal tool dispatch."
+)]
+async fn execute_question_tool_round(
+    tool_calls: &[ToolCall],
+    registry: &ToolRegistry,
+    env: Arc<dyn Sandbox>,
+    tool_hooks: Option<&Arc<dyn ToolHookCallback>>,
+    cancel_token: &CancellationToken,
+    config: &SessionOptions,
+    emitter: &Emitter,
+    session_id: &str,
+    root_session_id: &str,
+    tool_env_provider: Option<&Arc<dyn ToolEnvProvider>>,
+    agent_tool_runtime: &AgentToolRuntime,
+) -> Vec<ToolResult> {
+    let first_question_index = tool_calls
+        .iter()
+        .position(|tc| is_question_tool(&tc.name))
+        .expect("question-tool round should contain a question tool");
+    let mut results = Vec::with_capacity(tool_calls.len());
+
+    for (index, tc) in tool_calls.iter().enumerate() {
+        if cancel_token.is_cancelled() {
+            results.push(ToolResult::error(tc.id.clone(), "Cancelled"));
+            continue;
+        }
+
+        if index == first_question_index {
+            results.push(
+                execute_and_emit_one_tool_with_runtime(
+                    tc,
+                    registry,
+                    env.clone(),
+                    tool_hooks,
+                    cancel_token.child_token(),
+                    config,
+                    emitter,
+                    session_id,
+                    root_session_id,
+                    tool_env_provider,
+                    agent_tool_runtime,
+                )
+                .await,
+            );
+        } else if is_question_tool(&tc.name) {
+            results.push(error_tool_result_with_events(
+                tc,
+                emitter,
+                session_id,
+                config,
+                "Only one human-question tool call may be used in a tool round. Combine all questions into a single questions[] batch and call the question tool once.",
+            ));
+        } else {
+            results.push(error_tool_result_with_events(
+                tc,
+                emitter,
+                session_id,
+                config,
+                "This tool call was not executed because human-question tools must run alone in a tool round. Retry non-question tools in a later round after the user answers.",
+            ));
+        }
+    }
+
+    results
+}
+
+fn error_tool_result_with_events(
+    tc: &ToolCall,
+    emitter: &Emitter,
+    session_id: &str,
+    config: &SessionOptions,
+    message: &str,
+) -> ToolResult {
+    emit_tool_call_started(emitter, session_id, tc);
+    let result = ToolResult::error(&tc.id, message);
+    emit_tool_call_result(emitter, session_id, tc, &result);
+    truncate_tool_result(&result, &tc.name, config)
+}
+
+fn emit_tool_call_started(emitter: &Emitter, session_id: &str, tc: &ToolCall) {
+    emitter.emit(session_id.to_owned(), AgentEvent::ToolCallStarted {
+        tool_name:    tc.name.clone(),
+        tool_call_id: tc.id.clone(),
+        arguments:    tc.arguments.clone(),
+    });
+}
+
+fn emit_tool_call_result(emitter: &Emitter, session_id: &str, tc: &ToolCall, result: &ToolResult) {
+    emitter.emit(session_id.to_owned(), AgentEvent::ToolCallOutputDelta {
+        delta: result.content.to_string(),
+    });
+    emitter.emit(session_id.to_owned(), AgentEvent::ToolCallCompleted {
+        tool_name:    tc.name.clone(),
+        tool_call_id: tc.id.clone(),
+        output:       result.content.clone(),
+        is_error:     result.is_error,
+    });
 }
 
 /// Execute a single tool call with event emission and output truncation.
@@ -162,18 +304,61 @@ pub async fn execute_and_emit_one_tool(
     config: &SessionOptions,
     emitter: &Emitter,
     session_id: &str,
+    root_session_id: &str,
     tool_env_provider: Option<&Arc<dyn ToolEnvProvider>>,
 ) -> ToolResult {
-    execute_and_emit_one_tool_with_lookup(
+    execute_and_emit_one_tool_with_runtime(
         tc,
-        registry.get(&tc.name),
+        registry,
         env,
         tool_hooks,
         cancel_token,
         config,
         emitter,
         session_id,
+        root_session_id,
         tool_env_provider,
+        &AgentToolRuntime::default(),
+    )
+    .await
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Single-tool execution needs the tool, runtime handles, and emission context."
+)]
+async fn execute_and_emit_one_tool_with_runtime(
+    tc: &ToolCall,
+    registry: &ToolRegistry,
+    env: Arc<dyn Sandbox>,
+    tool_hooks: Option<&Arc<dyn ToolHookCallback>>,
+    cancel_token: CancellationToken,
+    config: &SessionOptions,
+    emitter: &Emitter,
+    session_id: &str,
+    root_session_id: &str,
+    tool_env_provider: Option<&Arc<dyn ToolEnvProvider>>,
+    agent_tool_runtime: &AgentToolRuntime,
+) -> ToolResult {
+    let access_denial = config.tool_access_denial_reason(&tc.name);
+    let registered_tool = if access_denial.is_none() {
+        registry.get(&tc.name)
+    } else {
+        None
+    };
+    execute_and_emit_one_tool_with_lookup(
+        tc,
+        registered_tool,
+        access_denial,
+        env,
+        tool_hooks,
+        cancel_token,
+        config,
+        emitter,
+        session_id,
+        root_session_id,
+        tool_env_provider,
+        agent_tool_runtime,
     )
     .await
 }
@@ -187,19 +372,24 @@ pub async fn execute_and_emit_one_tool(
 async fn execute_and_emit_one_tool_with_lookup(
     tc: &ToolCall,
     registered_tool: Option<&RegisteredTool>,
+    access_denial: Option<String>,
     env: Arc<dyn Sandbox>,
     tool_hooks: Option<&Arc<dyn ToolHookCallback>>,
     cancel_token: CancellationToken,
     config: &SessionOptions,
     emitter: &Emitter,
     session_id: &str,
+    root_session_id: &str,
     tool_env_provider: Option<&Arc<dyn ToolEnvProvider>>,
+    agent_tool_runtime: &AgentToolRuntime,
 ) -> ToolResult {
-    emitter.emit(session_id.to_owned(), AgentEvent::ToolCallStarted {
-        tool_name:    tc.name.clone(),
-        tool_call_id: tc.id.clone(),
-        arguments:    tc.arguments.clone(),
-    });
+    emit_tool_call_started(emitter, session_id, tc);
+
+    if let Some(reason) = access_denial {
+        let result = ToolResult::error(&tc.id, &reason);
+        emit_tool_call_result(emitter, session_id, tc, &result);
+        return truncate_tool_result(&result, &tc.name, config);
+    }
 
     // Pre-tool-use hook
     if let Some(hooks) = tool_hooks {
@@ -211,33 +401,25 @@ async fn execute_and_emit_one_tool_with_lookup(
 
         if let ToolHookDecision::Block { reason } = decision {
             let result = ToolResult::error(&tc.id, &reason);
-
-            emitter.emit(session_id.to_owned(), AgentEvent::ToolCallOutputDelta {
-                delta: result.content.to_string(),
-            });
-            emitter.emit(session_id.to_owned(), AgentEvent::ToolCallCompleted {
-                tool_name:    tc.name.clone(),
-                tool_call_id: tc.id.clone(),
-                output:       result.content.clone(),
-                is_error:     true,
-            });
-
+            emit_tool_call_result(emitter, session_id, tc, &result);
             return truncate_tool_result(&result, &tc.name, config);
         }
     }
 
-    let result = execute_one_tool(tc, registered_tool, env, cancel_token, tool_env_provider).await;
+    let result = execute_one_tool(
+        tc,
+        registered_tool,
+        env,
+        cancel_token,
+        emitter,
+        session_id,
+        root_session_id,
+        tool_env_provider,
+        agent_tool_runtime,
+    )
+    .await;
 
-    emitter.emit(session_id.to_owned(), AgentEvent::ToolCallOutputDelta {
-        delta: result.content.to_string(),
-    });
-
-    emitter.emit(session_id.to_owned(), AgentEvent::ToolCallCompleted {
-        tool_name:    tc.name.clone(),
-        tool_call_id: tc.id.clone(),
-        output:       result.content.clone(),
-        is_error:     result.is_error,
-    });
+    emit_tool_call_result(emitter, session_id, tc, &result);
 
     // Post-tool-use hooks
     if let Some(hooks) = tool_hooks {
@@ -265,27 +447,50 @@ async fn execute_and_emit_one_tool_with_lookup(
 }
 
 /// Execute a single tool call: argument validation and execution.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Single-tool execution threads session identity plus runtime handles to populate ToolContext."
+)]
 async fn execute_one_tool(
     tc: &ToolCall,
     registered_tool: Option<&RegisteredTool>,
     env: Arc<dyn Sandbox>,
     cancel_token: CancellationToken,
+    emitter: &Emitter,
+    session_id: &str,
+    root_session_id: &str,
     tool_env_provider: Option<&Arc<dyn ToolEnvProvider>>,
+    agent_tool_runtime: &AgentToolRuntime,
 ) -> ToolResult {
     match registered_tool {
         Some(tool) => {
-            if let Err(validation_error) =
-                validate_tool_args(&tool.definition.parameters, &tc.arguments)
-            {
-                return ToolResult::error(&tc.id, validation_error);
+            if tc.tool_type != "custom" {
+                if let Err(validation_error) =
+                    validate_tool_args(&tool.definition.parameters, &tc.arguments)
+                {
+                    return ToolResult::error(&tc.id, validation_error);
+                }
             }
 
+            let agent_event_emitter: Option<Arc<dyn AgentEventEmitter>> =
+                Some(Arc::new(SessionBoundEmitter {
+                    emitter:      emitter.clone(),
+                    session_id:   session_id.to_owned(),
+                    tool_call_id: Some(tc.id.clone()),
+                }));
             let ctx = ToolContext {
                 env,
                 cancel: cancel_token,
                 tool_env_provider: tool_env_provider.cloned(),
+                session_id: Some(session_id.to_owned()),
+                root_session_id: Some(root_session_id.to_owned()),
+                tool_call_id: Some(tc.id.clone()),
+                agent_event_emitter,
             };
-            match (tool.executor)(tc.arguments.clone(), ctx).await {
+            let execution = (tool.executor)(tc.arguments.clone(), ctx);
+            match question_tools::scope_agent_tool_runtime(agent_tool_runtime.clone(), execution)
+                .await
+            {
                 Ok(output) => ToolResult::success(&tc.id, serde_json::json!(output)),
                 Err(err) => ToolResult::error(&tc.id, err),
             }
@@ -348,20 +553,52 @@ pub fn validate_tool_args(
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
+    use async_trait::async_trait;
     use fabro_llm::types::{ToolCall, ToolDefinition};
+    use fabro_model::AgentProfileKind;
 
     use super::*;
-    use crate::config::{ToolHookCallback, ToolHookDecision};
+    use crate::config::{
+        ToolAccess, ToolAccessPolicy, ToolExposureMode, ToolHookCallback, ToolHookDecision,
+    };
     use crate::event::Emitter;
     use crate::local_sandbox::LocalSandbox;
+    use crate::question_tools::{
+        AgentQuestion, AgentQuestionAnswer, AgentQuestionAnswerStatus, AgentQuestionRuntime,
+        AgentToolRuntime, register_question_tools,
+    };
     use crate::read_before_write_sandbox::ReadBeforeWriteSandbox;
     use crate::test_support::MutableMockSandbox;
-    use crate::tool_registry::{RegisteredTool, ToolContext, ToolRegistry};
+    use crate::tool_registry::{RegisteredTool, ToolContext, ToolRegistry, ToolSource};
     use crate::tools::{
         make_edit_file_tool, make_grep_tool, make_read_file_tool, make_write_file_tool,
     };
+
+    struct NamedPolicy {
+        decisions: HashMap<String, ToolAccess>,
+    }
+
+    impl NamedPolicy {
+        fn new(decisions: impl IntoIterator<Item = (&'static str, ToolAccess)>) -> Self {
+            Self {
+                decisions: decisions
+                    .into_iter()
+                    .map(|(name, access)| (name.to_string(), access))
+                    .collect(),
+            }
+        }
+    }
+
+    impl ToolAccessPolicy for NamedPolicy {
+        fn access_for_tool(&self, tool_name: &str) -> ToolAccess {
+            self.decisions
+                .get(tool_name)
+                .copied()
+                .unwrap_or(ToolAccess::Denied)
+        }
+    }
 
     fn make_echo_tool() -> RegisteredTool {
         RegisteredTool {
@@ -382,6 +619,7 @@ mod tests {
                     Ok(format!("echo: {text}"))
                 })
             }),
+            source:     ToolSource::Native,
         }
     }
 
@@ -395,6 +633,7 @@ mod tests {
             executor:   Arc::new(|_args: serde_json::Value, _ctx: ToolContext| {
                 Box::pin(async move { Err("tool failed".to_string()) })
             }),
+            source:     ToolSource::Native,
         }
     }
 
@@ -407,6 +646,125 @@ mod tests {
             raw_arguments:     None,
             provider_metadata: None,
         }
+    }
+
+    struct StubQuestionRuntime;
+
+    #[async_trait]
+    impl AgentQuestionRuntime for StubQuestionRuntime {
+        async fn ask_questions(
+            &self,
+            _tool_call_id: &str,
+            questions: Vec<AgentQuestion>,
+            _cancel_token: CancellationToken,
+        ) -> Result<Vec<AgentQuestionAnswer>, String> {
+            Ok(questions
+                .into_iter()
+                .map(|question| AgentQuestionAnswer {
+                    original_id:       question.original_id,
+                    original_question: question.original_question,
+                    answers:           vec!["Ship".to_string()],
+                    status:            AgentQuestionAnswerStatus::Answered,
+                })
+                .collect())
+        }
+    }
+
+    #[tokio::test]
+    async fn question_tool_round_rejects_non_question_peers_and_preserves_order() {
+        let mut registry = ToolRegistry::new();
+        register_question_tools(AgentProfileKind::OpenAi, &mut registry);
+        registry.register(make_echo_tool());
+        let tool_calls = vec![
+            make_tool_call(
+                "request_user_input",
+                "call_question",
+                serde_json::json!({
+                    "questions": [{
+                        "id": "q1",
+                        "header": "Decision",
+                        "question": "Ship it?",
+                        "options": [{ "label": "Ship" }]
+                    }]
+                }),
+            ),
+            make_tool_call("echo", "call_echo", serde_json::json!({"text": "hello"})),
+        ];
+        let runtime = AgentToolRuntime::with_question_runtime(Arc::new(StubQuestionRuntime));
+
+        let results = execute_tool_calls(
+            &tool_calls,
+            true,
+            &registry,
+            Arc::new(LocalSandbox::new(std::env::current_dir().unwrap())),
+            None,
+            &CancellationToken::new(),
+            &SessionOptions::default(),
+            &Emitter::new(),
+            "root",
+            "root",
+            None,
+            &runtime,
+        )
+        .await;
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].tool_call_id, "call_question");
+        assert!(!results[0].is_error);
+        assert_eq!(results[1].tool_call_id, "call_echo");
+        assert!(results[1].is_error);
+        assert!(
+            results[1]
+                .content
+                .as_str()
+                .unwrap()
+                .contains("human-question tools must run alone")
+        );
+    }
+
+    #[tokio::test]
+    async fn multiple_question_tool_calls_execute_only_first() {
+        let mut registry = ToolRegistry::new();
+        register_question_tools(AgentProfileKind::OpenAi, &mut registry);
+        let question_args = serde_json::json!({
+            "questions": [{
+                "id": "q1",
+                "header": "Decision",
+                "question": "Ship it?",
+                "options": [{ "label": "Ship" }]
+            }]
+        });
+        let tool_calls = vec![
+            make_tool_call("request_user_input", "call_first", question_args.clone()),
+            make_tool_call("request_user_input", "call_second", question_args),
+        ];
+        let runtime = AgentToolRuntime::with_question_runtime(Arc::new(StubQuestionRuntime));
+
+        let results = execute_tool_calls(
+            &tool_calls,
+            true,
+            &registry,
+            Arc::new(LocalSandbox::new(std::env::current_dir().unwrap())),
+            None,
+            &CancellationToken::new(),
+            &SessionOptions::default(),
+            &Emitter::new(),
+            "root",
+            "root",
+            None,
+            &runtime,
+        )
+        .await;
+
+        assert!(!results[0].is_error);
+        assert!(results[1].is_error);
+        assert!(
+            results[1]
+                .content
+                .as_str()
+                .unwrap()
+                .contains("Combine all questions into a single questions[] batch")
+        );
     }
 
     struct MockHookCallback {
@@ -479,6 +837,7 @@ mod tests {
             &config,
             &emitter,
             "test-session",
+            "test-session",
             None,
         )
         .await;
@@ -509,6 +868,7 @@ mod tests {
             &config,
             &emitter,
             "test-session",
+            "test-session",
             None,
         )
         .await;
@@ -538,6 +898,7 @@ mod tests {
             CancellationToken::new(),
             &config,
             &emitter,
+            "test-session",
             "test-session",
             None,
         )
@@ -574,6 +935,7 @@ mod tests {
             &config,
             &emitter,
             "test-session",
+            "test-session",
             None,
         )
         .await;
@@ -606,6 +968,7 @@ mod tests {
             &config,
             &emitter,
             "test-session",
+            "test-session",
             None,
         )
         .await;
@@ -613,6 +976,116 @@ mod tests {
         assert!(!result.is_error);
         let content = result.content.to_string();
         assert!(content.contains("echo: hello"));
+    }
+
+    #[tokio::test]
+    async fn denied_policy_tool_is_blocked_before_executor_lookup() {
+        let executions = Arc::new(Mutex::new(0usize));
+        let mut registry = ToolRegistry::new();
+        let executions_for_tool = Arc::clone(&executions);
+        registry.register(RegisteredTool {
+            definition: ToolDefinition {
+                name:        "write_file".to_string(),
+                description: "Writes a file".to_string(),
+                parameters:  serde_json::json!({"type": "object"}),
+            },
+            executor:   Arc::new(move |_args: serde_json::Value, _ctx: ToolContext| {
+                let executions = Arc::clone(&executions_for_tool);
+                Box::pin(async move {
+                    *executions.lock().unwrap() += 1;
+                    Ok("wrote".to_string())
+                })
+            }),
+            source:     ToolSource::Native,
+        });
+        let config = SessionOptions {
+            tool_access_policy: Some(Arc::new(NamedPolicy::new([(
+                "write_file",
+                ToolAccess::Denied,
+            )]))),
+            tool_exposure_mode: ToolExposureMode::IncludeRequiresApproval,
+            ..SessionOptions::default()
+        };
+
+        let tc = make_tool_call("write_file", "call_1", serde_json::json!({}));
+        let result = execute_and_emit_one_tool(
+            &tc,
+            &registry,
+            make_sandbox(),
+            None,
+            CancellationToken::new(),
+            &config,
+            &Emitter::new(),
+            "test-session",
+            "test-session",
+            None,
+        )
+        .await;
+
+        assert!(result.is_error);
+        assert!(
+            result
+                .content
+                .as_str()
+                .unwrap_or_default()
+                .contains("denied by tool access policy")
+        );
+        assert_eq!(*executions.lock().unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn approval_required_tool_hidden_by_exposure_mode_is_blocked() {
+        let executions = Arc::new(Mutex::new(0usize));
+        let mut registry = ToolRegistry::new();
+        let executions_for_tool = Arc::clone(&executions);
+        registry.register(RegisteredTool {
+            definition: ToolDefinition {
+                name:        "shell".to_string(),
+                description: "Runs a command".to_string(),
+                parameters:  serde_json::json!({"type": "object"}),
+            },
+            executor:   Arc::new(move |_args: serde_json::Value, _ctx: ToolContext| {
+                let executions = Arc::clone(&executions_for_tool);
+                Box::pin(async move {
+                    *executions.lock().unwrap() += 1;
+                    Ok("ran".to_string())
+                })
+            }),
+            source:     ToolSource::Native,
+        });
+        let config = SessionOptions {
+            tool_access_policy: Some(Arc::new(NamedPolicy::new([(
+                "shell",
+                ToolAccess::RequiresApproval,
+            )]))),
+            tool_exposure_mode: ToolExposureMode::AutoApprovedOnly,
+            ..SessionOptions::default()
+        };
+
+        let tc = make_tool_call("shell", "call_1", serde_json::json!({}));
+        let result = execute_and_emit_one_tool(
+            &tc,
+            &registry,
+            make_sandbox(),
+            None,
+            CancellationToken::new(),
+            &config,
+            &Emitter::new(),
+            "test-session",
+            "test-session",
+            None,
+        )
+        .await;
+
+        assert!(result.is_error);
+        assert!(
+            result
+                .content
+                .as_str()
+                .unwrap_or_default()
+                .contains("requires approval")
+        );
+        assert_eq!(*executions.lock().unwrap(), 0);
     }
 
     // --- ReadBeforeWriteSandbox e2e tests ---
@@ -645,6 +1118,7 @@ mod tests {
             CancellationToken::new(),
             &config,
             &emitter,
+            "test-session",
             "test-session",
             None,
         )
@@ -679,6 +1153,7 @@ mod tests {
             &config,
             &emitter,
             "test-session",
+            "test-session",
             None,
         )
         .await;
@@ -698,6 +1173,7 @@ mod tests {
             CancellationToken::new(),
             &config,
             &emitter,
+            "test-session",
             "test-session",
             None,
         )
@@ -727,6 +1203,7 @@ mod tests {
             &config,
             &emitter,
             "test-session",
+            "test-session",
             None,
         )
         .await;
@@ -746,6 +1223,7 @@ mod tests {
             CancellationToken::new(),
             &config,
             &emitter,
+            "test-session",
             "test-session",
             None,
         )
@@ -777,6 +1255,7 @@ mod tests {
             &config,
             &emitter,
             "test-session",
+            "test-session",
             None,
         )
         .await;
@@ -807,6 +1286,7 @@ mod tests {
             CancellationToken::new(),
             &config,
             &emitter,
+            "test-session",
             "test-session",
             None,
         )

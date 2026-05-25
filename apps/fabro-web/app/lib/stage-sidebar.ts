@@ -1,9 +1,24 @@
 import { StageState } from "@qltysh/fabro-api-client";
-import type { PaginatedRunStageList } from "@qltysh/fabro-api-client";
+import type {
+  PaginatedRunStageList,
+  StageHandler,
+  StageModelUsage,
+} from "@qltysh/fabro-api-client";
 
-import type { Stage } from "../components/stage-sidebar";
 import { isVisibleStage } from "../data/runs";
 import { formatDurationMs } from "./format";
+
+export interface Stage {
+  id: string;
+  name: string;
+  handler: StageHandler;
+  status: StageState;
+  duration: string;
+  nodeId: string;
+  visit: number;
+  startedAt: string | null;
+  providerUsed: StageModelUsage | null;
+}
 
 export const ACTIVE_STAGE_STATES: ReadonlySet<StageState> = new Set([
   StageState.RUNNING,
@@ -20,14 +35,14 @@ export const SUCCEEDED_STAGE_STATES: ReadonlySet<StageState> = new Set([
 ]);
 
 const STAGE_STATUS_TONE: Record<StageState, string> = {
-  pending: "bg-overlay-strong text-fg-muted",
+  pending: "bg-overlay-strong text-fg-3",
   running: "bg-teal-500/15 text-teal-500",
   retrying: "bg-amber/15 text-amber",
   succeeded: "bg-mint/15 text-mint",
   partially_succeeded: "bg-amber/15 text-amber",
   failed: "bg-coral/15 text-coral",
-  skipped: "bg-overlay-strong text-fg-muted",
-  cancelled: "bg-overlay-strong text-fg-muted",
+  skipped: "bg-overlay-strong text-fg-3",
+  cancelled: "bg-overlay-strong text-fg-3",
 };
 
 const STAGE_STATUS_LABEL: Record<StageState, string> = {
@@ -50,12 +65,12 @@ export function stageStatusLabel(status: StageState): string {
 }
 
 /**
- * Display label for a stage. Suffixes `(N)` for visits > 1 so a looped node
- * (e.g. `verify`) renders as `verify`, `verify (2)`, `verify (3)` in the
- * sidebar and stage header.
+ * Display label for a stage. Suffixes `@N` for visits > 1 so a looped node
+ * (e.g. `verify`) renders as `verify`, `verify@2`, `verify@3` in the
+ * sidebar and stage header, matching Fabro's stage-reference syntax.
  */
 export function formatStageLabel(stage: { name: string; visit: number }): string {
-  return stage.visit > 1 ? `${stage.name} (${stage.visit})` : stage.name;
+  return stage.visit > 1 ? `${stage.name}@${stage.visit}` : stage.name;
 }
 
 export function mapRunStagesToSidebarStages(
@@ -74,6 +89,7 @@ export function mapRunStagesToSidebarStages(
         ? formatDurationMs(stage.wall_time_ms)
         : "--",
       startedAt: stage.started_at ?? null,
+      providerUsed: stage.provider_used ?? null,
     }));
 }
 

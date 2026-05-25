@@ -7,7 +7,9 @@ import {
   ClockIcon,
 } from "@heroicons/react/24/outline";
 
-import AskFabroSidebar from "../components/chats/ask-fabro-sidebar";
+import AskFabroSidebar, {
+  SIDEBAR_WIDTH,
+} from "../components/chats/ask-fabro-sidebar";
 
 // hideHeader/fullHeight/wide mirror the chats layout so the demo workspace and
 // the docked Ask-Fabro sidebar bleed edge-to-edge below the top nav.
@@ -20,6 +22,7 @@ export const handle = { hideHeader: true, fullHeight: true, wide: true };
  */
 export default function AskFabro() {
   const [isOpen, setIsOpen] = useState(false);
+  const [width, setWidth] = useState(SIDEBAR_WIDTH);
 
   return (
     // Cancel AppShell's content padding (px-4 py-6 / sm:px-6 / lg:px-8) so the
@@ -27,7 +30,13 @@ export default function AskFabro() {
     // grows by the vertical padding amount to recover the full viewport area.
     <div className="relative isolate -mx-4 -my-6 flex h-[calc(100%+3rem)] sm:-mx-6 lg:-mx-8">
       <DemoWorkspace isOpen={isOpen} onOpen={() => setIsOpen(true)} />
-      <AskFabroSidebar isOpen={isOpen} onClose={() => setIsOpen(false)} />
+      <AskFabroSidebar
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        runId="demo"
+        width={width}
+        onWidthChange={setWidth}
+      />
     </div>
   );
 }

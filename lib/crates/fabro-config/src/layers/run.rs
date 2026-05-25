@@ -3,12 +3,13 @@
 use std::collections::HashMap;
 
 use fabro_types::settings::run::{
-    AgentPermissions, ApprovalMode, DaytonaNetworkLayer, HookEvent, MergeStrategy, RunMode,
+    AgentPermissions, ApprovalMode, HookEvent, McpHttpProtocol, MergeStrategy, RunMode,
 };
-use fabro_types::settings::{Duration, InterpString, ModelRef, Size};
+use fabro_types::settings::{Duration, InterpString, ModelRef};
 use serde::{Deserialize, Serialize};
 
 use super::combine::Combine;
+use super::environment::RunEnvironmentLayer;
 use super::maps::{MergeMap, ReplaceMap, StickyMap};
 use super::splice_array::SPLICE_MARKER;
 
@@ -42,7 +43,7 @@ pub struct RunLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub meta_branch:   Option<RunMetaBranchLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sandbox:       Option<RunSandboxLayer>,
+    pub environment:   Option<RunEnvironmentLayer>,
     #[serde(default, skip_serializing_if = "MergeMap::is_empty")]
     pub notifications: MergeMap<NotificationRouteLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -281,7 +282,9 @@ pub struct RunExecutionLayer {
 #[serde(deny_unknown_fields)]
 pub struct RunCheckpointLayer {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub exclude_globs: Vec<String>,
+    pub exclude_globs:  Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip_git_hooks: Option<bool>,
 }
 
 /// `[run.clone]` — source workspace clone policy.
@@ -310,95 +313,6 @@ pub struct RunMetaBranchLayer {
     pub enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push:    Option<bool>,
-}
-
-/// `[run.sandbox]` — sandbox selection and execution-environment surface.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
-#[serde(deny_unknown_fields)]
-pub struct RunSandboxLayer {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider:         Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preserve:         Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stop_on_terminal: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub devcontainer:     Option<bool>,
-    /// Sticky merge-by-key across layers.
-    #[serde(default, skip_serializing_if = "StickyMap::is_empty")]
-    pub env:              StickyMap<InterpString>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub docker:           Option<DockerSandboxLayer>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub daytona:          Option<DaytonaSandboxLayer>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
-#[serde(deny_unknown_fields)]
-pub struct DockerSandboxLayer {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub image:        Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub network_mode: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub memory_limit: Option<Size>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cpu_quota:    Option<i64>,
-    #[serde(default, skip_serializing_if = "StickyMap::is_empty")]
-    pub env_vars:     StickyMap<InterpString>,
-    /// Host-path:container-path[:mode] bind mounts. Interpolated host-side
-    /// at run-start time against the fabro-server process env (e.g.
-    /// `{{ env.HOME }}/.claude:/home/dev/.claude:rw`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub binds:        Option<Vec<InterpString>>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
-#[serde(deny_unknown_fields)]
-pub struct DaytonaSandboxLayer {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub auto_stop_interval: Option<i32>,
-    /// Sticky merge-by-key (provider-native labels).
-    #[serde(default, skip_serializing_if = "StickyMap::is_empty")]
-    pub labels:             StickyMap<String>,
-    /// Existing Daytona volumes to mount when creating the sandbox.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub volumes:            Option<Vec<DaytonaVolumeLayer>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub snapshot:           Option<DaytonaSnapshotLayer>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub network:            Option<DaytonaNetworkLayer>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct DaytonaVolumeLayer {
-    pub volume_id:  String,
-    pub mount_path: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subpath:    Option<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct DaytonaSnapshotLayer {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub name:       Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cpu:        Option<i32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub memory:     Option<Size>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub disk:       Option<Size>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dockerfile: Option<DaytonaDockerfileLayer>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged, deny_unknown_fields)]
-pub enum DaytonaDockerfileLayer {
-    Inline(String),
-    Path { path: String },
 }
 
 /// `[run.notifications.<name>]` — a keyed notification route.
@@ -469,7 +383,7 @@ pub struct InterviewProviderLayer {
     pub channel: Option<InterpString>,
 }
 
-/// `[run.agent]` — agent knobs only (permissions, MCPs).
+/// `[run.agent]` — agent knobs only (Fabro tools, permissions, MCPs).
 #[derive(
     Debug,
     Clone,
@@ -482,6 +396,11 @@ pub struct InterviewProviderLayer {
 )]
 #[serde(deny_unknown_fields)]
 pub struct RunAgentLayer {
+    /// Allow workflow agents to use Fabro run-management tools.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[option(default = "false", value_type = "boolean")]
+    pub fabro_tools: Option<bool>,
+
     /// Default tool permission level for workflow agents.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[option(
@@ -489,10 +408,11 @@ pub struct RunAgentLayer {
         value_type = "\"read-only\" | \"read-write\" | \"full\""
     )]
     pub permissions: Option<AgentPermissions>,
+
     /// Agent-scoped MCP server entries, keyed by name.
     #[serde(default, skip_serializing_if = "StickyMap::is_empty")]
     #[option(value_type = "table")]
-    pub mcps:        StickyMap<McpEntryLayer>,
+    pub mcps: StickyMap<McpEntryLayer>,
 }
 
 /// A single MCP entry. `type` selects the transport; `script`/`command` are
@@ -504,6 +424,8 @@ pub enum McpEntryLayer {
     Http {
         #[serde(default)]
         enabled:         Option<bool>,
+        #[serde(default)]
+        protocol:        McpHttpProtocol,
         url:             InterpString,
         #[serde(default)]
         headers:         HashMap<String, InterpString>,
@@ -529,6 +451,8 @@ pub enum McpEntryLayer {
     Sandbox {
         #[serde(default)]
         enabled:         Option<bool>,
+        #[serde(default)]
+        protocol:        McpHttpProtocol,
         #[serde(default)]
         script:          Option<InterpString>,
         #[serde(default)]

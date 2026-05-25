@@ -147,7 +147,8 @@ fn inspect_resolves_selector_via_server_endpoint() {
                 "approval": "prompt"
               },
               "checkpoint": {
-                "exclude_globs": []
+                "exclude_globs": [],
+                "skip_git_hooks": false
               },
               "clone": {
                 "enabled": true
@@ -160,14 +161,30 @@ fn inspect_resolves_selector_via_server_endpoint() {
                 "enabled": true,
                 "push": true
               },
-              "sandbox": {
+              "environment": {
+                "id": "default",
                 "provider": "local",
-                "preserve": false,
-                "stop_on_terminal": true,
-                "devcontainer": false,
-                "env": {},
-                "docker": null,
-                "daytona": null
+                "image": {
+                  "ref": null,
+                  "dockerfile": null
+                },
+                "resources": {
+                  "cpu": null,
+                  "memory": null,
+                  "disk": null
+                },
+                "network": {
+                  "mode": "allow_all",
+                  "allow": []
+                },
+                "lifecycle": {
+                  "preserve": false,
+                  "stop_on_terminal": true,
+                  "auto_stop": null
+                },
+                "labels": {},
+                "volumes": [],
+                "env": {}
               },
               "notifications": {},
               "interviews": {
@@ -175,6 +192,7 @@ fn inspect_resolves_selector_via_server_endpoint() {
                 "slack": null
               },
               "agent": {
+                "fabro_tools": false,
                 "permissions": null,
                 "mcps": {}
               },
@@ -301,7 +319,7 @@ fn inspect_created_run_shows_run_spec_without_start_or_conclusion() {
           },
           "workflow_name": "Simple",
           "workflow_slug": "simple",
-          "sandbox_provider": "local",
+          "sandbox_provider": null,
           "dry_run": true,
           "provenance": {
             "server_version": "[VERSION]",
@@ -314,7 +332,7 @@ fn inspect_created_run_shows_run_spec_without_start_or_conclusion() {
         "conclusion": null,
         "checkpoint": null,
         "sandbox": {
-          "provider": "local"
+          "provider": "docker"
         }
       }
     ]
@@ -342,7 +360,7 @@ fn inspect_completed_run_shows_run_start_conclusion_checkpoint() {
           },
           "workflow_name": "Simple",
           "workflow_slug": "simple",
-          "sandbox_provider": "local",
+          "sandbox_provider": null,
           "dry_run": true,
           "provenance": {
             "server_version": "[VERSION]",
@@ -414,7 +432,7 @@ fn inspect_completed_run_reads_store_without_disk_metadata_files() {
           },
           "workflow_name": "Simple",
           "workflow_slug": "simple",
-          "sandbox_provider": "local",
+          "sandbox_provider": null,
           "dry_run": true,
           "provenance": {
             "server_version": "[VERSION]",
@@ -472,7 +490,7 @@ fn inspect_git_backed_run_exposes_checkpoint_and_sandbox_state() {
           "workflow_name": "Flow",
           "workflow_slug": "flow",
           "llm_provider": "openai",
-          "sandbox_provider": "local",
+          "sandbox_provider": null,
           "provenance": {
             "server_version": "[VERSION]",
             "client_name": "fabro-cli",

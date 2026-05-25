@@ -19,7 +19,7 @@ use crate::profiles::EnvContext;
 use crate::sandbox::*;
 use crate::session::Session;
 use crate::skills::{Skill, format_skills_prompt_section};
-use crate::tool_registry::{RegisteredTool, ToolRegistry};
+use crate::tool_registry::{RegisteredTool, ToolRegistry, ToolSource};
 
 // --- TestProfile ---
 
@@ -283,6 +283,7 @@ pub fn make_echo_tool() -> RegisteredTool {
                 Ok(format!("echo: {text}"))
             })
         }),
+        source:     ToolSource::Native,
     }
 }
 
@@ -297,6 +298,7 @@ pub fn make_error_tool() -> RegisteredTool {
         executor:   Arc::new(|_args, _ctx| {
             Box::pin(async move { Err("tool execution failed".to_string()) })
         }),
+        source:     ToolSource::Native,
     }
 }
 
@@ -356,33 +358,6 @@ impl ProviderAdapter for CapturingLlmProvider {
             .lock()
             .expect("captured_request lock poisoned") = Some(request.clone());
         Ok(response_to_stream(text_response("captured")))
-    }
-}
-
-// --- MockMidStreamErrorProvider ---
-
-/// A mock provider that yields some text deltas then an error mid-stream.
-pub struct MockMidStreamErrorProvider {
-    pub partial_text: String,
-    pub error:        LlmError,
-}
-
-#[async_trait]
-impl ProviderAdapter for MockMidStreamErrorProvider {
-    fn name(&self) -> &'static str {
-        "mock"
-    }
-
-    async fn complete(&self, _request: &Request) -> Result<Response, LlmError> {
-        Err(self.error.clone())
-    }
-
-    async fn stream(&self, _request: &Request) -> Result<StreamEventStream, LlmError> {
-        let events: Vec<Result<StreamEvent, LlmError>> = vec![
-            Ok(StreamEvent::text_delta(self.partial_text.clone(), None)),
-            Err(self.error.clone()),
-        ];
-        Ok(Box::pin(stream::iter(events)))
     }
 }
 

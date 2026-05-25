@@ -14,16 +14,20 @@ use fabro_config::bind::Bind;
 use fabro_interview::{
     AnswerValue, ControlInterviewer, Interviewer, Question, WorkerControlMessage,
 };
-use fabro_llm::types::{Message as LlmMessage, Request as LlmRequest};
+use fabro_llm::types::{Message as LlmMessage, Request as LlmRequest, TokenCounts};
 use fabro_model::catalog::LlmCatalogSettings;
-use fabro_model::{Catalog, ModelRef, ProviderId, Speed};
+use fabro_model::{Catalog, ModelRef, ProviderId, ReasoningEffort, Speed};
 use fabro_types::settings::ServerAuthMethod;
 use fabro_types::{
     AgentBackend, AttrValue, AuthMethod, CommandTermination, FailureCategory, FailureDetail, Graph,
     InterviewQuestionRecord, Node, Outcome, QuestionType, RunBlobId, RunId, RunSpec,
-    SandboxProvider, SuccessReason, SystemActorKind, WorkflowSettings, fixtures,
+    SandboxProvider, StageContextWindowBreakdownItem, StageContextWindowCategory,
+    StageContextWindowCountMethod, StageContextWindowProjection, StageContextWindowStaleness,
+    StageContextWindowWarning, StageModelUsage, StageTiming, SuccessReason, SystemActorKind,
+    WorkflowSettings, fixtures,
 };
 use fabro_util::check_report::CheckStatus;
+use fabro_workflow::records::CheckpointExt;
 use httpmock::Method::{GET, POST};
 use httpmock::MockServer;
 use serde_json::json;
@@ -606,6 +610,50 @@ async fn create_run_with_bearer(app: &Router, bearer: &str) -> RunId {
     body["id"].as_str().unwrap().parse().unwrap()
 }
 
+fn pair_test_target() -> PairTarget {
+    PairTarget {
+        stage_id:   StageId::new("agent", 1),
+        node_label: "Agent".to_string(),
+    }
+}
+
+async fn append_pair_transcript_fixture(state: &Arc<AppState>, run_id: RunId) -> PairId {
+    let pair_id = "01HZX6M29F1CD5YYMHT1F5D7WQ".parse().unwrap();
+    let run_store = state
+        .store
+        .open_run(&run_id)
+        .await
+        .expect("test run should be openable");
+    workflow_event::append_event(
+        &run_store,
+        &run_id,
+        &workflow_event::Event::RunPairStarted {
+            pair_id,
+            target: pair_test_target(),
+            actor: None,
+        },
+    )
+    .await
+    .unwrap();
+    workflow_event::append_event(
+        &run_store,
+        &run_id,
+        &workflow_event::Event::AgentPairUserMessage {
+            node_id: "agent".to_string(),
+            visit: 1,
+            session_id: "session-1".to_string(),
+            pair_id,
+            message_id: PairMessageId::new(),
+            client_message_id: None,
+            text: "hello pair".to_string(),
+            actor: None,
+        },
+    )
+    .await
+    .unwrap();
+    pair_id
+}
+
 fn bearer_request(method: Method, path: &str, bearer: &str, body: Body) -> Request<Body> {
     Request::builder()
         .method(method)
@@ -625,6 +673,15 @@ fn json_bearer_request(
         .method(method)
         .uri(api(path))
         .header(header::AUTHORIZATION, format!("Bearer {bearer}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&body).unwrap()))
+        .unwrap()
+}
+
+fn json_request(method: Method, path: &str, body: &serde_json::Value) -> Request<Body> {
+    Request::builder()
+        .method(method)
+        .uri(api(path))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(serde_json::to_vec(&body).unwrap()))
         .unwrap()
@@ -856,8 +913,8 @@ methods = ["dev-token"]
 [server.web]
 url = "http://new.example.com"
 
-[run.sandbox]
-provider = "invalid-provider"
+[run.environment]
+id = "missing"
 "#;
 
     state
@@ -872,55 +929,12 @@ provider = "invalid-provider"
 }
 
 #[test]
-fn system_features_use_dense_server_and_manifest_defaults() {
-    let source = r#"
-_version = 1
-
-[server.auth]
-methods = ["dev-token"]
-
-[features]
-session_sandboxes = true
-"#;
-    let server_settings = server_settings_from_toml(source);
-    let manifest_run_settings = resolve_manifest_run_settings(
-        &run_manifest::manifest_run_defaults(Some(&manifest_run_defaults_from_toml(source))),
-    );
-    let features = system_features(&server_settings, &manifest_run_settings);
-
-    assert_eq!(features.session_sandboxes, Some(true));
-}
-
-#[test]
-fn system_features_ignore_manifest_run_settings_resolution() {
-    let source = r#"
-_version = 1
-
-[server.auth]
-methods = ["dev-token"]
-
-[features]
-session_sandboxes = true
-
-[run.sandbox]
-provider = "invalid-provider"
-"#;
-    let server_settings = server_settings_from_toml(source);
-    let manifest_run_settings = resolve_manifest_run_settings(
-        &run_manifest::manifest_run_defaults(Some(&manifest_run_defaults_from_toml(source))),
-    );
-    let features = system_features(&server_settings, &manifest_run_settings);
-
-    assert_eq!(features.session_sandboxes, Some(true));
-}
-
-#[test]
 fn system_sandbox_provider_uses_manifest_defaults() {
     let source = r#"
 _version = 1
 
-[run.sandbox]
-provider = "daytona"
+[run.environment]
+id = "daytona"
 "#;
     let manifest_run_settings = resolve_manifest_run_settings(
         &run_manifest::manifest_run_defaults(Some(&manifest_run_defaults_from_toml(source))),
@@ -934,8 +948,8 @@ fn system_sandbox_provider_defaults_when_manifest_run_settings_do_not_resolve() 
     let source = r#"
 _version = 1
 
-[run.sandbox]
-provider = "invalid-provider"
+[run.environment]
+id = "missing"
 "#;
     let manifest_run_settings = resolve_manifest_run_settings(
         &run_manifest::manifest_run_defaults(Some(&manifest_run_defaults_from_toml(source))),
@@ -948,10 +962,34 @@ provider = "invalid-provider"
 }
 
 #[test]
+fn sandbox_provider_policy_error_reports_disabled_provider() {
+    let settings = server_settings_from_toml(
+        r#"
+_version = 1
+
+[server.auth]
+methods = ["dev-token"]
+
+[server.sandbox.providers.daytona]
+enabled = false
+"#,
+    );
+
+    assert_eq!(
+        crate::run_manifest::sandbox_provider_policy_error(&settings, SandboxProvider::Daytona)
+            .as_deref(),
+        Some(
+            "sandbox provider \"daytona\" is disabled by server.sandbox.providers.daytona.enabled"
+        )
+    );
+}
+
+#[test]
 fn clone_sandbox_credentials_are_available_for_clone_based_providers() {
-    assert!(clone_sandbox_can_use_github_credentials("docker"));
-    assert!(clone_sandbox_can_use_github_credentials("daytona"));
-    assert!(!clone_sandbox_can_use_github_credentials("local"));
+    use fabro_types::settings::run::EnvironmentProvider;
+    assert!(EnvironmentProvider::Docker.is_clone_based());
+    assert!(EnvironmentProvider::Daytona.is_clone_based());
+    assert!(!EnvironmentProvider::Local.is_clone_based());
 }
 
 #[tokio::test]
@@ -1517,92 +1555,53 @@ fn server_secrets_resolve_process_env_before_server_env() {
 
 #[cfg(unix)]
 #[test]
-fn worker_command_always_sets_worker_token_env() {
-    let github_only = tempfile::tempdir().unwrap();
-    let github_state =
-        worker_command_test_state(github_only.path(), &["github"], Some(TEST_DEV_TOKEN));
-    let github_run_id = RunId::new();
-    let github_cmd = worker_command(
-        github_state.as_ref(),
-        github_run_id,
-        RunExecutionMode::Start,
-        github_only.path(),
-    )
-    .unwrap();
-    assert!(matches!(
-        command_env_value(&github_cmd, "FABRO_WORKER_TOKEN"),
-        EnvOverride::Set(_)
-    ));
-    assert_eq!(
-        command_env_value(&github_cmd, "FABRO_DEV_TOKEN"),
-        EnvOverride::Unchanged
-    );
-    let github_args = github_cmd
-        .as_std()
-        .get_args()
-        .map(|arg| arg.to_string_lossy().into_owned())
-        .collect::<Vec<_>>();
-    assert!(
-        !github_args
-            .iter()
-            .any(|arg| arg == "--artifact-upload-token")
-    );
-    assert!(!github_args.iter().any(|arg| arg == "--worker-token"));
-    let EnvOverride::Set(github_token) = command_env_value(&github_cmd, "FABRO_WORKER_TOKEN")
-    else {
-        panic!("worker token should be set");
-    };
-    let github_keys = WorkerTokenKeys::from_master_secret(TEST_SESSION_SECRET.as_bytes())
-        .expect("worker keys should derive");
-    let github_claims = jsonwebtoken::decode::<crate::worker_token::WorkerTokenClaims>(
-        &github_token,
-        github_keys.decoding_key(),
-        github_keys.validation(),
-    )
-    .expect("github worker token should decode")
-    .claims;
-    assert_eq!(github_claims.run_id, github_run_id.to_string());
-    assert_eq!(
-        github_claims.scope.split_whitespace().collect::<Vec<_>>(),
-        vec!["run:worker", "agent:run_tools"]
-    );
+fn worker_command_default_token_omits_agent_run_tools_scope() {
+    let storage_dir = tempfile::tempdir().unwrap();
+    let state = worker_command_test_state(storage_dir.path(), &["dev-token"], Some(TEST_DEV_TOKEN));
+    let run_id = RunId::new();
 
-    let dev_token = tempfile::tempdir().unwrap();
-    let dev_token_state =
-        worker_command_test_state(dev_token.path(), &["dev-token"], Some(TEST_DEV_TOKEN));
-    let dev_token_run_id = RunId::new();
-    let dev_token_cmd = worker_command(
-        dev_token_state.as_ref(),
-        dev_token_run_id,
+    let cmd = worker_command(
+        state.as_ref(),
+        run_id,
         RunExecutionMode::Start,
-        dev_token.path(),
+        storage_dir.path(),
+        false,
     )
     .unwrap();
-    assert!(matches!(
-        command_env_value(&dev_token_cmd, "FABRO_WORKER_TOKEN"),
-        EnvOverride::Set(_)
-    ));
-    assert_eq!(
-        command_env_value(&dev_token_cmd, "FABRO_DEV_TOKEN"),
-        EnvOverride::Unchanged
-    );
-    let EnvOverride::Set(dev_worker_token) =
-        command_env_value(&dev_token_cmd, "FABRO_WORKER_TOKEN")
-    else {
-        panic!("worker token should be set");
-    };
-    let dev_claims = jsonwebtoken::decode::<crate::worker_token::WorkerTokenClaims>(
-        &dev_worker_token,
-        github_keys.decoding_key(),
-        github_keys.validation(),
+
+    assert_worker_command_passes_token_only_by_env(&cmd);
+    let claims = worker_token_claims(&cmd, state.as_ref());
+
+    assert_eq!(claims.run_id, run_id.to_string());
+    assert_eq!(claims.scope.split_whitespace().collect::<Vec<_>>(), vec![
+        "run:worker"
+    ]);
+}
+
+#[cfg(unix)]
+#[test]
+fn worker_command_opt_in_token_includes_agent_run_tools_scope() {
+    let storage_dir = tempfile::tempdir().unwrap();
+    let state = worker_command_test_state(storage_dir.path(), &["dev-token"], Some(TEST_DEV_TOKEN));
+    let run_id = RunId::new();
+
+    let cmd = worker_command(
+        state.as_ref(),
+        run_id,
+        RunExecutionMode::Start,
+        storage_dir.path(),
+        true,
     )
-    .expect("dev-token worker token should decode")
-    .claims;
-    assert_eq!(dev_claims.run_id, dev_token_run_id.to_string());
-    assert_eq!(
-        dev_claims.scope.split_whitespace().collect::<Vec<_>>(),
-        vec!["run:worker", "agent:run_tools"]
-    );
+    .unwrap();
+
+    assert_worker_command_passes_token_only_by_env(&cmd);
+    let claims = worker_token_claims(&cmd, state.as_ref());
+
+    assert_eq!(claims.run_id, run_id.to_string());
+    assert_eq!(claims.scope.split_whitespace().collect::<Vec<_>>(), vec![
+        "run:worker",
+        "agent:run_tools"
+    ]);
 }
 
 #[cfg(unix)]
@@ -1622,6 +1621,7 @@ fn worker_command_forwards_github_app_private_key_from_server_secrets() {
         RunId::new(),
         RunExecutionMode::Start,
         storage_dir.path(),
+        false,
     )
     .unwrap();
 
@@ -1641,6 +1641,7 @@ fn worker_command_omits_github_app_private_key_when_unset() {
         RunId::new(),
         RunExecutionMode::Start,
         storage_dir.path(),
+        false,
     )
     .unwrap();
 
@@ -1670,6 +1671,7 @@ level = "debug"
         run_id,
         RunExecutionMode::Start,
         storage_dir.path(),
+        false,
     )
     .unwrap();
 
@@ -1699,6 +1701,7 @@ destination = "stdout"
         run_id,
         RunExecutionMode::Start,
         storage_dir.path(),
+        false,
     )
     .unwrap();
 
@@ -1727,6 +1730,7 @@ fn worker_command_sets_fabro_config_to_active_absolute_config_path() {
         run_id,
         RunExecutionMode::Start,
         storage_dir.path(),
+        false,
     )
     .unwrap();
 
@@ -1768,6 +1772,7 @@ destination = "file"
         run_id,
         RunExecutionMode::Start,
         storage_dir.path(),
+        false,
     )
     .unwrap();
 
@@ -1799,6 +1804,7 @@ destination = "file"
         run_id,
         RunExecutionMode::Start,
         storage_dir.path(),
+        false,
     ) else {
         panic!("invalid env destination should fail");
     };
@@ -2107,6 +2113,40 @@ fn command_env_value(cmd: &Command, key: &str) -> EnvOverride {
         .unwrap_or(EnvOverride::Unchanged)
 }
 
+#[cfg(unix)]
+fn assert_worker_command_passes_token_only_by_env(cmd: &Command) {
+    assert!(matches!(
+        command_env_value(cmd, EnvVars::FABRO_WORKER_TOKEN),
+        EnvOverride::Set(_)
+    ));
+    assert_eq!(
+        command_env_value(cmd, EnvVars::FABRO_DEV_TOKEN),
+        EnvOverride::Unchanged
+    );
+    let args = cmd
+        .as_std()
+        .get_args()
+        .map(|arg| arg.to_string_lossy())
+        .collect::<Vec<_>>();
+    assert!(!args.iter().any(|arg| arg == "--artifact-upload-token"));
+    assert!(!args.iter().any(|arg| arg == "--worker-token"));
+}
+
+#[cfg(unix)]
+fn worker_token_claims(cmd: &Command, state: &AppState) -> crate::worker_token::WorkerTokenClaims {
+    let EnvOverride::Set(token) = command_env_value(cmd, EnvVars::FABRO_WORKER_TOKEN) else {
+        panic!("worker token env should be set");
+    };
+
+    jsonwebtoken::decode::<crate::worker_token::WorkerTokenClaims>(
+        &token,
+        state.worker_token_keys().decoding_key(),
+        state.worker_token_keys().validation(),
+    )
+    .expect("worker token should decode")
+    .claims
+}
+
 #[tokio::test]
 async fn subprocess_answer_transport_cancel_run_enqueues_cancel_message() {
     let (control_tx, mut control_rx) = tokio::sync::mpsc::channel(1);
@@ -2187,10 +2227,7 @@ async fn subprocess_answer_transport_pair_commands_enqueue_control_messages() {
     let actor = Principal::System {
         system_kind: SystemActorKind::Engine,
     };
-    let target = PairTarget {
-        stage_id:   StageId::new("agent", 1),
-        node_label: "Agent".to_string(),
-    };
+    let target = pair_test_target();
 
     transport
         .start_pair(run_id, pair_id, target.clone(), actor.clone())
@@ -2416,6 +2453,254 @@ url = "http://127.0.0.1:32276"
         body.get("web_url").is_none() || body["web_url"].is_null(),
         "web_url should be absent or null when web is disabled, got {body}"
     );
+}
+
+#[tokio::test]
+async fn create_run_without_explicit_title_returns_deterministic_then_updates_generated_title() {
+    let llm = MockServer::start_async().await;
+    let title_mock = mock_openai_title_response(&llm, "Generated deploy title", None).await;
+    let state = TestAppStateBuilder::new()
+        .provider_base_url("openai", llm.url("/v1"))
+        .env_lookup(|_| None)
+        .build();
+    state
+        .vault
+        .write()
+        .await
+        .set("OPENAI_API_KEY", "openai-key", SecretType::Token, None)
+        .unwrap();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+
+    let body = post_run_manifest(&app, minimal_manifest_json(MINIMAL_DOT)).await;
+    let run_id: RunId = body["id"].as_str().unwrap().parse().unwrap();
+
+    assert_eq!(body["title"], "Test");
+    wait_for_run_title(&state, run_id, "Generated deploy title").await;
+    assert_eq!(title_update_event_count(&state, run_id).await, 1);
+    title_mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn create_run_with_explicit_title_skips_generated_title_work() {
+    let llm = MockServer::start_async().await;
+    let title_mock = mock_openai_title_response(&llm, "Generated deploy title", None).await;
+    let state = TestAppStateBuilder::new()
+        .provider_base_url("openai", llm.url("/v1"))
+        .env_lookup(|_| None)
+        .build();
+    state
+        .vault
+        .write()
+        .await
+        .set("OPENAI_API_KEY", "openai-key", SecretType::Token, None)
+        .unwrap();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let mut manifest = minimal_manifest_json(MINIMAL_DOT);
+    manifest["title"] = json!("Caller title");
+
+    let body = post_run_manifest(&app, manifest).await;
+    let run_id: RunId = body["id"].as_str().unwrap().parse().unwrap();
+    // The spawn gate is synchronous in `create_run`, so once the response
+    // returns we know no title task was scheduled. No sleep needed.
+
+    assert_eq!(
+        state
+            .store
+            .get_cached_summary(&run_id, Utc::now())
+            .await
+            .unwrap()
+            .unwrap()
+            .title,
+        "Caller title"
+    );
+    assert_eq!(title_update_event_count(&state, run_id).await, 0);
+    title_mock.assert_calls_async(0).await;
+}
+
+#[tokio::test]
+async fn create_run_without_ready_llm_provider_skips_generated_title_work() {
+    let state = TestAppStateBuilder::new().env_lookup(|_| None).build();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+
+    let body = post_run_manifest(&app, minimal_manifest_json(MINIMAL_DOT)).await;
+    let run_id: RunId = body["id"].as_str().unwrap().parse().unwrap();
+
+    assert_eq!(
+        state
+            .store
+            .get_cached_summary(&run_id, Utc::now())
+            .await
+            .unwrap()
+            .unwrap()
+            .title,
+        "Test"
+    );
+    assert_eq!(title_update_event_count(&state, run_id).await, 0);
+}
+
+#[tokio::test]
+async fn generated_title_failure_leaves_deterministic_title_unchanged() {
+    let llm = MockServer::start_async().await;
+    let title_mock = llm
+        .mock_async(|when, then| {
+            when.method(POST).path("/v1/responses");
+            then.status(500)
+                .header("content-type", "application/json")
+                .json_body(json!({"error": {"message": "boom"}}));
+        })
+        .await;
+    let state = TestAppStateBuilder::new()
+        .provider_base_url("openai", llm.url("/v1"))
+        .env_lookup(|_| None)
+        .build();
+    state
+        .vault
+        .write()
+        .await
+        .set("OPENAI_API_KEY", "openai-key", SecretType::Token, None)
+        .unwrap();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+
+    let body = post_run_manifest(&app, minimal_manifest_json(MINIMAL_DOT)).await;
+    let run_id: RunId = body["id"].as_str().unwrap().parse().unwrap();
+    wait_for_mock_hits(&title_mock, 1).await;
+    tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+
+    assert_eq!(
+        state
+            .store
+            .get_cached_summary(&run_id, Utc::now())
+            .await
+            .unwrap()
+            .unwrap()
+            .title,
+        "Test"
+    );
+    assert_eq!(title_update_event_count(&state, run_id).await, 0);
+}
+
+#[tokio::test]
+async fn generated_title_does_not_overwrite_user_title_edit() {
+    let llm = MockServer::start_async().await;
+    let title_mock = mock_openai_title_response(
+        &llm,
+        "Generated deploy title",
+        Some(std::time::Duration::from_millis(150)),
+    )
+    .await;
+    let state = TestAppStateBuilder::new()
+        .provider_base_url("openai", llm.url("/v1"))
+        .env_lookup(|_| None)
+        .build();
+    state
+        .vault
+        .write()
+        .await
+        .set("OPENAI_API_KEY", "openai-key", SecretType::Token, None)
+        .unwrap();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+
+    let body = post_run_manifest(&app, minimal_manifest_json(MINIMAL_DOT)).await;
+    let run_id: RunId = body["id"].as_str().unwrap().parse().unwrap();
+    let patch = Request::builder()
+        .method("PATCH")
+        .uri(api(&format!("/runs/{run_id}")))
+        .header("content-type", "application/json")
+        .body(Body::from(json!({"title": "User title"}).to_string()))
+        .unwrap();
+    let response = app.clone().oneshot(patch).await.unwrap();
+    response_json!(response, StatusCode::OK).await;
+
+    wait_for_mock_hits(&title_mock, 1).await;
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    assert_eq!(
+        state
+            .store
+            .get_cached_summary(&run_id, Utc::now())
+            .await
+            .unwrap()
+            .unwrap()
+            .title,
+        "User title"
+    );
+    assert_eq!(title_update_event_count(&state, run_id).await, 1);
+}
+
+async fn post_run_manifest(app: &Router, manifest: serde_json::Value) -> serde_json::Value {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api("/runs"))
+                .header("content-type", "application/json")
+                .body(Body::from(manifest.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    response_json!(response, StatusCode::CREATED).await
+}
+
+async fn mock_openai_title_response<'a>(
+    server: &'a MockServer,
+    title: &str,
+    delay: Option<std::time::Duration>,
+) -> httpmock::Mock<'a> {
+    let title = title.to_string();
+    server
+        .mock_async(move |when, then| {
+            when.method(POST).path("/v1/responses");
+            let then = then
+                .status(200)
+                .header("content-type", "application/json")
+                .json_body(openai_responses_payload(
+                    &json!({ "title": title }).to_string(),
+                ));
+            if let Some(delay) = delay {
+                then.delay(delay);
+            }
+        })
+        .await
+}
+
+async fn wait_for_run_title(state: &AppState, run_id: RunId, expected: &str) {
+    for _ in 0..50 {
+        let title = state
+            .store
+            .get_cached_summary(&run_id, Utc::now())
+            .await
+            .unwrap()
+            .unwrap()
+            .title;
+        if title == expected {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("run {run_id} title did not become {expected:?}");
+}
+
+async fn wait_for_mock_hits(mock: &httpmock::Mock<'_>, expected: usize) {
+    for _ in 0..50 {
+        if mock.calls_async().await >= expected {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("mock did not receive {expected} request(s)");
+}
+
+async fn title_update_event_count(state: &AppState, run_id: RunId) -> usize {
+    let run_store = state.store.open_run(&run_id).await.unwrap();
+    run_store
+        .list_events()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|event| event.event.event_name() == "run.title.updated")
+        .count()
 }
 
 #[tokio::test]
@@ -2675,21 +2960,52 @@ async fn create_durable_run_with_events(
     let has_starting = events
         .iter()
         .any(|event| matches!(event, workflow_event::Event::RunStarting));
+    let has_runnable = events
+        .iter()
+        .any(|event| matches!(event, workflow_event::Event::RunRunnable { .. }));
     let has_running = events
         .iter()
         .any(|event| matches!(event, workflow_event::Event::RunRunning));
+    let mut inserted_runnable = has_runnable;
+    let mut inserted_starting = has_starting;
     for event in events {
-        if needs_running
-            && !has_starting
+        if !inserted_runnable
             && matches!(
                 event,
-                workflow_event::Event::WorkflowRunCompleted { .. }
+                workflow_event::Event::RunStarting
+                    | workflow_event::Event::RunRunning
+                    | workflow_event::Event::RunBlocked { .. }
+                    | workflow_event::Event::RunPaused
+                    | workflow_event::Event::WorkflowRunCompleted { .. }
+                    | workflow_event::Event::WorkflowRunFailed { .. }
+            )
+        {
+            workflow_event::append_event(
+                &run_store,
+                &run_id,
+                &workflow_event::Event::RunRunnable {
+                    source: fabro_types::RunRunnableSource::StartRequested,
+                    actor:  None,
+                },
+            )
+            .await
+            .unwrap();
+            inserted_runnable = true;
+        }
+        if !inserted_starting
+            && matches!(
+                event,
+                workflow_event::Event::RunRunning
+                    | workflow_event::Event::RunBlocked { .. }
+                    | workflow_event::Event::RunPaused
+                    | workflow_event::Event::WorkflowRunCompleted { .. }
                     | workflow_event::Event::WorkflowRunFailed { .. }
             )
         {
             workflow_event::append_event(&run_store, &run_id, &workflow_event::Event::RunStarting)
                 .await
                 .unwrap();
+            inserted_starting = true;
         }
         if needs_running
             && !has_running
@@ -2706,6 +3022,115 @@ async fn create_durable_run_with_events(
         workflow_event::append_event(&run_store, &run_id, event)
             .await
             .unwrap();
+    }
+}
+
+fn stage_started_event(node_id: &str, handler_type: &str) -> workflow_event::Event {
+    workflow_event::Event::StageStarted {
+        node_id:      node_id.to_string(),
+        name:         node_id.to_string(),
+        index:        1,
+        handler_type: handler_type.to_string(),
+        attempt:      1,
+        max_attempts: 1,
+    }
+}
+
+fn command_started_event(node_id: &str) -> workflow_event::Event {
+    workflow_event::Event::CommandStarted {
+        node_id:    node_id.to_string(),
+        script:     "echo ok".to_string(),
+        command:    "echo ok".to_string(),
+        language:   "shell".to_string(),
+        timeout_ms: None,
+    }
+}
+
+fn agent_session_activated_event(node_id: &str, visit: u32) -> workflow_event::Event {
+    workflow_event::Event::AgentSessionActivated {
+        node_id: node_id.to_string(),
+        visit,
+        session_id: "session-1".to_string(),
+        thread_id: None,
+        provider: Some("openai".to_string()),
+        model: Some("gpt-5.4".to_string()),
+        reasoning_effort: None,
+        speed: None,
+        permission_level: None,
+        capabilities: Vec::new(),
+    }
+}
+
+fn stage_completed_event(node_id: &str) -> workflow_event::Event {
+    workflow_event::Event::StageCompleted {
+        node_id: node_id.to_string(),
+        name: node_id.to_string(),
+        index: 1,
+        timing: StageTiming::wall_only(42),
+        status: "succeeded".to_string(),
+        preferred_label: None,
+        suggested_next_ids: Vec::new(),
+        billing: None,
+        failure: None,
+        notes: None,
+        files_touched: Vec::new(),
+        context_updates: None,
+        jump_to_node: None,
+        context_values: None,
+        node_visits: None,
+        loop_failure_signatures: None,
+        restart_failure_signatures: None,
+        response: None,
+        attempt: 1,
+        max_attempts: 1,
+    }
+}
+
+fn context_window_event(
+    stage: &str,
+    visit: u32,
+    context_window: StageContextWindowProjection,
+) -> workflow_event::Event {
+    workflow_event::Event::Agent {
+        stage: stage.to_string(),
+        visit,
+        event: fabro_agent::AgentEvent::AssistantMessage {
+            text:            "assistant response".to_string(),
+            model:           ModelRef {
+                provider: ProviderId::openai(),
+                model_id: "gpt-5.4".to_string(),
+                speed:    None,
+            },
+            usage:           TokenCounts::default(),
+            tool_call_count: 0,
+            context_window:  Some(context_window),
+        },
+        session_id: Some("session-1".to_string()),
+        parent_session_id: None,
+        tool_call_id: None,
+    }
+}
+
+fn context_window_snapshot(
+    input_tokens: u64,
+    warnings: Vec<StageContextWindowWarning>,
+) -> StageContextWindowProjection {
+    StageContextWindowProjection {
+        provider: "openai".to_string(),
+        model: "gpt-5.4".to_string(),
+        context_window_tokens: 400_000,
+        input_tokens,
+        usage_percent: input_tokens as f64 * 100.0 / 400_000.0,
+        count_method: StageContextWindowCountMethod::ResponseUsageScaledBreakdown,
+        staleness: StageContextWindowStaleness::Live,
+        generated_at: Utc::now(),
+        event_seq: None,
+        breakdown: vec![StageContextWindowBreakdownItem {
+            category:      StageContextWindowCategory::Conversation,
+            tokens:        input_tokens,
+            usage_percent: input_tokens as f64 * 100.0 / 400_000.0,
+        }],
+        warnings,
     }
 }
 
@@ -2726,11 +3151,579 @@ async fn append_default_run_created(run_store: &fabro_store::RunDatabase, run_id
         manifest_blob: None,
         git: None,
         fork_source_ref: None,
+        retried_from: None,
         parent_id: None,
         web_url: None,
     })
     .await
     .unwrap();
+}
+
+fn workflow_settings_with_run_notifications(
+    run_toml: &str,
+    workflow_name: Option<&str>,
+) -> WorkflowSettings {
+    let mut settings = WorkflowSettings {
+        run: fabro_config::RunSettingsBuilder::from_toml(run_toml)
+            .expect("run notification settings should resolve"),
+        ..WorkflowSettings::default()
+    };
+    settings.workflow.name = workflow_name.map(str::to_string);
+    settings
+}
+
+async fn create_slack_notification_run(
+    state: &Arc<AppState>,
+    run_id: RunId,
+    settings: WorkflowSettings,
+    graph_name: &str,
+    workflow_slug: Option<&str>,
+) -> fabro_store::RunDatabase {
+    let run_store = state.store.create_run(&run_id).await.unwrap();
+    workflow_event::append_event(&run_store, &run_id, &workflow_event::Event::RunCreated {
+        run_id,
+        title: None,
+        settings: serde_json::to_value(settings).unwrap(),
+        graph: serde_json::to_value(Graph::new(graph_name)).unwrap(),
+        workflow_source: None,
+        workflow_config: None,
+        labels: std::collections::BTreeMap::default(),
+        run_dir: "/tmp".to_string(),
+        source_directory: None,
+        workflow_slug: workflow_slug.map(str::to_string),
+        db_prefix: None,
+        provenance: None,
+        manifest_blob: None,
+        git: None,
+        fork_source_ref: None,
+        retried_from: None,
+        parent_id: None,
+        web_url: None,
+    })
+    .await
+    .unwrap();
+    run_store
+}
+
+async fn append_slack_notification_event(
+    run_store: &fabro_store::RunDatabase,
+    run_id: RunId,
+    event: &workflow_event::Event,
+) -> EventEnvelope {
+    workflow_event::append_event(run_store, &run_id, event)
+        .await
+        .unwrap();
+    run_store
+        .list_events()
+        .await
+        .unwrap()
+        .last()
+        .expect("appended event should be present")
+        .clone()
+}
+
+async fn mock_slack_post<'a>(
+    server: &'a MockServer,
+    body_includes: Vec<String>,
+    ts: &'static str,
+) -> httpmock::Mock<'a> {
+    server
+        .mock_async(move |when, then| {
+            let mut when = when
+                .method(POST)
+                .path("/chat.postMessage")
+                .header("authorization", "Bearer xoxb-test");
+            for part in body_includes {
+                when = when.body_includes(part);
+            }
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(json!({
+                    "ok": true,
+                    "channel": "C123",
+                    "ts": ts,
+                }));
+        })
+        .await
+}
+
+fn slack_lifecycle_service(base_url: String, default_channel: Option<&str>) -> SlackService {
+    SlackService {
+        client:          fabro_slack::client::SlackClient::with_api_base_and_http(
+            "xoxb-test".to_string(),
+            base_url,
+            fabro_http::test_http_client().expect("test HTTP client should build"),
+        ),
+        app_token:       "xapp-test".to_string(),
+        default_channel: default_channel.map(str::to_string),
+        posted_messages: StdArc::new(StdMutex::new(HashMap::new())),
+        thread_registry: StdArc::new(ThreadRegistry::new()),
+    }
+}
+
+fn workflow_run_started_event(run_id: RunId) -> workflow_event::Event {
+    workflow_event::Event::WorkflowRunStarted {
+        name: "run.started event name".to_string(),
+        run_id,
+        base_branch: None,
+        base_sha: None,
+        run_branch: None,
+        worktree_dir: None,
+        goal: None,
+    }
+}
+
+#[tokio::test]
+async fn slack_lifecycle_run_started_posts_for_matching_enabled_route() {
+    let server = MockServer::start_async().await;
+    let post = mock_slack_post(
+        &server,
+        vec![
+            r##""channel":"#deploys""##.to_string(),
+            "Fabro run started".to_string(),
+            "Deploy workflow".to_string(),
+            "Open in Fabro".to_string(),
+        ],
+        "100.1",
+    )
+    .await;
+    let state = test_app_state();
+    let service = slack_lifecycle_service(server.base_url(), None);
+    let run_id = fixtures::RUN_1;
+    let settings = workflow_settings_with_run_notifications(
+        r##"
+[run.notifications.deploys]
+enabled = true
+provider = "slack"
+events = ["run.started", "run.completed", "run.failed"]
+
+[run.notifications.deploys.slack]
+channel = "#deploys"
+"##,
+        Some("Deploy workflow"),
+    );
+    let run_store =
+        create_slack_notification_run(&state, run_id, settings, "deploy-graph", Some("deploy"))
+            .await;
+    let envelope =
+        append_slack_notification_event(&run_store, run_id, &workflow_run_started_event(run_id))
+            .await;
+
+    service
+        .handle_event(
+            state.as_ref(),
+            &envelope,
+            Some("https://fabro.example/runs/run-1"),
+        )
+        .await;
+
+    post.assert_async().await;
+    assert!(
+        service
+            .posted_messages
+            .lock()
+            .expect("posted messages lock poisoned")
+            .is_empty(),
+        "lifecycle posts must not use interview message state"
+    );
+}
+
+#[tokio::test]
+async fn slack_lifecycle_run_completed_posts_result_and_duration() {
+    let server = MockServer::start_async().await;
+    let post = mock_slack_post(
+        &server,
+        vec![
+            r##""channel":"#deploys""##.to_string(),
+            "Fabro run completed".to_string(),
+            "succeeded — completed".to_string(),
+            "1m 5s".to_string(),
+        ],
+        "100.2",
+    )
+    .await;
+    let state = test_app_state();
+    let service = slack_lifecycle_service(server.base_url(), None);
+    let run_id = fixtures::RUN_1;
+    let settings = workflow_settings_with_run_notifications(
+        r##"
+[run.notifications.deploys]
+enabled = true
+provider = "slack"
+events = ["run.completed"]
+
+[run.notifications.deploys.slack]
+channel = "#deploys"
+"##,
+        Some("Deploy workflow"),
+    );
+    let run_store = create_slack_notification_run(&state, run_id, settings, "deploy", None).await;
+    workflow_event::append_event(&run_store, &run_id, &workflow_event::Event::RunRunnable {
+        source: fabro_types::RunRunnableSource::StartRequested,
+        actor:  None,
+    })
+    .await
+    .unwrap();
+    workflow_event::append_event(&run_store, &run_id, &workflow_event::Event::RunStarting)
+        .await
+        .unwrap();
+    workflow_event::append_event(&run_store, &run_id, &workflow_event::Event::RunRunning)
+        .await
+        .unwrap();
+    let envelope = append_slack_notification_event(
+        &run_store,
+        run_id,
+        &workflow_event::Event::WorkflowRunCompleted {
+            timing:               fabro_types::RunTiming::wall_only(65_432),
+            artifact_count:       0,
+            status:               "succeeded".to_string(),
+            reason:               SuccessReason::Completed,
+            total_usd_micros:     None,
+            final_git_commit_sha: None,
+            final_patch:          None,
+            diff_summary:         None,
+            billing:              None,
+        },
+    )
+    .await;
+
+    service.handle_event(state.as_ref(), &envelope, None).await;
+
+    post.assert_async().await;
+}
+
+#[tokio::test]
+async fn slack_lifecycle_run_failed_posts_failure_result_message_and_duration() {
+    let server = MockServer::start_async().await;
+    let post = mock_slack_post(
+        &server,
+        vec![
+            r##""channel":"#deploys""##.to_string(),
+            "Fabro run failed".to_string(),
+            "workflow_error — command &lt;failed&gt; &amp; exited".to_string(),
+            "1.2s".to_string(),
+        ],
+        "100.3",
+    )
+    .await;
+    let state = test_app_state();
+    let service = slack_lifecycle_service(server.base_url(), None);
+    let run_id = fixtures::RUN_1;
+    let settings = workflow_settings_with_run_notifications(
+        r##"
+[run.notifications.deploys]
+enabled = true
+provider = "slack"
+events = ["run.failed"]
+
+[run.notifications.deploys.slack]
+channel = "#deploys"
+"##,
+        Some("Deploy workflow"),
+    );
+    let run_store = create_slack_notification_run(&state, run_id, settings, "deploy", None).await;
+    workflow_event::append_event(&run_store, &run_id, &workflow_event::Event::RunRunnable {
+        source: fabro_types::RunRunnableSource::StartRequested,
+        actor:  None,
+    })
+    .await
+    .unwrap();
+    workflow_event::append_event(&run_store, &run_id, &workflow_event::Event::RunStarting)
+        .await
+        .unwrap();
+    workflow_event::append_event(&run_store, &run_id, &workflow_event::Event::RunRunning)
+        .await
+        .unwrap();
+    let envelope = append_slack_notification_event(
+        &run_store,
+        run_id,
+        &workflow_event::Event::WorkflowRunFailed {
+            failure:              fabro_types::RunFailure {
+                reason: fabro_types::FailureReason::WorkflowError,
+                detail: FailureDetail::new(
+                    "command <failed> & exited",
+                    FailureCategory::Deterministic,
+                ),
+            },
+            timing:               fabro_types::RunTiming::wall_only(1_234),
+            final_git_commit_sha: None,
+            final_patch:          None,
+            diff_summary:         None,
+            billing:              None,
+        },
+    )
+    .await;
+
+    service.handle_event(state.as_ref(), &envelope, None).await;
+
+    post.assert_async().await;
+}
+
+#[tokio::test]
+async fn slack_lifecycle_skips_non_matching_events_and_disabled_routes() {
+    let server = MockServer::start_async().await;
+    let unexpected = mock_slack_post(&server, Vec::new(), "100.4").await;
+    let state = test_app_state();
+    let service = slack_lifecycle_service(server.base_url(), None);
+    let run_id = fixtures::RUN_1;
+    let settings = workflow_settings_with_run_notifications(
+        r##"
+[run.notifications.disabled]
+enabled = false
+provider = "slack"
+events = ["run.started"]
+
+[run.notifications.disabled.slack]
+channel = "#deploys"
+
+[run.notifications.stage]
+enabled = true
+provider = "slack"
+events = ["stage.completed"]
+
+[run.notifications.stage.slack]
+channel = "#deploys"
+"##,
+        Some("Deploy workflow"),
+    );
+    let run_store = create_slack_notification_run(&state, run_id, settings, "deploy", None).await;
+    let envelope =
+        append_slack_notification_event(&run_store, run_id, &workflow_run_started_event(run_id))
+            .await;
+
+    service.handle_event(state.as_ref(), &envelope, None).await;
+
+    unexpected.assert_calls_async(0).await;
+}
+
+#[tokio::test]
+async fn slack_lifecycle_missing_channel_is_skipped_without_blocking_other_routes() {
+    let server = MockServer::start_async().await;
+    let post = mock_slack_post(
+        &server,
+        vec![
+            r##""channel":"#ops""##.to_string(),
+            "Fabro run started".to_string(),
+        ],
+        "100.5",
+    )
+    .await;
+    let state = test_app_state_with_env_lookup(
+        default_test_server_settings(),
+        fabro_config::RunLayer::default(),
+        5,
+        |name| match name {
+            "SLACK_ROUTE_CHANNEL" => Some("#ops".to_string()),
+            _ => None,
+        },
+    );
+    let service = slack_lifecycle_service(server.base_url(), None);
+    let run_id = fixtures::RUN_1;
+    let settings = workflow_settings_with_run_notifications(
+        r#"
+[run.notifications.missing]
+enabled = true
+provider = "slack"
+events = ["run.started"]
+
+[run.notifications.unresolved]
+enabled = true
+provider = "slack"
+events = ["run.started"]
+
+[run.notifications.unresolved.slack]
+channel = "{{ env.MISSING_SLACK_CHANNEL }}"
+
+[run.notifications.valid]
+enabled = true
+provider = "slack"
+events = ["run.started"]
+
+[run.notifications.valid.slack]
+channel = "{{ env.SLACK_ROUTE_CHANNEL }}"
+"#,
+        Some("Deploy workflow"),
+    );
+    let run_store = create_slack_notification_run(&state, run_id, settings, "deploy", None).await;
+    let envelope =
+        append_slack_notification_event(&run_store, run_id, &workflow_run_started_event(run_id))
+            .await;
+
+    service.handle_event(state.as_ref(), &envelope, None).await;
+
+    post.assert_async().await;
+}
+
+#[tokio::test]
+async fn slack_lifecycle_uses_prior_pull_request_created_details() {
+    let server = MockServer::start_async().await;
+    let post = mock_slack_post(
+        &server,
+        vec![
+            "Fabro run completed".to_string(),
+            "https://github.com/fabro-sh/fabro/pull/42".to_string(),
+            "#42".to_string(),
+            "Ship &lt;prod&gt; &amp; notify".to_string(),
+        ],
+        "100.6",
+    )
+    .await;
+    let state = test_app_state();
+    let service = slack_lifecycle_service(server.base_url(), None);
+    let run_id = fixtures::RUN_1;
+    let settings = workflow_settings_with_run_notifications(
+        r##"
+[run.notifications.deploys]
+enabled = true
+provider = "slack"
+events = ["run.completed"]
+
+[run.notifications.deploys.slack]
+channel = "#deploys"
+"##,
+        Some("Deploy workflow"),
+    );
+    let run_store = create_slack_notification_run(&state, run_id, settings, "deploy", None).await;
+    workflow_event::append_event(&run_store, &run_id, &workflow_event::Event::RunRunnable {
+        source: fabro_types::RunRunnableSource::StartRequested,
+        actor:  None,
+    })
+    .await
+    .unwrap();
+    workflow_event::append_event(&run_store, &run_id, &workflow_event::Event::RunStarting)
+        .await
+        .unwrap();
+    workflow_event::append_event(&run_store, &run_id, &workflow_event::Event::RunRunning)
+        .await
+        .unwrap();
+    workflow_event::append_event(
+        &run_store,
+        &run_id,
+        &workflow_event::Event::PullRequestCreated {
+            pr_url:      "https://github.com/fabro-sh/fabro/pull/42".to_string(),
+            pr_number:   42,
+            owner:       "fabro-sh".to_string(),
+            repo:        "fabro".to_string(),
+            base_branch: "main".to_string(),
+            head_branch: "fabro/run/test".to_string(),
+            title:       "Ship <prod> & notify".to_string(),
+            draft:       false,
+        },
+    )
+    .await
+    .unwrap();
+    let envelope = append_slack_notification_event(
+        &run_store,
+        run_id,
+        &workflow_event::Event::WorkflowRunCompleted {
+            timing:               fabro_types::RunTiming::wall_only(1000),
+            artifact_count:       0,
+            status:               "succeeded".to_string(),
+            reason:               SuccessReason::Completed,
+            total_usd_micros:     None,
+            final_git_commit_sha: None,
+            final_patch:          None,
+            diff_summary:         None,
+            billing:              None,
+        },
+    )
+    .await;
+
+    service.handle_event(state.as_ref(), &envelope, None).await;
+
+    post.assert_async().await;
+}
+
+#[tokio::test]
+async fn slack_interviews_keep_state_separate_from_lifecycle_notifications() {
+    let server = MockServer::start_async().await;
+    let interview_post = mock_slack_post(
+        &server,
+        vec![
+            r##""channel":"#reviews""##.to_string(),
+            "Answer deploy question".to_string(),
+        ],
+        "200.1",
+    )
+    .await;
+    let lifecycle_post = mock_slack_post(
+        &server,
+        vec![
+            r##""channel":"#deploys""##.to_string(),
+            "Fabro run started".to_string(),
+        ],
+        "200.2",
+    )
+    .await;
+    let state = test_app_state();
+    let service = slack_lifecycle_service(server.base_url(), Some("#reviews"));
+    let run_id = fixtures::RUN_1;
+    let settings = workflow_settings_with_run_notifications(
+        r##"
+[run.notifications.deploys]
+enabled = true
+provider = "slack"
+events = ["run.started"]
+
+[run.notifications.deploys.slack]
+channel = "#deploys"
+"##,
+        Some("Deploy workflow"),
+    );
+    let run_store = create_slack_notification_run(&state, run_id, settings, "deploy", None).await;
+    let lifecycle_envelope =
+        append_slack_notification_event(&run_store, run_id, &workflow_run_started_event(run_id))
+            .await;
+    let interview_envelope = append_slack_notification_event(
+        &run_store,
+        run_id,
+        &workflow_event::Event::InterviewStarted {
+            question_id:     "q-1".to_string(),
+            question:        "Answer deploy question".to_string(),
+            stage:           "review".to_string(),
+            question_type:   "freeform".to_string(),
+            options:         Vec::new(),
+            allow_freeform:  true,
+            timeout_seconds: None,
+            context_display: None,
+        },
+    )
+    .await;
+
+    service
+        .handle_event(state.as_ref(), &lifecycle_envelope, None)
+        .await;
+    assert!(
+        service
+            .posted_messages
+            .lock()
+            .expect("posted messages lock poisoned")
+            .is_empty(),
+        "lifecycle notification should not record interview metadata"
+    );
+    assert!(
+        service.thread_registry.resolve("200.2").is_none(),
+        "lifecycle notification should not register answer threads"
+    );
+
+    service
+        .handle_event(state.as_ref(), &interview_envelope, None)
+        .await;
+
+    lifecycle_post.assert_async().await;
+    interview_post.assert_async().await;
+    assert!(
+        service
+            .posted_messages
+            .lock()
+            .expect("posted messages lock poisoned")
+            .contains_key(&(run_id, "q-1".to_string())),
+        "interview posts should retain interview state"
+    );
+    assert!(
+        service.thread_registry.resolve("200.1").is_some(),
+        "freeform interview posts should register reply threads"
+    );
 }
 
 #[tokio::test]
@@ -2808,7 +3801,9 @@ async fn delete_terminal_managed_run_does_not_send_cancel_signal() {
         .expect("runs lock poisoned")
         .insert(run_id, run);
 
-    delete_run_internal(&state, run_id, true).await.unwrap();
+    delete_run_internal(state.as_ref(), run_id, true)
+        .await
+        .unwrap();
 
     assert!(!cancel_token.is_cancelled());
 }
@@ -3012,6 +4007,68 @@ async fn list_run_stages_projects_retrying_until_completion() {
     assert_eq!(stage_status(&body, "work@1"), "partially_succeeded");
 }
 
+#[tokio::test]
+async fn list_run_stages_projects_running_stage_as_cancelled_after_cancelled_run_failure() {
+    let state = test_app_state_with_isolated_storage();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = RunId::new();
+
+    create_durable_run_with_events(&state, run_id, &[
+        workflow_event::Event::RunSubmitted {
+            definition_blob: None,
+        },
+        workflow_event::Event::RunStarting,
+        workflow_event::Event::RunRunning,
+    ])
+    .await;
+    append_scoped_stage_event(
+        &state,
+        run_id,
+        "work",
+        1,
+        &workflow_event::Event::StageStarted {
+            node_id:      "work".to_string(),
+            name:         "Work".to_string(),
+            index:        1,
+            handler_type: "agent".to_string(),
+            attempt:      1,
+            max_attempts: 1,
+        },
+    )
+    .await;
+    let run_store = state.store.open_run(&run_id).await.unwrap();
+    workflow_event::append_event(
+        &run_store,
+        &run_id,
+        &workflow_event::Event::WorkflowRunFailed {
+            failure:              fabro_types::RunFailure {
+                reason: fabro_types::FailureReason::Cancelled,
+                detail: FailureDetail::new("cancelled", FailureCategory::Canceled),
+            },
+            timing:               fabro_types::RunTiming::wall_only(100),
+            final_git_commit_sha: None,
+            final_patch:          None,
+            diff_summary:         None,
+            billing:              None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/runs/{run_id}/stages")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    assert_eq!(stage_status(&body, "work@1"), "cancelled");
+}
+
 fn stage_entry<'a>(body: &'a serde_json::Value, id: &str) -> &'a serde_json::Value {
     body["data"]
         .as_array()
@@ -3019,6 +4076,76 @@ fn stage_entry<'a>(body: &'a serde_json::Value, id: &str) -> &'a serde_json::Val
         .iter()
         .find(|stage| stage["id"] == id)
         .unwrap_or_else(|| panic!("stage {id} not found in {body:#?}"))
+}
+
+#[tokio::test]
+async fn list_run_stages_includes_stage_model_usage() {
+    let state = test_app_state_with_isolated_storage();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = RunId::new();
+
+    create_durable_run_with_events(&state, run_id, &[
+        workflow_event::Event::RunSubmitted {
+            definition_blob: None,
+        },
+        workflow_event::Event::RunStarting,
+        workflow_event::Event::RunRunning,
+    ])
+    .await;
+    append_scoped_stage_event(
+        &state,
+        run_id,
+        "prompt",
+        1,
+        &workflow_event::Event::StageStarted {
+            node_id:      "prompt".to_string(),
+            name:         "Prompt".to_string(),
+            index:        0,
+            handler_type: "prompt".to_string(),
+            attempt:      1,
+            max_attempts: 1,
+        },
+    )
+    .await;
+    append_scoped_stage_event(
+        &state,
+        run_id,
+        "prompt",
+        1,
+        &workflow_event::Event::Prompt {
+            stage:            "prompt".to_string(),
+            visit:            1,
+            text:             "Summarize".to_string(),
+            mode:             Some(StageModelUsage::MODE_PROMPT.to_string()),
+            provider:         Some("openai".to_string()),
+            model:            Some("gpt-5.5".to_string()),
+            reasoning_effort: Some(ReasoningEffort::High),
+            speed:            Some(Speed::Fast),
+        },
+    )
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/runs/{run_id}/stages")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    assert_eq!(
+        stage_entry(&body, "prompt@1")["provider_used"],
+        json!({
+            "mode": "prompt",
+            "provider": "openai",
+            "model": "gpt-5.5",
+            "reasoning_effort": "high",
+            "speed": "fast"
+        })
+    );
 }
 
 fn test_billed_usage(
@@ -3074,6 +4201,7 @@ async fn list_run_stages_distinguishes_visits() {
             manifest_blob: None,
             git: None,
             fork_source_ref: None,
+            retried_from: None,
             parent_id: None,
             web_url: None,
         },
@@ -3826,6 +4954,12 @@ async fn append_raw_run_event(
 async fn create_unreadable_durable_run(state: &Arc<AppState>, run_id: RunId) {
     let run_store = state.store.create_run(&run_id).await.unwrap();
     append_default_run_created(&run_store, run_id).await;
+    workflow_event::append_event(&run_store, &run_id, &workflow_event::Event::RunRunnable {
+        source: fabro_types::RunRunnableSource::StartRequested,
+        actor:  None,
+    })
+    .await
+    .unwrap();
     workflow_event::append_event(&run_store, &run_id, &workflow_event::Event::RunStarting)
         .await
         .unwrap();
@@ -3974,14 +5108,14 @@ async fn pr_test_app_with_completed_run(
     repo_origin_url: Option<&str>,
 ) -> (Arc<AppState>, Router, RunId) {
     let (state, app, run_id) = pr_test_app(token, github_api_base_url);
-    create_completed_run_ready_for_pull_request(
+    Box::pin(create_completed_run_ready_for_pull_request(
         &state,
         run_id,
         repo_origin_url,
         Some("main"),
         Some("fabro/run/42"),
         "diff --git a/src/lib.rs b/src/lib.rs\n+fn shipped() {}\n",
-    )
+    ))
     .await;
     (state, app, run_id)
 }
@@ -4074,6 +5208,7 @@ async fn create_completed_run_ready_for_pull_request(
             manifest_blob: None,
             git,
             fork_source_ref: None,
+            retried_from: None,
             parent_id: None,
             web_url: None,
         },
@@ -4221,7 +5356,6 @@ async fn list_models_filters_by_query_across_aliases() {
         .map(|model| model["id"].as_str().unwrap().to_string())
         .collect::<Vec<_>>();
     assert_eq!(model_ids, vec![
-        "gpt-5.2-codex".to_string(),
         "gpt-5.3-codex".to_string(),
         "gpt-5.3-codex-spark".to_string()
     ]);
@@ -4903,8 +6037,10 @@ async fn submit_pending_interview_answer_rejects_invalid_answer_shape() {
             stage:           "gate".to_string(),
             question_type:   QuestionType::MultipleChoice,
             options:         vec![fabro_types::run_event::InterviewOption {
-                key:   "approve".to_string(),
-                label: "Approve".to_string(),
+                key:         "approve".to_string(),
+                label:       "Approve".to_string(),
+                description: None,
+                preview:     None,
             }],
             allow_freeform:  false,
             timeout_seconds: None,
@@ -4990,8 +6126,10 @@ fn answer_from_typed_selected_request_validates_and_attaches_option() {
         stage:           "gate".to_string(),
         question_type:   QuestionType::MultipleChoice,
         options:         vec![fabro_types::run_event::InterviewOption {
-            key:   "approve".to_string(),
-            label: "Approve".to_string(),
+            key:         "approve".to_string(),
+            label:       "Approve".to_string(),
+            description: None,
+            preview:     None,
         }],
         allow_freeform:  false,
         timeout_seconds: None,
@@ -5021,12 +6159,16 @@ fn answer_from_typed_multi_selected_request_validates_option_keys() {
         question_type:   QuestionType::MultiSelect,
         options:         vec![
             fabro_types::run_event::InterviewOption {
-                key:   "approve".to_string(),
-                label: "Approve".to_string(),
+                key:         "approve".to_string(),
+                label:       "Approve".to_string(),
+                description: None,
+                preview:     None,
             },
             fabro_types::run_event::InterviewOption {
-                key:   "notify".to_string(),
-                label: "Notify".to_string(),
+                key:         "notify".to_string(),
+                label:       "Notify".to_string(),
+                description: None,
+                preview:     None,
             },
         ],
         allow_freeform:  false,
@@ -5382,6 +6524,244 @@ async fn get_run_stage_command_log_returns_not_found_for_missing_stage() {
 }
 
 #[tokio::test]
+async fn get_run_stage_context_window_returns_not_found_for_missing_run() {
+    let app = crate::test_support::build_test_router(test_app_state_with_isolated_storage());
+    let run_id = RunId::new();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!(
+                    "/runs/{run_id}/stages/agent@1/context-window"
+                )))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_status!(response, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn get_run_stage_context_window_returns_not_found_for_missing_stage() {
+    let state = test_app_state_with_isolated_storage();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = RunId::new();
+    create_durable_run_with_events(&state, run_id, &[workflow_event::Event::RunSubmitted {
+        definition_blob: None,
+    }])
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!(
+                    "/runs/{run_id}/stages/missing@1/context-window"
+                )))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_status!(response, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn get_run_stage_context_window_returns_unavailable_for_non_agent_stage() {
+    let state = test_app_state_with_isolated_storage();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = RunId::new();
+    create_durable_run_with_events(&state, run_id, &[
+        workflow_event::Event::RunSubmitted {
+            definition_blob: None,
+        },
+        stage_started_event("script_node", "command"),
+        command_started_event("script_node"),
+    ])
+    .await;
+
+    let body = response_json!(
+        app.oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!(
+                    "/runs/{run_id}/stages/script_node@1/context-window"
+                )))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap(),
+        StatusCode::OK
+    )
+    .await;
+
+    assert_eq!(body["available"], false);
+    assert_eq!(body["unavailable_reason"], "not_agent_stage");
+    assert_eq!(body["breakdown"], json!([]));
+    assert_eq!(body["staleness"], "unavailable");
+}
+
+#[tokio::test]
+async fn get_run_stage_context_window_returns_not_observed_for_agent_stage_without_snapshot() {
+    let state = test_app_state_with_isolated_storage();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = RunId::new();
+    create_durable_run_with_events(&state, run_id, &[
+        workflow_event::Event::RunSubmitted {
+            definition_blob: None,
+        },
+        agent_session_activated_event("agent_node", 1),
+    ])
+    .await;
+
+    let body = response_json!(
+        app.oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!(
+                    "/runs/{run_id}/stages/agent_node@1/context-window"
+                )))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap(),
+        StatusCode::OK
+    )
+    .await;
+
+    assert_eq!(body["available"], false);
+    assert_eq!(body["unavailable_reason"], "not_observed");
+    assert_eq!(body["input_tokens"], serde_json::Value::Null);
+    assert!(!body["warnings"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn get_run_stage_context_window_returns_live_projected_snapshot() {
+    let state = test_app_state_with_isolated_storage();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = RunId::new();
+    create_durable_run_with_events(&state, run_id, &[
+        workflow_event::Event::RunSubmitted {
+            definition_blob: None,
+        },
+        stage_started_event("agent_node", "agent"),
+        context_window_event(
+            "agent_node",
+            1,
+            context_window_snapshot(123_456, Vec::new()),
+        ),
+    ])
+    .await;
+
+    let body = response_json!(
+        app.oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!(
+                    "/runs/{run_id}/stages/agent_node@1/context-window"
+                )))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap(),
+        StatusCode::OK
+    )
+    .await;
+
+    assert_eq!(body["stage_id"], "agent_node@1");
+    assert_eq!(body["available"], true);
+    assert_eq!(body["provider"], "openai");
+    assert_eq!(body["count_method"], "response_usage_scaled_breakdown");
+    assert_eq!(body["staleness"], "live");
+    assert_eq!(body["input_tokens"], 123_456);
+    assert_eq!(body["breakdown"][0]["category"], "conversation");
+}
+
+#[tokio::test]
+async fn get_run_stage_context_window_marks_completed_stage_snapshot_stored() {
+    let state = test_app_state_with_isolated_storage();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = RunId::new();
+    create_durable_run_with_events(&state, run_id, &[
+        workflow_event::Event::RunSubmitted {
+            definition_blob: None,
+        },
+        stage_started_event("agent_node", "agent"),
+        context_window_event("agent_node", 1, context_window_snapshot(100, Vec::new())),
+        stage_completed_event("agent_node"),
+    ])
+    .await;
+
+    let body = response_json!(
+        app.oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!(
+                    "/runs/{run_id}/stages/agent_node@1/context-window"
+                )))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap(),
+        StatusCode::OK
+    )
+    .await;
+
+    assert_eq!(body["available"], true);
+    assert_eq!(body["staleness"], "stored");
+    assert_eq!(body["input_tokens"], 100);
+}
+
+#[tokio::test]
+async fn get_run_stage_context_window_returns_projected_warnings() {
+    let state = test_app_state_with_isolated_storage();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = RunId::new();
+    create_durable_run_with_events(&state, run_id, &[
+        workflow_event::Event::RunSubmitted {
+            definition_blob: None,
+        },
+        stage_started_event("agent_node", "agent"),
+        context_window_event(
+            "agent_node",
+            1,
+            context_window_snapshot(100, vec![StageContextWindowWarning {
+                code:    "provider_token_count_failed".to_string(),
+                message: "provider input token counting failed; returned local estimate"
+                    .to_string(),
+            }]),
+        ),
+    ])
+    .await;
+
+    let body = response_json!(
+        app.oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!(
+                    "/runs/{run_id}/stages/agent_node@1/context-window"
+                )))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap(),
+        StatusCode::OK
+    )
+    .await;
+
+    assert_eq!(body["warnings"][0]["code"], "provider_token_count_failed");
+}
+
+#[tokio::test]
 async fn get_run_pull_request_returns_live_detail_from_github() {
     let github = MockServer::start();
     let github_mock = github.mock(|when, then| {
@@ -5732,14 +7112,14 @@ async fn create_run_pull_request_creates_and_persists_record() {
         .unwrap();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
     let run_id = fixtures::RUN_1;
-    create_completed_run_ready_for_pull_request(
+    Box::pin(create_completed_run_ready_for_pull_request(
         &state,
         run_id,
         Some("git@github.com:acme/widgets.git"),
         Some("main"),
         Some("fabro/run/42"),
         "diff --git a/src/lib.rs b/src/lib.rs\n+fn shipped() {}\n",
-    )
+    ))
     .await;
 
     let response = app
@@ -5825,7 +7205,7 @@ async fn create_run_pull_request_returns_conflict_when_record_exists() {
 
 #[tokio::test]
 async fn create_run_pull_request_rejects_missing_repo_origin() {
-    let (_state, app, run_id) = pr_test_app_with_completed_run(None, None, None).await;
+    let (_state, app, run_id) = Box::pin(pr_test_app_with_completed_run(None, None, None)).await;
 
     let response = app
         .oneshot(
@@ -5851,9 +7231,12 @@ async fn create_run_pull_request_rejects_missing_repo_origin() {
 
 #[tokio::test]
 async fn create_run_pull_request_returns_service_unavailable_without_github_credentials() {
-    let (_state, app, run_id) =
-        pr_test_app_with_completed_run(None, None, Some("https://github.com/acme/widgets.git"))
-            .await;
+    let (_state, app, run_id) = Box::pin(pr_test_app_with_completed_run(
+        None,
+        None,
+        Some("https://github.com/acme/widgets.git"),
+    ))
+    .await;
 
     let response = app
         .oneshot(
@@ -5879,11 +7262,11 @@ async fn create_run_pull_request_returns_service_unavailable_without_github_cred
 
 #[tokio::test]
 async fn create_run_pull_request_rejects_non_github_origin_url() {
-    let (_state, app, run_id) = pr_test_app_with_completed_run(
+    let (_state, app, run_id) = Box::pin(pr_test_app_with_completed_run(
         Some("ghu_test"),
         None,
         Some("https://gitlab.com/acme/widgets.git"),
-    )
+    ))
     .await;
 
     let response = app
@@ -6237,6 +7620,12 @@ async fn cache_backed_run_endpoints_reflect_events_appended_after_warmup() {
     state.store.warm_projection_cache().await.unwrap();
 
     let run_store = state.store.open_run(&run_id).await.unwrap();
+    workflow_event::append_event(&run_store, &run_id, &workflow_event::Event::RunRunnable {
+        source: fabro_types::RunRunnableSource::StartRequested,
+        actor:  None,
+    })
+    .await
+    .unwrap();
     workflow_event::append_event(&run_store, &run_id, &workflow_event::Event::RunStarting)
         .await
         .unwrap();
@@ -7245,6 +8634,127 @@ async fn run_tool_worker_token_can_use_client_backend_routes_across_runs() {
 }
 
 #[tokio::test]
+async fn run_tools_worker_can_read_pair_status_and_transcript_across_runs() {
+    let (state, app) = jwt_auth_app();
+    let user_jwt = issue_test_user_jwt();
+    let origin_run_id = create_run_with_bearer(&app, &user_jwt).await;
+    let target_run_id = create_run_with_bearer(&app, &user_jwt).await;
+    let worker_token = issue_test_run_tools_worker_token(&origin_run_id);
+    let pair_id = append_pair_transcript_fixture(&state, target_run_id).await;
+
+    let response = app
+        .clone()
+        .oneshot(bearer_request(
+            Method::GET,
+            &format!("/runs/{target_run_id}/pair"),
+            &worker_token,
+            Body::empty(),
+        ))
+        .await
+        .unwrap();
+    let status_body = response_json!(response, StatusCode::OK).await;
+    assert_eq!(status_body["run_id"], target_run_id.to_string());
+
+    let response = app
+        .clone()
+        .oneshot(bearer_request(
+            Method::GET,
+            &format!("/runs/{target_run_id}/pair/{pair_id}/transcript"),
+            &worker_token,
+            Body::empty(),
+        ))
+        .await
+        .unwrap();
+    let transcript_body = response_json!(response, StatusCode::OK).await;
+    assert_eq!(transcript_body["data"].as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn run_tools_worker_start_pair_reaches_worker_control_domain_across_runs() {
+    let (state, app) = jwt_auth_app();
+    let user_jwt = issue_test_user_jwt();
+    let origin_run_id = create_run_with_bearer(&app, &user_jwt).await;
+    let target_run_id = create_run_with_bearer(&app, &user_jwt).await;
+    let worker_token = issue_test_run_tools_worker_token(&origin_run_id);
+    let target = pair_test_target();
+    let _temp_dir = insert_running_control_run(&state, target_run_id, None);
+    {
+        let mut runs = state.runs.lock().expect("runs lock poisoned");
+        runs.get_mut(&target_run_id)
+            .unwrap()
+            .active_api_targets
+            .insert(target.stage_id.clone(), target.clone());
+    }
+
+    let response = app
+        .clone()
+        .oneshot(json_bearer_request(
+            Method::POST,
+            &format!("/runs/{target_run_id}/pair"),
+            &worker_token,
+            &json!({ "stage_id": target.stage_id.to_string() }),
+        ))
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::SERVICE_UNAVAILABLE).await;
+    assert_eq!(body["errors"][0]["code"], "worker_control_unavailable");
+}
+
+#[tokio::test]
+async fn cross_run_base_worker_remains_forbidden_from_pair_routes() {
+    let (_state, app) = jwt_auth_app();
+    let user_jwt = issue_test_user_jwt();
+    let origin_run_id = create_run_with_bearer(&app, &user_jwt).await;
+    let target_run_id = create_run_with_bearer(&app, &user_jwt).await;
+    let worker_token = issue_test_worker_token(&origin_run_id);
+
+    let response = app
+        .clone()
+        .oneshot(bearer_request(
+            Method::GET,
+            &format!("/runs/{target_run_id}/pair"),
+            &worker_token,
+            Body::empty(),
+        ))
+        .await
+        .unwrap();
+    assert_status!(response, StatusCode::FORBIDDEN).await;
+}
+
+#[tokio::test]
+async fn run_tools_worker_cannot_call_user_only_non_mcp_routes() {
+    let (_state, app) = jwt_auth_app();
+    let user_jwt = issue_test_user_jwt();
+    let origin_run_id = create_run_with_bearer(&app, &user_jwt).await;
+    let target_run_id = create_run_with_bearer(&app, &user_jwt).await;
+    let worker_token = issue_test_run_tools_worker_token(&origin_run_id);
+
+    for (method, path) in [
+        (Method::POST, format!("/runs/{target_run_id}/approve")),
+        (Method::GET, format!("/runs/{target_run_id}/timeline")),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(bearer_request(
+                method.clone(),
+                &path,
+                &worker_token,
+                Body::empty(),
+            ))
+            .await
+            .unwrap();
+        assert!(
+            matches!(
+                response.status(),
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+            ),
+            "{method} {path} unexpectedly accepted run-tools worker token with status {}",
+            response.status()
+        );
+    }
+}
+
+#[tokio::test]
 async fn base_worker_token_is_rejected_by_run_tool_only_routes() {
     let (_state, app) = jwt_auth_app();
     let user_jwt = issue_test_user_jwt();
@@ -7443,7 +8953,6 @@ async fn worker_token_is_rejected_on_user_only_routes() {
         (Method::POST, "/validate".to_string()),
         (Method::POST, "/graph/render".to_string()),
         (Method::GET, "/attach".to_string()),
-        (Method::GET, "/boards/runs".to_string()),
         (Method::DELETE, format!("/runs/{run_id}")),
         (Method::GET, format!("/runs/{run_id}/attach")),
         (Method::GET, format!("/runs/{run_id}/checkpoint")),
@@ -7678,7 +9187,7 @@ async fn create_run_rejects_invalid_titles() {
 }
 
 #[tokio::test]
-async fn start_run_transitions_to_queued() {
+async fn start_run_transitions_to_runnable() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
 
@@ -7701,7 +9210,7 @@ async fn start_run_transitions_to_queued() {
         .unwrap();
     let response = app.oneshot(req).await.unwrap();
     let body = response_json!(response, StatusCode::OK).await;
-    assert_eq!(run_json_status(&body)["kind"], "queued");
+    assert_eq!(run_json_status(&body)["kind"], "runnable");
     assert_eq!(body["title"], "Test");
 
     let status = state
@@ -7713,7 +9222,153 @@ async fn start_run_transitions_to_queued() {
         .await
         .unwrap()
         .status;
-    assert_eq!(status, RunStatus::Queued);
+    assert_eq!(status, RunStatus::Runnable);
+}
+
+#[tokio::test]
+async fn worker_started_child_run_requires_approval_before_becoming_runnable() {
+    let (state, app) = jwt_auth_app();
+    let user_jwt = issue_test_user_jwt();
+    let parent_run_id = create_run_with_bearer(&app, &user_jwt).await;
+    let worker_token = issue_test_run_tools_worker_token(&parent_run_id);
+    let mut child_manifest = minimal_manifest_json(MINIMAL_DOT);
+    child_manifest["parent_id"] = json!(parent_run_id.to_string());
+
+    let response = app
+        .clone()
+        .oneshot(json_bearer_request(
+            Method::POST,
+            "/runs",
+            &worker_token,
+            &child_manifest,
+        ))
+        .await
+        .unwrap();
+    let child_body = response_json!(response, StatusCode::CREATED).await;
+    let child_run_id = child_body["id"].as_str().unwrap().parse::<RunId>().unwrap();
+
+    let response = app
+        .clone()
+        .oneshot(json_bearer_request(
+            Method::POST,
+            &format!("/runs/{child_run_id}/start"),
+            &worker_token,
+            &json!({ "resume": false }),
+        ))
+        .await
+        .unwrap();
+    let pending_body = response_json!(response, StatusCode::OK).await;
+    assert_eq!(
+        run_json_status(&pending_body),
+        &json!({
+            "kind": "pending",
+            "reason": "approval_required"
+        })
+    );
+    assert_eq!(
+        pending_body["lifecycle"]["approval"]["state"].as_str(),
+        Some("pending")
+    );
+
+    {
+        let runs = state.runs.lock().expect("runs lock poisoned");
+        assert_eq!(
+            runs.get(&child_run_id).map(|run| run.status),
+            Some(RunStatus::Pending {
+                reason: fabro_types::PendingReason::ApprovalRequired,
+            })
+        );
+    }
+
+    let response = app
+        .clone()
+        .oneshot(bearer_request(
+            Method::POST,
+            &format!("/runs/{child_run_id}/approve"),
+            &user_jwt,
+            Body::empty(),
+        ))
+        .await
+        .unwrap();
+    let approved_body = response_json!(response, StatusCode::OK).await;
+    assert_eq!(
+        run_json_status(&approved_body),
+        &json!({ "kind": "runnable" })
+    );
+    assert_eq!(
+        approved_body["lifecycle"]["approval"]["state"].as_str(),
+        Some("approved")
+    );
+    assert!(
+        approved_body["lifecycle"]["approval"]["decided_at"]
+            .as_str()
+            .is_some()
+    );
+
+    let runs = state.runs.lock().expect("runs lock poisoned");
+    assert_eq!(
+        runs.get(&child_run_id).map(|run| run.status),
+        Some(RunStatus::Runnable)
+    );
+}
+
+#[tokio::test]
+async fn denying_pending_child_run_fails_with_approval_denied() {
+    let (_state, app) = jwt_auth_app();
+    let user_jwt = issue_test_user_jwt();
+    let parent_run_id = create_run_with_bearer(&app, &user_jwt).await;
+    let worker_token = issue_test_run_tools_worker_token(&parent_run_id);
+    let mut child_manifest = minimal_manifest_json(MINIMAL_DOT);
+    child_manifest["parent_id"] = json!(parent_run_id.to_string());
+
+    let response = app
+        .clone()
+        .oneshot(json_bearer_request(
+            Method::POST,
+            "/runs",
+            &worker_token,
+            &child_manifest,
+        ))
+        .await
+        .unwrap();
+    let child_body = response_json!(response, StatusCode::CREATED).await;
+    let child_run_id = child_body["id"].as_str().unwrap().parse::<RunId>().unwrap();
+
+    let response = app
+        .clone()
+        .oneshot(json_bearer_request(
+            Method::POST,
+            &format!("/runs/{child_run_id}/start"),
+            &worker_token,
+            &json!({ "resume": false }),
+        ))
+        .await
+        .unwrap();
+    assert_status!(response, StatusCode::OK).await;
+
+    let response = app
+        .clone()
+        .oneshot(json_bearer_request(
+            Method::POST,
+            &format!("/runs/{child_run_id}/deny"),
+            &user_jwt,
+            &json!({ "reason": "  " }),
+        ))
+        .await
+        .unwrap();
+    let denied_body = response_json!(response, StatusCode::OK).await;
+    assert_eq!(
+        run_json_status(&denied_body),
+        &json!({
+            "kind": "failed",
+            "reason": "approval_denied"
+        })
+    );
+    assert_eq!(
+        denied_body["lifecycle"]["approval"]["state"].as_str(),
+        Some("denied")
+    );
+    assert!(denied_body["lifecycle"]["approval"]["denial_reason"].is_null());
 }
 
 #[tokio::test]
@@ -7774,7 +9429,10 @@ async fn patch_run_title_updates_active_and_archived_runs() {
 
     let run_store = state.store.open_run(&run_id).await.unwrap();
     for event in [
-        workflow_event::Event::RunQueued,
+        workflow_event::Event::RunRunnable {
+            source: fabro_types::RunRunnableSource::StartRequested,
+            actor:  None,
+        },
         workflow_event::Event::RunStarting,
         workflow_event::Event::RunRunning,
     ] {
@@ -7868,7 +9526,7 @@ async fn start_run_conflict_when_not_submitted() {
     let body = body_json(response.into_body()).await;
     let run_id = body["id"].as_str().unwrap();
 
-    // Start it (transitions to queued)
+    // Start it (transitions to runnable)
     let req = Request::builder()
         .method("POST")
         .uri(api(&format!("/runs/{run_id}/start")))
@@ -7883,6 +9541,212 @@ async fn start_run_conflict_when_not_submitted() {
         .body(Body::empty())
         .unwrap();
     let response = app.oneshot(req).await.unwrap();
+    assert_status!(response, StatusCode::CONFLICT).await;
+}
+
+#[tokio::test]
+async fn resume_cancelled_run_with_checkpoint_transitions_to_runnable() {
+    let state = test_app_state_with_isolated_storage();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = RunId::new();
+    let checkpoint = Checkpoint::from_context(
+        &fabro_workflow::context::Context::new(),
+        "start",
+        vec!["start".to_string()],
+        std::collections::HashMap::new(),
+        std::collections::HashMap::new(),
+        Some("exit".to_string()),
+        std::collections::HashMap::new(),
+        std::collections::HashMap::new(),
+        std::collections::HashMap::new(),
+    );
+    create_durable_run_with_events(&state, run_id, &[
+        workflow_event::Event::RunRunnable {
+            source: fabro_types::RunRunnableSource::StartRequested,
+            actor:  None,
+        },
+        workflow_event::Event::RunStarting,
+        workflow_event::Event::RunRunning,
+        workflow_event::Event::CheckpointCompleted {
+            node_id: checkpoint.current_node.clone(),
+            status: "succeeded".to_string(),
+            current_node: checkpoint.current_node.clone(),
+            completed_nodes: checkpoint.completed_nodes.clone(),
+            node_retries: checkpoint.node_retries.clone().into_iter().collect(),
+            context_values: checkpoint.context_values.clone().into_iter().collect(),
+            node_outcomes: checkpoint.node_outcomes.clone().into_iter().collect(),
+            next_node_id: checkpoint.next_node_id.clone(),
+            git_commit_sha: checkpoint.git_commit_sha.clone(),
+            loop_failure_signatures: std::collections::BTreeMap::new(),
+            restart_failure_signatures: std::collections::BTreeMap::new(),
+            node_visits: std::collections::BTreeMap::new(),
+            diff: None,
+            diff_summary: None,
+        },
+        workflow_event::Event::workflow_run_failed_from_error(
+            &WorkflowError::Cancelled,
+            fabro_types::RunTiming::wall_only(10),
+            FailureReason::Cancelled,
+            None,
+            None,
+            None,
+            None,
+        ),
+    ])
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api(&format!("/runs/{run_id}/start")))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "resume": true }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    assert_eq!(run_json_status(&body)["kind"], "runnable");
+    assert_eq!(body["timestamps"]["completed_at"], serde_json::Value::Null);
+    assert_eq!(body["timing"], serde_json::Value::Null);
+
+    let state = state
+        .store
+        .open_run_reader(&run_id)
+        .await
+        .unwrap()
+        .state()
+        .await
+        .unwrap();
+    assert_eq!(state.status, RunStatus::Runnable);
+    assert!(state.conclusion.is_none());
+}
+
+#[tokio::test]
+async fn retry_failed_run_creates_and_queues_new_run() {
+    let state = test_app_state_with_isolated_storage();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let source_run_id = RunId::new();
+    create_durable_run_with_events(&state, source_run_id, &[
+        workflow_event::Event::RunSubmitted {
+            definition_blob: None,
+        },
+        workflow_event::Event::workflow_run_failed_from_error(
+            &WorkflowError::engine("boom"),
+            fabro_types::RunTiming::wall_only(10),
+            FailureReason::WorkflowError,
+            None,
+            None,
+            None,
+            None,
+        ),
+    ])
+    .await;
+    let source_events_before = state
+        .store
+        .open_run(&source_run_id)
+        .await
+        .unwrap()
+        .list_events()
+        .await
+        .unwrap()
+        .len();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api(&format!("/runs/{source_run_id}/retry")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::CREATED).await;
+    let new_run_id = body["id"].as_str().unwrap().parse::<RunId>().unwrap();
+
+    assert_ne!(new_run_id, source_run_id);
+    assert_eq!(body["retried_from"], source_run_id.to_string());
+    assert_eq!(body["created_by"]["kind"], "user");
+    assert_eq!(body["created_by"]["login"], "dev");
+    assert_eq!(run_json_status(&body)["kind"], "runnable");
+
+    let source_store = state.store.open_run(&source_run_id).await.unwrap();
+    assert_eq!(
+        source_store.list_events().await.unwrap().len(),
+        source_events_before
+    );
+    assert_eq!(
+        source_store.state().await.unwrap().status,
+        RunStatus::Failed {
+            reason: FailureReason::WorkflowError,
+        }
+    );
+
+    let new_state = state
+        .store
+        .open_run(&new_run_id)
+        .await
+        .unwrap()
+        .state()
+        .await
+        .unwrap();
+    assert_eq!(new_state.retried_from, Some(source_run_id));
+    assert_eq!(new_state.status, RunStatus::Runnable);
+    assert!(new_state.checkpoints.is_empty());
+}
+
+#[tokio::test]
+async fn retry_missing_run_returns_not_found() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api(&format!("/runs/{}/retry", fixtures::RUN_64)))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_status!(response, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn retry_non_retryable_run_returns_conflict() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let source_run_id = RunId::new();
+    create_durable_run_with_events(&state, source_run_id, &[
+        workflow_event::Event::WorkflowRunCompleted {
+            timing:               fabro_types::RunTiming::wall_only(10),
+            artifact_count:       0,
+            status:               "succeeded".to_string(),
+            reason:               SuccessReason::Completed,
+            total_usd_micros:     None,
+            final_git_commit_sha: None,
+            final_patch:          None,
+            diff_summary:         None,
+            billing:              None,
+        },
+    ])
+    .await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api(&format!("/runs/{source_run_id}/retry")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
     assert_status!(response, StatusCode::CONFLICT).await;
 }
 
@@ -8254,6 +10118,43 @@ async fn interrupt_terminal_run_returns_run_not_interruptible() {
 }
 
 #[test]
+fn injected_runnable_event_does_not_make_submitted_run_schedulable() {
+    let state = test_app_state();
+    let run_id = fixtures::RUN_1;
+    let temp_dir = tempfile::tempdir().unwrap();
+    {
+        let mut runs = state.runs.lock().expect("runs lock poisoned");
+        runs.insert(
+            run_id,
+            managed_run(
+                String::new(),
+                RunStatus::Submitted,
+                chrono::Utc::now(),
+                temp_dir.path().join(run_id.to_string()),
+                RunExecutionMode::Start,
+            ),
+        );
+    }
+
+    let runnable = workflow_event::to_run_event(&run_id, &workflow_event::Event::RunRunnable {
+        source: fabro_types::RunRunnableSource::StartRequested,
+        actor:  None,
+    });
+    update_live_run_from_event(&state, run_id, &runnable);
+
+    {
+        let runs = state.runs.lock().expect("runs lock poisoned");
+        assert_eq!(runs.get(&run_id).unwrap().status, RunStatus::Submitted);
+    }
+
+    let starting = workflow_event::to_run_event(&run_id, &workflow_event::Event::RunStarting);
+    update_live_run_from_event(&state, run_id, &starting);
+
+    let runs = state.runs.lock().expect("runs lock poisoned");
+    assert_eq!(runs.get(&run_id).unwrap().status, RunStatus::Starting);
+}
+
+#[test]
 fn active_steerable_stage_projection_ignores_stale_deactivation() {
     let state = test_app_state();
     let run_id = fixtures::RUN_1;
@@ -8275,13 +10176,16 @@ fn active_steerable_stage_projection_ignores_stale_deactivation() {
     let stage_id = StageId::new("agent", 1);
     let activated_a =
         workflow_event::to_run_event(&run_id, &workflow_event::Event::AgentSessionActivated {
-            node_id:      "agent".to_string(),
-            visit:        1,
-            session_id:   "session-a".to_string(),
-            thread_id:    None,
-            provider:     Some("openai".to_string()),
-            model:        Some("gpt-5.4".to_string()),
-            capabilities: vec![SessionCapability::Steer],
+            node_id:          "agent".to_string(),
+            visit:            1,
+            session_id:       "session-a".to_string(),
+            thread_id:        None,
+            provider:         Some("openai".to_string()),
+            model:            Some("gpt-5.4".to_string()),
+            reasoning_effort: None,
+            speed:            None,
+            permission_level: None,
+            capabilities:     vec![SessionCapability::Steer],
         });
     update_live_run_from_event(&state, run_id, &activated_a);
 
@@ -8295,13 +10199,16 @@ fn active_steerable_stage_projection_ignores_stale_deactivation() {
 
     let activated_b =
         workflow_event::to_run_event(&run_id, &workflow_event::Event::AgentSessionActivated {
-            node_id:      "agent".to_string(),
-            visit:        1,
-            session_id:   "session-b".to_string(),
-            thread_id:    None,
-            provider:     Some("openai".to_string()),
-            model:        Some("gpt-5.4".to_string()),
-            capabilities: vec![SessionCapability::Steer],
+            node_id:          "agent".to_string(),
+            visit:            1,
+            session_id:       "session-b".to_string(),
+            thread_id:        None,
+            provider:         Some("openai".to_string()),
+            model:            Some("gpt-5.4".to_string()),
+            reasoning_effort: None,
+            speed:            None,
+            permission_level: None,
+            capabilities:     vec![SessionCapability::Steer],
         });
     update_live_run_from_event(&state, run_id, &activated_b);
     update_live_run_from_event(&state, run_id, &deactivated_a);
@@ -8351,13 +10258,16 @@ async fn steer_with_active_acp_session_forwards_to_worker() {
     update_live_run_from_event(&state, run_id, &started);
     let activated =
         workflow_event::to_run_event(&run_id, &workflow_event::Event::AgentSessionActivated {
-            node_id:      "agent".to_string(),
-            visit:        1,
-            session_id:   "acp-session".to_string(),
-            thread_id:    None,
-            provider:     Some(AgentBackend::Acp.to_string()),
-            model:        None,
-            capabilities: vec![SessionCapability::Steer],
+            node_id:          "agent".to_string(),
+            visit:            1,
+            session_id:       "acp-session".to_string(),
+            thread_id:        None,
+            provider:         Some(AgentBackend::Acp.to_string()),
+            model:            None,
+            reasoning_effort: None,
+            speed:            None,
+            permission_level: None,
+            capabilities:     vec![SessionCapability::Steer],
         });
     update_live_run_from_event(&state, run_id, &activated);
 
@@ -8452,13 +10362,16 @@ async fn active_acp_steerable_marker_clears_on_terminal_paths() {
         update_live_run_from_event(&state, run_id, &started);
         let activated =
             workflow_event::to_run_event(&run_id, &workflow_event::Event::AgentSessionActivated {
-                node_id:      "agent".to_string(),
-                visit:        1,
-                session_id:   "acp-session".to_string(),
-                thread_id:    None,
-                provider:     Some(AgentBackend::Acp.to_string()),
-                model:        None,
-                capabilities: vec![SessionCapability::Steer],
+                node_id:          "agent".to_string(),
+                visit:            1,
+                session_id:       "acp-session".to_string(),
+                thread_id:        None,
+                provider:         Some(AgentBackend::Acp.to_string()),
+                model:            None,
+                reasoning_effort: None,
+                speed:            None,
+                permission_level: None,
+                capabilities:     vec![SessionCapability::Steer],
             });
         update_live_run_from_event(&state, run_id, &activated);
         let terminal = acp_event_for_stage(&run_id, &terminal_event);
@@ -8947,6 +10860,649 @@ async fn archive_and_unarchive_updates_listing_visibility() {
     assert_eq!(run_json_status(restored_item)["reason"], "completed");
 }
 
+fn run_submitted_event() -> workflow_event::Event {
+    workflow_event::Event::RunSubmitted {
+        definition_blob: None,
+    }
+}
+
+fn workflow_completed_event() -> workflow_event::Event {
+    workflow_event::Event::WorkflowRunCompleted {
+        timing:               fabro_types::RunTiming::wall_only(1000),
+        artifact_count:       0,
+        status:               "succeeded".to_string(),
+        reason:               SuccessReason::Completed,
+        total_usd_micros:     None,
+        final_git_commit_sha: None,
+        final_patch:          None,
+        diff_summary:         None,
+        billing:              None,
+    }
+}
+
+async fn create_succeeded_run(state: &Arc<AppState>, run_id: RunId) {
+    create_durable_run_with_events(state, run_id, &[
+        run_submitted_event(),
+        workflow_completed_event(),
+    ])
+    .await;
+}
+
+async fn create_running_run(state: &Arc<AppState>, run_id: RunId) {
+    create_durable_run_with_events(state, run_id, &[
+        run_submitted_event(),
+        workflow_event::Event::RunRunning,
+    ])
+    .await;
+}
+
+async fn create_preserved_local_sandbox_run(state: &Arc<AppState>, run_id: RunId) {
+    let mut settings = fabro_types::WorkflowSettings::default();
+    settings.run.environment.lifecycle.preserve = true;
+    let graph = Graph::new("test");
+
+    create_durable_run_with_events(state, run_id, &[
+        workflow_event::Event::RunCreated {
+            run_id,
+            title: None,
+            settings: serde_json::to_value(settings).unwrap(),
+            graph: serde_json::to_value(graph).unwrap(),
+            workflow_source: None,
+            workflow_config: None,
+            labels: std::collections::BTreeMap::default(),
+            run_dir: "/tmp/fabro-run".to_string(),
+            source_directory: Some("/tmp/fabro-run".to_string()),
+            workflow_slug: Some("test".to_string()),
+            db_prefix: None,
+            provenance: None,
+            manifest_blob: None,
+            git: None,
+            fork_source_ref: None,
+            retried_from: None,
+            parent_id: None,
+            web_url: None,
+        },
+        workflow_event::Event::RunSubmitted {
+            definition_blob: None,
+        },
+        workflow_event::Event::SandboxInitialized {
+            provider:          SandboxProvider::Local,
+            id:                "sandbox-preserve-1".to_string(),
+            working_directory: "/tmp/fabro-preserved-sandbox".to_string(),
+            repo_cloned:       None,
+            clone_origin_url:  None,
+            clone_branch:      None,
+            workspace_root:    None,
+            repos_root:        None,
+            primary_repo_path: None,
+            primary_repo_link: None,
+        },
+    ])
+    .await;
+}
+
+fn batch_lifecycle_body(run_ids: &[RunId]) -> serde_json::Value {
+    json!({
+        "run_ids": run_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
+    })
+}
+
+fn batch_delete_body(run_ids: &[RunId], force: bool) -> serde_json::Value {
+    json!({
+        "run_ids": run_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
+        "force": force,
+    })
+}
+
+fn assert_batch_result(result: &serde_json::Value, run_id: RunId, ok: bool, outcome: &str) {
+    assert_eq!(result["run_id"], run_id.to_string());
+    assert_eq!(result["ok"], ok);
+    assert_eq!(result["outcome"], outcome);
+    if ok {
+        assert!(
+            result["run"].is_object(),
+            "successful result should include run: {result}"
+        );
+        assert!(
+            result["error"].is_null(),
+            "successful result should omit error: {result}"
+        );
+    } else {
+        assert!(
+            result["error"].is_object(),
+            "failed result should include error: {result}"
+        );
+        assert!(
+            result["run"].is_null(),
+            "failed result should omit run: {result}"
+        );
+    }
+}
+
+fn assert_batch_delete_result(result: &serde_json::Value, run_id: RunId, ok: bool, outcome: &str) {
+    assert_eq!(result["run_id"], run_id.to_string());
+    assert_eq!(result["ok"], ok);
+    assert_eq!(result["outcome"], outcome);
+    if ok {
+        assert!(
+            result["error"].is_null(),
+            "successful delete result should omit error: {result}"
+        );
+    } else {
+        assert!(
+            result["error"].is_object(),
+            "failed delete result should include error: {result}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn batch_archive_and_unarchive_updates_listing_visibility() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let first_id = RunId::new();
+    let second_id = RunId::new();
+    create_succeeded_run(&state, first_id).await;
+    create_succeeded_run(&state, second_id).await;
+
+    let archive_response = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/runs/archive",
+            &batch_lifecycle_body(&[first_id, second_id]),
+        ))
+        .await
+        .unwrap();
+    let archive_body = response_json!(archive_response, StatusCode::OK).await;
+    assert_eq!(archive_body["summary"]["requested"], 2);
+    assert_eq!(archive_body["summary"]["succeeded"], 2);
+    assert_eq!(archive_body["summary"]["failed"], 0);
+    let archive_results = archive_body["results"].as_array().unwrap();
+    assert_batch_result(&archive_results[0], first_id, true, "archived");
+    assert!(run_json_archived(&archive_results[0]["run"]));
+    assert_batch_result(&archive_results[1], second_id, true, "archived");
+    assert!(run_json_archived(&archive_results[1]["run"]));
+
+    let hidden_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api("/runs"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let hidden_body = response_json!(hidden_response, StatusCode::OK).await;
+    assert!(
+        hidden_body["data"].as_array().unwrap().iter().all(|item| {
+            let item_id = run_json_id(item);
+            item_id != Some(&first_id.to_string()) && item_id != Some(&second_id.to_string())
+        }),
+        "archived runs should be hidden from default listing"
+    );
+
+    let unarchive_response = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/runs/unarchive",
+            &batch_lifecycle_body(&[first_id, second_id]),
+        ))
+        .await
+        .unwrap();
+    let unarchive_body = response_json!(unarchive_response, StatusCode::OK).await;
+    assert_eq!(unarchive_body["summary"]["requested"], 2);
+    assert_eq!(unarchive_body["summary"]["succeeded"], 2);
+    assert_eq!(unarchive_body["summary"]["failed"], 0);
+    let unarchive_results = unarchive_body["results"].as_array().unwrap();
+    assert_batch_result(&unarchive_results[0], first_id, true, "unarchived");
+    assert!(!run_json_archived(&unarchive_results[0]["run"]));
+    assert_batch_result(&unarchive_results[1], second_id, true, "unarchived");
+    assert!(!run_json_archived(&unarchive_results[1]["run"]));
+
+    let restored_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api("/runs"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let restored_body = response_json!(restored_response, StatusCode::OK).await;
+    for run_id in [first_id, second_id] {
+        let restored_item = restored_body["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| run_json_id(item) == Some(&run_id.to_string()))
+            .expect("unarchived run should reappear in default listing");
+        assert_eq!(run_json_status(restored_item)["kind"], "succeeded");
+    }
+}
+
+#[tokio::test]
+async fn batch_archive_reports_ordered_mixed_results_without_rollback() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let already_archived_id = RunId::new();
+    let terminal_id = RunId::new();
+    let running_id = RunId::new();
+    let missing_id = RunId::new();
+    create_succeeded_run(&state, already_archived_id).await;
+    create_succeeded_run(&state, terminal_id).await;
+    create_running_run(&state, running_id).await;
+
+    let already_archived_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api(&format!("/runs/{already_archived_id}/archive")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_status!(already_archived_response, StatusCode::OK).await;
+
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/runs/archive",
+            &batch_lifecycle_body(&[already_archived_id, terminal_id, running_id, missing_id]),
+        ))
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    assert_eq!(body["summary"]["requested"], 4);
+    assert_eq!(body["summary"]["succeeded"], 2);
+    assert_eq!(body["summary"]["failed"], 2);
+    let results = body["results"].as_array().unwrap();
+    assert_batch_result(&results[0], already_archived_id, true, "already_archived");
+    assert_batch_result(&results[1], terminal_id, true, "archived");
+    assert_batch_result(&results[2], running_id, false, "conflict");
+    assert_eq!(results[2]["error"]["status"], "409");
+    assert_batch_result(&results[3], missing_id, false, "not_found");
+    assert_eq!(results[3]["error"]["status"], "404");
+
+    let terminal_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/runs/{terminal_id}")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let terminal_body = response_json!(terminal_response, StatusCode::OK).await;
+    assert!(run_json_archived(&terminal_body));
+}
+
+#[tokio::test]
+async fn batch_unarchive_treats_terminal_not_archived_as_success() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let archived_id = RunId::new();
+    let not_archived_id = RunId::new();
+    create_succeeded_run(&state, archived_id).await;
+    create_succeeded_run(&state, not_archived_id).await;
+
+    let archive_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api(&format!("/runs/{archived_id}/archive")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_status!(archive_response, StatusCode::OK).await;
+
+    let response = app
+        .oneshot(json_request(
+            Method::POST,
+            "/runs/unarchive",
+            &batch_lifecycle_body(&[archived_id, not_archived_id]),
+        ))
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    assert_eq!(body["summary"]["requested"], 2);
+    assert_eq!(body["summary"]["succeeded"], 2);
+    assert_eq!(body["summary"]["failed"], 0);
+    let results = body["results"].as_array().unwrap();
+    assert_batch_result(&results[0], archived_id, true, "unarchived");
+    assert_batch_result(&results[1], not_archived_id, true, "not_archived");
+}
+
+#[tokio::test]
+async fn batch_lifecycle_rejects_invalid_requests_before_mutating_runs() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = RunId::new();
+    create_succeeded_run(&state, run_id).await;
+    let too_many_ids = (0..251)
+        .map(|_| RunId::new().to_string())
+        .collect::<Vec<_>>();
+    let invalid_requests = [
+        json!({ "run_ids": [] }),
+        json!({ "run_ids": [run_id.to_string(), run_id.to_string()] }),
+        json!({ "run_ids": ["not-a-run-id"] }),
+        json!({ "run_ids": too_many_ids }),
+    ];
+
+    for body in invalid_requests {
+        let response = app
+            .clone()
+            .oneshot(json_request(Method::POST, "/runs/archive", &body))
+            .await
+            .unwrap();
+        assert_status!(response, StatusCode::BAD_REQUEST).await;
+    }
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/runs/{run_id}")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    assert!(!run_json_archived(&body));
+}
+
+#[tokio::test]
+async fn batch_lifecycle_requires_user_authentication() {
+    let (_state, app) = jwt_auth_app();
+    let user_jwt = issue_test_user_jwt();
+    let run_id = create_run_with_bearer(&app, &user_jwt).await;
+    let worker_token = issue_test_worker_token(&run_id);
+    let body = batch_lifecycle_body(&[run_id]);
+
+    let unauthenticated = app
+        .clone()
+        .oneshot(json_request(Method::POST, "/runs/archive", &body))
+        .await
+        .unwrap();
+    assert_status!(unauthenticated, StatusCode::UNAUTHORIZED).await;
+
+    for path in ["/runs/archive", "/runs/unarchive"] {
+        let worker_response = app
+            .clone()
+            .oneshot(json_bearer_request(
+                Method::POST,
+                path,
+                &worker_token,
+                &body,
+            ))
+            .await
+            .unwrap();
+        assert!(
+            matches!(
+                worker_response.status(),
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+            ),
+            "{path} unexpectedly accepted worker token with status {}",
+            worker_response.status()
+        );
+    }
+}
+
+#[tokio::test]
+async fn batch_delete_removes_runs_and_reports_ordered_results() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let first_id = RunId::new();
+    let second_id = RunId::new();
+    create_succeeded_run(&state, first_id).await;
+    create_succeeded_run(&state, second_id).await;
+
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/runs/delete",
+            &batch_delete_body(&[first_id, second_id], false),
+        ))
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    assert_eq!(body["summary"]["requested"], 2);
+    assert_eq!(body["summary"]["succeeded"], 2);
+    assert_eq!(body["summary"]["failed"], 0);
+    let results = body["results"].as_array().unwrap();
+    assert_batch_delete_result(&results[0], first_id, true, "deleted");
+    assert_batch_delete_result(&results[1], second_id, true, "deleted");
+
+    for run_id in [first_id, second_id] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(api(&format!("/runs/{run_id}")))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_status!(response, StatusCode::NOT_FOUND).await;
+    }
+}
+
+#[tokio::test]
+async fn batch_delete_reports_mixed_results_without_rollback() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let terminal_id = RunId::new();
+    let running_id = RunId::new();
+    let missing_id = RunId::new();
+    create_succeeded_run(&state, terminal_id).await;
+    create_running_run(&state, running_id).await;
+
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/runs/delete",
+            &batch_delete_body(&[terminal_id, running_id, missing_id], false),
+        ))
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    assert_eq!(body["summary"]["requested"], 3);
+    assert_eq!(body["summary"]["succeeded"], 2);
+    assert_eq!(body["summary"]["failed"], 1);
+    let results = body["results"].as_array().unwrap();
+    assert_batch_delete_result(&results[0], terminal_id, true, "deleted");
+    assert_batch_delete_result(&results[1], running_id, false, "conflict");
+    assert_eq!(results[1]["error"]["status"], "409");
+    assert_batch_delete_result(&results[2], missing_id, true, "already_absent");
+
+    let deleted_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/runs/{terminal_id}")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_status!(deleted_response, StatusCode::NOT_FOUND).await;
+
+    let running_response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/runs/{running_id}")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_status!(running_response, StatusCode::OK).await;
+}
+
+#[tokio::test]
+async fn batch_delete_force_removes_active_runs() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = RunId::new();
+    create_running_run(&state, run_id).await;
+
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/runs/delete",
+            &batch_delete_body(&[run_id], true),
+        ))
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    assert_eq!(body["summary"]["requested"], 1);
+    assert_eq!(body["summary"]["succeeded"], 1);
+    assert_eq!(body["summary"]["failed"], 0);
+    let results = body["results"].as_array().unwrap();
+    assert_batch_delete_result(&results[0], run_id, true, "deleted");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/runs/{run_id}")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_status!(response, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn batch_delete_with_preserved_sandbox_returns_handoff() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = RunId::new();
+    create_preserved_local_sandbox_run(&state, run_id).await;
+
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/runs/delete",
+            &batch_delete_body(&[run_id], true),
+        ))
+        .await
+        .unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    assert_eq!(body["summary"]["requested"], 1);
+    assert_eq!(body["summary"]["succeeded"], 1);
+    assert_eq!(body["summary"]["failed"], 0);
+    let results = body["results"].as_array().unwrap();
+    assert_batch_delete_result(&results[0], run_id, true, "sandbox_preserved");
+    assert_eq!(results[0]["sandbox"]["provider"], "local");
+    assert_eq!(results[0]["sandbox"]["id"], "sandbox-preserve-1");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/runs/{run_id}")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_status!(response, StatusCode::NOT_FOUND).await;
+}
+
+#[tokio::test]
+async fn batch_delete_rejects_invalid_requests_before_mutating_runs() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+    let run_id = RunId::new();
+    create_succeeded_run(&state, run_id).await;
+    let too_many_ids = (0..251)
+        .map(|_| RunId::new().to_string())
+        .collect::<Vec<_>>();
+    let invalid_requests = [
+        json!({ "run_ids": [], "force": false }),
+        json!({ "run_ids": [run_id.to_string(), run_id.to_string()], "force": false }),
+        json!({ "run_ids": ["not-a-run-id"], "force": false }),
+        json!({ "run_ids": too_many_ids, "force": false }),
+    ];
+
+    for body in invalid_requests {
+        let response = app
+            .clone()
+            .oneshot(json_request(Method::POST, "/runs/delete", &body))
+            .await
+            .unwrap();
+        assert_status!(response, StatusCode::BAD_REQUEST).await;
+    }
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(api(&format!("/runs/{run_id}")))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_status!(response, StatusCode::OK).await;
+}
+
+#[tokio::test]
+async fn batch_delete_requires_user_authentication() {
+    let (_state, app) = jwt_auth_app();
+    let user_jwt = issue_test_user_jwt();
+    let run_id = create_run_with_bearer(&app, &user_jwt).await;
+    let worker_token = issue_test_worker_token(&run_id);
+    let body = batch_delete_body(&[run_id], false);
+
+    let unauthenticated = app
+        .clone()
+        .oneshot(json_request(Method::POST, "/runs/delete", &body))
+        .await
+        .unwrap();
+    assert_status!(unauthenticated, StatusCode::UNAUTHORIZED).await;
+
+    let worker_response = app
+        .oneshot(json_bearer_request(
+            Method::POST,
+            "/runs/delete",
+            &worker_token,
+            &body,
+        ))
+        .await
+        .unwrap();
+    assert!(
+        matches!(
+            worker_response.status(),
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+        ),
+        "/runs/delete unexpectedly accepted worker token with status {}",
+        worker_response.status()
+    );
+}
+
 #[tokio::test]
 async fn archive_unknown_run_returns_not_found() {
     let app = test_app_with();
@@ -9063,47 +11619,7 @@ async fn delete_run_with_preserved_sandbox_returns_handoff() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
     let run_id = RunId::new();
-    let mut settings = fabro_types::WorkflowSettings::default();
-    settings.run.sandbox.preserve = true;
-    let graph = Graph::new("test");
-
-    create_durable_run_with_events(&state, run_id, &[
-        workflow_event::Event::RunCreated {
-            run_id,
-            title: None,
-            settings: serde_json::to_value(settings).unwrap(),
-            graph: serde_json::to_value(graph).unwrap(),
-            workflow_source: None,
-            workflow_config: None,
-            labels: std::collections::BTreeMap::default(),
-            run_dir: "/tmp/fabro-run".to_string(),
-            source_directory: Some("/tmp/fabro-run".to_string()),
-            workflow_slug: Some("test".to_string()),
-            db_prefix: None,
-            provenance: None,
-            manifest_blob: None,
-            git: None,
-            fork_source_ref: None,
-            parent_id: None,
-            web_url: None,
-        },
-        workflow_event::Event::RunSubmitted {
-            definition_blob: None,
-        },
-        workflow_event::Event::SandboxInitialized {
-            provider:          SandboxProvider::Local,
-            id:                "sandbox-preserve-1".to_string(),
-            working_directory: "/tmp/fabro-preserved-sandbox".to_string(),
-            repo_cloned:       None,
-            clone_origin_url:  None,
-            clone_branch:      None,
-            workspace_root:    None,
-            repos_root:        None,
-            primary_repo_path: None,
-            primary_repo_link: None,
-        },
-    ])
-    .await;
+    create_preserved_local_sandbox_run(&state, run_id).await;
 
     let req = Request::builder()
         .method("DELETE")
@@ -9151,6 +11667,7 @@ async fn delete_run_retry_after_missing_provider_resource_removes_metadata() {
             manifest_blob: None,
             git: None,
             fork_source_ref: None,
+            retried_from: None,
             parent_id: None,
             web_url: None,
         },
@@ -9530,8 +12047,8 @@ mode = "dry_run"
 provider = "anthropic"
 name = "claude-sonnet-4-5"
 
-[run.sandbox]
-provider = "local"
+[run.environment]
+id = "local"
 
 [[run.hooks]]
 name = "snapshot-hook"
@@ -9625,7 +12142,7 @@ level = "debug"
 }
 
 #[tokio::test]
-async fn cancel_queued_run_succeeds() {
+async fn cancel_runnable_run_succeeds() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
 
@@ -9656,26 +12173,26 @@ async fn cancel_queued_run_succeeds() {
     assert_eq!(run_json_status(&body)["kind"], "failed");
     assert_eq!(run_json_status(&body)["reason"], "cancelled");
 
-    // Cancelled runs appear on the board in the "failed" column
+    // Cancelled runs appear in the runs list with a "failed" status
     let req = Request::builder()
         .method("GET")
-        .uri(api("/boards/runs"))
+        .uri(api("/runs"))
         .body(Body::empty())
         .unwrap();
     let response = app.clone().oneshot(req).await.unwrap();
     let body = body_json(response.into_body()).await;
     let run_id_str = run_id.to_string();
-    let board_item = body["data"]
+    let list_item = body["data"]
         .as_array()
         .unwrap()
         .iter()
         .find(|item| run_json_id(item) == Some(run_id_str.as_str()));
     assert!(
-        board_item.is_some(),
-        "cancelled run should appear on the board"
+        list_item.is_some(),
+        "cancelled run should appear in the list"
     );
     assert_eq!(
-        run_json_status(board_item.unwrap())["kind"].as_str(),
+        run_json_status(list_item.unwrap())["kind"].as_str(),
         Some("failed"),
         "cancelled run should preserve the failed lifecycle status"
     );
@@ -9773,7 +12290,7 @@ async fn pause_run_sets_pending_control_on_board_response() {
         .unwrap();
     let response = app.clone().oneshot(req).await.unwrap();
     let body = response_json!(response, StatusCode::OK).await;
-    assert_eq!(run_json_status(&body)["kind"], "queued");
+    assert_eq!(run_json_status(&body)["kind"], "runnable");
     assert_eq!(run_json_pending_control(&body).as_str(), Some("pause"));
 
     // Verify pending_control via /runs/{id} (board no longer includes this field)
@@ -9786,11 +12303,10 @@ async fn pause_run_sets_pending_control_on_board_response() {
     let body = body_json(response.into_body()).await;
     assert_eq!(run_json_pending_control(&body).as_str(), Some("pause"));
 
-    // Verify the run appears on the board (store has Submitted status →
-    // "queued" column)
+    // Verify the run appears in the runs list with runnable status.
     let req = Request::builder()
         .method("GET")
-        .uri(api("/boards/runs"))
+        .uri(api("/runs"))
         .body(Body::empty())
         .unwrap();
     let response = app.clone().oneshot(req).await.unwrap();
@@ -9894,7 +12410,7 @@ async fn unpause_run_sets_pending_control() {
         .unwrap();
     let response = app.clone().oneshot(req).await.unwrap();
     let body = response_json!(response, StatusCode::OK).await;
-    assert_eq!(run_json_status(&body)["kind"], "queued");
+    assert_eq!(run_json_status(&body)["kind"], "runnable");
     assert_eq!(run_json_pending_control(&body).as_str(), Some("unpause"));
 
     let summary = state.store.runs().find(&run_id).await.unwrap().unwrap();
@@ -10137,8 +12653,8 @@ script = "sleep 5"
 [run.prepare]
 timeout = "30s"
 
-[run.sandbox]
-provider = "local"
+[run.environment]
+id = "local"
 "#;
     let state = test_app_state_with_settings_and_registry_factory(
         server_settings_from_toml(source),
@@ -10163,7 +12679,7 @@ provider = "local"
         if matches!(
             live_status_before_cancel,
             Some(
-                RunStatus::Queued
+                RunStatus::Runnable
                     | RunStatus::Starting
                     | RunStatus::Running
                     | RunStatus::Blocked { .. }
@@ -10178,7 +12694,7 @@ provider = "local"
         matches!(
             live_status_before_cancel,
             Some(
-                RunStatus::Queued
+                RunStatus::Runnable
                     | RunStatus::Starting
                     | RunStatus::Running
                     | RunStatus::Blocked { .. }
@@ -10275,15 +12791,15 @@ async fn cancel_before_run_transitions_to_running_returns_empty_attach_stream() 
 }
 
 #[tokio::test]
-async fn queue_position_reported_for_queued_runs() {
+async fn queue_position_reported_for_runnable_runs() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
 
-    // Create and start two runs (no scheduler, both stay queued)
+    // Create and start two runs (no scheduler, both stay runnable)
     let first_run_id = create_and_start_run(&app, MINIMAL_DOT).await;
     let second_run_id = create_and_start_run(&app, MINIMAL_DOT).await;
 
-    // Queue position is tracked in memory even when queued runs are also
+    // Queue position is tracked in memory even when runnable runs are also
     // visible on the board.
     let runs = state.runs.lock().expect("runs lock poisoned");
     let positions = compute_queue_positions(&runs);
@@ -10305,12 +12821,10 @@ async fn concurrency_limit_respected() {
     // Give scheduler time to pick up the first run
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-    // The board only shows runs with a visible board column. With
-    // max_concurrent_runs=1, at most one run should land in the live
-    // "running" column.
+    // With max_concurrent_runs=1, at most one run should be live "running".
     let req = Request::builder()
         .method("GET")
-        .uri(api("/boards/runs"))
+        .uri(api("/runs"))
         .body(Body::empty())
         .unwrap();
     let response = app.clone().oneshot(req).await.unwrap();
@@ -10318,16 +12832,16 @@ async fn concurrency_limit_respected() {
     let items = body["data"].as_array().unwrap();
     let active_count = items
         .iter()
-        .filter(|item| item["column"].as_str() == Some("running"))
+        .filter(|item| run_json_status(item)["kind"].as_str() == Some("running"))
         .count();
     assert!(
         active_count <= 1,
-        "expected at most 1 active run on the board, got {active_count}"
+        "expected at most 1 active run, got {active_count}"
     );
 }
 
 #[tokio::test]
-async fn submit_answer_to_queued_run_returns_conflict() {
+async fn submit_answer_to_unstarted_run_returns_conflict() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(state);
 
@@ -10342,7 +12856,7 @@ async fn submit_answer_to_queued_run_returns_conflict() {
     let body = body_json(response.into_body()).await;
     let run_id = body["id"].as_str().unwrap().to_string();
 
-    // Try to submit an answer to a queued run
+    // Try to submit an answer to a run with no active worker.
     let req = Request::builder()
         .method("POST")
         .uri(api(&format!("/runs/{run_id}/questions/q1/answer")))
@@ -10468,12 +12982,12 @@ reasoning = false
 }
 
 #[tokio::test]
-async fn demo_boards_runs_returns_run_list_items() {
+async fn demo_list_runs_returns_run_list_items() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(state);
     let req = Request::builder()
         .method("GET")
-        .uri(api("/boards/runs"))
+        .uri(api("/runs"))
         .header("X-Fabro-Demo", "1")
         .body(Body::empty())
         .unwrap();
@@ -10593,12 +13107,11 @@ async fn demo_workflows_return_list_detail_and_runs() {
 }
 
 #[tokio::test]
-async fn boards_runs_returns_run_list_items_with_board_columns() {
+async fn list_runs_returns_run_list_items() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
     let run_id = create_and_start_run(&app, MINIMAL_DOT).await;
 
-    // Set run to running so it appears on the board
     {
         let id = run_id.parse::<RunId>().unwrap();
         let mut runs = state.runs.lock().expect("runs lock poisoned");
@@ -10608,7 +13121,7 @@ async fn boards_runs_returns_run_list_items_with_board_columns() {
 
     let req = Request::builder()
         .method("GET")
-        .uri(api("/boards/runs"))
+        .uri(api("/runs"))
         .body(Body::empty())
         .unwrap();
     let response = app.oneshot(req).await.unwrap();
@@ -10617,7 +13130,7 @@ async fn boards_runs_returns_run_list_items_with_board_columns() {
     let item = data
         .iter()
         .find(|i| run_json_id(i) == Some(&run_id))
-        .expect("run should be in board");
+        .expect("run should be in list");
     assert!(item["goal"].is_string());
     assert!(item["title"].is_string());
     assert!(item["repository"].is_object());
@@ -10632,12 +13145,12 @@ async fn boards_runs_returns_run_list_items_with_board_columns() {
 }
 
 #[tokio::test]
-async fn boards_runs_excludes_removing_status() {
+async fn list_runs_excludes_removing_status_by_default() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
     let run_id = fixtures::RUN_1;
 
-    // A run in Removing status should not appear on the board
+    // A run in Removing status should not appear by default
     create_durable_run_with_events(&state, run_id, &[
         workflow_event::Event::RunSubmitted {
             definition_blob: None,
@@ -10650,20 +13163,37 @@ async fn boards_runs_excludes_removing_status() {
 
     let req = Request::builder()
         .method("GET")
-        .uri(api("/boards/runs"))
+        .uri(api("/runs"))
+        .body(Body::empty())
+        .unwrap();
+    let response = app.clone().oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    let data = body["data"].as_array().expect("data should be array");
+    assert!(
+        !data
+            .iter()
+            .any(|i| run_json_id(i) == Some(&run_id.to_string())),
+        "removing run should not appear by default"
+    );
+
+    // ?status=removing opts the bucket in.
+    let req = Request::builder()
+        .method("GET")
+        .uri(api("/runs?status=removing"))
         .body(Body::empty())
         .unwrap();
     let response = app.oneshot(req).await.unwrap();
     let body = response_json!(response, StatusCode::OK).await;
     let data = body["data"].as_array().expect("data should be array");
-    let found = data
-        .iter()
-        .any(|i| i["run_id"].as_str() == Some(&run_id.to_string()));
-    assert!(!found, "removing run should not appear on the board");
+    assert!(
+        data.iter()
+            .any(|i| run_json_id(i) == Some(&run_id.to_string())),
+        "?status=removing should opt removing runs in"
+    );
 }
 
 #[tokio::test]
-async fn boards_runs_excludes_archived_by_default() {
+async fn list_runs_excludes_archived_by_default() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
     let run_id = fixtures::RUN_1;
@@ -10691,7 +13221,7 @@ async fn boards_runs_excludes_archived_by_default() {
 
     let req = Request::builder()
         .method("GET")
-        .uri(api("/boards/runs"))
+        .uri(api("/runs"))
         .body(Body::empty())
         .unwrap();
     let response = app.oneshot(req).await.unwrap();
@@ -10700,18 +13230,13 @@ async fn boards_runs_excludes_archived_by_default() {
     assert!(
         !data
             .iter()
-            .any(|i| i["run_id"].as_str() == Some(&run_id.to_string())),
+            .any(|i| run_json_id(i) == Some(&run_id.to_string())),
         "archived run should be hidden when include_archived is unset",
-    );
-    let columns = body["columns"].as_array().expect("columns should be array");
-    assert!(
-        !columns.iter().any(|c| c["id"].as_str() == Some("archived")),
-        "archived column should not appear in default response",
     );
 }
 
 #[tokio::test]
-async fn boards_runs_includes_archived_when_flag_set() {
+async fn list_runs_includes_archived_when_flag_set() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
     let archived_id = fixtures::RUN_1;
@@ -10759,7 +13284,7 @@ async fn boards_runs_includes_archived_when_flag_set() {
 
     let req = Request::builder()
         .method("GET")
-        .uri(api("/boards/runs?include_archived=true"))
+        .uri(api("/runs?include_archived=true"))
         .body(Body::empty())
         .unwrap();
     let response = app.oneshot(req).await.unwrap();
@@ -10784,21 +13309,6 @@ async fn boards_runs_includes_archived_when_flag_set() {
         run_json_status(succeeded_item)["kind"].as_str().unwrap(),
         "succeeded"
     );
-
-    let columns = body["columns"].as_array().expect("columns should be array");
-    let column_ids: Vec<_> = columns
-        .iter()
-        .map(|c| c["id"].as_str().unwrap().to_string())
-        .collect();
-    assert_eq!(column_ids, vec![
-        "queued",
-        "initializing",
-        "running",
-        "blocked",
-        "succeeded",
-        "failed",
-        "archived",
-    ],);
 }
 
 #[tokio::test]
@@ -10878,7 +13388,7 @@ async fn get_run_exposes_canonical_operator_statuses() {
 }
 
 #[tokio::test]
-async fn boards_runs_maps_statuses_to_columns() {
+async fn list_runs_preserves_underlying_run_status_payloads() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
 
@@ -10973,7 +13483,7 @@ async fn boards_runs_maps_statuses_to_columns() {
 
     let req = Request::builder()
         .method("GET")
-        .uri(api("/boards/runs"))
+        .uri(api("/runs"))
         .body(Body::empty())
         .unwrap();
     let response = app.oneshot(req).await.unwrap();
@@ -11019,23 +13529,12 @@ async fn boards_runs_maps_statuses_to_columns() {
     );
     assert!(
         blocked_item["current_question"].is_object(),
-        "blocked board item should include the current question"
-    );
-
-    // Verify columns are included in the response
-    let columns = body["columns"].as_array().expect("columns should be array");
-    assert!(!columns.is_empty());
-    assert!(columns.iter().any(|c| c["id"].as_str() == Some("running")));
-    assert!(columns.iter().any(|c| c["id"].as_str() == Some("blocked")));
-    assert!(
-        columns
-            .iter()
-            .any(|c| c["id"].as_str() == Some("succeeded"))
+        "blocked item should include the current question"
     );
 }
 
 #[tokio::test]
-async fn boards_runs_includes_live_board_metadata_from_run_state() {
+async fn list_runs_includes_live_metadata_from_run_state() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
     let run_id = create_and_start_run(&app, MINIMAL_DOT)
@@ -11086,7 +13585,7 @@ async fn boards_runs_includes_live_board_metadata_from_run_state() {
 
     let req = Request::builder()
         .method("GET")
-        .uri(api("/boards/runs"))
+        .uri(api("/runs"))
         .body(Body::empty())
         .unwrap();
     let response = app.oneshot(req).await.unwrap();
@@ -11107,7 +13606,7 @@ async fn boards_runs_includes_live_board_metadata_from_run_state() {
 }
 
 #[tokio::test]
-async fn boards_runs_page_limit_preserves_metadata_for_paged_items() {
+async fn list_runs_page_limit_preserves_metadata_for_paged_items() {
     let state = test_app_state();
     let app = crate::test_support::build_test_router(Arc::clone(&state));
 
@@ -11146,7 +13645,7 @@ async fn boards_runs_page_limit_preserves_metadata_for_paged_items() {
 
     let req = Request::builder()
         .method("GET")
-        .uri(api("/boards/runs?page[limit]=1"))
+        .uri(api("/runs?page[limit]=1"))
         .body(Body::empty())
         .unwrap();
     let response = app.oneshot(req).await.unwrap();
@@ -11164,6 +13663,213 @@ async fn boards_runs_page_limit_preserves_metadata_for_paged_items() {
 }
 
 #[tokio::test]
+async fn list_runs_status_filter_accepts_repeated_values() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+
+    // Running run (will map to BoardColumn::Running)
+    let running_id = fixtures::RUN_1;
+    create_durable_run_with_events(&state, running_id, &[
+        workflow_event::Event::RunSubmitted {
+            definition_blob: None,
+        },
+        workflow_event::Event::RunStarting,
+        workflow_event::Event::RunRunning,
+    ])
+    .await;
+
+    // Succeeded run (BoardColumn::Succeeded)
+    let succeeded_id = fixtures::RUN_2;
+    create_durable_run_with_events(&state, succeeded_id, &[
+        workflow_event::Event::RunSubmitted {
+            definition_blob: None,
+        },
+        workflow_event::Event::RunStarting,
+        workflow_event::Event::RunRunning,
+        workflow_event::Event::WorkflowRunCompleted {
+            timing:               fabro_types::RunTiming::wall_only(1000),
+            artifact_count:       0,
+            status:               "succeeded".to_string(),
+            reason:               SuccessReason::Completed,
+            total_usd_micros:     None,
+            final_git_commit_sha: None,
+            final_patch:          None,
+            diff_summary:         None,
+            billing:              None,
+        },
+    ])
+    .await;
+
+    // Pending run (BoardColumn::Pending via Submitted)
+    let pending_id = fixtures::RUN_3;
+    create_durable_run_with_events(&state, pending_id, &[workflow_event::Event::RunSubmitted {
+        definition_blob: None,
+    }])
+    .await;
+
+    // Single value: only running.
+    let req = Request::builder()
+        .method("GET")
+        .uri(api("/runs?status=running"))
+        .body(Body::empty())
+        .unwrap();
+    let response = app.clone().oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    let ids: Vec<&str> = body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(run_json_id)
+        .collect();
+    assert!(ids.contains(&running_id.to_string().as_str()));
+    assert!(!ids.contains(&succeeded_id.to_string().as_str()));
+    assert!(!ids.contains(&pending_id.to_string().as_str()));
+
+    // Repeated values: running + succeeded.
+    let req = Request::builder()
+        .method("GET")
+        .uri(api("/runs?status=running&status=succeeded"))
+        .body(Body::empty())
+        .unwrap();
+    let response = app.oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    let ids: Vec<&str> = body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(run_json_id)
+        .collect();
+    assert!(ids.contains(&running_id.to_string().as_str()));
+    assert!(ids.contains(&succeeded_id.to_string().as_str()));
+    assert!(!ids.contains(&pending_id.to_string().as_str()));
+}
+
+#[tokio::test]
+async fn list_runs_sort_direction_reverses_order_with_stable_tiebreak() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+
+    // All fixtures share timestamp=0; the id-desc tiebreak controls order.
+    let ids = [fixtures::RUN_1, fixtures::RUN_2, fixtures::RUN_3];
+    for id in &ids {
+        create_durable_run_with_events(&state, *id, &[
+            workflow_event::Event::RunSubmitted {
+                definition_blob: None,
+            },
+            workflow_event::Event::RunStarting,
+            workflow_event::Event::RunRunning,
+        ])
+        .await;
+    }
+
+    // Default (sort=created_at desc): tiebreak puts higher ids first.
+    let req = Request::builder()
+        .method("GET")
+        .uri(api("/runs"))
+        .body(Body::empty())
+        .unwrap();
+    let response = app.clone().oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    let observed: Vec<String> = body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(run_json_id)
+        .map(str::to_string)
+        .collect();
+    let mut expected: Vec<String> = ids.iter().map(std::string::ToString::to_string).collect();
+    expected.sort_by(|a, b| b.cmp(a)); // desc by id
+    assert_eq!(observed, expected, "default desc order with id tiebreak");
+
+    // Ascending: timestamps still tie, then id desc tiebreak still applies.
+    let req = Request::builder()
+        .method("GET")
+        .uri(api("/runs?sort=created_at&direction=asc"))
+        .body(Body::empty())
+        .unwrap();
+    let response = app.oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    let observed: Vec<String> = body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(run_json_id)
+        .map(str::to_string)
+        .collect();
+    assert_eq!(
+        observed, expected,
+        "asc still uses id-desc tiebreak for tied keys"
+    );
+}
+
+#[tokio::test]
+async fn list_runs_sort_by_status_groups_by_bucket() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+
+    // BoardColumn enum order: pending < runnable < initializing < running <
+    // blocked < succeeded < failed < archived < removing. Use three distinct
+    // buckets.
+    let pending_id = fixtures::RUN_1;
+    create_durable_run_with_events(&state, pending_id, &[workflow_event::Event::RunSubmitted {
+        definition_blob: None,
+    }])
+    .await;
+
+    let succeeded_id = fixtures::RUN_2;
+    create_durable_run_with_events(&state, succeeded_id, &[
+        workflow_event::Event::RunSubmitted {
+            definition_blob: None,
+        },
+        workflow_event::Event::RunStarting,
+        workflow_event::Event::RunRunning,
+        workflow_event::Event::WorkflowRunCompleted {
+            timing:               fabro_types::RunTiming::wall_only(1000),
+            artifact_count:       0,
+            status:               "succeeded".to_string(),
+            reason:               SuccessReason::Completed,
+            total_usd_micros:     None,
+            final_git_commit_sha: None,
+            final_patch:          None,
+            diff_summary:         None,
+            billing:              None,
+        },
+    ])
+    .await;
+
+    let running_id = fixtures::RUN_3;
+    create_durable_run_with_events(&state, running_id, &[
+        workflow_event::Event::RunSubmitted {
+            definition_blob: None,
+        },
+        workflow_event::Event::RunStarting,
+        workflow_event::Event::RunRunning,
+    ])
+    .await;
+
+    // sort=status asc: pending < running < succeeded.
+    let req = Request::builder()
+        .method("GET")
+        .uri(api("/runs?sort=status&direction=asc"))
+        .body(Body::empty())
+        .unwrap();
+    let response = app.oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    let observed: Vec<String> = body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(run_json_id)
+        .map(str::to_string)
+        .collect();
+    assert_eq!(observed, vec![
+        pending_id.to_string(),
+        running_id.to_string(),
+        succeeded_id.to_string(),
+    ]);
+}
+
+#[tokio::test]
 async fn filtered_global_events_streams_only_matching_run_ids() {
     let run_one = fixtures::RUN_1;
     let run_two = fixtures::RUN_2;
@@ -11175,14 +13881,18 @@ async fn filtered_global_events_streams_only_matching_run_ids() {
         .send(test_event_envelope(
             1,
             run_two,
-            EventBody::RunQueued(fabro_types::run_event::RunStatusEffectProps::default()),
+            EventBody::RunRunnable(fabro_types::run_event::RunRunnableProps {
+                source: fabro_types::RunRunnableSource::StartRequested,
+            }),
         ))
         .unwrap();
     event_tx
         .send(test_event_envelope(
             2,
             run_one,
-            EventBody::RunQueued(fabro_types::run_event::RunStatusEffectProps::default()),
+            EventBody::RunRunnable(fabro_types::run_event::RunRunnableProps {
+                source: fabro_types::RunRunnableSource::StartRequested,
+            }),
         ))
         .unwrap();
     drop(event_tx);

@@ -277,6 +277,7 @@ impl RunLifecycle<WorkflowGraph> for GitLifecycle {
             shadow_sha,
             &self.run_options.checkpoint_exclude_globs(),
             &git_author,
+            self.run_options.checkpoint_skip_git_hooks(),
         )
         .await;
 
@@ -729,6 +730,7 @@ mod tests {
             manifest_blob: None,
             git: None,
             fork_source_ref: None,
+            retried_from: None,
             parent_id: None,
             web_url: None,
         })

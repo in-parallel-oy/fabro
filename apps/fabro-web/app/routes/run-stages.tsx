@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import {
+  ArrowDownTrayIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  ClipboardDocumentIcon,
   CpuChipIcon,
 } from "@heroicons/react/16/solid";
 import { CircleStackIcon, ClockIcon } from "@heroicons/react/20/solid";
@@ -25,10 +27,17 @@ import type {
   ThreadDnaSelection,
 } from "../components/event-debug";
 import { StageContext } from "../components/stage-context";
+import { StageInsightsSidebar } from "../components/stage-insights-sidebar";
 import { StageSidebar } from "../components/stage-sidebar";
 import type { Stage } from "../components/stage-sidebar";
 import { EmptyState } from "../components/state";
-import { Tooltip } from "../components/ui";
+import {
+  HoverCard,
+  PopoverHeader,
+  PopoverRow,
+  PopoverRows,
+  Tooltip,
+} from "../components/ui";
 import { ConditionalDecision } from "../components/stage-renderers/conditional-decision";
 import { FanInResults } from "../components/stage-renderers/fan-in-results";
 import {
@@ -54,14 +63,16 @@ import {
 import {
   useRun,
   useRunEventsList,
+  useRunStageContextWindow,
   useRunStageEvents,
   useRunStageLog,
   useRunStages,
+  useRunState,
 } from "../lib/queries";
 import { STAGE_ACTIVITY_EVENT_TYPES, type StageActivityEventType } from "../lib/run-events";
 import { mapRunStagesToSidebarStages } from "../lib/stage-sidebar";
 import { getNumber, getString, type UnknownRecord } from "../lib/unknown";
-import type { EventEnvelope, StageHandler } from "@qltysh/fabro-api-client";
+import type { EventEnvelope, StageHandler, StageModelUsage } from "@qltysh/fabro-api-client";
 
 export const handle = { wide: true, fullHeight: true };
 
@@ -69,6 +80,8 @@ type TurnType =
   | { kind: "system"; ts: string; content: string }
   | { kind: "steer"; ts: string; content: string }
   | { kind: "interrupt"; ts: string; content: string }
+  | { kind: "pair_user"; ts: string; content: string }
+  | { kind: "pair_system"; ts: string; content: string }
   | { kind: "assistant"; ts: string; content: string; inputTokens: number; outputTokens: number }
   | { kind: "tool"; ts: string; toolName: string; input: string; result: string; isError: boolean; durationMs: number }
   | {
@@ -97,13 +110,24 @@ type PanelSelection = ThreadDnaSelection;
 
 const STAGE_ACTIVITY_EVENT_SET = new Set<string>(STAGE_ACTIVITY_EVENT_TYPES);
 
-const EVENT_KINDS = ["system", "steer", "interrupt", "assistant", "tool", "command"] as const;
+const EVENT_KINDS = [
+  "system",
+  "steer",
+  "interrupt",
+  "pair_user",
+  "pair_system",
+  "assistant",
+  "tool",
+  "command",
+] as const;
 type EventKind = (typeof EVENT_KINDS)[number];
 
 const EVENT_KIND_LABEL: Record<EventKind, string> = {
   system: "System",
   steer: "Steer",
   interrupt: "Interrupt",
+  pair_user: "Human",
+  pair_system: "System",
   assistant: "Agent",
   tool: "Tool",
   command: "Command",
@@ -231,6 +255,20 @@ export function eventsToActivity(events: EventEnvelope[], stageId: string): Turn
       case "agent.interrupt.injected":
         turns.push({ kind: "interrupt", ts: e.ts, content: "Agent interrupted" });
         break;
+      case "agent.pair.user_message": {
+        const text = getString(props, "text") ?? e.text ?? "";
+        if (text) {
+          turns.push({ kind: "pair_user", ts: e.ts, content: text });
+        }
+        break;
+      }
+      case "agent.pair.system_message": {
+        const text = getString(props, "text") ?? e.text ?? "";
+        if (text) {
+          turns.push({ kind: "pair_system", ts: e.ts, content: text });
+        }
+        break;
+      }
       case "agent.tool.started": {
         const callId = getString(props, "tool_call_id") ?? e.tool_call_id ?? "";
         const args = props.arguments ?? e.arguments;
@@ -423,6 +461,26 @@ export function buildThreadDnaItems(
           });
           prevEndMs = tsMs;
           break;
+        case "pair_user":
+          out.push({
+            category: "user",
+            label: "pair.user",
+            startMs: Math.max(0, tsMs - anchorMs),
+            durationMs: 0,
+            selection,
+          });
+          prevEndMs = tsMs;
+          break;
+        case "pair_system":
+          out.push({
+            category: "system",
+            label: "pair.system",
+            startMs: Math.max(0, tsMs - anchorMs),
+            durationMs: 0,
+            selection,
+          });
+          prevEndMs = tsMs;
+          break;
         case "assistant": {
           // turn.ts is the moment the assistant message arrived (end of
           // generation). Its bar represents the gap from the last activity
@@ -492,23 +550,37 @@ export function buildThreadDnaItems(
   return out;
 }
 
-const STAGE_MODEL_EVENT_NAMES = new Set([
-  "stage.prompt",
-  "agent.session.activated",
-]);
-
-export function extractStageModel(
-  events: EventEnvelope[],
-  stageId: string,
+export function formatStageModelUsageLabel(
+  providerUsed: StageModelUsage | null | undefined,
 ): string | null {
-  let model: string | null = null;
-  for (const e of events) {
-    if (activityEventStageId(e) !== stageId) continue;
-    if (!e.event || !STAGE_MODEL_EVENT_NAMES.has(e.event)) continue;
-    const candidate = getString(e.properties ?? {}, "model");
-    if (candidate) model = candidate;
-  }
-  return model;
+  const model = providerUsed?.model;
+  if (!model) return null;
+  const effort = providerUsed.reasoning_effort;
+  return effort ? `${model}[${effort}]` : model;
+}
+
+function ModelUsagePopover({ providerUsed }: { providerUsed: StageModelUsage }) {
+  return (
+    <>
+      <PopoverHeader>Model</PopoverHeader>
+      <PopoverRows>
+        {providerUsed.provider && (
+          <PopoverRow label="Provider">{providerUsed.provider}</PopoverRow>
+        )}
+        {providerUsed.model && (
+          <PopoverRow label="Model">
+            <span className="break-all font-mono">{providerUsed.model}</span>
+          </PopoverRow>
+        )}
+        {providerUsed.reasoning_effort && (
+          <PopoverRow label="Reasoning">{providerUsed.reasoning_effort}</PopoverRow>
+        )}
+        {providerUsed.speed && (
+          <PopoverRow label="Speed">{providerUsed.speed}</PopoverRow>
+        )}
+      </PopoverRows>
+    </>
+  );
 }
 
 function turnLabel(turn: TurnType): string {
@@ -519,6 +591,10 @@ function turnLabel(turn: TurnType): string {
       return "Steer";
     case "interrupt":
       return "Interrupt";
+    case "pair_user":
+      return "Human";
+    case "pair_system":
+      return "System";
     case "assistant":
       return "Agent";
     case "tool":
@@ -536,6 +612,10 @@ function turnTone(turn: TurnType): string {
       return "bg-overlay-strong text-fg-2";
     case "interrupt":
       return "bg-coral/15 text-coral";
+    case "pair_user":
+      return "bg-overlay-strong text-fg-2";
+    case "pair_system":
+      return "bg-amber/15 text-amber";
     case "assistant":
       return "bg-teal-500/15 text-teal-500";
     case "tool":
@@ -582,6 +662,8 @@ export function turnSummary(turn: TurnType): string {
     case "system":
     case "steer":
     case "interrupt":
+    case "pair_user":
+    case "pair_system":
     case "assistant":
       return oneLine(turn.content);
     case "tool":
@@ -611,6 +693,8 @@ export function turnMetric(turn: TurnType): string | null {
     case "steer":
     case "interrupt":
     case "system":
+    case "pair_user":
+    case "pair_system":
       return null;
   }
 }
@@ -620,6 +704,8 @@ export function searchableText(turn: TurnType): string {
     case "system":
     case "steer":
     case "interrupt":
+    case "pair_user":
+    case "pair_system":
     case "assistant":
       return turn.content;
     case "tool":
@@ -775,6 +861,8 @@ function EventDetails({
       {(turn.kind === "system" ||
         turn.kind === "steer" ||
         turn.kind === "interrupt" ||
+        turn.kind === "pair_user" ||
+        turn.kind === "pair_system" ||
         turn.kind === "assistant") && (
         <DetailField label="Content">
           <Markdown content={turn.content} />
@@ -1148,6 +1236,66 @@ function EventsTabToggle({
   );
 }
 
+function EventExportActions({
+  events,
+  runId,
+  stageId,
+  className,
+}: {
+  events: EventEnvelope[];
+  runId: string;
+  stageId: string;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const disabled = events.length === 0;
+  const buttonClass =
+    "inline-flex size-6 items-center justify-center rounded text-fg-muted transition-colors hover:bg-overlay hover:text-fg-2 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-fg-muted";
+  return (
+    <div className={`flex items-center gap-1 ${className ?? ""}`}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(JSON.stringify(events, null, 2));
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1200);
+          } catch {
+            // ignore — clipboard may be unavailable in some contexts
+          }
+        }}
+        title={copied ? "Copied!" : "Copy loaded events as JSON"}
+        aria-label="Copy loaded events as JSON"
+        className={buttonClass}
+      >
+        <ClipboardDocumentIcon className="size-3.5" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          const jsonl = events.map((e) => JSON.stringify(e)).join("\n");
+          const blob = new Blob([jsonl], { type: "application/x-ndjson" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${runId}-${stageId}-events.jsonl`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        }}
+        title="Download loaded events as JSONL"
+        aria-label="Download loaded events as JSONL"
+        className={buttonClass}
+      >
+        <ArrowDownTrayIcon className="size-3.5" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 function EventsToolbar({
   tab,
   renderer,
@@ -1163,7 +1311,10 @@ function EventsToolbar({
   onSearchChange,
   filteredCount,
   totalCount,
-  model,
+  providerUsed,
+  events,
+  runId,
+  stageId,
 }: {
   tab: EventsTab;
   renderer: StageRenderer;
@@ -1179,7 +1330,10 @@ function EventsToolbar({
   onSearchChange: (value: string) => void;
   filteredCount: number;
   totalCount: number;
-  model: string | null;
+  providerUsed: StageModelUsage | null;
+  events: EventEnvelope[];
+  runId: string;
+  stageId: string;
 }) {
   // Filters apply to: the agent transcript (filter event kinds) and the Debug
   // tab (filter event categories). Specialized renderers (human, parallel,
@@ -1200,6 +1354,11 @@ function EventsToolbar({
     else onDebugCategoriesChange([]);
     onSearchChange("");
   }
+
+  const modelUsageLabel = useMemo(
+    () => formatStageModelUsageLabel(providerUsed),
+    [providerUsed],
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pb-3">
@@ -1246,16 +1405,19 @@ function EventsToolbar({
             : `${totalCount.toLocaleString()} events`}
         </span>
       )}
-      {model && (
-        <span
+      {modelUsageLabel && providerUsed && (
+        <HoverCard
           className={`inline-flex items-center gap-1.5 text-xs text-fg-muted ${
             showFilters ? "" : "ml-auto"
           }`}
-          title="LLM model used for this stage"
+          content={<ModelUsagePopover providerUsed={providerUsed} />}
         >
           <CpuChipIcon className="size-3.5" aria-hidden="true" />
-          <span className="font-mono">{model}</span>
-        </span>
+          <span className="font-mono">{modelUsageLabel}</span>
+        </HoverCard>
+      )}
+      {tab === "debug" && (
+        <EventExportActions events={events} runId={runId} stageId={stageId} />
       )}
       {tab === "primary" && renderer === "command" && commandTurn && (
         <CommandStatus turn={commandTurn} />
@@ -1280,6 +1442,18 @@ export default function RunStages() {
     runQuery.data?.timestamps.started_at ??
     runQuery.data?.timestamps.created_at;
   const stageEventsQuery = useRunStageEvents(id, selectedStageId);
+  // Insights sidebar only renders for agent stages; fetch projection + context
+  // window only when the user is on one to keep the hot path lean.
+  const isAgentStage = selectedStage?.handler === "agent";
+  const runStateQuery = useRunState(isAgentStage ? id : undefined);
+  const contextWindowQuery = useRunStageContextWindow(
+    isAgentStage ? id : undefined,
+    isAgentStage ? selectedStageId : undefined,
+  );
+  const stageProjection =
+    isAgentStage && selectedStageId
+      ? runStateQuery.data?.stages[selectedStageId]
+      : undefined;
   const turns = useMemo(
     () =>
       selectedStageId
@@ -1370,14 +1544,6 @@ export default function RunStages() {
     }
     return Array.from(set).sort();
   }, [debugEvents]);
-  const stageModel = useMemo(
-    () =>
-      selectedStageId
-        ? extractStageModel(stageEventsQuery.data ?? [], selectedStageId)
-        : null,
-    [stageEventsQuery.data, selectedStageId],
-  );
-
   const filteredDebugEvents = useMemo<EventEnvelope[]>(() => {
     const useCategoryFilter = selectedDebugCategories.length > 0;
     const cats = new Set(selectedDebugCategories);
@@ -1417,8 +1583,8 @@ export default function RunStages() {
   }
 
   return (
-    <div className="-mr-4 -mt-6 flex min-h-0 flex-1 sm:-mr-6 lg:-mr-8">
-      <div className="shrink-0 pb-6 pr-3 pt-6">
+    <div className="-mr-4 -mt-3 flex min-h-0 flex-1 sm:-mr-6 lg:-mr-8">
+      <div className="shrink-0 pb-6 pr-3 pt-3">
         <StageSidebar stages={stages} runId={id} selectedStageId={selectedStage.id} />
       </div>
 
@@ -1428,6 +1594,23 @@ export default function RunStages() {
           className="absolute inset-x-0 top-0 -bottom-6 bg-line"
         />
       </div>
+
+      {isAgentStage && (
+        <>
+          <div className="shrink-0 px-3 pb-6 pt-3">
+            <StageInsightsSidebar
+              stage={stageProjection}
+              contextWindow={contextWindowQuery.data}
+            />
+          </div>
+          <div className="relative w-px shrink-0">
+            <div
+              aria-hidden="true"
+              className="absolute inset-x-0 top-0 -bottom-6 bg-line"
+            />
+          </div>
+        </>
+      )}
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col pt-3">
         <div className="shrink-0 border-b border-line">
@@ -1447,7 +1630,10 @@ export default function RunStages() {
               onSearchChange={setSearch}
               filteredCount={effectiveTab === "primary" ? filteredTurns.length : filteredDebugEvents.length}
               totalCount={effectiveTab === "primary" ? turns.length : debugEvents.length}
-              model={stageModel}
+              providerUsed={selectedStage.providerUsed}
+              events={stageEventsQuery.data ?? []}
+              runId={id ?? ""}
+              stageId={selectedStageId ?? ""}
             />
             {effectiveTab === "debug" && (
               <div className="pb-3">

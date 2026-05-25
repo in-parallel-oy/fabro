@@ -9,7 +9,7 @@ use fabro_workflow::event::build_redacted_event_payload;
 use super::super::{
     ApiError, AppState, AppendEventResponse, BroadcastStream, Event, EventBody, EventEnvelope,
     EventPayload, HashSet, IntoResponse, Json, KeepAlive, PaginatedEventList, PaginationMeta, Path,
-    Query, RequireRunScoped, RequireRunScopedOrRunTools, RequireRunStageScoped, RequiredUser,
+    Query, RequireRunManagementTarget, RequireRunScoped, RequireRunStageScoped, RequiredUser,
     Response, Router, RunEvent, RunId, Sse, State, StatusCode, StreamExt, UnboundedReceiverStream,
     broadcast, get, mpsc, parse_run_id_path, parse_stage_id_path, redact_jsonl_line,
     reject_if_archived, update_live_run_from_event,
@@ -198,7 +198,7 @@ async fn append_run_event(
 }
 
 async fn list_run_events(
-    RequireRunScopedOrRunTools(id, _actor): RequireRunScopedOrRunTools,
+    RequireRunManagementTarget(id, _actor): RequireRunManagementTarget,
     State(state): State<Arc<AppState>>,
     Query(params): Query<EventListParams>,
 ) -> Response {
@@ -214,7 +214,10 @@ async fn list_run_events(
                 events.truncate(limit);
                 Json(PaginatedEventList {
                     data: events,
-                    meta: PaginationMeta { has_more },
+                    meta: PaginationMeta {
+                        has_more,
+                        total: None,
+                    },
                 })
                 .into_response()
             }
@@ -247,7 +250,10 @@ async fn list_run_stage_events(
                 events.truncate(limit);
                 Json(PaginatedEventList {
                     data: events,
-                    meta: PaginationMeta { has_more },
+                    meta: PaginationMeta {
+                        has_more,
+                        total: None,
+                    },
                 })
                 .into_response()
             }
@@ -567,6 +573,7 @@ mod stage_events_tests {
             manifest_blob:    None,
             git:              None,
             fork_source_ref:  None,
+            retried_from:     None,
             parent_id:        None,
             web_url:          None,
         })
@@ -677,6 +684,10 @@ mod stage_events_tests {
         for event in [
             workflow_event::Event::RunSubmitted {
                 definition_blob: None,
+            },
+            workflow_event::Event::RunRunnable {
+                source: fabro_types::RunRunnableSource::StartRequested,
+                actor:  None,
             },
             workflow_event::Event::RunStarting,
             workflow_event::Event::RunRunning,

@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router";
 import { graphTheme } from "../lib/graph-theme";
 import { ApiError } from "../lib/api-client";
 import { useRun, useRunGraph, useRunStages } from "../lib/queries";
 import { RunSummaryPanel } from "../components/run-summary-panel";
+import { StagePopover } from "../components/stage-popover";
 import { StageSidebar } from "../components/stage-sidebar";
+import { hoverCardStyle } from "../components/ui";
 import {
   GRAPH_DEFAULT_ZOOM_INDEX,
   GRAPH_ZOOM_STEPS,
@@ -16,7 +19,15 @@ import {
   SUCCEEDED_STAGE_STATES,
   aggregateGraphNodeStatus,
   mapRunStagesToSidebarStages,
+  type Stage,
 } from "../lib/stage-sidebar";
+
+const HOVER_OPEN_DELAY_MS = 200;
+
+interface NodeHover {
+  stage: Stage;
+  rect:  DOMRect;
+}
 
 export const handle = { wide: true };
 
@@ -54,6 +65,15 @@ export default function RunOverview() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const dragState = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number } | null>(null);
   const zoom = GRAPH_ZOOM_STEPS[zoomIndex];
+  const [hoveredNode, setHoveredNode] = useState<NodeHover | null>(null);
+
+  // Per-stage lookup keyed by latest visit's `stageId`, used when the SVG's
+  // imperative hover handlers need to resolve a node to its sidebar Stage.
+  const stageById = useMemo(() => {
+    const map = new Map<string, Stage>();
+    for (const stage of stages) map.set(stage.id, stage);
+    return map;
+  }, [stages]);
 
   // Render SVG with stage annotations
   useEffect(() => {
@@ -83,14 +103,37 @@ export default function RunOverview() {
     }
 
     const ns = "http://www.w3.org/2000/svg";
+    let openTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearOpenTimer = () => {
+      if (openTimer !== null) {
+        clearTimeout(openTimer);
+        openTimer = null;
+      }
+    };
+
     for (const group of svg.querySelectorAll(".node")) {
       const nodeId = group.querySelector("title")?.textContent?.trim();
       if (!nodeId) continue;
 
       const stageId = dotIdToStageId.get(nodeId);
+      const stage = stageId ? stageById.get(stageId) : undefined;
       if (stageId) {
         (group as SVGElement).style.cursor = "pointer";
         group.addEventListener("click", () => navigate(`/runs/${id}/stages/${stageId}`));
+      }
+      if (stage) {
+        group.addEventListener("mouseenter", () => {
+          clearOpenTimer();
+          const target = group as SVGGElement;
+          openTimer = setTimeout(() => {
+            openTimer = null;
+            setHoveredNode({ stage, rect: target.getBoundingClientRect() });
+          }, HOVER_OPEN_DELAY_MS);
+        });
+        group.addEventListener("mouseleave", () => {
+          clearOpenTimer();
+          setHoveredNode(null);
+        });
       }
 
       // Color exit node based on run outcome
@@ -154,7 +197,12 @@ export default function RunOverview() {
         }
       }
     }
-  }, [stages, graphSvg, id, navigate, terminalOutcome]);
+
+    return () => {
+      clearOpenTimer();
+      setHoveredNode(null);
+    };
+  }, [stages, stageById, graphSvg, id, navigate, terminalOutcome]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest("button")) return;
@@ -243,6 +291,22 @@ export default function RunOverview() {
           />
         )}
       </div>
+      {hoveredNode &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            role="tooltip"
+            style={hoverCardStyle(hoveredNode.rect)}
+            className="pointer-events-none fixed z-50 max-w-[18rem] rounded-lg bg-panel p-3 text-xs text-fg-2 shadow-xl outline-1 -outline-offset-1 outline-line-strong"
+          >
+            <StagePopover
+              runId={id!}
+              stage={hoveredNode.stage}
+              duration={hoveredNode.stage.duration}
+            />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

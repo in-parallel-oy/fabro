@@ -1093,12 +1093,21 @@ paths:
       operationId: listRuns
       tags: [Runs]
       summary: List Runs
-      description: Returns durable run summaries from the backing store, including runs persisted before the current server boot. Archived runs are hidden by default; pass `include_archived=true` to include them in the response.
+      description: |
+        Returns durable run summaries from the backing store, including runs
+        persisted before the current server boot. Supports per-status filtering
+        and sorting for both list and kanban renderings. Archived runs are
+        hidden by default; pass `include_archived=true` (or `status=archived`)
+        to include them. Runs in the `removing` bucket are hidden unless
+        explicitly requested via `status=removing`.
       parameters:
         - $ref: "#/components/parameters/PageLimit"
         - $ref: "#/components/parameters/PageOffset"
         - $ref: "#/components/parameters/IncludeArchived"
         - $ref: "#/components/parameters/ParentRunId"
+        - $ref: "#/components/parameters/RunStatusFilter"
+        - $ref: "#/components/parameters/RunsSort"
+        - $ref: "#/components/parameters/RunsSortDirection"
       responses:
         "200":
           description: Paginated durable run summaries
@@ -1126,6 +1135,163 @@ paths:
                 $ref: "#/components/schemas/Run"
         "400":
           description: Invalid Graphviz source
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/runs/archive:
+    post:
+      operationId: batchArchiveRuns
+      tags: [Runs]
+      summary: Archive Runs
+      description: >
+        Marks up to 250 terminal runs as archived in one fail-soft,
+        non-transactional request. Each run is processed independently and
+        successful items emit the same per-run archive events as
+        `POST /api/v1/runs/{id}/archive`. A valid batch returns `200` even
+        when some items fail; inspect `results` and `summary` for per-run
+        outcomes. Invalid request bodies are rejected before mutating any run.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchRunLifecycleRequest"
+      responses:
+        "200":
+          description: Batch processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchRunLifecycleResponse"
+        "400":
+          description: Invalid batch request
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Request-level server error
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/runs/delete:
+    post:
+      operationId: batchDeleteRuns
+      tags: [Runs]
+      summary: Delete Runs
+      description: >
+        Deletes up to 250 runs in one fail-soft, non-transactional request.
+        Each run is processed independently. A valid batch returns `200` even
+        when some items fail; inspect `results` and `summary` for per-run
+        outcomes. Invalid request bodies are rejected before mutating any run.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDeleteRunsRequest"
+      responses:
+        "200":
+          description: Batch processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchDeleteRunsResponse"
+        "400":
+          description: Invalid batch request
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Request-level server error
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/runs/unarchive:
+    post:
+      operationId: batchUnarchiveRuns
+      tags: [Runs]
+      summary: Unarchive Runs
+      description: >
+        Restores up to 250 archived runs in one fail-soft, non-transactional
+        request. Each run is processed independently and successful items emit
+        the same per-run unarchive events as
+        `POST /api/v1/runs/{id}/unarchive`. A valid batch returns `200` even
+        when some items fail; inspect `results` and `summary` for per-run
+        outcomes. Invalid request bodies are rejected before mutating any run.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchRunLifecycleRequest"
+      responses:
+        "200":
+          description: Batch processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchRunLifecycleResponse"
+        "400":
+          description: Invalid batch request
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Request-level server error
           headers:
             x-request-id:
               $ref: "#/components/headers/XRequestId"
@@ -1422,7 +1588,7 @@ paths:
       operationId: cancelRun
       tags: [Runs]
       summary: Cancel Run
-      description: Cancels a running or queued run. Returns 409 if the run has already completed or been cancelled.
+      description: Cancels a pending, runnable, or running run. Returns 409 if the run has already completed or been cancelled.
       parameters:
         - $ref: "#/components/parameters/RunId"
       responses:
@@ -1820,7 +1986,7 @@ paths:
       operationId: startRun
       tags: [Runs]
       summary: Start Run
-      description: Starts a submitted run, queuing it for execution. Provide `resume=true` to resume an interrupted run from checkpoint. Returns 409 if the run is not startable.
+      description: Requests start for a submitted run. User-created runs become runnable; parent-generated child runs may become pending until approved. Provide `resume=true` to resume an interrupted run from checkpoint. Returns 409 if the run is not startable.
       parameters:
         - $ref: "#/components/parameters/RunId"
       requestBody:
@@ -1847,6 +2013,118 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: Run is not in submitted status
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/runs/{id}/approve:
+    post:
+      operationId: approveRun
+      tags: [Runs]
+      summary: Approve Run
+      description: Approves a pending run that requires pre-execution approval and makes it runnable.
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "200":
+          description: Run approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "404":
+          description: Run not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Run is not pending approval
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/runs/{id}/deny:
+    post:
+      operationId: denyRun
+      tags: [Runs]
+      summary: Deny Run
+      description: Denies a pending run that requires pre-execution approval and fails it with `approval_denied`.
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DenyRunRequest"
+      responses:
+        "200":
+          description: Run denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "404":
+          description: Run not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Run is not pending approval
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/runs/{id}/retry:
+    post:
+      operationId: retryRun
+      tags: [Runs]
+      summary: Retry Run
+      description: >
+        Creates a fresh run from the failed or dead source run's captured
+        durable definition, records `retried_from` on the new run, and schedules
+        it for execution. The source run is left unchanged. Active, succeeded,
+        and archived runs are not retryable.
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "201":
+          description: New retry run created and scheduled for execution
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "404":
+          description: Run not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Source run is not retryable
           headers:
             x-request-id:
               $ref: "#/components/headers/XRequestId"
@@ -2251,24 +2529,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/boards/runs:
-    get:
-      operationId: listBoardRuns
-      tags: [Runs]
-      summary: List Board Runs
-      description: Temporary board-view list of managed runs. This endpoint is UI-oriented and may change as the app evolves. Archived runs are hidden by default; pass `include_archived=true` to include them under the `archived` column.
-      parameters:
-        - $ref: "#/components/parameters/PageLimit"
-        - $ref: "#/components/parameters/PageOffset"
-        - $ref: "#/components/parameters/IncludeArchived"
-      responses:
-        "200":
-          description: Paginated list of runs for the board view
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PaginatedBoardRunList"
 
   /api/v1/runs/{id}/state:
     get:
@@ -2956,6 +3216,34 @@ paths:
                 $ref: "#/components/schemas/PaginatedEventList"
         "404":
           description: Run not found.
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/runs/{id}/stages/{stageId}/context-window:
+    get:
+      operationId: getRunStageContextWindow
+      tags: [Run Internals]
+      summary: Get Stage Context Window
+      description: |
+        Returns the latest best-effort model-visible context-window usage snapshot for an agent stage.
+        Known stages without applicable or observed data return `available: false`; missing runs or stages return 404.
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+        - $ref: "#/components/parameters/StageId"
+      responses:
+        "200":
+          description: Latest context-window snapshot or a typed unavailable state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StageContextWindow"
+        "404":
+          description: Run or stage not found.
           headers:
             x-request-id:
               $ref: "#/components/headers/XRequestId"
@@ -4451,6 +4739,45 @@ components:
         type: string
       example: 01JNQVR7M0EJ5GKAT2SC4ERS1Z
 
+    RunStatusFilter:
+      name: status
+      in: query
+      required: false
+      style: form
+      explode: true
+      description: |
+        Filter runs by status bucket. Repeatable. When omitted, runs in the
+        `removing` bucket are hidden; pass `status=removing` to include them.
+        Archived runs are hidden unless `include_archived=true` or
+        `status=archived` is passed.
+      schema:
+        type: array
+        items:
+          $ref: "#/components/schemas/BoardColumn"
+      example: [running, blocked]
+
+    RunsSort:
+      name: sort
+      in: query
+      required: false
+      description: Field to sort by. Defaults to `created_at`.
+      schema:
+        type: string
+        enum: [created_at, updated_at, status, elapsed, repo, title, workflow, changes]
+        default: created_at
+      example: created_at
+
+    RunsSortDirection:
+      name: direction
+      in: query
+      required: false
+      description: Sort direction. Defaults to `desc`.
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
+      example: desc
+
     ForceRunDelete:
       name: force
       in: query
@@ -4989,6 +5316,15 @@ components:
         has_more:
           type: boolean
           description: Whether additional pages of results are available.
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            Total number of items matching the current filters. Optional —
+            only populated by endpoints that compute the full count cheaply
+            (e.g. in-memory filtering). When omitted, clients should rely on
+            `has_more` and cursor through pages.
           example: true
 
     PaginatedRunList:
@@ -5004,6 +5340,184 @@ components:
             $ref: "#/components/schemas/Run"
         meta:
           $ref: "#/components/schemas/PaginationMeta"
+
+    BatchRunLifecycleRequest:
+      description: Run IDs to archive or unarchive as one bounded fail-soft batch.
+      type: object
+      additionalProperties: false
+      required:
+        - run_ids
+      properties:
+        run_ids:
+          type: array
+          description: Run IDs to process, in result order.
+          minItems: 1
+          maxItems: 250
+          uniqueItems: true
+          items:
+            type: string
+            example: 01HZX6M29F1CD5YYMHT1F5D7WQ
+
+    BatchRunLifecycleResponse:
+      description: Per-run results for a fail-soft batch archive or unarchive request.
+      type: object
+      additionalProperties: false
+      required:
+        - results
+        - summary
+      properties:
+        results:
+          type: array
+          description: Results ordered exactly like the request `run_ids`.
+          items:
+            $ref: "#/components/schemas/BatchRunLifecycleResult"
+        summary:
+          $ref: "#/components/schemas/BatchRunLifecycleSummary"
+
+    BatchRunLifecycleResult:
+      description: Result for one run in a batch archive or unarchive request.
+      type: object
+      additionalProperties: false
+      required:
+        - run_id
+        - ok
+        - outcome
+      properties:
+        run_id:
+          type: string
+          description: Run ID from the request item.
+        ok:
+          type: boolean
+          description: Whether this item succeeded.
+        outcome:
+          type: string
+          enum:
+            - archived
+            - already_archived
+            - unarchived
+            - not_archived
+            - not_found
+            - conflict
+            - error
+          description: Machine-readable item outcome.
+        run:
+          $ref: "#/components/schemas/Run"
+          description: Decorated run summary for successful items when it can be loaded.
+        error:
+          $ref: "#/components/schemas/ErrorResponseEntry"
+          description: Structured item error for failed items.
+
+    BatchRunLifecycleSummary:
+      description: Aggregate counts for a batch archive or unarchive request.
+      type: object
+      additionalProperties: false
+      required:
+        - requested
+        - succeeded
+        - failed
+      properties:
+        requested:
+          type: integer
+          minimum: 0
+          description: Number of requested run IDs.
+        succeeded:
+          type: integer
+          minimum: 0
+          description: Number of item results with `ok=true`.
+        failed:
+          type: integer
+          minimum: 0
+          description: Number of item results with `ok=false`.
+
+    BatchDeleteRunsRequest:
+      description: Run IDs to delete as one bounded fail-soft batch.
+      type: object
+      additionalProperties: false
+      required:
+        - run_ids
+      properties:
+        run_ids:
+          type: array
+          description: Run IDs to process, in result order.
+          minItems: 1
+          maxItems: 250
+          uniqueItems: true
+          items:
+            type: string
+            example: 01HZX6M29F1CD5YYMHT1F5D7WQ
+        force:
+          type: boolean
+          description: Whether to force deletion of active runs. Defaults to `false`.
+          default: false
+
+    BatchDeleteRunsResponse:
+      description: Per-run results for a fail-soft batch delete request.
+      type: object
+      additionalProperties: false
+      required:
+        - results
+        - summary
+      properties:
+        results:
+          type: array
+          description: Results ordered exactly like the request `run_ids`.
+          items:
+            $ref: "#/components/schemas/BatchDeleteRunsResult"
+        summary:
+          $ref: "#/components/schemas/BatchDeleteRunsSummary"
+
+    BatchDeleteRunsResult:
+      description: Result for one run in a batch delete request.
+      type: object
+      additionalProperties: false
+      required:
+        - run_id
+        - ok
+        - outcome
+      properties:
+        run_id:
+          type: string
+          description: Run ID from the request item.
+        ok:
+          type: boolean
+          description: Whether this item succeeded.
+        outcome:
+          type: string
+          enum:
+            - deleted
+            - already_absent
+            - sandbox_preserved
+            - conflict
+            - error
+          description: Machine-readable item outcome.
+        sandbox:
+          $ref: "#/components/schemas/DeleteRunSandbox"
+          description: Sandbox handoff details when `outcome` is `sandbox_preserved`.
+        error:
+          $ref: "#/components/schemas/ErrorResponseEntry"
+          description: Structured item error for failed items.
+
+    BatchDeleteRunsSummary:
+      description: Aggregate counts for a batch delete request.
+      type: object
+      additionalProperties: false
+      required:
+        - requested
+        - succeeded
+        - failed
+      properties:
+        requested:
+          type: integer
+          minimum: 0
+          description: Number of requested run IDs.
+        succeeded:
+          type: integer
+          minimum: 0
+          description: Number of item results with `ok=true`.
+        failed:
+          type: integer
+          minimum: 0
+          description: Number of item results with `ok=false`.
 
     PairId:
       type: string
@@ -5418,6 +5932,11 @@ components:
       type: string
       enum: [idle, running, failed]
 
+    PermissionLevel:
+      description: Agent tool permission level applied to a session.
+      type: string
+      enum: [read-only, read-write, full]
+
     SessionTurn:
       description: Currently active durable session turn.
       type: object
@@ -5600,25 +6119,6 @@ components:
         meta:
           $ref: "#/components/schemas/PaginationMeta"
 
-    PaginatedBoardRunList:
-      description: Paginated list of board runs with shared canonical fields plus board metadata.
-      type: object
-      required:
-        - columns
-        - data
-        - meta
-      properties:
-        columns:
-          type: array
-          items:
-            $ref: "#/components/schemas/BoardColumnDefinition"
-        data:
-          type: array
-          items:
-            $ref: "#/components/schemas/Run"
-        meta:
-          $ref: "#/components/schemas/PaginationMeta"
-
     WorkflowScheduleSummary:
       description: Workflow schedule summary shown in workflow lists.
       type: object
@@ -5775,6 +6275,14 @@ components:
             Whether credential material is present for this provider on the
             server when this response was produced. Does NOT imply requests
             will succeed.
+        expected_secret_name:
+          type: ["string", "null"]
+          description: |
+            Suggested vault secret name for configuring this provider,
+            derived from the first vault credential reference in the
+            provider catalog. Null when the provider has no vault
+            credential (e.g. no-auth or env-only providers). Used to
+            prefill the create-secret form.
 
     ProviderId:
       description: LLM provider identifier.
@@ -5805,6 +6313,16 @@ components:
       enum:
         - levels
         - none
+
+    ReasoningEffort:
+      description: Native reasoning-effort level requested for an LLM call.
+      type: string
+      enum:
+        - low
+        - medium
+        - high
+        - xhigh
+        - max
 
     ModelFeatures:
       description: Capability flags for a model.
@@ -5871,6 +6389,7 @@ components:
         - estimated_output_tps
         - aliases
         - default
+        - small_default
         - configured
       properties:
         id:
@@ -5914,6 +6433,9 @@ components:
         default:
           type: boolean
           description: Whether this is the default model for its provider.
+        small_default:
+          type: boolean
+          description: Whether this is the provider's small/default utility model.
         configured:
           type: boolean
           description: |
@@ -6156,7 +6678,8 @@ components:
         `RunLifecycle.archived` so terminal status payloads remain intact.
       oneOf:
         - $ref: "#/components/schemas/RunStatusSubmitted"
-        - $ref: "#/components/schemas/RunStatusQueued"
+        - $ref: "#/components/schemas/RunStatusPending"
+        - $ref: "#/components/schemas/RunStatusRunnable"
         - $ref: "#/components/schemas/RunStatusStarting"
         - $ref: "#/components/schemas/RunStatusRunning"
         - $ref: "#/components/schemas/RunStatusBlocked"
@@ -6169,7 +6692,8 @@ components:
         propertyName: kind
         mapping:
           submitted: "#/components/schemas/RunStatusSubmitted"
-          queued: "#/components/schemas/RunStatusQueued"
+          pending: "#/components/schemas/RunStatusPending"
+          runnable: "#/components/schemas/RunStatusRunnable"
           starting: "#/components/schemas/RunStatusStarting"
           running: "#/components/schemas/RunStatusRunning"
           blocked: "#/components/schemas/RunStatusBlocked"
@@ -6189,7 +6713,20 @@ components:
           enum:
             - submitted
 
-    RunStatusQueued:
+    RunStatusPending:
+      type: object
+      required:
+        - kind
+        - reason
+      properties:
+        kind:
+          type: string
+          enum:
+            - pending
+        reason:
+          $ref: "#/components/schemas/PendingReason"
+
+    RunStatusRunnable:
       type: object
       required:
         - kind
@@ -6197,7 +6734,7 @@ components:
         kind:
           type: string
           enum:
-            - queued
+            - runnable
 
     RunStatusStarting:
       type: object
@@ -6306,12 +6843,26 @@ components:
       enum:
         - workflow_error
         - cancelled
+        - approval_denied
         - terminated
         - transient_infra
         - budget_exhausted
         - launch_failed
         - bootstrap_failed
         - sandbox_init_failed
+
+    PendingReason:
+      description: Reason a pre-execution run is pending instead of runnable.
+      type: string
+      enum:
+        - approval_required
+
+    RunRunnableSource:
+      description: Source that made a run runnable.
+      type: string
+      enum:
+        - start_requested
+        - approved
 
     FailureCategory:
       description: Product-level classification for grouping and retry policy.
@@ -6572,11 +7123,12 @@ components:
           type: string
         provider:
           type: string
-        sandbox:
+        environment:
           type: string
+          description: Named environment slug to select for the run.
         docker_image:
           type: string
-          description: Per-run Docker sandbox image override.
+          description: Per-run environment image override.
         verbose:
           type: boolean
         dry_run:
@@ -6908,6 +7460,15 @@ components:
           description: Resume from checkpoint instead of starting from submitted state.
           default: false
 
+    DenyRunRequest:
+      description: Request body for denying a pending run approval request.
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Optional human-readable reason for denying execution. Empty or whitespace-only values are stored as absent.
+          example: Not approved for execution
+
     UpdateRunRequest:
       description: Request body for updating mutable run metadata.
       type: object
@@ -6941,22 +7502,6 @@ components:
         id:
           type: string
 
-    ApiQuestionOption:
-      description: A selectable option for a multiple-choice or multi-select question.
-      type: object
-      required:
-        - key
-        - label
-      properties:
-        key:
-          type: string
-          description: Machine-readable option key used when submitting an answer.
-          example: option_a
-        label:
-          type: string
-          description: Human-readable label displayed to the user.
-          example: Accept changes
-
     ApiQuestion:
       description: A pending human-in-the-loop question generated by a workflow stage.
       type: object
@@ -6986,7 +7531,7 @@ components:
           type: array
           description: Available options for selection-based questions. Empty for freeform questions.
           items:
-            $ref: "#/components/schemas/ApiQuestionOption"
+            $ref: "#/components/schemas/InterviewOption"
         allow_freeform:
           type: boolean
           description: Whether the user may provide freeform text in addition to selecting options.
@@ -7392,6 +7937,90 @@ components:
           additionalProperties: true
       additionalProperties: true
 
+    AgentSessionActivatedProps:
+      description: Properties for the `agent.session.activated` event.
+      type: object
+      required:
+        - capabilities
+        - visit
+      properties:
+        thread_id:
+          type: ["string", "null"]
+        provider:
+          type: ["string", "null"]
+        model:
+          type: ["string", "null"]
+        reasoning_effort:
+          oneOf:
+            - $ref: "#/components/schemas/ReasoningEffort"
+            - type: "null"
+        speed:
+          oneOf:
+            - $ref: "#/components/schemas/BillingSpeed"
+            - type: "null"
+        permission_level:
+          oneOf:
+            - $ref: "#/components/schemas/PermissionLevel"
+            - type: "null"
+        capabilities:
+          type: array
+          items:
+            type: string
+            enum: [steer]
+        visit:
+          type: integer
+          minimum: 1
+
+    AgentMessageProps:
+      description: Properties for the `agent.message` event.
+      type: object
+      required:
+        - text
+        - model
+        - billing
+        - tool_call_count
+        - visit
+      properties:
+        text:
+          type: string
+        model:
+          $ref: "#/components/schemas/BillingModelRef"
+        billing:
+          $ref: "#/components/schemas/BilledTokenCounts"
+        tool_call_count:
+          type: integer
+          minimum: 0
+        visit:
+          type: integer
+          minimum: 1
+        message:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: "null"
+          description: Canonical replay-authoritative transcript message, when present.
+        context_window:
+          oneOf:
+            - $ref: "#/components/schemas/StageContextWindowProjection"
+            - type: "null"
+          description: Latest content-free context-window projection for this agent stage.
+
+    AgentToolsAvailableProps:
+      description: Properties for the `agent.tools.available` event.
+      type: object
+      required:
+        - tools
+        - visit
+      properties:
+        tools:
+          type: array
+          description: Effective model-callable tools exposed to the stage session.
+          items:
+            $ref: "#/components/schemas/AgentToolSummary"
+        visit:
+          type: integer
+          minimum: 1
+
     RunSupersededByProps:
       description: Properties for the `run.superseded_by` audit event emitted on a rewound source run after archive succeeds.
       type: object
@@ -7681,6 +8310,212 @@ components:
           type: string
           format: date-time
 
+    StageContextWindowCategory:
+      description: Category of model-visible input/context tokens.
+      type: string
+      enum:
+        - system_prompt
+        - tools
+        - mcp_tools
+        - skills
+        - memory
+        - conversation
+        - other
+
+    StageContextWindowCountMethod:
+      description: Method used to produce the context-window token total and breakdown.
+      type: string
+      enum:
+        - provider_api_scaled_breakdown
+        - response_usage_scaled_breakdown
+        - local_estimate
+
+    StageContextWindowStaleness:
+      description: Freshness of the returned context-window data.
+      type: string
+      enum:
+        - live
+        - stored
+        - unavailable
+
+    StageContextWindowUnavailableReason:
+      description: Why context-window data is unavailable for a known run stage.
+      type: string
+      enum:
+        - not_agent_stage
+        - not_observed
+        - provider_unconfigured
+
+    StageContextWindowWarning:
+      description: Content-free warning about context-window count quality or attribution.
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Stable warning code.
+          example: provider_token_count_failed
+        message:
+          type: string
+          description: Human-readable warning that must not include prompt, memory, message, or tool-argument content.
+          example: provider input token counting failed; returned local estimate
+
+    StageContextWindowBreakdownItem:
+      description: Token usage for one content category.
+      type: object
+      required:
+        - category
+        - tokens
+        - usage_percent
+      properties:
+        category:
+          $ref: "#/components/schemas/StageContextWindowCategory"
+        tokens:
+          type: integer
+          format: uint64
+          minimum: 0
+          example: 30000
+        usage_percent:
+          type: number
+          format: double
+          minimum: 0
+          example: 7.5
+
+    StageContextWindowProjection:
+      description: Durable content-free context-window snapshot projected onto an agent stage.
+      type: object
+      required:
+        - provider
+        - model
+        - context_window_tokens
+        - input_tokens
+        - usage_percent
+        - count_method
+        - staleness
+        - generated_at
+        - breakdown
+        - warnings
+      properties:
+        provider:
+          type: string
+          example: openai
+        model:
+          type: string
+          example: gpt-5.4
+        context_window_tokens:
+          type: integer
+          format: uint64
+          minimum: 0
+          example: 400000
+        input_tokens:
+          type: integer
+          format: uint64
+          minimum: 0
+          example: 123456
+        usage_percent:
+          type: number
+          format: double
+          minimum: 0
+          example: 30.86
+        count_method:
+          $ref: "#/components/schemas/StageContextWindowCountMethod"
+        staleness:
+          $ref: "#/components/schemas/StageContextWindowStaleness"
+        generated_at:
+          type: string
+          format: date-time
+          example: "2026-05-23T12:34:56Z"
+        event_seq:
+          type: ["integer", "null"]
+          format: uint32
+          minimum: 1
+          example: 42
+        breakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/StageContextWindowBreakdownItem"
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/StageContextWindowWarning"
+
+    StageContextWindow:
+      description: Best-effort context-window usage for one agent stage.
+      type: object
+      required:
+        - stage_id
+        - available
+        - unavailable_reason
+        - provider
+        - model
+        - context_window_tokens
+        - input_tokens
+        - usage_percent
+        - count_method
+        - staleness
+        - generated_at
+        - event_seq
+        - breakdown
+        - warnings
+      properties:
+        stage_id:
+          type: string
+          description: Stage ID in `node@visit` form.
+          example: implement@1
+        available:
+          type: boolean
+          description: Whether context-window data is available for this known stage.
+        unavailable_reason:
+          oneOf:
+            - $ref: "#/components/schemas/StageContextWindowUnavailableReason"
+            - type: "null"
+        provider:
+          type: ["string", "null"]
+          example: openai
+        model:
+          type: ["string", "null"]
+          example: gpt-5.4
+        context_window_tokens:
+          type: ["integer", "null"]
+          format: uint64
+          minimum: 0
+          example: 400000
+        input_tokens:
+          type: ["integer", "null"]
+          format: uint64
+          minimum: 0
+          example: 123456
+        usage_percent:
+          type: ["number", "null"]
+          format: double
+          minimum: 0
+          example: 30.86
+        count_method:
+          oneOf:
+            - $ref: "#/components/schemas/StageContextWindowCountMethod"
+            - type: "null"
+        staleness:
+          $ref: "#/components/schemas/StageContextWindowStaleness"
+        generated_at:
+          type: ["string", "null"]
+          format: date-time
+          example: "2026-05-23T12:34:56Z"
+        event_seq:
+          type: ["integer", "null"]
+          format: uint32
+          minimum: 1
+          example: 42
+        breakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/StageContextWindowBreakdownItem"
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/StageContextWindowWarning"
+
     StageProjection:
       description: Observable projection data for one workflow stage execution.
       type: object
@@ -7702,7 +8537,9 @@ components:
             - $ref: "#/components/schemas/StageCompletion"
             - type: "null"
         provider_used:
-          type: ["object", "null"]
+          oneOf:
+            - $ref: "#/components/schemas/StageModelUsage"
+            - type: "null"
           description: Provider and model metadata recorded for the stage attempt.
         diff:
           type: ["string", "null"]
@@ -7745,9 +8582,340 @@ components:
           oneOf:
             - $ref: "#/components/schemas/BillingModelRef"
             - type: "null"
+        todos:
+          oneOf:
+            - $ref: "#/components/schemas/TodoListProjection"
+            - type: "null"
+          description: Projected todo / task list for this stage.
+        subagents:
+          type: array
+          description: Subagents spawned by this stage, in replay/insertion order.
+          items:
+            $ref: "#/components/schemas/SubAgentProjection"
+        skills:
+          $ref: "#/components/schemas/SkillsProjection"
+          description: Agent skills discovered and activated during this stage.
+        permission_level:
+          oneOf:
+            - $ref: "#/components/schemas/PermissionLevel"
+            - type: "null"
+          description: Agent tool permission level applied to this stage session.
+        agent_tools:
+          type: array
+          description: >
+            Effective model-callable tools exposed to this agent stage session.
+            Tool parameter schemas are intentionally omitted from this projection.
+          items:
+            $ref: "#/components/schemas/AgentToolSummary"
+        mcp_servers:
+          type: array
+          description: MCP servers observed by this stage.
+          items:
+            $ref: "#/components/schemas/McpServerProjection"
+        context_window:
+          oneOf:
+            - $ref: "#/components/schemas/StageContextWindowProjection"
+            - type: "null"
+          description: Latest content-free context-window snapshot for this agent stage.
         state:
           $ref: "#/components/schemas/StageState"
           description: Lifecycle state of the stage projection.
+
+    SubAgentProjection:
+      description: Current projected state for one subagent spawned by an agent stage.
+      type: object
+      required:
+        - agent_id
+        - depth
+        - task
+        - status
+      properties:
+        agent_id:
+          type: string
+        depth:
+          type: integer
+          minimum: 0
+        task:
+          type: string
+        status:
+          $ref: "#/components/schemas/SubAgentStatus"
+
+    SubAgentStatus:
+      description: Projected lifecycle status for a subagent.
+      oneOf:
+        - $ref: "#/components/schemas/SubAgentStatusRunning"
+        - $ref: "#/components/schemas/SubAgentStatusCompleted"
+        - $ref: "#/components/schemas/SubAgentStatusFailed"
+        - $ref: "#/components/schemas/SubAgentStatusClosed"
+      discriminator:
+        propertyName: kind
+        mapping:
+          running: "#/components/schemas/SubAgentStatusRunning"
+          completed: "#/components/schemas/SubAgentStatusCompleted"
+          failed: "#/components/schemas/SubAgentStatusFailed"
+          closed: "#/components/schemas/SubAgentStatusClosed"
+
+    SubAgentStatusRunning:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum: [running]
+
+    SubAgentStatusCompleted:
+      type: object
+      required:
+        - kind
+        - success
+        - turns_used
+      properties:
+        kind:
+          type: string
+          enum: [completed]
+        success:
+          type: boolean
+        turns_used:
+          type: integer
+          minimum: 0
+
+    SubAgentStatusFailed:
+      type: object
+      required:
+        - kind
+        - error
+      properties:
+        kind:
+          type: string
+          enum: [failed]
+        error:
+          description: Provider/tool error payload captured by the subagent event.
+
+    SubAgentStatusClosed:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum: [closed]
+
+    SkillsProjection:
+      description: Agent skills discovered and activated during a stage.
+      type: object
+      required:
+        - available
+        - activated
+      properties:
+        available:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentSkillSummary"
+        activated:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivatedSkill"
+
+    AgentSkillSummary:
+      description: Summary of an available agent skill.
+      type: object
+      required:
+        - name
+        - description
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    ActivatedSkill:
+      description: One observed agent skill activation.
+      type: object
+      required:
+        - name
+        - source
+      properties:
+        name:
+          type: string
+        source:
+          $ref: "#/components/schemas/AgentSkillActivationSource"
+
+    AgentSkillActivationSource:
+      description: Source that activated an agent skill.
+      type: string
+      enum: [slash, tool]
+
+    AgentToolSummary:
+      description: Summary of one effective model-callable tool exposed to an agent stage.
+      type: object
+      required:
+        - name
+        - description
+        - source
+        - category
+        - invoked
+      properties:
+        name:
+          type: string
+          description: Exposed model-facing tool name, for example `apply_patch` or `mcp__filesystem__read_file`.
+        description:
+          type: string
+          description: Model-facing tool description.
+        source:
+          $ref: "#/components/schemas/AgentToolSource"
+        category:
+          $ref: "#/components/schemas/AgentToolCategory"
+        invoked:
+          type: boolean
+          description: True once this tool has been invoked during the stage.
+
+    AgentToolSource:
+      description: Origin of an effective agent tool.
+      oneOf:
+        - $ref: "#/components/schemas/AgentToolSourceNative"
+        - $ref: "#/components/schemas/AgentToolSourceMcp"
+        - $ref: "#/components/schemas/AgentToolSourceSkill"
+      discriminator:
+        propertyName: kind
+        mapping:
+          native: "#/components/schemas/AgentToolSourceNative"
+          mcp: "#/components/schemas/AgentToolSourceMcp"
+          skill: "#/components/schemas/AgentToolSourceSkill"
+
+    AgentToolSourceNative:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum: [native]
+
+    AgentToolSourceMcp:
+      type: object
+      required:
+        - kind
+        - server_name
+        - original_name
+      properties:
+        kind:
+          type: string
+          enum: [mcp]
+        server_name:
+          type: string
+          description: MCP server name that provided the tool.
+        original_name:
+          type: string
+          description: Tool name before MCP qualification.
+
+    AgentToolSourceSkill:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum: [skill]
+
+    AgentToolCategory:
+      description: Coarse tool category for display and grouping.
+      type: string
+      enum: [read, write, shell, subagent, other]
+
+    McpServerProjection:
+      description: Projected state for one MCP server observed by an agent stage.
+      type: object
+      required:
+        - server_name
+        - tool_count
+        - status
+        - invoked
+      properties:
+        server_name:
+          type: string
+        tool_count:
+          type: integer
+          minimum: 0
+        status:
+          $ref: "#/components/schemas/McpServerStatus"
+        invoked:
+          type: boolean
+          description: True once the agent has invoked at least one tool from this server during the stage.
+
+    McpServerStatus:
+      description: Projected MCP server readiness status.
+      oneOf:
+        - $ref: "#/components/schemas/McpServerStatusReady"
+        - $ref: "#/components/schemas/McpServerStatusFailed"
+      discriminator:
+        propertyName: kind
+        mapping:
+          ready: "#/components/schemas/McpServerStatusReady"
+          failed: "#/components/schemas/McpServerStatusFailed"
+
+    McpServerStatusReady:
+      type: object
+      required:
+        - kind
+        - tools
+      properties:
+        kind:
+          type: string
+          enum: [ready]
+        tools:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentMcpToolSummary"
+
+    McpServerStatusFailed:
+      type: object
+      required:
+        - kind
+        - error
+      properties:
+        kind:
+          type: string
+          enum: [failed]
+        error:
+          type: string
+
+    AgentMcpToolSummary:
+      description: Summary of one tool exposed by an MCP server.
+      type: object
+      required:
+        - name
+        - original_name
+      properties:
+        name:
+          type: string
+        original_name:
+          type: string
+
+    StageModelUsage:
+      description: Provider, model, and request-control metadata recorded for a stage attempt.
+      type: object
+      required:
+        - mode
+      properties:
+        mode:
+          type: string
+          description: Source of the stage's model usage metadata.
+          example: agent
+        provider:
+          type: ["string", "null"]
+          example: openai
+        model:
+          type: ["string", "null"]
+          example: gpt-5.5
+        reasoning_effort:
+          oneOf:
+            - $ref: "#/components/schemas/ReasoningEffort"
+            - type: "null"
+        speed:
+          oneOf:
+            - $ref: "#/components/schemas/BillingSpeed"
+            - type: "null"
 
     InterviewOption:
       description: Option stored with an interview question in the event log.
@@ -7758,8 +8926,16 @@ components:
       properties:
         key:
           type: string
+          description: Machine-readable option key used when submitting an answer.
         label:
           type: string
+          description: Human-readable label displayed to the user.
+        description:
+          type: ["string", "null"]
+          description: Optional untrusted model-authored option description for display.
+        preview:
+          type: ["string", "null"]
+          description: Optional untrusted model-authored option preview captured for clients.
 
     InterviewQuestionRecord:
       description: Storage shape of an interview question recorded in the event log.
@@ -8027,6 +9203,9 @@ components:
             - type: "null"
         superseded_by:
           type: ["string", "null"]
+        retried_from:
+          type: ["string", "null"]
+          description: Source run ID when this run was created by manual retry.
         pending_interviews:
           type: object
           additionalProperties:
@@ -8036,6 +9215,74 @@ components:
           description: Map from StageId (`node_id@visit`) to stage projection data.
           additionalProperties:
             $ref: "#/components/schemas/StageProjection"
+
+    TodoStatus:
+      type: string
+      enum: [pending, in_progress, completed, deleted]
+      description: |-
+        Lifecycle for a todo / task. `deleted` is reachable for Anthropic
+        tasks; once observed, the todo is removed from the projection.
+
+    TodoListKind:
+      type: string
+      enum: [openai_plan, anthropic_tasks]
+      description: |-
+        Tool surface a todo list belongs to. Determines the `list_id`
+        prefix and scoping convention.
+
+    TodoProjection:
+      type: object
+      description: One projected todo / task item.
+      required:
+        - id
+        - status
+        - order
+        - subject
+      properties:
+        id:
+          type: string
+        status:
+          $ref: "#/components/schemas/TodoStatus"
+        order:
+          type: integer
+          format: uint32
+          minimum: 0
+        subject:
+          type: string
+        description:
+          type: string
+          default: ""
+        active_form:
+          type: ["string", "null"]
+        owner:
+          type: ["string", "null"]
+        blocks:
+          type: array
+          items:
+            type: string
+        blocked_by:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    TodoListProjection:
+      type: object
+      description: All currently-projected todos for one `list_id`.
+      required:
+        - kind
+        - list_id
+      properties:
+        kind:
+          $ref: "#/components/schemas/TodoListKind"
+        list_id:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TodoProjection"
 
     Run:
       description: Canonical public run shape.
@@ -8057,11 +9304,13 @@ components:
         - timestamps
         - timing
         - billing
+        - size
         - ask_fabro
         - diff
         - pull_request
         - current_question
         - superseded_by
+        - retried_from
         - links
         - children_count
       properties:
@@ -8124,6 +9373,8 @@ components:
           oneOf:
             - $ref: "#/components/schemas/RunBillingSummary"
             - type: "null"
+        size:
+          $ref: "#/components/schemas/RunSize"
         ask_fabro:
           $ref: "#/components/schemas/AskFabro"
         diff:
@@ -8140,6 +9391,10 @@ components:
             - type: "null"
         superseded_by:
           type: ["string", "null"]
+          description: Run ID that superseded this run via rewind, if any.
+        retried_from:
+          type: ["string", "null"]
+          description: Source run ID when this run was created by manual retry.
         links:
           $ref: "#/components/schemas/RunLinks"
 
@@ -8156,7 +9411,6 @@ components:
         unavailable_reason:
           type: ["string", "null"]
           enum:
-            - feature_disabled
             - no_sandbox
             - sandbox_not_ready
             - llm_unconfigured
@@ -8202,10 +9456,14 @@ components:
 
     RunLifecycle:
       type: object
-      required: [status, pending_control, queue_position, error, archived, archived_at]
+      required: [status, approval, pending_control, queue_position, error, archived, archived_at]
       properties:
         status:
           $ref: "#/components/schemas/RunStatus"
+        approval:
+          oneOf:
+            - $ref: "#/components/schemas/RunApproval"
+            - type: "null"
         pending_control:
           oneOf:
             - $ref: "#/components/schemas/RunControlAction"
@@ -8221,6 +9479,30 @@ components:
         archived_at:
           type: ["string", "null"]
           format: date-time
+
+    RunApproval:
+      description: Pre-execution approval state for runs that require one-time human approval.
+      type: object
+      required: [state, requested_at, decided_at, denial_reason]
+      properties:
+        state:
+          $ref: "#/components/schemas/RunApprovalState"
+        requested_at:
+          type: string
+          format: date-time
+        decided_at:
+          type: ["string", "null"]
+          format: date-time
+        denial_reason:
+          type: ["string", "null"]
+
+    RunApprovalState:
+      description: State of a run's pre-execution approval request.
+      type: string
+      enum:
+        - pending
+        - approved
+        - denied
 
     RunModel:
       type: object
@@ -8255,6 +9537,11 @@ components:
         total_usd_micros:
           type: ["integer", "null"]
           format: int64
+
+    RunSize:
+      type: string
+      enum: [XS, S, M, L, XL]
+      description: Run size bucket derived from current best-effort billed usage.
 
     RunLinks:
       type: object
@@ -8341,27 +9628,22 @@ components:
     # ── Run Board Schemas ────────────────────────────────────────────────
 
     BoardColumn:
-      description: Board column status for a run in the list view.
+      description: |
+        Status bucket for a run, shared by list and kanban renderings and by
+        the `status` query parameter on `GET /api/v1/runs`. The `archived`
+        bucket is orthogonal to the `include_archived` flag — passing
+        `status=archived` is equivalent to opting archived runs in.
       type: string
       enum:
-        - queued
+        - pending
+        - runnable
         - initializing
         - running
         - blocked
         - succeeded
         - failed
         - archived
-
-    BoardColumnDefinition:
-      type: object
-      required:
-        - id
-        - name
-      properties:
-        id:
-          $ref: "#/components/schemas/BoardColumn"
-        name:
-          type: string
+        - removing
 
     CheckRunStatus:
       description: Status of a CI check run.
@@ -9113,6 +10395,11 @@ components:
           minimum: 1
           description: 1-based visit count; bumped each time the workflow re-enters this node.
           example: 2
+        provider_used:
+          oneOf:
+            - $ref: "#/components/schemas/StageModelUsage"
+            - type: "null"
+          description: Provider, model, and request controls recorded for the latest stage attempt.
         started_at:
           type: ["string", "null"]
           format: date-time
@@ -10026,12 +11313,10 @@ components:
     ServerSettings:
       description: Current in-memory server settings view.
       type: object
-      required: [server, features]
+      required: [server]
       properties:
         server:
           $ref: "#/components/schemas/ServerNamespace"
-        features:
-          $ref: "#/components/schemas/FeaturesNamespace"
 
     ServerNamespace:
       type: object
@@ -10041,6 +11326,7 @@ components:
         - web
         - auth
         - ip_allowlist
+        - sandbox
         - storage
         - artifacts
         - slatedb
@@ -10058,6 +11344,8 @@ components:
           $ref: "#/components/schemas/ServerAuthSettings"
         ip_allowlist:
           $ref: "#/components/schemas/ServerIpAllowlistSettings"
+        sandbox:
+          $ref: "#/components/schemas/ServerSandboxSettings"
         storage:
           $ref: "#/components/schemas/ServerStorageSettings"
         artifacts:
@@ -10070,13 +11358,6 @@ components:
           $ref: "#/components/schemas/ServerLoggingSettings"
         integrations:
           $ref: "#/components/schemas/ServerIntegrationsSettings"
-
-    FeaturesNamespace:
-      type: object
-      required: [session_sandboxes]
-      properties:
-        session_sandboxes:
-          type: boolean
 
     ServerListenSettings:
       oneOf:
@@ -10180,6 +11461,31 @@ components:
     GitHubMetaHooksEntry:
       type: string
       enum: [GitHubMetaHooks]
+
+    ServerSandboxSettings:
+      type: object
+      required: [providers]
+      properties:
+        providers:
+          $ref: "#/components/schemas/ServerSandboxProvidersSettings"
+
+    ServerSandboxProvidersSettings:
+      type: object
+      required: [local, docker, daytona]
+      properties:
+        local:
+          $ref: "#/components/schemas/ServerSandboxProviderSettings"
+        docker:
+          $ref: "#/components/schemas/ServerSandboxProviderSettings"
+        daytona:
+          $ref: "#/components/schemas/ServerSandboxProviderSettings"
+
+    ServerSandboxProviderSettings:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
 
     ServerStorageSettings:
       type: object
@@ -10333,12 +11639,17 @@ components:
       required:
         - project
         - workflow
+        - environments
         - run
       properties:
         project:
           $ref: "#/components/schemas/ProjectNamespace"
         workflow:
           $ref: "#/components/schemas/WorkflowNamespace"
+        environments:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/EnvironmentSettings"
         run:
           $ref: "#/components/schemas/RunNamespace"
 
@@ -10393,7 +11704,7 @@ components:
         - clone
         - run_branch
         - meta_branch
-        - sandbox
+        - environment
         - notifications
         - interviews
         - agent
@@ -10433,8 +11744,8 @@ components:
           $ref: "#/components/schemas/RunBranchSettings"
         meta_branch:
           $ref: "#/components/schemas/RunMetaBranchSettings"
-        sandbox:
-          $ref: "#/components/schemas/RunSandboxSettings"
+        environment:
+          $ref: "#/components/schemas/RunEnvironmentSettings"
         notifications:
           type: object
           additionalProperties:
@@ -10564,12 +11875,19 @@ components:
 
     RunCheckpointSettings:
       type: object
-      required: [exclude_globs]
+      required: [exclude_globs, skip_git_hooks]
       properties:
         exclude_globs:
           type: array
           items:
             type: string
+        skip_git_hooks:
+          type: boolean
+          default: false
+          description: |
+            When true, Fabro-managed run-branch checkpoint commits bypass
+            local Git commit hooks. Does not affect Fabro `[[run.hooks]]`
+            or metadata-branch snapshots. Defaults to false.
 
     RunCloneSettings:
       type: object
@@ -10596,87 +11914,122 @@ components:
         push:
           type: boolean
 
-    RunSandboxSettings:
+    RunEnvironmentSettings:
       type: object
-      required: [provider, preserve, stop_on_terminal, devcontainer, env, docker, daytona]
+      required: [id, provider, image, resources, network, lifecycle, labels, volumes, env]
       properties:
+        id:
+          type: string
         provider:
-          $ref: "#/components/schemas/SandboxProvider"
-        preserve:
-          type: boolean
-        stop_on_terminal:
-          type: boolean
-        devcontainer:
-          type: boolean
+          $ref: "#/components/schemas/EnvironmentProvider"
+        image:
+          $ref: "#/components/schemas/EnvironmentImageSettings"
+        resources:
+          $ref: "#/components/schemas/EnvironmentResourcesSettings"
+        network:
+          $ref: "#/components/schemas/EnvironmentNetworkSettings"
+        lifecycle:
+          $ref: "#/components/schemas/EnvironmentLifecycleSettings"
+        labels:
+          $ref: "#/components/schemas/StringMap"
+        volumes:
+          type: array
+          items:
+            $ref: "#/components/schemas/EnvironmentVolumeSettings"
         env:
           type: object
           additionalProperties:
             $ref: "#/components/schemas/InterpString"
-        docker:
-          oneOf:
-            - $ref: "#/components/schemas/DockerSettings"
-            - type: "null"
-        daytona:
-          oneOf:
-            - $ref: "#/components/schemas/DaytonaSettings"
-            - type: "null"
 
-    DockerSettings:
+    EnvironmentSettings:
       type: object
-      required: [image, network_mode, memory_limit, cpu_quota, env_vars]
+      required: [provider, image, resources, network, lifecycle, labels, volumes, env]
       properties:
+        provider:
+          $ref: "#/components/schemas/EnvironmentProvider"
         image:
-          type: string
-        network_mode:
-          type: ["string", "null"]
-        memory_limit:
-          type: ["integer", "null"]
-          format: int64
-        cpu_quota:
-          type: ["integer", "null"]
-          format: int64
-        env_vars:
+          $ref: "#/components/schemas/EnvironmentImageSettings"
+        resources:
+          $ref: "#/components/schemas/EnvironmentResourcesSettings"
+        network:
+          $ref: "#/components/schemas/EnvironmentNetworkSettings"
+        lifecycle:
+          $ref: "#/components/schemas/EnvironmentLifecycleSettings"
+        labels:
+          $ref: "#/components/schemas/StringMap"
+        volumes:
+          type: array
+          items:
+            $ref: "#/components/schemas/EnvironmentVolumeSettings"
+        env:
           type: object
           additionalProperties:
             $ref: "#/components/schemas/InterpString"
 
-    DaytonaSettings:
-      type: object
-      required: [auto_stop_interval, labels, snapshot, network]
-      properties:
-        auto_stop_interval:
-          type: ["integer", "null"]
-          format: int32
-        labels:
-          $ref: "#/components/schemas/StringMap"
-        snapshot:
-          oneOf:
-            - $ref: "#/components/schemas/DaytonaSnapshotSettings"
-            - type: "null"
-        network:
-          oneOf:
-            - $ref: "#/components/schemas/DaytonaNetworkLayer"
-            - type: "null"
+    EnvironmentProvider:
+      description: Desired environment provider.
+      type: string
+      enum: [local, docker, daytona]
 
-    DaytonaSnapshotSettings:
+    EnvironmentImageSettings:
       type: object
-      required: [name, cpu, memory_gb, disk_gb, dockerfile]
+      required: [ref, dockerfile]
       properties:
-        name:
-          type: string
-        cpu:
-          type: ["integer", "null"]
-          format: int32
-        memory_gb:
-          type: ["integer", "null"]
-          format: int32
-        disk_gb:
-          type: ["integer", "null"]
-          format: int32
+        ref:
+          type: ["string", "null"]
         dockerfile:
           oneOf:
             - $ref: "#/components/schemas/DockerfileSource"
             - type: "null"
+
+    EnvironmentResourcesSettings:
+      type: object
+      required: [cpu, memory, disk]
+      properties:
+        cpu:
+          type: ["integer", "null"]
+          format: int32
+        memory:
+          type: ["string", "null"]
+        disk:
+          type: ["string", "null"]
+
+    EnvironmentNetworkSettings:
+      type: object
+      required: [mode, allow]
+      properties:
+        mode:
+          $ref: "#/components/schemas/EnvironmentNetworkMode"
+        allow:
+          type: array
+          items:
+            type: string
+
+    EnvironmentNetworkMode:
+      type: string
+      enum: [allow_all, block, cidr_allow_list]
+
+    EnvironmentLifecycleSettings:
+      type: object
+      required: [preserve, stop_on_terminal, auto_stop]
+      properties:
+        preserve:
+          type: boolean
+        stop_on_terminal:
+          type: boolean
+        auto_stop:
+          type: ["string", "null"]
+
+    EnvironmentVolumeSettings:
+      type: object
+      required: [id, mount_path, subpath]
+      properties:
+        id:
+          type: string
+        mount_path:
+          type: string
+        subpath:
+          type: ["string", "null"]
 
     DockerfileSource:
       oneOf:
@@ -10702,23 +12055,6 @@ components:
           enum: [path]
         path:
           type: string
-
-    DaytonaNetworkLayer:
-      description: Daytona network access policy.
-      oneOf:
-        - type: string
-          enum: [block, allow_all]
-        - type: object
-          required: [allow_list]
-          properties:
-            allow_list:
-              type: object
-              required: [allow_list]
-              properties:
-                allow_list:
-                  type: array
-                  items:
-                    type: string
 
     NotificationRouteSettings:
       type: object
@@ -10989,16 +12325,6 @@ components:
         sandbox_provider:
           type: string
           description: Effective sandbox provider for launched runs.
-        features:
-          $ref: "#/components/schemas/SystemFeatures"
-
-    SystemFeatures:
-      description: Server-level capability flags.
-      type: object
-      properties:
-        session_sandboxes:
-          type: boolean
-          description: Whether session sandboxes are enabled.
 
     SystemRunCounts:
       description: Counts of known runs in the active server process.
@@ -11011,7 +12337,7 @@ components:
         active:
           type: integer
           format: int64
-          description: Runs currently queued or executing.
+          description: Runs currently pending, runnable, or executing.
 
     SystemResourcesResponse:
       description: Server-visible runtime resource usage for the active Fabro process environment.

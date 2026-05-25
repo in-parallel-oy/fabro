@@ -8,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::error::Error;
 use crate::session::Session;
-use crate::tool_registry::RegisteredTool;
+use crate::tool_registry::{RegisteredTool, ToolSource};
 use crate::tools::required_str;
 use crate::types::{AgentEvent, Message, SessionEvent};
 
@@ -307,7 +307,7 @@ pub fn make_spawn_agent_tool(
     RegisteredTool {
         definition: ToolDefinition {
             name:        "spawn_agent".into(),
-            description: "Spawn a subagent to work on a delegated task".into(),
+            description: "Spawn a subagent for independent work or context isolation. Use it for tasks that can proceed separately, and avoid duplicating the same work in the parent session.".into(),
             parameters:  serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -331,7 +331,7 @@ pub fn make_spawn_agent_tool(
                 "required": ["task"]
             }),
         },
-        executor:   Arc::new(move |args, _ctx| {
+        executor:   Arc::new(move |args, ctx| {
             let manager = manager.clone();
             let session_factory = session_factory.clone();
             Box::pin(async move {
@@ -345,6 +345,12 @@ pub fn make_spawn_agent_tool(
 
                 // Note: working_dir and model require session factory changes to wire through
                 let mut session = session_factory();
+                // Inherit the parent agent's root session ID so todo tools
+                // that scope by root (e.g. Anthropic tasks) share one list
+                // across the parent and all subagents.
+                if let Some(root) = ctx.root_session_id.as_ref().or(ctx.session_id.as_ref()) {
+                    session.set_root_session_id(root.clone());
+                }
                 // Default subagent max_turns is 0 (unlimited) per spec (overridable via
                 // parameter)
                 session.set_max_turns(max_turns.unwrap_or(0));
@@ -353,6 +359,7 @@ pub fn make_spawn_agent_tool(
                     .map_err(|e| e.to_string())
             })
         }),
+        source:     ToolSource::Native,
     }
 }
 
@@ -360,7 +367,7 @@ pub fn make_send_input_tool(manager: Arc<AsyncMutex<SubAgentManager>>) -> Regist
     RegisteredTool {
         definition: ToolDefinition {
             name:        "send_input".into(),
-            description: "Send a follow-up message to a running subagent".into(),
+            description: "Send a follow-up message to a running subagent when new information or corrected instructions are needed.".into(),
             parameters:  serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -388,6 +395,7 @@ pub fn make_send_input_tool(manager: Arc<AsyncMutex<SubAgentManager>>) -> Regist
                 Ok(format!("Message sent to agent {agent_id}"))
             })
         }),
+        source:     ToolSource::Native,
     }
 }
 
@@ -395,7 +403,7 @@ pub fn make_wait_tool(manager: Arc<AsyncMutex<SubAgentManager>>) -> RegisteredTo
     RegisteredTool {
         definition: ToolDefinition {
             name:        "wait".into(),
-            description: "Wait for a subagent to complete and return its result".into(),
+            description: "Wait for a subagent to complete, then use the result to synthesize the outcome for the user.".into(),
             parameters:  serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -420,6 +428,7 @@ pub fn make_wait_tool(manager: Arc<AsyncMutex<SubAgentManager>>) -> RegisteredTo
                 ))
             })
         }),
+        source:     ToolSource::Native,
     }
 }
 
@@ -427,7 +436,7 @@ pub fn make_close_agent_tool(manager: Arc<AsyncMutex<SubAgentManager>>) -> Regis
     RegisteredTool {
         definition: ToolDefinition {
             name:        "close_agent".into(),
-            description: "Close a running subagent".into(),
+            description: "Close a running subagent that is no longer needed.".into(),
             parameters:  serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -449,6 +458,7 @@ pub fn make_close_agent_tool(manager: Arc<AsyncMutex<SubAgentManager>>) -> Regis
                 Ok(format!("Agent {agent_id} closed"))
             })
         }),
+        source:     ToolSource::Native,
     }
 }
 
@@ -463,6 +473,31 @@ mod tests {
     use crate::test_support::*;
 
     // --- Tests ---
+
+    #[test]
+    fn subagent_tool_descriptions_explain_delegation_lifecycle() {
+        let manager = Arc::new(AsyncMutex::new(SubAgentManager::new(3)));
+        let factory: SessionFactory = Arc::new(|| {
+            panic!("should not construct subagent in description test");
+        });
+
+        let spawn = make_spawn_agent_tool(manager.clone(), factory, 0);
+        let send = make_send_input_tool(manager.clone());
+        let wait = make_wait_tool(manager.clone());
+        let close = make_close_agent_tool(manager);
+
+        assert!(spawn.definition.description.contains("independent work"));
+        assert!(spawn.definition.description.contains("context isolation"));
+        assert!(send.definition.description.contains("follow-up"));
+        assert!(wait.definition.description.contains("synthesize"));
+        assert!(close.definition.description.contains("no longer needed"));
+
+        for tool in [spawn, send, wait, close] {
+            let text = &tool.definition.description;
+            assert!(!text.contains("background Bash"));
+            assert!(!text.contains("addComment"));
+        }
+    }
 
     #[test]
     fn manager_creation() {
@@ -725,6 +760,7 @@ mod tests {
             timestamp:         std::time::SystemTime::now(),
             session_id:        "child".into(),
             parent_session_id: None,
+            tool_call_id:      None,
         }));
         callback(SubAgentCallbackEvent::Forwarded(SessionEvent {
             event:             AgentEvent::SessionStarted {
@@ -734,6 +770,7 @@ mod tests {
             timestamp:         std::time::SystemTime::now(),
             session_id:        "grandchild".into(),
             parent_session_id: Some("child".into()),
+            tool_call_id:      None,
         }));
 
         let child = rx.recv().await.unwrap();

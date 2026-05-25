@@ -16,6 +16,7 @@ pub mod envfile;
 pub mod error;
 pub mod home;
 pub mod input_overrides;
+mod legacy_sandbox_migration;
 mod load;
 pub mod logging;
 pub mod parse;
@@ -38,31 +39,32 @@ pub use error::{Error, Result};
 pub use fabro_util::path::expand_tilde;
 pub use home::Home;
 pub use input_overrides::{InputOverrideParseError, parse_input_overrides, parse_labels};
+pub(crate) use layers::Combine;
 pub use layers::{
     CliAuthLayer, CliExecAgentLayer, CliExecLayer, CliExecModelLayer, CliLayer, CliLoggingLayer,
     CliOutputLayer, CliTargetLayer, CliUpdatesLayer, CostRates, CredentialRef,
-    CredentialRefParseError, DaytonaDockerfileLayer, DaytonaSandboxLayer, DaytonaSnapshotLayer,
-    DaytonaVolumeLayer, DockerSandboxLayer, FeaturesLayer, GitAuthorLayer, GithubIntegrationLayer,
-    HeaderValueRef, HookAgentMarker, HookEntry, HookTlsMode, IntegrationWebhooksLayer,
-    InterviewProviderLayer, InterviewsLayer, LlmLayer, LlmModelFeatures, LlmModelLimits, LogFilter,
-    McpEntryLayer, MergeMap, ModelControls, ModelCostTable, ModelRefOrSplice, ModelSettings,
+    CredentialRefParseError, EnvironmentDockerfileLayer, EnvironmentImageLayer, EnvironmentLayer,
+    EnvironmentLifecycleLayer, EnvironmentNetworkLayer, EnvironmentResourcesLayer,
+    EnvironmentVolumeLayer, GitAuthorLayer, GithubIntegrationLayer, HeaderValueRef,
+    HookAgentMarker, HookEntry, HookTlsMode, IntegrationWebhooksLayer, InterviewProviderLayer,
+    InterviewsLayer, LlmLayer, LlmModelFeatures, LlmModelLimits, LogFilter, McpEntryLayer,
+    MergeMap, ModelControls, ModelCostTable, ModelRefOrSplice, ModelSettings,
     NotificationProviderLayer, NotificationRouteLayer, ObjectStoreLocalLayer, ObjectStoreS3Layer,
     PrepareStep, ProjectLayer, ProviderSettings, ReasoningEffortFeature, ReplaceMap, RunAgentLayer,
-    RunArtifactsLayer, RunCheckpointLayer, RunCloneLayer, RunExecutionLayer, RunGitLayer,
-    RunGoalLayer, RunIntegrationsGithubLayer, RunIntegrationsLayer, RunLayer, RunMetaBranchLayer,
-    RunModelControlsLayer, RunModelLayer, RunPrepareLayer, RunPullRequestLayer, RunRunBranchLayer,
-    RunSandboxLayer, RunScmLayer, ScmGitHubLayer, ServerApiLayer, ServerArtifactsLayer,
+    RunArtifactsLayer, RunCheckpointLayer, RunCloneLayer, RunEnvironmentLayer, RunExecutionLayer,
+    RunGitLayer, RunGoalLayer, RunIntegrationsGithubLayer, RunIntegrationsLayer, RunLayer,
+    RunMetaBranchLayer, RunModelControlsLayer, RunModelLayer, RunPrepareLayer, RunPullRequestLayer,
+    RunRunBranchLayer, RunScmLayer, ScmGitHubLayer, ServerApiLayer, ServerArtifactsLayer,
     ServerAuthGithubLayer, ServerAuthLayer, ServerIntegrationsLayer, ServerIpAllowlistLayer,
     ServerIpAllowlistOverrideLayer, ServerLayer, ServerListenLayer, ServerLoggingLayer,
-    ServerSchedulerLayer, ServerSlateDbLayer, ServerStorageLayer, ServerWebLayer,
+    ServerSandboxLayer, ServerSandboxProviderLayer, ServerSandboxProvidersLayer,
+    ServerSchedulerLayer, ServerSlateDbLayer, ServerStorageLayer, ServerWebLayer, SettingsLayer,
     SlackIntegrationLayer, StickyMap, StringOrSplice, WorkflowLayer,
 };
-pub(crate) use layers::{Combine, SettingsLayer};
 pub use logging::{resolve_log_destination, resolve_log_destination_with_env};
 pub use parse::ParseError;
 pub use resolve::{
-    ResolveError, resolve_cli, resolve_features, resolve_project, resolve_run, resolve_server,
-    resolve_workflow,
+    ResolveError, resolve_cli, resolve_project, resolve_run, resolve_server, resolve_workflow,
 };
 use serde::de::DeserializeOwned;
 pub use storage::{RunScratch, RuntimeDirectory, Storage};

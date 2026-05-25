@@ -3,11 +3,13 @@ use std::collections::BTreeMap;
 use ::fabro_types::{
     BilledTokenCounts, BlockedReason, CommandTermination, DiffSummary, FailureReason,
     ForkSourceRef, GitContext, PairId, PairMessageId, PairSystemMessageKind, PairTarget,
-    ParallelBranchId, Principal, PullRequestLink, RunBlobId, RunFailure, RunId, RunNoticeLevel,
-    RunPairEndedReason, RunPairFailedReason, RunProvenance, RunTiming, SandboxProvider, StageId,
-    StageTiming, SuccessReason, run_event as fabro_types,
+    ParallelBranchId, PendingReason, PermissionLevel, Principal, PullRequestLink, RunBlobId,
+    RunFailure, RunId, RunNoticeLevel, RunPairEndedReason, RunPairFailedReason, RunProvenance,
+    RunRunnableSource, RunTiming, SandboxProvider, StageId, StageTiming, SuccessReason,
+    run_event as fabro_types,
 };
 use fabro_agent::{AgentEvent, SandboxEvent};
+use fabro_model::{ReasoningEffort, Speed};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, run_failure_from_error};
@@ -46,6 +48,8 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         fork_source_ref:  Option<ForkSourceRef>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        retried_from:     Option<RunId>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         parent_id:        Option<RunId>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         web_url:          Option<String>,
@@ -68,7 +72,31 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         definition_blob: Option<RunBlobId>,
     },
-    RunQueued,
+    RunStartRequested {
+        resume: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actor:  Option<Principal>,
+    },
+    RunPending {
+        reason: PendingReason,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actor:  Option<Principal>,
+    },
+    RunApproved {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actor: Option<Principal>,
+    },
+    RunDenied {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actor:  Option<Principal>,
+    },
+    RunRunnable {
+        source: RunRunnableSource,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actor:  Option<Principal>,
+    },
     RunStarting,
     RunRunning,
     RunInterrupt {
@@ -427,15 +455,19 @@ pub enum Event {
         to_node:   String,
     },
     Prompt {
-        stage:    String,
-        visit:    u32,
-        text:     String,
+        stage:            String,
+        visit:            u32,
+        text:             String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        mode:     Option<String>,
+        mode:             Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        provider: Option<String>,
+        provider:         Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        model:    Option<String>,
+        model:            Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reasoning_effort: Option<ReasoningEffort>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        speed:            Option<Speed>,
     },
     PromptCompleted {
         node_id:  String,
@@ -454,6 +486,8 @@ pub enum Event {
         session_id:        Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent_session_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tool_call_id:      Option<String>,
     },
     SubgraphStarted {
         node_id:    String,
@@ -568,16 +602,30 @@ pub enum Event {
     },
     /// A stage has a currently steerable live session binding.
     AgentSessionActivated {
-        node_id:      String,
-        visit:        u32,
-        session_id:   String,
+        node_id:          String,
+        visit:            u32,
+        session_id:       String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        thread_id:    Option<String>,
+        thread_id:        Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        provider:     Option<String>,
+        provider:         Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        model:        Option<String>,
-        capabilities: Vec<fabro_types::SessionCapability>,
+        model:            Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reasoning_effort: Option<ReasoningEffort>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        speed:            Option<Speed>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        permission_level: Option<PermissionLevel>,
+        capabilities:     Vec<fabro_types::SessionCapability>,
+    },
+    /// Effective model-callable tools for a stage session after profile setup,
+    /// optional registrations, MCP integration, and access-policy filtering.
+    AgentToolsAvailable {
+        node_id:    String,
+        visit:      u32,
+        session_id: String,
+        tools:      Vec<fabro_types::AgentToolSummary>,
     },
     /// A stage's steerable live session binding ended.
     AgentSessionDeactivated {
@@ -774,8 +822,20 @@ impl Event {
             Self::RunSubmitted { definition_blob } => {
                 info!(?definition_blob, "Run submitted");
             }
-            Self::RunQueued => {
-                info!("Run queued");
+            Self::RunStartRequested { resume, .. } => {
+                info!(resume, "Run start requested");
+            }
+            Self::RunPending { reason, .. } => {
+                info!(?reason, "Run pending");
+            }
+            Self::RunApproved { .. } => {
+                info!("Run approved");
+            }
+            Self::RunDenied { reason, .. } => {
+                info!(?reason, "Run denied");
+            }
+            Self::RunRunnable { source, .. } => {
+                info!(?source, "Run runnable");
             }
             Self::RunStarting => {
                 info!("Run starting");
@@ -1413,6 +1473,20 @@ impl Event {
                 ..
             } => {
                 debug!(node_id, visit, session_id, "Agent session activated");
+            }
+            Self::AgentToolsAvailable {
+                node_id,
+                visit,
+                session_id,
+                tools,
+            } => {
+                debug!(
+                    node_id,
+                    visit,
+                    session_id,
+                    tool_count = tools.len(),
+                    "Agent tools available"
+                );
             }
             Self::AgentSessionDeactivated {
                 node_id,

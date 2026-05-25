@@ -10,14 +10,13 @@ use fabro_util::error::SharedError;
 use crate::defaults::DEFAULTS_LAYER;
 use crate::load::load_settings_path;
 use crate::resolve::{
-    ResolveError, resolve_cli, resolve_features, resolve_project, resolve_run, resolve_server,
-    resolve_workflow,
+    ResolveError, resolve_cli, resolve_project, resolve_run, resolve_server, resolve_workflow,
 };
 use crate::user::load_settings_config;
 use crate::{
-    CliLayer, Combine, CostRates, Error, LlmLayer, LlmModelFeatures, LlmModelLimits, ModelControls,
-    ModelCostTable, ModelSettings, ProviderSettings, Result, RunLayer, ServerLayer, SettingsLayer,
-    run,
+    CliLayer, Combine, CostRates, EnvironmentLayer, Error, LlmLayer, LlmModelFeatures,
+    LlmModelLimits, MergeMap, ModelControls, ModelCostTable, ModelSettings, ProviderSettings,
+    Result, RunLayer, ServerLayer, SettingsLayer, run,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,9 +97,8 @@ impl ServerSettingsBuilder {
         let layer = layer.clone().combine(DEFAULTS_LAYER.clone());
         let mut errors = Vec::new();
         let server = resolve_server(&layer.server.clone().unwrap_or_default(), &mut errors);
-        let features = resolve_features(&layer.features.clone().unwrap_or_default(), &mut errors);
         finish_result(
-            ServerSettings { server, features },
+            ServerSettings { server },
             "failed to resolve server settings",
             errors,
         )
@@ -148,9 +146,8 @@ impl UserSettingsBuilder {
         let layer = layer.clone().combine(DEFAULTS_LAYER.clone());
         let mut errors = Vec::new();
         let cli = resolve_cli(&layer.cli.clone().unwrap_or_default(), &mut errors);
-        let features = resolve_features(&layer.features.clone().unwrap_or_default(), &mut errors);
         finish_result(
-            UserSettings { cli, features },
+            UserSettings { cli },
             "failed to resolve user settings",
             errors,
         )
@@ -193,7 +190,11 @@ impl RunSettingsBuilder {
     pub(crate) fn from_layer(layer: &SettingsLayer) -> Result<RunNamespace> {
         let layer = layer.clone().combine(DEFAULTS_LAYER.clone());
         let mut errors = Vec::new();
-        let run = resolve_run(&layer.run.clone().unwrap_or_default(), &mut errors);
+        let run = resolve_run(
+            &layer.run.clone().unwrap_or_default(),
+            &layer.environments,
+            &mut errors,
+        );
         finish_result(run, "failed to resolve run settings", errors)
     }
 
@@ -207,10 +208,11 @@ impl RunSettingsBuilder {
 
 #[derive(Clone)]
 pub struct ServerRuntimeSettings {
-    pub server_settings:       ServerSettings,
-    pub manifest_run_defaults: RunLayer,
-    pub manifest_run_settings: std::result::Result<RunNamespace, SharedError>,
-    pub llm_catalog_settings:  model_catalog::LlmCatalogSettings,
+    pub server_settings:               ServerSettings,
+    pub manifest_run_defaults:         RunLayer,
+    pub manifest_environment_defaults: crate::MergeMap<crate::EnvironmentLayer>,
+    pub manifest_run_settings:         std::result::Result<RunNamespace, SharedError>,
+    pub llm_catalog_settings:          model_catalog::LlmCatalogSettings,
 }
 
 pub fn load_server_runtime_settings(
@@ -266,12 +268,18 @@ fn resolve_server_runtime_settings(
     }
 
     let manifest_run_defaults = layer.run.clone().unwrap_or_default();
+    let manifest_environment_defaults = layer.environments.clone();
     let llm_catalog_settings = llm_catalog_settings_from_layer(&layer);
     Ok(ServerRuntimeSettings {
         server_settings: ServerSettingsBuilder::from_layer(&layer)?,
-        manifest_run_settings: RunSettingsBuilder::from_run_layer(&manifest_run_defaults)
-            .map_err(|err| SharedError::new(anyhow::Error::new(err))),
+        manifest_run_settings: RunSettingsBuilder::from_layer(&SettingsLayer {
+            run: Some(manifest_run_defaults.clone()),
+            environments: manifest_environment_defaults.clone(),
+            ..SettingsLayer::default()
+        })
+        .map_err(|err| SharedError::new(anyhow::Error::new(err))),
         manifest_run_defaults,
+        manifest_environment_defaults,
         llm_catalog_settings,
     })
 }
@@ -329,6 +337,7 @@ fn model_settings_to_catalog(settings: ModelSettings) -> model_catalog::ModelCat
         training,
         knowledge_cutoff,
         default,
+        small_default,
         probe,
         enabled,
         aliases,
@@ -347,6 +356,7 @@ fn model_settings_to_catalog(settings: ModelSettings) -> model_catalog::ModelCat
         training,
         knowledge_cutoff,
         default,
+        small_default,
         probe,
         enabled,
         aliases,
@@ -432,7 +442,7 @@ impl WorkflowSettingsBuilder {
     }
 
     #[must_use]
-    pub(crate) fn workflow_layer(mut self, layer: SettingsLayer) -> Self {
+    pub fn workflow_layer(mut self, layer: SettingsLayer) -> Self {
         self.workflow = layer;
         self
     }
@@ -465,7 +475,7 @@ impl WorkflowSettingsBuilder {
     }
 
     #[must_use]
-    pub(crate) fn project_layer(mut self, layer: SettingsLayer) -> Self {
+    pub fn project_layer(mut self, layer: SettingsLayer) -> Self {
         self.project = layer;
         self
     }
@@ -521,6 +531,19 @@ impl WorkflowSettingsBuilder {
     }
 
     #[must_use]
+    pub fn server_manifest_defaults(
+        self,
+        run: RunLayer,
+        environments: MergeMap<EnvironmentLayer>,
+    ) -> Self {
+        self.server_layer(SettingsLayer {
+            run: Some(run),
+            environments,
+            ..SettingsLayer::default()
+        })
+    }
+
+    #[must_use]
     pub fn run_overrides(self, run: RunLayer) -> Self {
         self.args_layer(SettingsLayer {
             run: Some(run),
@@ -541,6 +564,7 @@ impl WorkflowSettingsBuilder {
         let server_defaults = SettingsLayer {
             version: self.server.version,
             run: self.server.run,
+            environments: self.server.environments,
             ..SettingsLayer::default()
         };
         let mut layer = self
@@ -552,7 +576,6 @@ impl WorkflowSettingsBuilder {
         layer = layer.combine(DEFAULTS_LAYER.clone());
         layer.server = None;
         layer.cli = None;
-        layer.features = None;
         layer
     }
 
@@ -567,7 +590,11 @@ impl WorkflowSettingsBuilder {
         let mut errors = Vec::new();
         let project = resolve_project(&layer.project.clone().unwrap_or_default(), &mut errors);
         let workflow = resolve_workflow(&layer.workflow.clone().unwrap_or_default(), &mut errors);
-        let run = resolve_run(&layer.run.clone().unwrap_or_default(), &mut errors);
+        let run = resolve_run(
+            &layer.run.clone().unwrap_or_default(),
+            &layer.environments,
+            &mut errors,
+        );
         finish_dense_result(
             WorkflowSettings {
                 project,

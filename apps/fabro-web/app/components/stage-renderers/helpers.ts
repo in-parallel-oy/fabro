@@ -5,6 +5,8 @@ import { getArray, getNumber, getObject, getString, type UnknownRecord } from ".
 export interface InterviewOption {
   key: string;
   label: string;
+  description?: string | null;
+  preview?: string | null;
 }
 
 export interface HumanQuestion {
@@ -54,7 +56,14 @@ function parseInterviewOptions(value: unknown): InterviewOption[] {
     const record = item as UnknownRecord;
     const key = getString(record, "key");
     const label = getString(record, "label");
-    if (key && label) out.push({ key, label });
+    if (key && label) {
+      const option: InterviewOption = { key, label };
+      const description = getString(record, "description");
+      const preview = getString(record, "preview");
+      if (description !== null) option.description = description;
+      if (preview !== null) option.preview = preview;
+      out.push(option);
+    }
   }
   return out;
 }
@@ -215,12 +224,14 @@ export function parseFanInOutcome(events: EventEnvelope[], notes: string | null)
   for (const event of events) {
     if (event.event === "stage.prompt") {
       const mode = getString(event.properties ?? {}, "mode");
-      if (mode === "fan_in") hasReducerTranscript = true;
+      if (mode === "fan_in") {
+        hasReducerTranscript = true;
+        const model = getString(event.properties ?? {}, "model");
+        if (model) reducerModel = model;
+      }
     }
     if (event.event === "prompt.completed") {
       hasReducerTranscript = true;
-      const model = getString(event.properties ?? {}, "model");
-      if (model) reducerModel = model;
     }
   }
   return {

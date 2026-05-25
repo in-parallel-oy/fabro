@@ -57,28 +57,6 @@ pub(crate) async fn list_runs(
     paginated_response(runs::summaries(), &pagination)
 }
 
-pub(crate) async fn list_board_runs(
-    _auth: RequiredUser,
-    State(_state): State<Arc<AppState>>,
-    Query(pagination): Query<PaginationParams>,
-) -> Response {
-    let items = runs::summaries();
-    let limit = pagination.limit.clamp(1, 100) as usize;
-    let offset = pagination.offset as usize;
-    let mut data: Vec<_> = items.into_iter().skip(offset).take(limit + 1).collect();
-    let has_more = data.len() > limit;
-    data.truncate(limit);
-    (
-        StatusCode::OK,
-        Json(json!({
-            "columns": runs::columns(),
-            "data": data,
-            "meta": { "has_more": has_more }
-        })),
-    )
-        .into_response()
-}
-
 pub(crate) async fn create_run_stub(
     _auth: RequiredUser,
     State(_state): State<Arc<AppState>>,
@@ -128,7 +106,7 @@ pub(crate) async fn start_run_stub(
     (
         StatusCode::OK,
         Json(
-            serde_json::json!({"id": id, "status": "queued", "created_at": "2026-03-06T14:30:00Z"}),
+            serde_json::json!({"id": id, "status": "runnable", "created_at": "2026-03-06T14:30:00Z"}),
         ),
     )
         .into_response()
@@ -172,7 +150,10 @@ pub(crate) async fn get_stage_events(
         StatusCode::OK,
         Json(PaginatedEventList {
             data: matches,
-            meta: PaginationMeta { has_more },
+            meta: PaginationMeta {
+                has_more,
+                total: None,
+            },
         }),
     )
         .into_response()
@@ -537,6 +518,22 @@ pub(crate) async fn cancel_stub(
         .into_response()
 }
 
+pub(crate) async fn deny_run_stub(
+    _auth: RequiredUser,
+    State(_state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Response {
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "id": id,
+            "status": { "kind": "failed", "reason": "approval_denied" },
+            "created_at": "2026-03-06T14:30:00Z"
+        })),
+    )
+        .into_response()
+}
+
 pub(crate) async fn pause_stub(
     _auth: RequiredUser,
     State(_state): State<Arc<AppState>>,
@@ -875,8 +872,7 @@ pub(crate) async fn get_system_info(
             "storage_dir": "/demo/fabro/storage",
             "uptime_secs": 42,
             "runs": { "total": 3, "active": 1 },
-            "sandbox_provider": "local",
-            "features": { "session_sandboxes": false }
+            "sandbox_provider": "local"
         })),
     )
         .into_response()
@@ -1042,13 +1038,14 @@ mod runs {
 
     use fabro_api::types::*;
     use fabro_types::settings::run::{
-        DaytonaSettings, DaytonaSnapshotSettings, RunGoal, RunModelSettings, RunNamespace,
-        RunPrepareSettings, RunSandboxSettings,
+        EnvironmentImageSettings, EnvironmentLifecycleSettings, EnvironmentProvider,
+        EnvironmentResourcesSettings, EnvironmentSettings, RunEnvironmentSettings, RunGoal,
+        RunModelSettings, RunNamespace, RunPrepareSettings,
     };
     use fabro_types::settings::{InterpString, ProjectNamespace, WorkflowNamespace};
     use fabro_types::{
-        RepositoryRef, RunBillingSummary, RunId, RunLifecycle, RunLinks, RunOrigin, RunTimestamps,
-        StageId, WorkflowRef, WorkflowSettings,
+        PendingReason, RepositoryRef, RunBillingSummary, RunId, RunLifecycle, RunLinks, RunOrigin,
+        RunSize, RunTimestamps, StageId, WorkflowRef, WorkflowSettings,
     };
 
     use super::ts;
@@ -1132,6 +1129,7 @@ mod runs {
             lifecycle: RunLifecycle {
                 status: parse_run_status(status, status_reason)
                     .unwrap_or_else(|| panic!("invalid demo run status: {status}")),
+                approval: None,
                 pending_control,
                 queue_position: None,
                 error: None,
@@ -1151,11 +1149,13 @@ mod runs {
             billing: total_usd_micros.map(|total_usd_micros| RunBillingSummary {
                 total_usd_micros: Some(total_usd_micros),
             }),
+            size: RunSize::from_total_usd_micros(total_usd_micros),
             ask_fabro: Default::default(),
             diff: None,
             pull_request: None,
             current_question: None,
             superseded_by: None,
+            retried_from: None,
             links: RunLinks { web: None },
         }
     }
@@ -1163,7 +1163,10 @@ mod runs {
     fn parse_run_status(status: &str, status_reason: Option<&str>) -> Option<RunStatus> {
         match status {
             "submitted" => Some(RunStatus::Submitted),
-            "queued" => Some(RunStatus::Queued),
+            "pending" => Some(RunStatus::Pending {
+                reason: PendingReason::ApprovalRequired,
+            }),
+            "runnable" => Some(RunStatus::Runnable),
             "starting" => Some(RunStatus::Starting),
             "running" => Some(RunStatus::Running),
             "blocked" => Some(RunStatus::Blocked {
@@ -1198,6 +1201,7 @@ mod runs {
         match reason {
             "workflow_error" => Some(FailureReason::WorkflowError),
             "cancelled" => Some(FailureReason::Cancelled),
+            "approval_denied" => Some(FailureReason::ApprovalDenied),
             "terminated" => Some(FailureReason::Terminated),
             "transient_infra" => Some(FailureReason::TransientInfra),
             "budget_exhausted" => Some(FailureReason::BudgetExhausted),
@@ -1211,35 +1215,6 @@ mod runs {
     fn duration_ms_from_secs(secs: f64) -> Option<u64> {
         let duration = Duration::try_from_secs_f64(secs).ok()?;
         duration.as_millis().try_into().ok()
-    }
-
-    pub(super) fn columns() -> Vec<BoardColumnDefinition> {
-        vec![
-            BoardColumnDefinition {
-                id:   BoardColumn::Queued,
-                name: "Queued".into(),
-            },
-            BoardColumnDefinition {
-                id:   BoardColumn::Initializing,
-                name: "Initializing".into(),
-            },
-            BoardColumnDefinition {
-                id:   BoardColumn::Running,
-                name: "Running".into(),
-            },
-            BoardColumnDefinition {
-                id:   BoardColumn::Blocked,
-                name: "Blocked".into(),
-            },
-            BoardColumnDefinition {
-                id:   BoardColumn::Succeeded,
-                name: "Succeeded".into(),
-            },
-            BoardColumnDefinition {
-                id:   BoardColumn::Failed,
-                name: "Failed".into(),
-            },
-        ]
     }
 
     pub(super) fn summaries() -> Vec<Run> {
@@ -1334,7 +1309,7 @@ mod runs {
                 "implement",
                 "Implement",
                 "Add audit log retention policy",
-                "queued",
+                "runnable",
                 "2026-03-06T14:35:00Z",
                 None,
                 None,
@@ -1354,6 +1329,7 @@ mod runs {
                 Some(72_000),
                 None,
                 StageHandler::Command,
+                None,
             ),
             run_stage_from_stage_id(
                 &StageId::new("propose-changes", 1),
@@ -1362,6 +1338,7 @@ mod runs {
                 Some(154_000),
                 None,
                 StageHandler::Agent,
+                None,
             ),
             run_stage_from_stage_id(
                 &StageId::new("review-changes", 1),
@@ -1370,6 +1347,7 @@ mod runs {
                 Some(45_000),
                 None,
                 StageHandler::Agent,
+                None,
             ),
             run_stage_from_stage_id(
                 &StageId::new("apply-changes", 1),
@@ -1378,6 +1356,7 @@ mod runs {
                 Some(118_000),
                 None,
                 StageHandler::Command,
+                None,
             ),
             run_stage_from_stage_id(
                 &StageId::new("apply-changes", 2),
@@ -1386,6 +1365,7 @@ mod runs {
                 None,
                 None,
                 StageHandler::Command,
+                None,
             ),
         ]
     }
@@ -1432,6 +1412,8 @@ mod runs {
                     mode:     None,
                     provider: None,
                     model:    None,
+                    reasoning_effort: None,
+                    speed: None,
                 }),
             ),
             make_envelope(
@@ -1447,16 +1429,21 @@ mod runs {
                     billing:         BilledTokenCounts::default(),
                     tool_call_count: 0,
                     visit:           1,
+                    message:         None,
+                    context_window:  None,
                 }),
             ),
             make_envelope(
                 3,
                 "evt-detect-drift-3",
                 EventBody::AgentToolStarted(AgentToolStartedProps {
-                    tool_name:    "read_file".into(),
-                    tool_call_id: "toolu_01".into(),
-                    arguments:    serde_json::json!({ "path": "environments/production/config.toml" }),
-                    visit:        1,
+                    tool_name:         "read_file".into(),
+                    tool_call_id:      "toolu_01".into(),
+                    arguments:         serde_json::json!({ "path": "environments/production/config.toml" }),
+                    visit:             1,
+                    tool_call:         None,
+                    turn_id:           None,
+                    parent_message_id: None,
                 }),
             ),
             make_envelope(
@@ -1468,16 +1455,21 @@ mod runs {
                     output:       serde_json::json!("[redis]\nhost = \"redis-prod.internal\"\nport = 6379"),
                     is_error:     false,
                     visit:        1,
+                    tool_result:  None,
+                    turn_id:      None,
                 }),
             ),
             make_envelope(
                 5,
                 "evt-detect-drift-5",
                 EventBody::AgentToolStarted(AgentToolStartedProps {
-                    tool_name:    "read_file".into(),
-                    tool_call_id: "toolu_02".into(),
-                    arguments:    serde_json::json!({ "path": "environments/staging/config.toml" }),
-                    visit:        1,
+                    tool_name:         "read_file".into(),
+                    tool_call_id:      "toolu_02".into(),
+                    arguments:         serde_json::json!({ "path": "environments/staging/config.toml" }),
+                    visit:             1,
+                    tool_call:         None,
+                    turn_id:           None,
+                    parent_message_id: None,
                 }),
             ),
             make_envelope(
@@ -1489,6 +1481,8 @@ mod runs {
                     output:       serde_json::json!("[redis]\nhost = \"redis-staging.internal\"\nport = 6379"),
                     is_error:     false,
                     visit:        1,
+                    tool_result:  None,
+                    turn_id:      None,
                 }),
             ),
             make_envelope(
@@ -1504,6 +1498,8 @@ mod runs {
                     billing:         BilledTokenCounts::default(),
                     tool_call_count: 0,
                     visit:           1,
+                    message:         None,
+                    context_window:  None,
                 }),
             ),
         ]
@@ -1666,13 +1662,17 @@ mod runs {
                 stage:           "review".into(),
                 question_type:   QuestionType::YesNo,
                 options:         vec![
-                    ApiQuestionOption {
-                        key:   "yes".into(),
-                        label: "Yes".into(),
+                    InterviewOption {
+                        key:         "yes".into(),
+                        label:       "Yes".into(),
+                        description: None,
+                        preview:     None,
                     },
-                    ApiQuestionOption {
-                        key:   "no".into(),
-                        label: "No".into(),
+                    InterviewOption {
+                        key:         "no".into(),
+                        label:       "No".into(),
+                        description: None,
+                        preview:     None,
                     },
                 ],
                 allow_freeform:  false,
@@ -1685,13 +1685,17 @@ mod runs {
                 stage:           "migration".into(),
                 question_type:   QuestionType::MultipleChoice,
                 options:         vec![
-                    ApiQuestionOption {
-                        key:   "incremental".into(),
-                        label: "Incremental migration".into(),
+                    InterviewOption {
+                        key:         "incremental".into(),
+                        label:       "Incremental migration".into(),
+                        description: None,
+                        preview:     None,
                     },
-                    ApiQuestionOption {
-                        key:   "big_bang".into(),
-                        label: "Big-bang rewrite".into(),
+                    InterviewOption {
+                        key:         "big_bang".into(),
+                        label:       "Big-bang rewrite".into(),
+                        description: None,
+                        preview:     None,
                     },
                 ],
                 allow_freeform:  true,
@@ -1702,6 +1706,27 @@ mod runs {
     }
 
     pub(super) fn settings() -> serde_json::Value {
+        let environment = EnvironmentSettings {
+            provider: EnvironmentProvider::Daytona,
+            image: EnvironmentImageSettings {
+                reference:  Some("api-server-dev".into()),
+                dockerfile: None,
+            },
+            resources: EnvironmentResourcesSettings {
+                cpu:    Some(4),
+                memory: Some(fabro_types::settings::Size::from_gigabytes(8)),
+                disk:   Some(fabro_types::settings::Size::from_gigabytes(10)),
+            },
+            lifecycle: EnvironmentLifecycleSettings {
+                preserve:         false,
+                stop_on_terminal: true,
+                auto_stop:        Some(
+                    "60m".parse().expect("hardcoded demo duration should parse"),
+                ),
+            },
+            labels: HashMap::from([("project".to_string(), "api-server".to_string())]),
+            ..EnvironmentSettings::default()
+        };
         let settings = WorkflowSettings {
             project:  ProjectNamespace::default(),
             workflow: WorkflowNamespace {
@@ -1722,30 +1747,10 @@ mod runs {
                     commands:   vec!["bun install".into(), "bun run typecheck".into()],
                     timeout_ms: 120_000,
                 },
-                sandbox: RunSandboxSettings {
-                    provider:         "daytona".into(),
-                    preserve:         false,
-                    stop_on_terminal: true,
-                    devcontainer:     false,
-                    env:              HashMap::new(),
-                    docker:           None,
-                    daytona:          Some(DaytonaSettings {
-                        auto_stop_interval: Some(60),
-                        labels:             HashMap::from([(
-                            "project".to_string(),
-                            "api-server".to_string(),
-                        )]),
-                        volumes:            Vec::new(),
-                        snapshot:           Some(DaytonaSnapshotSettings {
-                            name:       "api-server-dev".into(),
-                            cpu:        Some(4),
-                            memory_gb:  Some(8),
-                            disk_gb:    Some(10),
-                            dockerfile: None,
-                        }),
-                        network:            None,
-                    }),
-                },
+                environment: RunEnvironmentSettings::from_environment(
+                    "api-server".to_string(),
+                    environment,
+                ),
                 ..RunNamespace::default()
             },
         };
@@ -2123,9 +2128,6 @@ strategy = "app"
 app_id = "12345"
 client_id = "Iv1.abc123"
 slug = "fabro-dev"
-
-[features]
-session_sandboxes = false
 "#,
                     )
                     .expect("demo settings fixture should resolve"),

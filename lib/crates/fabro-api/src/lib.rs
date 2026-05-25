@@ -16,39 +16,48 @@ mod generated {
 pub mod types {
     pub use fabro_model::{
         Model, ModelCosts, ModelFeatures, ModelLimits, ModelRef as BillingModelRef, ModelTestMode,
-        Provider, ReasoningEffortFeature, Speed as BillingSpeed,
+        Provider, ReasoningEffort, ReasoningEffortFeature, Speed as BillingSpeed,
     };
+    pub use fabro_types::run_event::AgentSessionActivatedProps;
+    pub use fabro_types::settings::ServerNamespace;
     pub use fabro_types::settings::server::{
         GithubIntegrationSettings, GithubIntegrationStrategy, IntegrationWebhooksSettings,
         IpAllowEntry, LogDestination, ObjectStoreSettings, ServerApiSettings,
         ServerArtifactsSettings, ServerAuthGithubSettings, ServerAuthMethod, ServerAuthSettings,
         ServerIntegrationsSettings, ServerIpAllowlistOverrideSettings, ServerIpAllowlistSettings,
-        ServerListenSettings, ServerLoggingSettings, ServerSchedulerSettings,
+        ServerListenSettings, ServerLoggingSettings, ServerSandboxProviderSettings,
+        ServerSandboxProvidersSettings, ServerSandboxSettings, ServerSchedulerSettings,
         ServerSlateDbSettings, ServerStorageSettings, ServerWebSettings, SlackIntegrationSettings,
         WebhookStrategy,
     };
-    pub use fabro_types::settings::{FeaturesNamespace, ServerNamespace};
     pub use fabro_types::status::{
-        BlockedReason, FailureReason, RunControlAction, RunStatus, SuccessReason,
+        BlockedReason, FailureReason, PendingReason, RunControlAction, RunStatus, SuccessReason,
     };
     pub use fabro_types::{
-        AskFabro, AuthMethod, BilledTokenCounts, CommandTermination, Conclusion, DiffStats,
-        DiffSummary, DirtyStatus, EventEnvelope, ExecOutputTail, FailureCategory, FailureDetail,
+        ActivatedSkill, AgentMcpToolSummary, AgentSkillActivationSource, AgentSkillSummary,
+        AgentToolCategory, AgentToolSource, AgentToolSummary, AgentToolsAvailableProps, AskFabro,
+        AuthMethod, BilledTokenCounts, CommandTermination, Conclusion, DiffStats, DiffSummary,
+        DirtyStatus, EventEnvelope, ExecOutputTail, FailureCategory, FailureDetail,
         FailureSignature, GitContext, IdpIdentity, InterviewOption, InterviewQuestionRecord,
-        PairId, PairMessageId, PairMessageRecord, PairMessageRequest, PairRecord, PairStartRequest,
-        PairStatus, PairTarget, PairTranscriptEntry, PairTranscriptResponse,
-        PendingInterviewRecord, PreRunPushOutcome, Principal, PullRequest, PullRequestDetails,
-        PullRequestDetailsStatus, PullRequestDetailsUnavailableReason, PullRequestLink,
-        PullRequestMeta, PullRequestResponse, QuestionType, RepositoryRef, Run,
-        RunClientProvenance, RunEvent, RunEventDetailContentKind, RunEventDetailResponse,
-        RunFailure, RunPairStatusResponse, RunProjection, RunProvenance, RunSandbox,
-        RunSandboxRuntime, RunServerProvenance, SandboxDetails, SandboxNetwork,
+        McpServerProjection, McpServerStatus, PairId, PairMessageId, PairMessageRecord,
+        PairMessageRequest, PairRecord, PairStartRequest, PairStatus, PairTarget,
+        PairTranscriptEntry, PairTranscriptResponse, PendingInterviewRecord, PermissionLevel,
+        PreRunPushOutcome, Principal, PullRequest, PullRequestDetails, PullRequestDetailsStatus,
+        PullRequestDetailsUnavailableReason, PullRequestLink, PullRequestMeta, PullRequestResponse,
+        QuestionType, RepositoryRef, Run, RunApproval, RunApprovalState, RunClientProvenance,
+        RunEvent, RunEventDetailContentKind, RunEventDetailResponse, RunFailure,
+        RunPairStatusResponse, RunProjection, RunProvenance, RunRunnableSource, RunSandbox,
+        RunSandboxRuntime, RunServerProvenance, RunSize, SandboxDetails, SandboxNetwork,
         SandboxNetworkPolicy, SandboxNetworkPolicyMode, SandboxProvider, SandboxResources,
         SandboxService, SandboxServiceListResponse, SandboxState, SandboxTimestamps,
         SecretMetadata, SecretType, ServerSettings, SessionDetail, SessionId, SessionMessage,
-        SessionRecord, SessionStatus, SessionSummary, SessionTurn, StageCompletion, StageHandler,
-        StageOutcome, StageProjection, StageState, SystemActorKind, TurnId, UserPrincipal,
-        WorkflowSettings,
+        SessionRecord, SessionStatus, SessionSummary, SessionTurn, SkillsProjection,
+        StageCompletion, StageContextWindow, StageContextWindowBreakdownItem,
+        StageContextWindowCategory, StageContextWindowCountMethod, StageContextWindowProjection,
+        StageContextWindowStaleness, StageContextWindowUnavailableReason,
+        StageContextWindowWarning, StageHandler, StageModelUsage, StageOutcome, StageProjection,
+        StageState, SubAgentProjection, SubAgentStatus, SystemActorKind, TodoListProjection,
+        TurnId, UserPrincipal, WorkflowSettings,
     };
 
     pub use crate::generated::types::*;

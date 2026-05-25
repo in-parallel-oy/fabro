@@ -442,6 +442,21 @@ pub fn write_object_store_settings(
     }
 }
 
+fn write_sandbox_provider_policy(server: &mut toml::Table) -> Result<()> {
+    use fabro_types::SandboxProvider;
+    let sandbox = ensure_table(server, "sandbox")?;
+    let providers = ensure_table(sandbox, "providers")?;
+    for provider in [
+        SandboxProvider::Local,
+        SandboxProvider::Docker,
+        SandboxProvider::Daytona,
+    ] {
+        let entry = ensure_table(providers, &provider.to_string())?;
+        entry.insert("enabled".to_string(), toml::Value::Boolean(true));
+    }
+    Ok(())
+}
+
 pub fn write_sandbox_settings(
     doc: &mut toml::Value,
     selection: InstallSandboxSelection,
@@ -452,11 +467,17 @@ pub fn write_sandbox_settings(
     };
     let root = root_table_mut(doc)?;
     let run = ensure_table(root, "run")?;
-    let sandbox = ensure_table(run, "sandbox")?;
-    sandbox.insert(
+    let environment = ensure_table(run, "environment")?;
+    environment.insert("id".to_string(), toml::Value::String("default".to_string()));
+
+    let environments = ensure_table(root, "environments")?;
+    let default = ensure_table(environments, "default")?;
+    default.insert(
         "provider".to_string(),
         toml::Value::String(provider.to_string()),
     );
+    let server = ensure_table(root, "server")?;
+    write_sandbox_provider_policy(server)?;
     Ok(())
 }
 
@@ -1388,12 +1409,24 @@ stale = "remove-me"
         assert_eq!(
             doc.get("run")
                 .and_then(toml::Value::as_table)
-                .and_then(|run| run.get("sandbox"))
+                .and_then(|run| run.get("environment"))
                 .and_then(toml::Value::as_table)
-                .and_then(|sandbox| sandbox.get("provider"))
+                .and_then(|env| env.get("id"))
+                .and_then(toml::Value::as_str),
+            Some("default")
+        );
+        assert_eq!(
+            doc.get("environments")
+                .and_then(toml::Value::as_table)
+                .and_then(|envs| envs.get("default"))
+                .and_then(toml::Value::as_table)
+                .and_then(|env| env.get("provider"))
                 .and_then(toml::Value::as_str),
             Some("docker")
         );
+        assert_eq!(sandbox_provider_enabled(&doc, "local"), Some(true));
+        assert_eq!(sandbox_provider_enabled(&doc, "docker"), Some(true));
+        assert_eq!(sandbox_provider_enabled(&doc, "daytona"), Some(true));
     }
 
     #[test]
@@ -1405,12 +1438,37 @@ stale = "remove-me"
         assert_eq!(
             doc.get("run")
                 .and_then(toml::Value::as_table)
-                .and_then(|run| run.get("sandbox"))
+                .and_then(|run| run.get("environment"))
                 .and_then(toml::Value::as_table)
-                .and_then(|sandbox| sandbox.get("provider"))
+                .and_then(|env| env.get("id"))
+                .and_then(toml::Value::as_str),
+            Some("default")
+        );
+        assert_eq!(
+            doc.get("environments")
+                .and_then(toml::Value::as_table)
+                .and_then(|envs| envs.get("default"))
+                .and_then(toml::Value::as_table)
+                .and_then(|env| env.get("provider"))
                 .and_then(toml::Value::as_str),
             Some("daytona")
         );
+        assert_eq!(sandbox_provider_enabled(&doc, "local"), Some(true));
+        assert_eq!(sandbox_provider_enabled(&doc, "docker"), Some(true));
+        assert_eq!(sandbox_provider_enabled(&doc, "daytona"), Some(true));
+    }
+
+    fn sandbox_provider_enabled(doc: &toml::Value, provider: &str) -> Option<bool> {
+        doc.get("server")
+            .and_then(toml::Value::as_table)
+            .and_then(|server| server.get("sandbox"))
+            .and_then(toml::Value::as_table)
+            .and_then(|sandbox| sandbox.get("providers"))
+            .and_then(toml::Value::as_table)
+            .and_then(|providers| providers.get(provider))
+            .and_then(toml::Value::as_table)
+            .and_then(|provider| provider.get("enabled"))
+            .and_then(toml::Value::as_bool)
     }
 
     #[test]

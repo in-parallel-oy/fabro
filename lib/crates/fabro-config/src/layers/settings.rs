@@ -10,8 +10,9 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use super::cli::CliLayer;
-use super::features::FeaturesLayer;
+use super::environment::EnvironmentLayer;
 use super::llm::LlmLayer;
+use super::maps::MergeMap;
 use super::project::ProjectLayer;
 use super::run::RunLayer;
 use super::server::ServerLayer;
@@ -20,23 +21,23 @@ use crate::parse::{ParseError, parse_settings};
 
 /// A sparse settings layer before merge/resolve.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
-pub(crate) struct SettingsLayer {
+pub struct SettingsLayer {
     #[serde(default, rename = "_version", skip_serializing_if = "Option::is_none")]
-    pub version:  Option<u32>,
+    pub version:      Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub project:  Option<ProjectLayer>,
+    pub project:      Option<ProjectLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workflow: Option<WorkflowLayer>,
+    pub workflow:     Option<WorkflowLayer>,
+    #[serde(default, skip_serializing_if = "MergeMap::is_empty")]
+    pub environments: MergeMap<EnvironmentLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub run:      Option<RunLayer>,
+    pub run:          Option<RunLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cli:      Option<CliLayer>,
+    pub cli:          Option<CliLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub server:   Option<ServerLayer>,
+    pub server:       Option<ServerLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub features: Option<FeaturesLayer>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub llm:      Option<LlmLayer>,
+    pub llm:          Option<LlmLayer>,
 }
 
 impl FromStr for SettingsLayer {
@@ -51,15 +52,6 @@ impl From<CliLayer> for SettingsLayer {
     fn from(cli: CliLayer) -> Self {
         Self {
             cli: Some(cli),
-            ..Self::default()
-        }
-    }
-}
-
-impl From<FeaturesLayer> for SettingsLayer {
-    fn from(features: FeaturesLayer) -> Self {
-        Self {
-            features: Some(features),
             ..Self::default()
         }
     }

@@ -79,23 +79,27 @@ fn load_run_checkpoint(run_dir: &Path) -> Result<Checkpoint, Box<dyn std::error:
                 let runtime = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()?;
-                let run_id = if uses_shared_store {
-                    run_dir
-                        .file_name()
-                        .ok_or("run dir should have file name")?
-                        .to_string_lossy()
-                        .rsplit('-')
-                        .next()
-                        .ok_or("run dir should contain run id suffix")?
-                        .parse()?
-                } else {
-                    runtime
-                        .block_on(store.list_runs(&fabro_store::ListRunsQuery::default()))?
-                        .into_iter()
-                        .next()
-                        .ok_or("test store should contain one run")?
-                        .id
-                };
+                let run_id =
+                    if uses_shared_store {
+                        run_dir
+                            .file_name()
+                            .ok_or("run dir should have file name")?
+                            .to_string_lossy()
+                            .rsplit('-')
+                            .next()
+                            .ok_or("run dir should contain run id suffix")?
+                            .parse()?
+                    } else {
+                        runtime
+                            .block_on(store.list_runs(
+                                &fabro_store::ListRunsQuery::default(),
+                                chrono::Utc::now(),
+                            ))?
+                            .into_iter()
+                            .next()
+                            .ok_or("test store should contain one run")?
+                            .id
+                    };
                 let run = runtime.block_on(store.open_run_reader(&run_id))?;
                 let state = runtime.block_on(async {
                     for attempt in 0..20 {
@@ -128,7 +132,9 @@ fn load_run_checkpoint(run_dir: &Path) -> Result<Checkpoint, Box<dyn std::error:
                 .parse()?
         } else {
             runtime
-                .block_on(store.list_runs(&fabro_store::ListRunsQuery::default()))?
+                .block_on(
+                    store.list_runs(&fabro_store::ListRunsQuery::default(), chrono::Utc::now()),
+                )?
                 .into_iter()
                 .next()
                 .ok_or("test store should contain one run")?
@@ -2000,7 +2006,8 @@ async fn daytona_playwright_mcp_sandbox_transport() {
     let mcp_config = fabro_mcp::config::McpServerSettings {
         name:                 "playwright".into(),
         transport:            fabro_mcp::config::McpTransport::Sandbox {
-            command: vec![
+            protocol: fabro_mcp::config::McpHttpProtocol::Sse,
+            command:  vec![
                 "npx".into(),
                 "@playwright/mcp@latest".into(),
                 "--port".into(),
@@ -2009,8 +2016,8 @@ async fn daytona_playwright_mcp_sandbox_transport() {
                 "--browser".into(),
                 "chromium".into(),
             ],
-            port:    mcp_port,
-            env:     std::collections::HashMap::new(),
+            port:     mcp_port,
+            env:      std::collections::HashMap::new(),
         },
         current_dir:          None,
         clear_env:            false,
@@ -2021,7 +2028,12 @@ async fn daytona_playwright_mcp_sandbox_transport() {
     // Resolve the sandbox transport: start the server, get preview URL, rewrite to
     // HTTP
     let resolved = match &mcp_config.transport {
-        fabro_mcp::config::McpTransport::Sandbox { command, port, .. } => {
+        fabro_mcp::config::McpTransport::Sandbox {
+            protocol,
+            command,
+            port,
+            ..
+        } => {
             let (url, headers) = {
                 let cmd_str = command.join(" ");
                 let launch_script = format!(
@@ -2067,9 +2079,15 @@ async fn daytona_playwright_mcp_sandbox_transport() {
             };
             eprintln!("Preview URL: {url}");
 
+            let url = fabro_mcp::http_transport::sandbox_mcp_http_url(*protocol, &url).unwrap();
+
             fabro_mcp::config::McpServerSettings {
                 name:                 mcp_config.name.clone(),
-                transport:            fabro_mcp::config::McpTransport::Http { url, headers },
+                transport:            fabro_mcp::config::McpTransport::Http {
+                    protocol: *protocol,
+                    url,
+                    headers,
+                },
                 current_dir:          mcp_config.current_dir.clone(),
                 clear_env:            mcp_config.clear_env,
                 startup_timeout_secs: mcp_config.startup_timeout_secs,

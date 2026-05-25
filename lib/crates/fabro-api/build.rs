@@ -187,6 +187,7 @@ fn main() {
     settings.with_interface(InterfaceStyle::Builder);
     let replacements: &[(&str, &str, &[TypeImpl])] = &[
         ("RunStatus", "fabro_types::status::RunStatus", &[]),
+        ("PendingReason", "fabro_types::status::PendingReason", &[]),
         ("SuccessReason", "fabro_types::status::SuccessReason", &[]),
         ("FailureReason", "fabro_types::status::FailureReason", &[]),
         ("FailureCategory", "fabro_types::FailureCategory", &[]),
@@ -200,6 +201,10 @@ fn main() {
             &[],
         ),
         ("Run", "fabro_types::Run", &[]),
+        ("RunApproval", "fabro_types::RunApproval", &[]),
+        ("RunApprovalState", "fabro_types::RunApprovalState", &[]),
+        ("RunRunnableSource", "fabro_types::RunRunnableSource", &[]),
+        ("RunSize", "fabro_types::RunSize", &[]),
         ("DiffSummary", "fabro_types::DiffSummary", &[]),
         ("RepositoryRef", "fabro_types::RepositoryRef", &[]),
         ("WorkflowSettings", "fabro_types::WorkflowSettings", &[]),
@@ -207,11 +212,6 @@ fn main() {
         (
             "ServerNamespace",
             "fabro_types::settings::ServerNamespace",
-            &[],
-        ),
-        (
-            "FeaturesNamespace",
-            "fabro_types::settings::FeaturesNamespace",
             &[],
         ),
         (
@@ -257,6 +257,21 @@ fn main() {
         (
             "IpAllowEntry",
             "fabro_types::settings::server::IpAllowEntry",
+            &[],
+        ),
+        (
+            "ServerSandboxSettings",
+            "fabro_types::settings::server::ServerSandboxSettings",
+            &[],
+        ),
+        (
+            "ServerSandboxProvidersSettings",
+            "fabro_types::settings::server::ServerSandboxProvidersSettings",
+            &[],
+        ),
+        (
+            "ServerSandboxProviderSettings",
+            "fabro_types::settings::server::ServerSandboxProviderSettings",
             &[],
         ),
         (
@@ -347,7 +362,80 @@ fn main() {
         ("StageHandler", "fabro_types::StageHandler", &[]),
         ("StageState", "fabro_types::StageState", &[]),
         ("CommandTermination", "fabro_types::CommandTermination", &[]),
+        ("StageModelUsage", "fabro_types::StageModelUsage", &[]),
         ("StageProjection", "fabro_types::StageProjection", &[]),
+        ("PermissionLevel", "fabro_types::PermissionLevel", &[]),
+        (
+            "AgentSessionActivatedProps",
+            "fabro_types::run_event::AgentSessionActivatedProps",
+            &[],
+        ),
+        ("TodoListProjection", "fabro_types::TodoListProjection", &[]),
+        ("SubAgentProjection", "fabro_types::SubAgentProjection", &[]),
+        ("SubAgentStatus", "fabro_types::SubAgentStatus", &[]),
+        ("SkillsProjection", "fabro_types::SkillsProjection", &[]),
+        ("ActivatedSkill", "fabro_types::ActivatedSkill", &[]),
+        ("AgentSkillSummary", "fabro_types::AgentSkillSummary", &[]),
+        (
+            "AgentSkillActivationSource",
+            "fabro_types::AgentSkillActivationSource",
+            &[],
+        ),
+        ("AgentToolSummary", "fabro_types::AgentToolSummary", &[]),
+        ("AgentToolSource", "fabro_types::AgentToolSource", &[]),
+        ("AgentToolCategory", "fabro_types::AgentToolCategory", &[]),
+        (
+            "AgentToolsAvailableProps",
+            "fabro_types::AgentToolsAvailableProps",
+            &[],
+        ),
+        (
+            "McpServerProjection",
+            "fabro_types::McpServerProjection",
+            &[],
+        ),
+        ("McpServerStatus", "fabro_types::McpServerStatus", &[]),
+        (
+            "AgentMcpToolSummary",
+            "fabro_types::AgentMcpToolSummary",
+            &[],
+        ),
+        ("StageContextWindow", "fabro_types::StageContextWindow", &[]),
+        (
+            "StageContextWindowProjection",
+            "fabro_types::StageContextWindowProjection",
+            &[],
+        ),
+        (
+            "StageContextWindowBreakdownItem",
+            "fabro_types::StageContextWindowBreakdownItem",
+            &[],
+        ),
+        (
+            "StageContextWindowCategory",
+            "fabro_types::StageContextWindowCategory",
+            &[],
+        ),
+        (
+            "StageContextWindowCountMethod",
+            "fabro_types::StageContextWindowCountMethod",
+            &[],
+        ),
+        (
+            "StageContextWindowStaleness",
+            "fabro_types::StageContextWindowStaleness",
+            &[],
+        ),
+        (
+            "StageContextWindowUnavailableReason",
+            "fabro_types::StageContextWindowUnavailableReason",
+            &[],
+        ),
+        (
+            "StageContextWindowWarning",
+            "fabro_types::StageContextWindowWarning",
+            &[],
+        ),
         ("SecretMetadata", "fabro_types::SecretMetadata", &[]),
         ("InterviewOption", "fabro_types::InterviewOption", &[]),
         (
@@ -375,6 +463,7 @@ fn main() {
             "fabro_model::ReasoningEffortFeature",
             &[],
         ),
+        ("ReasoningEffort", "fabro_model::ReasoningEffort", &[]),
         ("ModelFeatures", "fabro_model::ModelFeatures", &[]),
         ("ModelCosts", "fabro_model::ModelCosts", &[]),
         ("ModelTestMode", "fabro_model::ModelTestMode", &[]),

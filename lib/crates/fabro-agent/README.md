@@ -74,14 +74,16 @@ pub trait AgentProfile: Send + Sync {
 
 Built-in profiles:
 - **`AnthropicProfile`** -- 200K context, extended thinking beta headers, tools: `read_file`, `write_file`, `edit_file`, `shell`, `grep`, `glob`
-- **`OpenAiProfile`** -- 128K context, reasoning effort support, tools: `read_file`, `write_file`, `shell`, `grep`, `glob`, `apply_patch` (v4a format)
+- **`OpenAiProfile`** -- 128K context, reasoning effort support, tools: `read_file`, `write_file`, `shell`, `grep`, `glob`, `apply_patch` (Codex apply_patch format)
 - **`GeminiProfile`** -- 1M context, safety settings, tools: all Anthropic tools plus `read_many_files`, `list_dir`, `web_search`, `web_fetch`
 
 ### `Sandbox`
 
 ```rust
 pub trait Sandbox: Send + Sync {
-    async fn read_file(&self, path: &str, offset: Option<usize>, limit: Option<usize>) -> Result<String, String>;
+    async fn read_file_bytes(&self, path: &str) -> Result<Vec<u8>, String>;
+    async fn read_file_text(&self, path: &str) -> Result<String, String>;
+    async fn read_file(&self, path: &str, offset: Option<usize>, limit: Option<usize>) -> Result<String, String>; // line-numbered display
     async fn write_file(&self, path: &str, content: &str) -> Result<(), String>;
     async fn exec_command(&self, command: &str, timeout_ms: u64, ...) -> Result<ExecResult, String>;
     async fn grep(&self, pattern: &str, path: &str, options: &GrepOptions) -> Result<Vec<String>, String>;

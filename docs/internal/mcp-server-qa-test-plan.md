@@ -12,6 +12,7 @@ Live list of bugs and notable observations surfaced during the sweep. Each entry
 None currently open.
 
 ### Rechecked / no longer open
+- **C18 — `fabro_run_create` shorthand schema/runtime mismatch**: fixed on 2026-05-22. `runs: ["sleeper"]` is now accepted as workflow-selector shorthand, object-form specs remain supported for create options, and `tools/list` advertises both item shapes. Covered by `fabro_run_create_tool_advertises_string_and_object_run_specs`, `stdio_server_initializes_and_lists_run_tools`, and `mcp_create_string_shorthand_deserializes_before_auth`.
 - **C4 — `inputs` schema/runtime mismatch**: fixed by narrowing MCP input values to scalar JSON (`string`, `boolean`, `integer`, `number`) and rejecting arrays/objects locally with scalar-only errors. Re-tested on 2026-05-11 against `127.0.0.1:32276`; `tools/list` now advertises scalar-only `inputs.additionalProperties`.
 - **C5 — Misleading null-input error message**: fixed. Re-tested on 2026-05-11; null now returns ``input `maybe` cannot be null; use a string, boolean, or number``.
 - **I7 / I9 — Misleading "Run not found." on terminal runs**: fixed on 2026-05-11 in the server API layer. `message`/steer against a durable terminal run that no longer has a live managed engine now returns `409` with `run_not_steerable`; `cancel` returns `409` with `Run is already terminal and cannot be cancelled.` True missing runs still return `404`.
@@ -42,7 +43,7 @@ None currently open.
 Source: `run_tools/create.rs:124`
 
 ### Happy path
-- [x] **C1** Create one run from an existing workflow (e.g. `gh-list`); default `start=true` → expect `started=true`, `status` in `{queued, starting, running}`. — **PASS**. `status=queued`.
+- [x] **C1** Create one run from an existing workflow (e.g. `gh-list`); default `start=true` → expect `start_requested=true`, `status` in `{runnable, starting, running}`. — **PASS**. `status=runnable`.
 - [x] **C2** Create with `start=false` → expect `started=false`, `status=submitted`. — **PASS**. Run `01KRC4MP2NEQS9GJDE9FJ0EECH` kept as fixture for I3.
 - [x] **C3** Batch create 5 runs in one call → all return; result preserves array order. — **PASS**. ULIDs monotonically increasing.
 
@@ -64,6 +65,7 @@ Source: `run_tools/create.rs:124`
 - [x] **C14** 51 entries → `runs must contain no more than 50 item(s)`. — **PASS**.
 - [x] **C15** Missing required `workflow` → MCP layer `-32602: missing field 'workflow'`. — **PASS**.
 - [x] **C16** Unknown workflow slug → `Unknown workflow 'X'\n\nAvailable workflows: ...`. — **PASS** (very helpful — lists available workflows).
+- [x] **C18** String shorthand `runs: ["gh-list"]` → accepted as the workflow selector. `tools/list` should show `runs.items.anyOf` with both a string branch and an object branch requiring `workflow`. — **COVERED by automated regression tests added 2026-05-22**.
 
 ### Failure semantics
 - [x] **C17** Invalid sandbox name → `failed to resolve manifest settings: run.sandbox.provider: invalid value - unknown sandbox provider: this-sandbox-does-not-exist`. — **PASS**. Error raised at manifest-resolve time before any run record is created (no orphaned submitted run).
@@ -179,7 +181,7 @@ Source: `run_tools/interact.rs:201`
 - [x] **I2** Non-existent run → fuzzy match error. — **PASS**.
 
 #### `start`
-- [x] **I3** Non-started run (from C2) → `start` transitions to `queued`. Second `start` → `an engine process is still running for this run — cannot start`. — **PASS**.
+- [x] **I3** Non-started run (from C2) → `start` transitions to `runnable`. Second `start` → `start has already been requested for this run`. — **PASS**.
 
 #### `message` (steer)
 - [ ] **I4** Steer a running LLM agent — **DEFERRED** (requires an active LLM agent stage; would burn LLM tokens; can be exercised manually once the answer bug below is resolved).

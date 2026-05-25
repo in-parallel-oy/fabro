@@ -38,6 +38,7 @@ fabro-http.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+strum.workspace = true
 tokio.workspace = true
 uuid.workspace = true
 futures.workspace = true
@@ -48,6 +49,7 @@ tokio-util.workspace = true
 tracing.workspace = true
 dirs = "6"
 glob = "0.3"
+sha2.workspace = true
 shell-escape = "0.1"
 htmd = "0.5"
 
@@ -61,3 +63,4 @@ paste = "1"
 fabro-sandbox = { path = "../fabro-sandbox", features = ["test-support"] }
 fabro-macros = { path = "../fabro-macros" }
 fabro-test = { workspace = true }
+tracing-subscriber.workspace = true

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use fabro_llm::types::ToolDefinition;
 use fabro_mcp::connection_manager::{McpConnectionManager, call_result_to_string};
 
-use crate::tool_registry::RegisteredTool;
+use crate::tool_registry::{RegisteredTool, ToolSource};
 
 /// Create `RegisteredTool` instances for every tool exposed by connected MCP
 /// servers.
@@ -14,6 +14,8 @@ pub fn make_mcp_tools(manager: &Arc<McpConnectionManager>) -> Vec<RegisteredTool
         .map(|(qualified_name, info)| {
             let mgr = Arc::clone(manager);
             let name = qualified_name.clone();
+            let server_name = info.server_name.clone();
+            let original_name = info.original_tool_name.clone();
             let tool_timeout = std::time::Duration::from_mins(2);
 
             RegisteredTool {
@@ -34,6 +36,10 @@ pub fn make_mcp_tools(manager: &Arc<McpConnectionManager>) -> Vec<RegisteredTool
                         call_result_to_string(&result)
                     })
                 }),
+                source:     ToolSource::Mcp {
+                    server_name,
+                    original_name,
+                },
             }
         })
         .collect()
@@ -97,6 +103,10 @@ mod tests {
                 env,
                 cancel: CancellationToken::new(),
                 tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
+                agent_event_emitter: None,
             },
         )
         .await;

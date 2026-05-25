@@ -5,6 +5,7 @@ import {
   subscribeToCrossTabSse,
   type CrossTabSseCoordinator,
 } from "./cross-tab-sse";
+import { runListCacheMatchers } from "./board-cache";
 import { queryKeys } from "./query-keys";
 import {
   createBrowserEventSource,
@@ -22,7 +23,11 @@ interface BoardEventOptions {
 
 const BOARD_STATUS_EVENTS = new Set([
   "run.submitted",
-  "run.queued",
+  "run.start_requested",
+  "run.pending",
+  "run.approved",
+  "run.denied",
+  "run.runnable",
   "run.starting",
   "run.running",
   "run.removing",
@@ -85,7 +90,7 @@ function boardInvalidation(payload: EventPayload) {
 }
 
 function boardRunKeys() {
-  return [queryKeys.boards.runs(false), queryKeys.boards.runs(true)];
+  return runListCacheMatchers();
 }
 
 export function useBoardEvents() {

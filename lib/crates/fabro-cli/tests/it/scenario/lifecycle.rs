@@ -30,7 +30,7 @@ fn local_run_lifecycle() {
         .run_cmd()
         .args([
             "--auto-approve",
-            "--sandbox",
+            "--environment",
             "local",
             fixture("command_pipeline.fabro").to_str().unwrap(),
         ])
@@ -154,7 +154,8 @@ fn dry_run_create_start_attach_works_with_default_run_lookup() {
             } else {
                 match state.status {
                 fabro_types::RunStatus::Submitted => "submitted",
-                fabro_types::RunStatus::Queued => "queued",
+                fabro_types::RunStatus::Pending { .. } => "pending",
+                fabro_types::RunStatus::Runnable => "runnable",
                 fabro_types::RunStatus::Starting => "starting",
                 fabro_types::RunStatus::Running => "running",
                 fabro_types::RunStatus::Blocked { .. } => "blocked",

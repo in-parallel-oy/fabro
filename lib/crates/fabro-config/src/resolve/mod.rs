@@ -1,15 +1,15 @@
 mod cli;
+mod environment;
 mod error;
-mod features;
 mod project;
 mod run;
 mod server;
 mod workflow;
 
 pub use cli::resolve_cli;
+pub(crate) use environment::resolve_run_environment;
 pub use error::ResolveError;
 use fabro_types::settings::InterpString;
-pub use features::resolve_features;
 pub use project::resolve_project;
 pub use run::resolve_run;
 pub use server::resolve_server;
@@ -54,7 +54,7 @@ pub(crate) fn default_interp(path: impl AsRef<std::path::Path>) -> InterpString 
 mod tests {
     use std::collections::HashMap;
 
-    use fabro_types::settings::run::{HookType, McpTransport, TlsMode};
+    use fabro_types::settings::run::{HookType, McpHttpProtocol, McpTransport, TlsMode};
 
     use crate::{SettingsLayer, WorkflowSettingsBuilder};
 
@@ -117,8 +117,9 @@ Authorization = "Bearer {{ env.HOOK_TOKEN }}"
         assert_eq!(
             mcps.get("http").map(|mcp| &mcp.transport),
             Some(&McpTransport::Http {
-                url:     "https://mcp.example.com".to_string(),
-                headers: HashMap::from([(
+                protocol: McpHttpProtocol::default(),
+                url:      "https://mcp.example.com".to_string(),
+                headers:  HashMap::from([(
                     "Authorization".to_string(),
                     "Bearer {{ env.MCP_HTTP_TOKEN }}".to_string(),
                 )]),
@@ -127,9 +128,10 @@ Authorization = "Bearer {{ env.HOOK_TOKEN }}"
         assert_eq!(
             mcps.get("sandbox").map(|mcp| &mcp.transport),
             Some(&McpTransport::Sandbox {
-                command: vec!["fabro-mcp".to_string(), "--sandbox".to_string()],
-                port:    3333,
-                env:     HashMap::from([(
+                protocol: McpHttpProtocol::default(),
+                command:  vec!["fabro-mcp".to_string(), "--sandbox".to_string()],
+                port:     3333,
+                env:      HashMap::from([(
                     "TOKEN".to_string(),
                     "{{ env.MCP_SANDBOX_TOKEN }}".to_string(),
                 )]),

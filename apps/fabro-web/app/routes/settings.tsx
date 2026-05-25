@@ -3,6 +3,7 @@ import {
   CircleStackIcon,
   Cog6ToothIcon,
   CpuChipIcon,
+  CubeTransparentIcon,
   KeyIcon,
   PuzzlePieceIcon,
   ServerStackIcon,
@@ -40,6 +41,12 @@ const navItems: NavEntry[] = [
     href: "/settings/models",
     icon: CpuChipIcon,
     match: (p) => p.startsWith("/settings/models"),
+  },
+  {
+    name: "Sandboxes",
+    href: "/settings/sandboxes",
+    icon: CubeTransparentIcon,
+    match: (p) => p.startsWith("/settings/sandboxes"),
   },
   {
     name: "Integrations",
