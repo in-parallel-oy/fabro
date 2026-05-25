@@ -320,7 +320,6 @@ function PrCard({
   actions?: string[];
 }) {
   const lifecycleLabel = boardLifecycleStatusLabel(pr);
-  const hasActions = actions != null && actions.length > 0;
 
   return (
     <div className="group rounded-md border border-line bg-panel p-4 transition-all duration-200 hover:border-line-strong hover:shadow-lg hover:shadow-black/20">
@@ -347,34 +346,62 @@ function PrCard({
         <p className="text-sm leading-snug text-fg-2">{pr.title}</p>
       </Link>
 
-      {(pr.resources != null || pr.comments != null || (pr.elapsed != null && !hasActions)) && (
-        <div className="mt-3 flex items-center gap-3 font-mono text-xs">
-          {pr.resources != null && (
-            <span className="text-fg-3">{pr.resources}</span>
-          )}
-          {pr.comments != null && (
-            <span className="inline-flex items-center gap-1 text-fg-muted">
-              <svg viewBox="0 0 16 16" fill="currentColor" className="size-3" aria-hidden="true">
-                <path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z" />
-              </svg>
-              {pr.comments}
-            </span>
-          )}
-          {pr.elapsed != null && !hasActions && (
-            <span className="ml-auto font-mono text-fg-muted">{pr.elapsed}</span>
-          )}
-        </div>
-      )}
-
       {pr.checks != null && <ChecksStatus checks={pr.checks} />}
 
       {pr.question != null && (
         <p className="mt-3 truncate text-xs italic text-amber/70">{pr.question}</p>
       )}
 
-      {hasActions && (
+      <PrCardFooter pr={pr} actions={actions} />
+
+      {pr.pendingApproval && (
         <div className="mt-3 flex items-center gap-1.5">
-          {actions?.map((label) => (
+          <ApproveBoardButton runId={pr.id} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// All inline footer metadata on PrCard belongs in this one row. Adding a new
+// piece as a sibling `<div>` below the card body recreates a recurring bug
+// where stats stack onto separate lines instead of sitting next to elapsed/actions.
+function PrCardFooter({ pr, actions }: { pr: RunItem; actions?: string[] }) {
+  const hasActions = actions != null && actions.length > 0;
+  const hasStats =
+    pr.resources != null ||
+    pr.comments != null ||
+    (pr.additions != null && pr.additions !== 0) ||
+    (pr.deletions != null && pr.deletions !== 0);
+
+  if (!hasStats && !hasActions && pr.elapsed == null) return null;
+
+  return (
+    <div className="mt-3 flex items-center gap-3 font-mono text-xs">
+      {pr.resources != null && (
+        <span className="text-fg-3">{pr.resources}</span>
+      )}
+      {pr.comments != null && (
+        <span className="inline-flex items-center gap-1 text-fg-muted">
+          <svg viewBox="0 0 16 16" fill="currentColor" className="size-3" aria-hidden="true">
+            <path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z" />
+          </svg>
+          {pr.comments}
+        </span>
+      )}
+      {pr.additions != null && pr.additions !== 0 && (
+        <span className="tabular-nums text-mint">
+          +{pr.additions.toLocaleString()}
+        </span>
+      )}
+      {pr.deletions != null && pr.deletions !== 0 && (
+        <span className="tabular-nums text-coral">
+          -{pr.deletions.toLocaleString()}
+        </span>
+      )}
+      {hasActions && (
+        <div className="ml-auto flex items-center gap-1.5">
+          {actions.map((label) => (
             <button
               key={label}
               type="button"
@@ -407,32 +434,12 @@ function PrCard({
               {label}
             </button>
           ))}
-          {pr.elapsed != null && (
-            <span className="ml-auto font-mono text-xs text-fg-muted">{pr.elapsed}</span>
-          )}
         </div>
       )}
-
-      {((pr.additions != null && pr.additions !== 0) ||
-        (pr.deletions != null && pr.deletions !== 0)) && (
-        <div className="mt-3 flex items-center gap-3 font-mono text-xs">
-          {pr.additions != null && (
-            <span className="tabular-nums text-mint">
-              +{pr.additions.toLocaleString()}
-            </span>
-          )}
-          {pr.deletions != null && (
-            <span className="tabular-nums text-coral">
-              -{pr.deletions.toLocaleString()}
-            </span>
-          )}
-        </div>
-      )}
-
-      {pr.pendingApproval && (
-        <div className="mt-3 flex items-center gap-1.5">
-          <ApproveBoardButton runId={pr.id} />
-        </div>
+      {pr.elapsed != null && (
+        <span className={`text-fg-muted ${hasActions ? "" : "ml-auto"}`}>
+          {pr.elapsed}
+        </span>
       )}
     </div>
   );
