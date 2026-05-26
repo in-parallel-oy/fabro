@@ -75,7 +75,7 @@ Each commit leaves the tree in a working state; no commit emits events that aren
 
 ### `lib/crates/fabro-acp/src/session.rs`
 
-- Add `on_session_update: Option<Arc<dyn Fn(&SessionUpdate) + Send + Sync>>` to `AcpRunRequest`.
+- Add `on_session_update: Option<Arc<dyn Fn(&SessionUpdate) + Send + Sync>>` to `AcpLiveControl`, keeping `AcpRunRequest` struct literals source-compatible.
 - In the `tokio::select!` arm at lines 402-428, invoke `on_session_update` (when set) for *every* notification — including `AgentMessageChunk` — before the existing text accumulation. The callback is fire-and-forget; failures are logged via `tracing` but never abort the prompt loop.
 - Keep the `AgentMessageChunk` accumulator intact (it still drives the response-text contract).
 - Test in `test_support.rs` style: a synthetic ACP server replays each `SessionUpdate` variant; assert the callback fires with each verbatim.
@@ -162,7 +162,7 @@ Each commit leaves the tree in a working state; no commit emits events that aren
   };
   ```
 
-- Pass `on_session_update: Some(on_session_update)` into `AcpRunRequest`.
+- Pass `on_session_update: Some(on_session_update)` through the `AcpLiveControl` supplied to `AcpRunRequest`.
 
 - The existing `AgentAcpStarted` / `AgentAcpCompleted` / `AgentAcpCancelled` / `AgentAcpTimedOut` emissions stay exactly as today; they remain the canonical subprocess lifecycle signal. The new events stream *during* the gap between started and completed.
 
@@ -190,7 +190,7 @@ Each commit leaves the tree in a working state; no commit emits events that aren
 ## Migration / Compatibility
 
 - **Wire-format additive.** No existing event type changes. Existing consumers (run store, SSE, CLI, JSONL sinks) ignore unknown event types — verified by the `EventBody::Unknown` fallback at `fabro-types/src/run_event/mod.rs:373`.
-- **No breaking API changes.** `fabro-acp`'s `AcpRunRequest` gains an optional field; existing callers compile unchanged.
+- **No breaking API changes.** `fabro-acp` keeps `AcpRunRequest` source-compatible for existing struct-literal callers; the optional session-update hook lives on `AcpLiveControl`, which already has `Default` and `new(...)` constructors.
 - **`agent.acp.completed.stdout`** continues to carry the accumulated agent text. New consumers that prefer `agent.acp.message`-stream rendering can use that; legacy consumers (e.g. run-summary commands) keep the coalesced blob.
 - **Storage**: persisted events go through the standard `EventBody` serialization path; no schema migration needed.
 

@@ -1285,30 +1285,46 @@ fn event_body_from_event(event: &Event) -> EventBody {
             visit:        *visit,
             fields:       fields.clone(),
         }),
-        Event::AgentAcpMessage { visit, content, .. } => {
-            EventBody::AgentAcpMessage(fabro_types::AgentAcpMessageProps {
-                visit:   *visit,
-                content: content.clone(),
-            })
-        }
-        Event::AgentAcpThought { visit, content, .. } => {
-            EventBody::AgentAcpThought(fabro_types::AgentAcpThoughtProps {
-                visit:   *visit,
-                content: content.clone(),
-            })
-        }
-        Event::AgentAcpPlan { visit, entries, .. } => {
-            EventBody::AgentAcpPlan(fabro_types::AgentAcpPlanProps {
-                visit:   *visit,
-                entries: entries.clone(),
-            })
-        }
-        Event::AgentAcpUserMessage { visit, content, .. } => {
-            EventBody::AgentAcpUserMessage(fabro_types::AgentAcpUserMessageProps {
-                visit:   *visit,
-                content: content.clone(),
-            })
-        }
+        Event::AgentAcpMessage {
+            visit,
+            content,
+            metadata,
+            ..
+        } => EventBody::AgentAcpMessage(fabro_types::AgentAcpMessageProps {
+            visit:    *visit,
+            content:  content.clone(),
+            metadata: metadata.clone(),
+        }),
+        Event::AgentAcpThought {
+            visit,
+            content,
+            metadata,
+            ..
+        } => EventBody::AgentAcpThought(fabro_types::AgentAcpThoughtProps {
+            visit:    *visit,
+            content:  content.clone(),
+            metadata: metadata.clone(),
+        }),
+        Event::AgentAcpPlan {
+            visit,
+            entries,
+            metadata,
+            ..
+        } => EventBody::AgentAcpPlan(fabro_types::AgentAcpPlanProps {
+            visit:    *visit,
+            entries:  entries.clone(),
+            metadata: metadata.clone(),
+        }),
+        Event::AgentAcpUserMessage {
+            visit,
+            content,
+            metadata,
+            ..
+        } => EventBody::AgentAcpUserMessage(fabro_types::AgentAcpUserMessageProps {
+            visit:    *visit,
+            content:  content.clone(),
+            metadata: metadata.clone(),
+        }),
         Event::PullRequestCreated {
             pr_url,
             pr_number,
@@ -2420,6 +2436,64 @@ mod tests {
                 ..
             })
         ));
+
+        let tool_call = to_run_event_at(
+            &fixtures::RUN_1,
+            &Event::AgentAcpToolCall {
+                node_id:      "code".to_string(),
+                tool_call_id: "call_1".to_string(),
+                visit:        2,
+                call:         serde_json::json!({
+                    "toolCallId": "call_1",
+                    "title": "Read file",
+                    "status": "pending"
+                }),
+            },
+            Utc::now(),
+            Some(&scope),
+        );
+        assert_eq!(tool_call.event_name(), "agent.acp.tool_call");
+        assert_eq!(tool_call.node_id.as_deref(), Some("code"));
+        assert_eq!(tool_call.stage_id, Some(StageId::new("code", 2)));
+        assert_eq!(tool_call.tool_call_id.as_deref(), Some("call_1"));
+        assert_eq!(tool_call.parallel_group_id, scope.parallel_group_id);
+        match &tool_call.body {
+            EventBody::AgentAcpToolCall(props) => {
+                assert_eq!(props.visit, 2);
+                assert_eq!(props.tool_call_id, "call_1");
+                assert_eq!(props.call["title"], "Read file");
+            }
+            other => panic!("expected AgentAcpToolCall, got {other:?}"),
+        }
+
+        let message = to_run_event_at(
+            &fixtures::RUN_1,
+            &Event::AgentAcpMessage {
+                node_id:  "code".to_string(),
+                visit:    2,
+                content:  serde_json::json!({
+                    "type": "text",
+                    "text": "hello"
+                }),
+                metadata: serde_json::Map::from_iter([(
+                    "_meta".to_string(),
+                    serde_json::json!({"source": "acp"}),
+                )]),
+            },
+            Utc::now(),
+            Some(&scope),
+        );
+        assert_eq!(message.event_name(), "agent.acp.message");
+        assert_eq!(message.node_id.as_deref(), Some("code"));
+        assert_eq!(message.stage_id, Some(StageId::new("code", 2)));
+        match &message.body {
+            EventBody::AgentAcpMessage(props) => {
+                assert_eq!(props.visit, 2);
+                assert_eq!(props.content["text"], "hello");
+                assert_eq!(props.metadata["_meta"]["source"], "acp");
+            }
+            other => panic!("expected AgentAcpMessage, got {other:?}"),
+        }
     }
 
     #[test]

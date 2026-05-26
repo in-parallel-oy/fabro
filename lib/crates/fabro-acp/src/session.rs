@@ -145,6 +145,7 @@ pub struct AcpLiveControl {
     pub handle:                AcpControlHandle,
     pub on_natural_completion: Option<AcpNaturalCompletionCallback>,
     pub on_steer_prompt:       Option<AcpSteerPromptCallback>,
+    pub on_session_update:     Option<AcpSessionUpdateCallback>,
 }
 
 impl AcpLiveControl {
@@ -154,6 +155,7 @@ impl AcpLiveControl {
             handle,
             on_natural_completion: None,
             on_steer_prompt: None,
+            on_session_update: None,
         }
     }
 }
@@ -161,16 +163,15 @@ impl AcpLiveControl {
 pub type AcpSessionUpdateCallback = Arc<dyn Fn(&SessionUpdate) + Send + Sync>;
 
 pub struct AcpRunRequest {
-    pub command:           AcpProcessSpec,
-    pub prompt:             String,
-    pub cwd:                String,
-    pub timeout_ms:         Option<u64>,
-    pub env:                HashMap<String, String>,
-    pub sandbox:            Arc<dyn Sandbox>,
-    pub cancel_token:       CancellationToken,
-    pub on_activity:        Option<Arc<dyn Fn() + Send + Sync>>,
-    pub on_session_update:  Option<AcpSessionUpdateCallback>,
-    pub live_control:       Option<AcpLiveControl>,
+    pub command:      AcpProcessSpec,
+    pub prompt:       String,
+    pub cwd:          String,
+    pub timeout_ms:   Option<u64>,
+    pub env:          HashMap<String, String>,
+    pub sandbox:      Arc<dyn Sandbox>,
+    pub cancel_token: CancellationToken,
+    pub on_activity:  Option<Arc<dyn Fn() + Send + Sync>>,
+    pub live_control: Option<AcpLiveControl>,
 }
 
 #[derive(Debug)]
@@ -191,7 +192,6 @@ pub async fn run_acp_turn(request: AcpRunRequest) -> Result<AcpRunResult, AcpErr
         sandbox,
         cancel_token,
         on_activity,
-        on_session_update,
         live_control,
     } = request;
     let live_control = live_control.unwrap_or_default();
@@ -232,7 +232,7 @@ pub async fn run_acp_turn(request: AcpRunRequest) -> Result<AcpRunResult, AcpErr
                         live_control.on_natural_completion.as_ref(),
                         live_control.on_steer_prompt.as_ref(),
                         on_activity.as_ref(),
-                        on_session_update.as_ref(),
+                        live_control.on_session_update.as_ref(),
                     )
                     .await
                 })

@@ -30,6 +30,17 @@ fn node_stored_fields(node_id: Option<String>) -> StoredEventFields {
     }
 }
 
+fn stage_stored_fields(node_id: &str, visit: u32) -> StoredEventFields {
+    let node_id = node_id.to_string();
+    let node_label = default_node_label(Some(&node_id), None);
+    StoredEventFields {
+        node_id: Some(node_id.clone()),
+        node_label,
+        stage_id: Some(StageId::new(node_id, visit)),
+        ..StoredEventFields::default()
+    }
+}
+
 pub(super) fn stored_event_fields(event: &Event, scope: Option<&StageScope>) -> StoredEventFields {
     let mut fields = stored_event_fields_for_variant(event);
     if let Some(scope) = scope {
@@ -141,6 +152,26 @@ fn stored_event_fields_for_variant(event: &Event) -> StoredEventFields {
                 stage_id: Some(StageId::new(node_id_str, *visit)),
                 ..StoredEventFields::default()
             }
+        }
+        Event::AgentAcpMessage { node_id, visit, .. }
+        | Event::AgentAcpThought { node_id, visit, .. }
+        | Event::AgentAcpPlan { node_id, visit, .. }
+        | Event::AgentAcpUserMessage { node_id, visit, .. } => stage_stored_fields(node_id, *visit),
+        Event::AgentAcpToolCall {
+            node_id,
+            visit,
+            tool_call_id,
+            ..
+        }
+        | Event::AgentAcpToolCallUpdate {
+            node_id,
+            visit,
+            tool_call_id,
+            ..
+        } => {
+            let mut fields = stage_stored_fields(node_id, *visit);
+            fields.tool_call_id = Some(tool_call_id.clone());
+            fields
         }
         Event::AgentSessionStarted {
             session_id,

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use super::ExecOutputTail;
 use crate::{CommandTermination, PullRequestLink};
@@ -286,28 +286,39 @@ pub struct AgentAcpToolCallUpdateProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentAcpMessageProps {
-    pub visit:   u32,
+    pub visit:    u32,
     /// ACP `ContentBlock` payload (text, image, audio, resource).
-    pub content: Value,
+    pub content:  Value,
+    /// Remaining ACP `ContentChunk` wrapper fields, such as `_meta`
+    /// and feature-gated `messageId`.
+    #[serde(flatten)]
+    pub metadata: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentAcpThoughtProps {
-    pub visit:   u32,
-    pub content: Value,
+    pub visit:    u32,
+    pub content:  Value,
+    #[serde(flatten)]
+    pub metadata: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentAcpPlanProps {
-    pub visit:   u32,
+    pub visit:    u32,
     /// `Vec<PlanEntry>` per ACP schema.
-    pub entries: Value,
+    pub entries:  Value,
+    /// Remaining ACP `Plan` wrapper fields, such as `_meta`.
+    #[serde(flatten)]
+    pub metadata: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentAcpUserMessageProps {
-    pub visit:   u32,
-    pub content: Value,
+    pub visit:    u32,
+    pub content:  Value,
+    #[serde(flatten)]
+    pub metadata: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

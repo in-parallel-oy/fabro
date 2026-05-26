@@ -143,9 +143,7 @@ impl AgentAcpBackend {
             let node_id = node.id.clone();
             let visit = stage_scope.visit;
             Arc::new(move |update: &SessionUpdate| {
-                let Some(event) =
-                    map_session_update_to_event(update, &node_id, visit)
-                else {
+                let Some(event) = map_session_update_to_event(update, &node_id, visit) else {
                     return;
                 };
                 emitter.emit_scoped(&event, &stage_scope);
@@ -163,11 +161,11 @@ impl AgentAcpBackend {
             sandbox: Arc::clone(sandbox),
             cancel_token: cancel_token.child_token(),
             on_activity: Some(on_activity),
-            on_session_update: Some(on_session_update),
             live_control: Some(AcpLiveControl {
                 handle: control_handle.clone(),
                 on_natural_completion,
                 on_steer_prompt,
+                on_session_update: Some(on_session_update),
             }),
         })
         .await
@@ -436,60 +434,62 @@ fn acp_error_to_workflow(error: AcpError) -> Error {
 /// so consumers downstream of `fabro-types` (which intentionally
 /// does not depend on `agent-client-protocol`) can deserialize
 /// them into the typed ACP schema or work with the raw JSON.
-fn map_session_update_to_event(
-    update: &SessionUpdate,
-    node_id: &str,
-    visit: u32,
-) -> Option<Event> {
+fn map_session_update_to_event(update: &SessionUpdate, node_id: &str, visit: u32) -> Option<Event> {
     match update {
         SessionUpdate::ToolCall(call) => {
             let value = serde_json::to_value(call).ok()?;
-            let tool_call_id = value
-                .get("toolCallId")
-                .and_then(|v| v.as_str())
-                .map(str::to_string)
-                .unwrap_or_default();
             Some(Event::AgentAcpToolCall {
                 node_id: node_id.to_string(),
-                tool_call_id,
+                tool_call_id: call.tool_call_id.to_string(),
                 visit,
                 call: value,
             })
         }
         SessionUpdate::ToolCallUpdate(update) => {
-            let value = serde_json::to_value(update).ok()?;
-            let tool_call_id = value
-                .get("toolCallId")
-                .and_then(|v| v.as_str())
-                .map(str::to_string)
-                .unwrap_or_default();
+            let fields = acp_object_without_key(update, "toolCallId")?;
             Some(Event::AgentAcpToolCallUpdate {
                 node_id: node_id.to_string(),
-                tool_call_id,
+                tool_call_id: update.tool_call_id.to_string(),
                 visit,
-                fields: value,
+                fields: serde_json::Value::Object(fields),
             })
         }
-        SessionUpdate::AgentMessageChunk(chunk) => Some(Event::AgentAcpMessage {
-            node_id: node_id.to_string(),
-            visit,
-            content: serde_json::to_value(&chunk.content).ok()?,
-        }),
-        SessionUpdate::AgentThoughtChunk(chunk) => Some(Event::AgentAcpThought {
-            node_id: node_id.to_string(),
-            visit,
-            content: serde_json::to_value(&chunk.content).ok()?,
-        }),
-        SessionUpdate::Plan(plan) => Some(Event::AgentAcpPlan {
-            node_id: node_id.to_string(),
-            visit,
-            entries: serde_json::to_value(&plan.entries).ok()?,
-        }),
-        SessionUpdate::UserMessageChunk(chunk) => Some(Event::AgentAcpUserMessage {
-            node_id: node_id.to_string(),
-            visit,
-            content: serde_json::to_value(&chunk.content).ok()?,
-        }),
+        SessionUpdate::AgentMessageChunk(chunk) => {
+            let (content, metadata) = acp_object_parts(chunk, "content")?;
+            Some(Event::AgentAcpMessage {
+                node_id: node_id.to_string(),
+                visit,
+                content,
+                metadata,
+            })
+        }
+        SessionUpdate::AgentThoughtChunk(chunk) => {
+            let (content, metadata) = acp_object_parts(chunk, "content")?;
+            Some(Event::AgentAcpThought {
+                node_id: node_id.to_string(),
+                visit,
+                content,
+                metadata,
+            })
+        }
+        SessionUpdate::Plan(plan) => {
+            let (entries, metadata) = acp_object_parts(plan, "entries")?;
+            Some(Event::AgentAcpPlan {
+                node_id: node_id.to_string(),
+                visit,
+                entries,
+                metadata,
+            })
+        }
+        SessionUpdate::UserMessageChunk(chunk) => {
+            let (content, metadata) = acp_object_parts(chunk, "content")?;
+            Some(Event::AgentAcpUserMessage {
+                node_id: node_id.to_string(),
+                visit,
+                content,
+                metadata,
+            })
+        }
         // Introspection / session-state variants; not persisted today.
         // SessionUpdate is #[non_exhaustive] — the wildcard catches
         // both the currently-defined non-persisted variants
@@ -497,6 +497,31 @@ fn map_session_update_to_event(
         // SessionInfoUpdate, UsageUpdate) and any future additions.
         _ => None,
     }
+}
+
+fn acp_object_parts<T: serde::Serialize>(
+    value: &T,
+    primary_key: &str,
+) -> Option<(
+    serde_json::Value,
+    serde_json::Map<String, serde_json::Value>,
+)> {
+    let serde_json::Value::Object(mut object) = serde_json::to_value(value).ok()? else {
+        return None;
+    };
+    let primary = object.remove(primary_key)?;
+    Some((primary, object))
+}
+
+fn acp_object_without_key<T: serde::Serialize>(
+    value: &T,
+    key: &str,
+) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let serde_json::Value::Object(mut object) = serde_json::to_value(value).ok()? else {
+        return None;
+    };
+    object.remove(key);
+    Some(object)
 }
 
 #[cfg(test)]
@@ -1035,6 +1060,43 @@ mod tests {
             "raw stderr belongs in exec_output_tail, not causes: {:?}",
             detail.causes
         );
+    }
+
+    #[test]
+    fn acp_object_parts_preserve_wrapper_metadata() {
+        let chunk = serde_json::json!({
+            "content": {
+                "type": "text",
+                "text": "hello"
+            },
+            "_meta": {
+                "source": "fixture"
+            }
+        });
+
+        let (content, metadata) =
+            super::acp_object_parts(&chunk, "content").expect("split ACP object");
+
+        assert_eq!(content["text"], "hello");
+        assert_eq!(metadata["_meta"]["source"], "fixture");
+    }
+
+    #[test]
+    fn acp_object_without_key_removes_only_duplicate_identity() {
+        let update = serde_json::json!({
+            "toolCallId": "call_1",
+            "status": "completed",
+            "_meta": {
+                "source": "fixture"
+            }
+        });
+
+        let fields =
+            super::acp_object_without_key(&update, "toolCallId").expect("split ACP object");
+
+        assert!(!fields.contains_key("toolCallId"));
+        assert_eq!(fields["status"], "completed");
+        assert_eq!(fields["_meta"]["source"], "fixture");
     }
 
     #[expect(

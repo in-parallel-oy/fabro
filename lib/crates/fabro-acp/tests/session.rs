@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use agent_client_protocol::schema::StopReason;
+use agent_client_protocol::schema::{ContentBlock, SessionUpdate, StopReason};
 use fabro_acp::{
     AcpControlHandle, AcpError, AcpLiveControl, AcpProcessSpec, AcpRunRequest, AcpRunResult,
     run_acp_turn,
@@ -91,6 +91,51 @@ async fn clean_stdio_exit_after_final_response_completes_turn() {
 
     assert_eq!(result.text, "hello from acp");
     assert_eq!(result.stop_reason, StopReason::EndTurn);
+}
+
+#[tokio::test]
+async fn session_update_callback_receives_notifications_without_changing_text_output() {
+    let sandbox = MockSandbox::linux();
+    sandbox.set_stdio_process(mock_acp_stdio_process("end_turn"));
+    let sandbox: Arc<dyn Sandbox> = Arc::new(sandbox);
+    let command = AcpProcessSpec::from_command_attr("mock-acp-agent").expect("parse ACP command");
+    let updates = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let updates_for_callback = Arc::clone(&updates);
+
+    let result = run_acp_turn(AcpRunRequest {
+        command,
+        prompt: "hello".to_string(),
+        cwd: "/workspace".to_string(),
+        timeout_ms: Some(ACP_TEST_TIMEOUT_MS),
+        env: HashMap::new(),
+        sandbox,
+        cancel_token: CancellationToken::new(),
+        on_activity: None,
+        live_control: Some(AcpLiveControl {
+            handle:                AcpControlHandle::default(),
+            on_natural_completion: None,
+            on_steer_prompt:       None,
+            on_session_update:     Some(Arc::new(move |update| {
+                updates_for_callback
+                    .lock()
+                    .expect("updates lock poisoned")
+                    .push(update.clone());
+            })),
+        }),
+    })
+    .await
+    .expect("run ACP turn");
+
+    assert_eq!(result.text, "hello from acp");
+    let updates = updates.lock().expect("updates lock poisoned");
+    assert_eq!(updates.len(), 1);
+    let SessionUpdate::AgentMessageChunk(chunk) = &updates[0] else {
+        panic!("expected agent message chunk update");
+    };
+    assert_eq!(
+        chunk.content,
+        ContentBlock::from("hello from acp".to_string())
+    );
 }
 
 #[tokio::test]
