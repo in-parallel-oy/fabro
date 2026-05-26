@@ -16,5 +16,13 @@ pub use command::{AcpCommandError, AcpProcessSpec};
 pub use error::{AcpError, AcpProcessExit};
 #[cfg(feature = "runtime")]
 pub use session::{
-    AcpControlHandle, AcpLiveControl, AcpRunRequest, AcpRunResult, render_stop_reason, run_acp_turn,
+    AcpControlHandle, AcpLiveControl, AcpRunRequest, AcpRunResult, AcpSessionUpdateCallback,
+    render_stop_reason, run_acp_turn,
 };
+
+/// Re-export the ACP wire-level `SessionUpdate` type so callers
+/// registering an `on_session_update` callback (e.g.
+/// `fabro-workflow`) don't need to depend on
+/// `agent-client-protocol` directly.
+#[cfg(feature = "runtime")]
+pub use agent_client_protocol::schema::SessionUpdate;

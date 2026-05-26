@@ -158,16 +158,19 @@ impl AcpLiveControl {
     }
 }
 
+pub type AcpSessionUpdateCallback = Arc<dyn Fn(&SessionUpdate) + Send + Sync>;
+
 pub struct AcpRunRequest {
-    pub command:      AcpProcessSpec,
-    pub prompt:       String,
-    pub cwd:          String,
-    pub timeout_ms:   Option<u64>,
-    pub env:          HashMap<String, String>,
-    pub sandbox:      Arc<dyn Sandbox>,
-    pub cancel_token: CancellationToken,
-    pub on_activity:  Option<Arc<dyn Fn() + Send + Sync>>,
-    pub live_control: Option<AcpLiveControl>,
+    pub command:           AcpProcessSpec,
+    pub prompt:             String,
+    pub cwd:                String,
+    pub timeout_ms:         Option<u64>,
+    pub env:                HashMap<String, String>,
+    pub sandbox:            Arc<dyn Sandbox>,
+    pub cancel_token:       CancellationToken,
+    pub on_activity:        Option<Arc<dyn Fn() + Send + Sync>>,
+    pub on_session_update:  Option<AcpSessionUpdateCallback>,
+    pub live_control:       Option<AcpLiveControl>,
 }
 
 #[derive(Debug)]
@@ -188,6 +191,7 @@ pub async fn run_acp_turn(request: AcpRunRequest) -> Result<AcpRunResult, AcpErr
         sandbox,
         cancel_token,
         on_activity,
+        on_session_update,
         live_control,
     } = request;
     let live_control = live_control.unwrap_or_default();
@@ -228,6 +232,7 @@ pub async fn run_acp_turn(request: AcpRunRequest) -> Result<AcpRunResult, AcpErr
                         live_control.on_natural_completion.as_ref(),
                         live_control.on_steer_prompt.as_ref(),
                         on_activity.as_ref(),
+                        on_session_update.as_ref(),
                     )
                     .await
                 })
@@ -342,6 +347,7 @@ async fn read_live_session(
     on_natural_completion: Option<&AcpNaturalCompletionCallback>,
     on_steer_prompt: Option<&AcpSteerPromptCallback>,
     on_activity: Option<&Arc<dyn Fn() + Send + Sync>>,
+    on_session_update: Option<&AcpSessionUpdateCallback>,
 ) -> Result<(String, StopReason), ProtocolError> {
     let mut text = String::new();
     let mut prompt_active = true;
@@ -408,6 +414,9 @@ async fn read_live_session(
                     SessionMessage::SessionMessage(dispatch) => {
                         MatchDispatch::new(dispatch)
                             .if_notification(async |notification: SessionNotification| {
+                                if let Some(callback) = on_session_update {
+                                    callback(&notification.update);
+                                }
                                 if let SessionUpdate::AgentMessageChunk(ContentChunk {
                                     content: ContentBlock::Text(text_chunk),
                                     ..
