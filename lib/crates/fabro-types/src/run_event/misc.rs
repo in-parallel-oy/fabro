@@ -252,6 +252,64 @@ pub struct AgentAcpTimedOutProps {
     pub duration_ms: u64,
 }
 
+// ─── ACP granular SessionUpdate events ──────────────────────────────
+//
+// These pair with the AgentAcp{Started,Completed,Cancelled,TimedOut}
+// lifecycle events above. The ACP payloads (`ToolCall`, `ToolCallUpdate`,
+// `ContentBlock`, `PlanEntry`) are stored as `serde_json::Value` so that
+// `fabro-types` doesn't need to depend on `agent-client-protocol`.
+// Downstream consumers that already use the ACP crate can deserialize
+// the `Value` into the typed schema; consumers that don't can work with
+// the JSON directly.
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentAcpToolCallProps {
+    pub tool_call_id: String,
+    pub visit:        u32,
+    /// Full ACP `ToolCall` payload (`title`, `kind`, `status`, optional
+    /// `content`, `locations`, `raw_input`, `raw_output`). Stored
+    /// verbatim — see `agent-client-protocol@0.11.1` schema.
+    #[serde(flatten)]
+    pub call:         Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentAcpToolCallUpdateProps {
+    pub tool_call_id: String,
+    pub visit:        u32,
+    /// Partial-shape update over a previously-started `ToolCall`
+    /// (any subset of `status`, `content`, `raw_input`, `raw_output`,
+    /// etc.). Identity is `tool_call_id`.
+    #[serde(flatten)]
+    pub fields:       Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentAcpMessageProps {
+    pub visit:   u32,
+    /// ACP `ContentBlock` payload (text, image, audio, resource).
+    pub content: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentAcpThoughtProps {
+    pub visit:   u32,
+    pub content: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentAcpPlanProps {
+    pub visit:   u32,
+    /// `Vec<PlanEntry>` per ACP schema.
+    pub entries: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentAcpUserMessageProps {
+    pub visit:   u32,
+    pub content: Value,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PullRequestCreatedProps {
     pub pr_url:      String,

@@ -350,6 +350,18 @@ pub enum EventBody {
     AgentAcpCancelled(AgentAcpCancelledProps),
     #[serde(rename = "agent.acp.timed_out")]
     AgentAcpTimedOut(AgentAcpTimedOutProps),
+    #[serde(rename = "agent.acp.tool_call")]
+    AgentAcpToolCall(AgentAcpToolCallProps),
+    #[serde(rename = "agent.acp.tool_call_update")]
+    AgentAcpToolCallUpdate(AgentAcpToolCallUpdateProps),
+    #[serde(rename = "agent.acp.message")]
+    AgentAcpMessage(AgentAcpMessageProps),
+    #[serde(rename = "agent.acp.thought")]
+    AgentAcpThought(AgentAcpThoughtProps),
+    #[serde(rename = "agent.acp.plan")]
+    AgentAcpPlan(AgentAcpPlanProps),
+    #[serde(rename = "agent.acp.user_message")]
+    AgentAcpUserMessage(AgentAcpUserMessageProps),
     #[serde(rename = "pull_request.created")]
     PullRequestCreated(PullRequestCreatedProps),
     #[serde(rename = "pull_request.linked")]
@@ -576,6 +588,12 @@ impl EventBody {
             Self::AgentAcpCompleted(_) => "agent.acp.completed",
             Self::AgentAcpCancelled(_) => "agent.acp.cancelled",
             Self::AgentAcpTimedOut(_) => "agent.acp.timed_out",
+            Self::AgentAcpToolCall(_) => "agent.acp.tool_call",
+            Self::AgentAcpToolCallUpdate(_) => "agent.acp.tool_call_update",
+            Self::AgentAcpMessage(_) => "agent.acp.message",
+            Self::AgentAcpThought(_) => "agent.acp.thought",
+            Self::AgentAcpPlan(_) => "agent.acp.plan",
+            Self::AgentAcpUserMessage(_) => "agent.acp.user_message",
             Self::PullRequestCreated(_) => "pull_request.created",
             Self::PullRequestLinked(_) => "pull_request.linked",
             Self::PullRequestUnlinked(_) => "pull_request.unlinked",
@@ -758,6 +776,12 @@ fn is_known_event_name(event: &str) -> bool {
             | "agent.acp.completed"
             | "agent.acp.cancelled"
             | "agent.acp.timed_out"
+            | "agent.acp.tool_call"
+            | "agent.acp.tool_call_update"
+            | "agent.acp.message"
+            | "agent.acp.thought"
+            | "agent.acp.plan"
+            | "agent.acp.user_message"
             | "pull_request.created"
             | "pull_request.linked"
             | "pull_request.unlinked"
