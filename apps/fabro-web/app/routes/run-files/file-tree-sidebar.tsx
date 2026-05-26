@@ -139,6 +139,7 @@ export function FileTreeSidebar({
   const selection = useFileTreeSelection(model);
   useEffect(() => {
     const pendingSelectedPath = pendingSelectedPathRef.current;
+    // react-doctor-disable-next-line react-doctor/no-event-handler -- This keeps Pierre's imperative tree model aligned after the tree emits a selection change.
     if (pendingSelectedPath === selectedPath) {
       pendingSelectedPathRef.current = null;
     }
@@ -169,9 +170,9 @@ export function FileTreeSidebar({
       {paths.length > 0 ? (
         <FileTree model={model} className="min-h-0 flex-1 overflow-hidden" />
       ) : (
-        <div role="status" className="min-h-0 flex-1 px-3 py-2 text-sm text-fg-muted">
+        <output className="min-h-0 flex-1 px-3 py-2 text-sm text-fg-muted">
           No changed files
-        </div>
+        </output>
       )}
     </aside>
   );

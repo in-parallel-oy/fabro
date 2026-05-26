@@ -9,10 +9,6 @@ import {
 } from "@headlessui/react";
 import {
   Bars3Icon,
-  BeakerIcon,
-  ClockIcon,
-  Cog6ToothIcon,
-  PlayIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { Link, Outlet, useLocation, useMatches } from "react-router";
@@ -20,21 +16,11 @@ import { ErrorState } from "../components/state";
 import { ToastProvider } from "../components/toast";
 import { AskFabroLayoutProvider, useAskFabroLayout } from "../lib/ask-fabro-layout";
 import { DemoModeProvider } from "../lib/demo-mode";
-import { useToggleDemoMode } from "../lib/mutations";
 import { useAuthMe } from "../lib/queries";
-
-const allNavigation = [
-  { name: "Automations", href: "/automations", icon: ClockIcon, demoOnly: true },
-  { name: "Runs", href: "/runs", icon: PlayIcon, demoOnly: false },
-  { name: "Settings", href: "/settings", icon: Cog6ToothIcon, demoOnly: false },
-];
+import { allNavigation, getVisibleNavigation } from "./navigation";
 
 function activeFor(item: (typeof allNavigation)[number], pathname: string): boolean {
   return pathname.startsWith(item.href);
-}
-
-export function getVisibleNavigation(demoMode: boolean) {
-  return allNavigation.filter((item) => !item.demoOnly || demoMode);
 }
 
 function classNames(...classes: Array<string | false | null | undefined>) {
@@ -45,7 +31,6 @@ export default function AppShell() {
   const { data: auth, error, isLoading } = useAuthMe();
   const { pathname } = useLocation();
   const matches = useMatches();
-  const toggleDemoModeMutation = useToggleDemoMode();
 
   if (isLoading && !auth) {
     return <div className="min-h-full bg-page" />;
@@ -76,10 +61,6 @@ export default function AppShell() {
   );
   const maxWidth = wide ? "" : "max-w-5xl";
 
-  async function toggleDemoMode() {
-    await toggleDemoModeMutation.trigger({ enabled: !demoMode });
-  }
-
   return (
     <DemoModeProvider value={demoMode}>
     <ToastProvider>
@@ -103,7 +84,7 @@ export default function AppShell() {
                 </Link>
               </div>
               <div className="hidden md:block">
-                <div className="ml-10 flex items-baseline space-x-4">
+                <div className="ml-10 flex items-baseline gap-x-4">
                   {navigation.map((item) => {
                     const current = activeFor(item, pathname);
                     return (
@@ -128,18 +109,6 @@ export default function AppShell() {
             </div>
             <div className="hidden md:block">
               <div className="ml-4 flex items-center gap-3 md:ml-6">
-                <button
-                  type="button"
-                  onClick={toggleDemoMode}
-                  className={classNames(
-                    "rounded-full p-1.5 transition-colors hover:bg-overlay hover:text-fg",
-                    demoMode ? "text-teal-500" : "text-fg-muted",
-                  )}
-                  title={demoMode ? "Switch to live data" : "Switch to demo data"}
-                >
-                  <BeakerIcon className="size-5" aria-hidden="true" />
-                  <span className="sr-only">Toggle demo mode</span>
-                </button>
                 <Menu as="div" className="relative">
                   <MenuButton className="relative flex max-w-xs items-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500">
                     <span className="absolute -inset-1.5" />
@@ -233,20 +202,6 @@ export default function AppShell() {
                 <div className="text-sm font-medium text-fg-muted">
                   {user.email}
                 </div>
-              </div>
-              <div className="ml-auto flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={toggleDemoMode}
-                  className={classNames(
-                    "rounded-full p-1.5 transition-colors hover:bg-overlay hover:text-fg",
-                    demoMode ? "text-teal-500" : "text-fg-muted",
-                  )}
-                  title={demoMode ? "Switch to live data" : "Switch to demo data"}
-                >
-                  <BeakerIcon className="size-5" aria-hidden="true" />
-                  <span className="sr-only">Toggle demo mode</span>
-                </button>
               </div>
             </div>
             <div className="mt-3 space-y-1 px-2">

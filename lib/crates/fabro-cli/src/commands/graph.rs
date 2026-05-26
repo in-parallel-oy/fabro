@@ -12,6 +12,7 @@ use std::io::Write;
 use anyhow::{Context, bail};
 use fabro_api::types;
 use fabro_config::user::active_settings_path;
+use fabro_graphviz::render;
 use fabro_manifest::{ManifestBuildInput, build_run_manifest};
 use fabro_util::terminal::Styles;
 use tracing::debug;
@@ -43,23 +44,27 @@ pub(crate) async fn run(
     let diagnostics = api_diagnostics_to_local(&preflight.workflow.diagnostics);
 
     print_diagnostics(&diagnostics, styles, printer);
-    if diagnostics
+    let has_errors = diagnostics
         .iter()
-        .any(|diagnostic| diagnostic.severity == fabro_validate::Severity::Error)
-    {
+        .any(|diagnostic| diagnostic.severity == fabro_validate::Severity::Error);
+    if has_errors && !args.allow_invalid {
         bail!("Validation failed");
     }
 
-    let rendered = client
-        .render_workflow_graph(types::RenderWorkflowGraphRequest {
-            manifest:  built.manifest,
-            format:    Some(types::RenderWorkflowGraphFormat::Svg),
-            direction: args.direction.map(|direction| match direction {
-                GraphDirection::Lr => types::RenderWorkflowGraphDirection::Lr,
-                GraphDirection::Tb => types::RenderWorkflowGraphDirection::Tb,
-            }),
-        })
-        .await?;
+    let rendered = if has_errors && args.allow_invalid {
+        render_manifest_graph_locally(&built.manifest, args.direction)?
+    } else {
+        client
+            .render_workflow_graph(types::RenderWorkflowGraphRequest {
+                manifest:  built.manifest,
+                format:    Some(types::RenderWorkflowGraphFormat::Svg),
+                direction: args.direction.map(|direction| match direction {
+                    GraphDirection::Lr => types::RenderWorkflowGraphDirection::Lr,
+                    GraphDirection::Tb => types::RenderWorkflowGraphDirection::Tb,
+                }),
+            })
+            .await?
+    };
 
     if let Some(ref output_path) = args.output {
         std::fs::write(output_path, &rendered)
@@ -78,6 +83,32 @@ pub(crate) async fn run(
     );
 
     Ok(())
+}
+
+fn render_manifest_graph_locally(
+    manifest: &types::RunManifest,
+    direction: Option<GraphDirection>,
+) -> anyhow::Result<Vec<u8>> {
+    let source = manifest_root_source(manifest)?;
+    let source = match direction {
+        Some(direction) => render::apply_direction(source, &direction.to_string()).into_owned(),
+        None => source.to_string(),
+    };
+
+    render::render_dot(&source).context("rendering workflow graph")
+}
+
+fn manifest_root_source(manifest: &types::RunManifest) -> anyhow::Result<&str> {
+    manifest
+        .workflows
+        .get(&manifest.target.path)
+        .map(|workflow| workflow.source.as_str())
+        .with_context(|| {
+            format!(
+                "manifest target path is missing from workflows map: {}",
+                manifest.target.path
+            )
+        })
 }
 
 fn output_file_json(output_path: &std::path::Path, format: GraphOutputFormat) -> serde_json::Value {

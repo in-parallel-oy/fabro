@@ -16,10 +16,10 @@ import { elapsedSecsSince, useTickingNow } from "../../lib/time";
  */
 export function StageMetaBar({
   stage,
-  trailing,
+  children,
 }: {
   stage: Stage;
-  trailing?: ReactNode;
+  children?: ReactNode;
 }) {
   const isActive = ACTIVE_STAGE_STATES.has(stage.status);
   // Re-render every second while running so the elapsed clock keeps up.
@@ -48,7 +48,7 @@ export function StageMetaBar({
       ) : (
         durationNode
       )}
-      {trailing && <span className="ml-auto inline-flex items-center gap-3">{trailing}</span>}
+      {children && <span className="ml-auto inline-flex items-center gap-3">{children}</span>}
     </div>
   );
 }
@@ -57,7 +57,7 @@ export function StageMetaBar({
  * Section heading used inside renderer bodies. Pairs an h3 title with optional
  * supporting text underneath.
  */
-export function SectionHeader({
+function SectionHeader({
   title,
   description,
   action,

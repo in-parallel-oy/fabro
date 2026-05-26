@@ -9,7 +9,8 @@ import type { EventEnvelope } from "@qltysh/fabro-api-client";
 import type { Stage } from "../stage-sidebar";
 import { formatTokenCount } from "../../lib/format";
 import { getString } from "../../lib/unknown";
-import { Markdown, prettyJson } from "./primitives";
+import { Markdown } from "./primitives";
+import { prettyJson } from "./pretty-json";
 import { StageMetaBar } from "./meta-bar";
 import { parseFanInOutcome } from "./helpers";
 
@@ -95,17 +96,14 @@ export function FanInResults({
 
   return (
     <div className="space-y-6 pl-3 pr-4 sm:pr-6 lg:pr-8">
-      <StageMetaBar
-        stage={stage}
-        trailing={
-          outcome.reducerModel ? (
-            <span className="inline-flex items-center gap-1.5 text-xs text-fg-muted">
-              <CpuChipIcon className="size-3.5" aria-hidden="true" />
-              <span className="font-mono">{outcome.reducerModel}</span>
-            </span>
-          ) : null
-        }
-      />
+      <StageMetaBar stage={stage}>
+        {outcome.reducerModel ? (
+          <span className="inline-flex items-center gap-1.5 text-xs text-fg-muted">
+            <CpuChipIcon className="size-3.5" aria-hidden="true" />
+            <span className="font-mono">{outcome.reducerModel}</span>
+          </span>
+        ) : null}
+      </StageMetaBar>
 
       <section className="overflow-hidden rounded-lg bg-gradient-to-br from-amber/10 via-panel to-panel outline-1 -outline-offset-1 outline-line">
         <div className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:gap-8">

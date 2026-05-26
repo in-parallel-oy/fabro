@@ -259,6 +259,7 @@ function findByTestId(renderer: TestRenderer.ReactTestRenderer, id: string) {
 function textContent(node: TestRenderer.ReactTestInstance): string {
   const flatten = (children: ReactNode): string => {
     if (children == null || children === false) return "";
+    // react-doctor-disable-next-line react-doctor/no-polymorphic-children -- Test helper recursively flattens renderer output; this is not component API branching.
     if (typeof children === "string") return children;
     if (typeof children === "number") return String(children);
     if (Array.isArray(children)) return children.map(flatten).join("");
@@ -337,7 +338,7 @@ describe("FilesystemPanel render", () => {
     const renderer = renderPanel();
     const empties = renderer.root.findAll(
       (node) =>
-        node.type === "div" &&
+        node.type === "output" &&
         Array.isArray(node.children) &&
         node.children.includes("Empty directory"),
     );

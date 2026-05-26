@@ -2,15 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 
 import {
-  DEBUG_CATEGORIES,
   DebugEventDetailsPanel,
   EventSearchInput,
   MultiSelectFilter,
+} from "../components/event-debug";
+import {
+  DEBUG_CATEGORIES,
   debugCategory,
   debugCategoryLabel,
   debugCategoryTone,
   type DebugCategory,
-} from "../components/event-debug";
+} from "../components/event-debug-helpers";
 import { EmptyState } from "../components/state";
 import { Tooltip } from "../components/ui";
 import { eventDedupeKey } from "../lib/cross-tab-sse";
@@ -176,6 +178,7 @@ function LiveEventRow({
   }
 
   return (
+    // react-doctor-disable-next-line react-doctor/prefer-tag-over-role -- The row includes a nested run link, so replacing it with <button> would create invalid nested interactive content.
     <div
       role="button"
       tabIndex={0}
@@ -204,7 +207,7 @@ function LiveEventRow({
             {event.run_id}
           </Link>
         ) : (
-          <span className="text-fg-muted">—</span>
+          <span className="text-fg-muted">No run</span>
         )}
       </span>
       <span className="min-w-0 truncate font-mono text-xs text-fg-muted">
@@ -217,7 +220,7 @@ function LiveEventRow({
           </span>
         </Tooltip>
       ) : (
-        <span className="font-mono text-xs text-fg-muted">—</span>
+        <span className="font-mono text-xs text-fg-muted">No time</span>
       )}
     </div>
   );

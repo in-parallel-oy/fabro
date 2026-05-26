@@ -21,7 +21,7 @@ use fabro_types::settings::ServerAuthMethod;
 use fabro_types::{
     AgentBackend, AttrValue, AuthMethod, CommandTermination, FailureCategory, FailureDetail, Graph,
     InterviewQuestionRecord, Node, Outcome, QuestionType, RunBlobId, RunId, RunSpec,
-    SandboxProvider, StageContextWindowBreakdownItem, StageContextWindowCategory,
+    SandboxProviderKind, StageContextWindowBreakdownItem, StageContextWindowCategory,
     StageContextWindowCountMethod, StageContextWindowProjection, StageContextWindowStaleness,
     StageContextWindowWarning, StageModelUsage, StageTiming, SuccessReason, SystemActorKind,
     WorkflowSettings, fixtures,
@@ -480,13 +480,18 @@ async fn http_log_records_webhook_principal_fields() {
 )]
 fn webhook_test_app(auth_mode: AuthMode) -> Router {
     let secret = TEST_WEBHOOK_SECRET.to_string();
-    let state = test_app_state_with_env_lookup_and_server_secret_env(
+    let state = test_app_state_with_env_lookup(
         default_test_server_settings(),
         RunLayer::default(),
         5,
         |_| None,
-        &HashMap::from([(WEBHOOK_SECRET_ENV.to_string(), secret)]),
     );
+    state
+        .vault
+        .try_write()
+        .expect("test vault should not be locked")
+        .set(WEBHOOK_SECRET_ENV, &secret, SecretType::Token, None)
+        .unwrap();
     build_router_with_options(
         state,
         &auth_mode,
@@ -957,7 +962,7 @@ id = "missing"
 
     assert_eq!(
         system_sandbox_provider(&manifest_run_settings),
-        SandboxProvider::default().to_string()
+        SandboxProviderKind::default().to_string()
     );
 }
 
@@ -976,7 +981,7 @@ enabled = false
     );
 
     assert_eq!(
-        crate::run_manifest::sandbox_provider_policy_error(&settings, SandboxProvider::Daytona)
+        crate::run_manifest::sandbox_provider_policy_error(&settings, SandboxProviderKind::Daytona)
             .as_deref(),
         Some(
             "sandbox provider \"daytona\" is disabled by server.sandbox.providers.daytona.enabled"
@@ -1026,6 +1031,63 @@ async fn create_secret_stores_file_secret_outside_token_lookups() {
         "/tmp/test.pem".to_string(),
         "pem-data".to_string()
     )]);
+}
+
+fn create_token_secret_request(name: &str, value: &str) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(api("/secrets"))
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::to_string(&serde_json::json!({
+                "name": name,
+                "value": value,
+                "type": "token"
+            }))
+            .unwrap(),
+        ))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn create_secret_rejects_bootstrap_secret_names() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+
+    for name in [EnvVars::SESSION_SECRET, EnvVars::FABRO_DEV_TOKEN] {
+        let response = app
+            .clone()
+            .oneshot(create_token_secret_request(name, "secret-value"))
+            .await
+            .unwrap();
+        let body = response_json!(response, StatusCode::BAD_REQUEST).await;
+
+        assert_eq!(
+            body["errors"][0]["detail"],
+            format!("{name} is a bootstrap secret; configure it with process env or server.env")
+        );
+        assert!(state.vault.read().await.get(name).is_none());
+    }
+}
+
+#[tokio::test]
+async fn create_secret_allows_optional_vault_and_custom_secret_names() {
+    let state = test_app_state();
+    let app = crate::test_support::build_test_router(Arc::clone(&state));
+
+    for (name, value) in [
+        (EnvVars::GITHUB_APP_CLIENT_SECRET, "github-client-secret"),
+        ("CUSTOM_WORKFLOW_TOKEN", "custom-secret"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(create_token_secret_request(name, value))
+            .await
+            .unwrap();
+
+        assert_status!(response, StatusCode::OK).await;
+        assert_eq!(state.vault.read().await.get(name), Some(value));
+    }
 }
 
 #[tokio::test]
@@ -1275,6 +1337,24 @@ async fn resolve_llm_client_reads_openai_token_from_vault() {
     assert!(llm_result.auth_issues.is_empty());
 }
 
+#[tokio::test]
+async fn resolve_llm_client_ignores_env_lookup_provider_tokens() {
+    let state = test_app_state_with_env_lookup(
+        default_test_server_settings(),
+        RunLayer::default(),
+        5,
+        |name| (name == EnvVars::OPENAI_API_KEY).then(|| "env-openai-key".to_string()),
+    );
+
+    let llm_result = state.resolve_llm_client().await.unwrap();
+
+    assert!(
+        llm_result.client.provider_names().is_empty(),
+        "server LLM credentials should come from vault only"
+    );
+    assert!(llm_result.auth_issues.is_empty());
+}
+
 struct FailingCredentialSource;
 
 #[async_trait::async_trait]
@@ -1348,17 +1428,16 @@ async fn llm_source_configured_providers_reads_openai_token_from_vault() {
 }
 
 #[tokio::test]
-async fn resolve_llm_client_uses_env_lookup_for_openai_settings() {
+async fn resolve_llm_client_uses_vault_key_without_env_lookup_openai_settings() {
     let server = MockServer::start_async().await;
     let response_mock = server
         .mock_async(|when, then| {
             when.method(POST)
                 .path("/v1/responses")
-                .header("authorization", "Bearer vault-openai-key")
-                .header("OpenAI-Organization", "env-org");
+                .header("authorization", "Bearer vault-openai-key");
             then.status(200)
                 .header("content-type", "application/json")
-                .json_body(openai_responses_payload("hello from env lookup"));
+                .json_body(openai_responses_payload("hello from vault key"));
         })
         .await;
     let state = TestAppStateBuilder::new()
@@ -1404,7 +1483,7 @@ async fn resolve_llm_client_uses_env_lookup_for_openai_settings() {
         .await
         .unwrap();
 
-    assert_eq!(response.text(), "hello from env lookup");
+    assert_eq!(response.text(), "hello from vault key");
     response_mock.assert_async().await;
 }
 
@@ -1532,11 +1611,11 @@ async fn delete_secret_by_name_removes_file_secret() {
 }
 
 #[test]
-fn server_secrets_resolve_process_env_before_server_env() {
+fn server_secrets_resolve_bootstrap_process_env_before_server_env() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(
         dir.path().join("server.env"),
-        "SESSION_SECRET=file-value\nGITHUB_APP_CLIENT_SECRET=file-client\n",
+        "SESSION_SECRET=file-value\nFABRO_DEV_TOKEN=file-dev-token\n",
     )
     .unwrap();
 
@@ -1548,9 +1627,83 @@ fn server_secrets_resolve_process_env_before_server_env() {
 
     assert_eq!(secrets.get("SESSION_SECRET").as_deref(), Some("env-value"));
     assert_eq!(
-        secrets.get("GITHUB_APP_CLIENT_SECRET").as_deref(),
-        Some("file-client")
+        secrets.get("FABRO_DEV_TOKEN").as_deref(),
+        Some("file-dev-token")
     );
+}
+
+fn slack_app_state_with_secret_sources(
+    vault_entries: &[(&str, &str, SecretType)],
+    server_secret_env: HashMap<String, String>,
+) -> Arc<AppState> {
+    let (store, artifact_store) = test_store_bundle();
+    let vault_path = test_secret_store_path();
+    let server_env_path = vault_path.with_file_name("server.env");
+    let mut vault = Vault::load(vault_path.clone()).unwrap();
+    for (name, value, secret_type) in vault_entries {
+        vault.set(name, value, *secret_type, None).unwrap();
+    }
+    build_app_state(AppStateConfig {
+        resolved_settings: resolved_runtime_settings_for_tests(
+            default_test_server_settings(),
+            RunLayer::default(),
+            LlmCatalogSettings::default(),
+        ),
+        registry_factory_override: None,
+        max_concurrent_runs: 5,
+        store,
+        artifact_store,
+        vault_path,
+        preloaded_vault: Some(vault),
+        server_secrets: load_test_server_secrets(server_env_path, server_secret_env),
+        env_lookup: default_env_lookup(),
+        github_api_base_url: None,
+        active_config_path: tempfile::tempdir().unwrap().path().join("settings.toml"),
+        http_client: Some(fabro_http::test_http_client().expect("test HTTP client should build")),
+        sandbox_provider_registry: None,
+        shutdown: tokio_util::sync::CancellationToken::new(),
+    })
+    .expect("slack test app state should build")
+}
+
+#[test]
+fn slack_service_is_enabled_by_vault_tokens() {
+    let state = slack_app_state_with_secret_sources(
+        &[
+            (
+                EnvVars::FABRO_SLACK_BOT_TOKEN,
+                "xoxb-test",
+                SecretType::Token,
+            ),
+            (
+                EnvVars::FABRO_SLACK_APP_TOKEN,
+                "xapp-test",
+                SecretType::Token,
+            ),
+        ],
+        HashMap::new(),
+    );
+
+    assert!(state.slack_service.is_some());
+}
+
+#[test]
+fn slack_service_ignores_server_env_tokens() {
+    let state = slack_app_state_with_secret_sources(
+        &[],
+        HashMap::from([
+            (
+                EnvVars::FABRO_SLACK_BOT_TOKEN.to_string(),
+                "xoxb-server-env".to_string(),
+            ),
+            (
+                EnvVars::FABRO_SLACK_APP_TOKEN.to_string(),
+                "xapp-server-env".to_string(),
+            ),
+        ]),
+    );
+
+    assert!(state.slack_service.is_none());
 }
 
 #[cfg(unix)]
@@ -1606,16 +1759,20 @@ fn worker_command_opt_in_token_includes_agent_run_tools_scope() {
 
 #[cfg(unix)]
 #[test]
-fn worker_command_forwards_github_app_private_key_from_server_secrets() {
+fn worker_command_forwards_github_app_private_key_from_vault() {
     let storage_dir = tempfile::tempdir().unwrap();
-    let state = worker_command_test_state_with_extra_config_and_env_lookup(
-        storage_dir.path(),
-        &["dev-token"],
-        Some(TEST_DEV_TOKEN),
-        "",
-        &[(EnvVars::GITHUB_APP_PRIVATE_KEY, "test-private-key")],
-        |_| None,
-    );
+    let state = worker_command_test_state(storage_dir.path(), &["dev-token"], Some(TEST_DEV_TOKEN));
+    state
+        .vault
+        .try_write()
+        .expect("test vault should not be locked")
+        .set(
+            EnvVars::GITHUB_APP_PRIVATE_KEY,
+            "test-private-key",
+            SecretType::File,
+            None,
+        )
+        .unwrap();
     let cmd = worker_command(
         state.as_ref(),
         RunId::new(),
@@ -1838,11 +1995,13 @@ methods = ["dev-token"]
         store,
         artifact_store,
         vault_path,
+        preloaded_vault: None,
         server_secrets: ServerSecrets::load(server_env_path, HashMap::new()).unwrap(),
         env_lookup: default_env_lookup(),
         github_api_base_url: None,
         active_config_path: tempfile::tempdir().unwrap().path().join("settings.toml"),
         http_client: Some(fabro_http::test_http_client().expect("test HTTP client should build")),
+        sandbox_provider_registry: None,
         shutdown: tokio_util::sync::CancellationToken::new(),
     }) else {
         panic!("build_app_state should require SESSION_SECRET")
@@ -1959,6 +2118,7 @@ fn build_test_app_state_with_vault_path(vault_path: &Path) -> anyhow::Result<Arc
         store,
         artifact_store,
         vault_path: vault_path.to_path_buf(),
+        preloaded_vault: None,
         server_secrets: load_test_server_secrets(
             vault_path.with_file_name("server.env"),
             HashMap::new(),
@@ -1967,6 +2127,7 @@ fn build_test_app_state_with_vault_path(vault_path: &Path) -> anyhow::Result<Arc
         github_api_base_url: None,
         active_config_path: tempfile::tempdir().unwrap().path().join("settings.toml"),
         http_client: Some(fabro_http::test_http_client().expect("test HTTP client should build")),
+        sandbox_provider_registry: None,
         shutdown: tokio_util::sync::CancellationToken::new(),
     })
 }
@@ -5052,11 +5213,13 @@ fn create_github_token_app_state_with_env_lookup_and_llm_catalog_settings(
         store,
         artifact_store,
         vault_path,
+        preloaded_vault: None,
         server_secrets: load_test_server_secrets(server_env_path, HashMap::new()),
         env_lookup: Arc::new(env_lookup),
         github_api_base_url,
         active_config_path: tempfile::tempdir().unwrap().path().join("settings.toml"),
         http_client: Some(fabro_http::test_http_client().expect("test HTTP client should build")),
+        sandbox_provider_registry: None,
         shutdown: tokio_util::sync::CancellationToken::new(),
     };
     let state = build_app_state(config).expect("test app state should build");
@@ -5069,6 +5232,68 @@ fn create_github_token_app_state_with_env_lookup_and_llm_catalog_settings(
             .expect("test github token should be writable");
     }
     state
+}
+
+#[test]
+fn github_token_strategy_ignores_process_env_token() {
+    let state = create_github_token_app_state_with_env_lookup(None, None, |name| match name {
+        EnvVars::GITHUB_TOKEN => Some("ghu_from_env".to_string()),
+        _ => None,
+    });
+    let settings = state.server_settings();
+
+    let err = state
+        .github_credentials(&settings.server.integrations.github)
+        .expect_err("server runtime should ignore env-backed GitHub tokens");
+
+    assert_eq!(
+        err,
+        "GITHUB_TOKEN not configured -- run fabro install or run fabro secret set GITHUB_TOKEN"
+    );
+}
+
+#[test]
+fn github_token_strategy_ignores_gh_token_alias() {
+    let state = create_github_token_app_state_with_env_lookup(None, None, |name| match name {
+        EnvVars::GH_TOKEN => Some("ghu_from_env_alias".to_string()),
+        _ => None,
+    });
+    state
+        .vault
+        .try_write()
+        .expect("test vault should not already be locked")
+        .set(
+            EnvVars::GH_TOKEN,
+            "ghu_from_vault_alias",
+            SecretType::Token,
+            None,
+        )
+        .unwrap();
+    let settings = state.server_settings();
+
+    let err = state
+        .github_credentials(&settings.server.integrations.github)
+        .expect_err("server runtime should ignore GH_TOKEN in env and vault");
+
+    assert_eq!(
+        err,
+        "GITHUB_TOKEN not configured -- run fabro install or run fabro secret set GITHUB_TOKEN"
+    );
+}
+
+#[test]
+fn github_token_strategy_reads_github_token_from_vault() {
+    let state = create_github_token_app_state(Some("ghu_test"), None);
+    let settings = state.server_settings();
+
+    let credentials = state
+        .github_credentials(&settings.server.integrations.github)
+        .expect("vault GitHub token should resolve")
+        .expect("vault GitHub token should produce credentials");
+
+    assert!(
+        matches!(credentials, fabro_github::GitHubCredentials::Pat(token) if token == "ghu_test")
+    );
 }
 
 /// Build the (state, router, run_id) triple every PR-endpoint test
@@ -5338,37 +5563,24 @@ async fn list_models_filters_by_provider() {
 }
 
 #[tokio::test]
-async fn list_models_filters_by_query_across_aliases() {
-    let app = test_app_with();
-
-    let req = Request::builder()
-        .method("GET")
-        .uri(api("/models?query=codex"))
-        .body(Body::empty())
-        .unwrap();
-
-    let response = app.oneshot(req).await.unwrap();
-    let body = response_json!(response, StatusCode::OK).await;
-    let model_ids = body["data"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|model| model["id"].as_str().unwrap().to_string())
-        .collect::<Vec<_>>();
-    assert_eq!(model_ids, vec![
-        "gpt-5.3-codex".to_string(),
-        "gpt-5.3-codex-spark".to_string()
-    ]);
-}
-
-#[tokio::test]
 async fn list_models_marks_configured_true_when_provider_has_credential_material() {
     let state = test_app_state_with_env_lookup(
         default_test_server_settings(),
         RunLayer::default(),
         5,
-        |name| (name == EnvVars::ANTHROPIC_API_KEY).then(|| "test-key".to_string()),
+        |_| None,
     );
+    state
+        .vault
+        .write()
+        .await
+        .set(
+            EnvVars::ANTHROPIC_API_KEY,
+            "test-key",
+            SecretType::Token,
+            None,
+        )
+        .unwrap();
     let app = crate::test_support::build_test_router(state);
 
     let req = Request::builder()
@@ -5544,14 +5756,25 @@ reasoning = false
 
 #[tokio::test]
 async fn list_providers_marks_configured_per_provider_and_omits_secrets() {
-    // Only `ANTHROPIC_API_KEY` is supplied, so anthropic resolves as configured
-    // while every other catalog provider does not.
+    // Only `ANTHROPIC_API_KEY` is supplied in the vault, so anthropic resolves as
+    // configured while every other catalog provider does not.
     let state = test_app_state_with_env_lookup(
         default_test_server_settings(),
         RunLayer::default(),
         5,
-        |name| (name == EnvVars::ANTHROPIC_API_KEY).then(|| "test-key".to_string()),
+        |_| None,
     );
+    state
+        .vault
+        .write()
+        .await
+        .set(
+            EnvVars::ANTHROPIC_API_KEY,
+            "test-key",
+            SecretType::Token,
+            None,
+        )
+        .unwrap();
     let app = crate::test_support::build_test_router(state);
 
     let req = Request::builder()
@@ -5650,6 +5873,398 @@ async fn list_providers_marks_all_unconfigured_without_credentials() {
             .all(|provider| provider["configured"].as_bool() == Some(false)),
         "no provider should be configured when no credentials are supplied"
     );
+}
+
+#[tokio::test]
+async fn test_providers_no_configured_providers_returns_error_summary() {
+    let state = test_app_state_with_env_lookup(
+        default_test_server_settings(),
+        RunLayer::default(),
+        5,
+        |_| None,
+    );
+    let app = crate::test_support::build_test_router(state);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(api("/providers/test"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+
+    assert_eq!(body["data"].as_array().unwrap().len(), 0);
+    assert_eq!(body["summary"]["status"], "error");
+    assert_eq!(body["summary"]["total"], 0);
+    assert_eq!(body["summary"]["passed"], 0);
+    assert_eq!(body["summary"]["failed"], 0);
+}
+
+#[tokio::test]
+async fn test_providers_successful_probe_returns_probe_model() {
+    let server = MockServer::start_async().await;
+    let response_mock = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/v1/responses")
+                .header("authorization", "Bearer vault-openai-key");
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(openai_responses_payload("OK"));
+        })
+        .await;
+    let state = TestAppStateBuilder::new()
+        .runtime_settings(default_test_server_settings(), RunLayer::default())
+        .max_concurrent_runs(5)
+        .provider_base_url("openai", server.url("/v1"))
+        .build();
+    state
+        .vault
+        .write()
+        .await
+        .set(
+            EnvVars::OPENAI_API_KEY,
+            "vault-openai-key",
+            SecretType::Token,
+            None,
+        )
+        .unwrap();
+    let app = crate::test_support::build_test_router(state);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(api("/providers/test"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    let results = body["data"].as_array().unwrap();
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0]["provider"], "openai");
+    assert_eq!(results[0]["model_id"], "gpt-5.4-mini");
+    assert_eq!(results[0]["status"], "ok");
+    assert!(results[0]["error_message"].is_null());
+    assert_eq!(body["summary"]["status"], "ok");
+    assert_eq!(body["summary"]["total"], 1);
+    assert_eq!(body["summary"]["passed"], 1);
+    assert_eq!(body["summary"]["failed"], 0);
+    response_mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn test_providers_auth_issue_returns_error_without_upstream_call() {
+    let server = MockServer::start_async().await;
+    let upstream = server
+        .mock_async(|when, then| {
+            when.method(POST).path("/v1/responses");
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(openai_responses_payload("unexpected"));
+        })
+        .await;
+    let state = TestAppStateBuilder::new()
+        .runtime_settings(default_test_server_settings(), RunLayer::default())
+        .max_concurrent_runs(5)
+        .provider_base_url("openai", server.url("/v1"))
+        .build();
+    let mut credential = openai_oauth_credential();
+    credential.tokens.expires_at = Utc::now() - ChronoDuration::hours(1);
+    credential.tokens.refresh_token = None;
+    state
+        .vault
+        .write()
+        .await
+        .set(
+            "OPENAI_CODEX",
+            &serde_json::to_string(&credential).unwrap(),
+            SecretType::Oauth,
+            None,
+        )
+        .unwrap();
+    let app = crate::test_support::build_test_router(state);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(api("/providers/test"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    let results = body["data"].as_array().unwrap();
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0]["provider"], "openai");
+    assert!(results[0]["model_id"].is_null());
+    assert_eq!(results[0]["status"], "error");
+    assert!(
+        results[0]["error_message"]
+            .as_str()
+            .unwrap()
+            .contains("requires re-authentication")
+    );
+    assert_eq!(body["summary"]["status"], "error");
+    assert_eq!(body["summary"]["total"], 1);
+    assert_eq!(body["summary"]["passed"], 0);
+    assert_eq!(body["summary"]["failed"], 1);
+    upstream.assert_calls_async(0).await;
+}
+
+#[tokio::test]
+async fn test_providers_registration_issue_returns_error_without_probe() {
+    let llm_catalog_settings: LlmCatalogSettings = toml::from_str(
+        r#"
+[providers.acme]
+display_name = "Acme"
+adapter = "openai_compatible"
+
+[providers.acme.auth]
+credentials = ["vault:ACME_API_KEY"]
+
+[models."acme-probe"]
+provider = "acme"
+display_name = "Acme Probe"
+family = "acme"
+default = true
+probe = true
+
+[models."acme-probe".limits]
+context_window = 128000
+
+[models."acme-probe".features]
+tools = true
+vision = false
+reasoning = false
+"#,
+    )
+    .expect("catalog fixture should parse");
+    let state = TestAppStateBuilder::new()
+        .runtime_settings(default_test_server_settings(), RunLayer::default())
+        .max_concurrent_runs(5)
+        .llm_catalog_settings(llm_catalog_settings)
+        .build();
+    state
+        .vault
+        .write()
+        .await
+        .set("ACME_API_KEY", "acme-key", SecretType::Token, None)
+        .unwrap();
+    let app = crate::test_support::build_test_router(state);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(api("/providers/test"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    let results = body["data"].as_array().unwrap();
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0]["provider"], "acme");
+    assert!(results[0]["model_id"].is_null());
+    assert_eq!(results[0]["status"], "error");
+    assert!(
+        results[0]["error_message"]
+            .as_str()
+            .unwrap()
+            .contains("does not configure base_url")
+    );
+    assert_eq!(body["summary"]["status"], "error");
+    assert_eq!(body["summary"]["total"], 1);
+    assert_eq!(body["summary"]["passed"], 0);
+    assert_eq!(body["summary"]["failed"], 1);
+}
+
+#[tokio::test]
+async fn test_providers_mixed_results_preserve_catalog_order_and_counts() {
+    let server = MockServer::start_async().await;
+    let alpha_mock = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/v1/responses")
+                .header("authorization", "Bearer alpha-key");
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(openai_responses_payload("OK"));
+        })
+        .await;
+    let zeta_mock = server
+        .mock_async(|when, then| {
+            when.method(POST)
+                .path("/v1/responses")
+                .header("authorization", "Bearer zeta-key");
+            then.status(401)
+                .header("content-type", "application/json")
+                .json_body(json!({
+                    "error": {
+                        "message": "invalid api key",
+                        "type": "invalid_request_error"
+                    }
+                }));
+        })
+        .await;
+    let llm_catalog_settings: LlmCatalogSettings = toml::from_str(&format!(
+        r#"
+[providers.zeta]
+display_name = "Zeta"
+adapter = "openai"
+base_url = "{base_url}"
+
+[providers.zeta.auth]
+credentials = ["vault:ZETA_API_KEY"]
+
+[providers.alpha]
+display_name = "Alpha"
+adapter = "openai"
+base_url = "{base_url}"
+
+[providers.alpha.auth]
+credentials = ["vault:ALPHA_API_KEY"]
+
+[models."zeta-probe"]
+provider = "zeta"
+display_name = "Zeta Probe"
+family = "zeta"
+default = true
+probe = true
+
+[models."zeta-probe".limits]
+context_window = 128000
+
+[models."zeta-probe".features]
+tools = true
+vision = false
+reasoning = false
+
+[models."alpha-probe"]
+provider = "alpha"
+display_name = "Alpha Probe"
+family = "alpha"
+default = true
+probe = true
+
+[models."alpha-probe".limits]
+context_window = 128000
+
+[models."alpha-probe".features]
+tools = true
+vision = false
+reasoning = false
+"#,
+        base_url = server.url("/v1")
+    ))
+    .expect("catalog fixture should parse");
+    let state = TestAppStateBuilder::new()
+        .runtime_settings(default_test_server_settings(), RunLayer::default())
+        .max_concurrent_runs(5)
+        .llm_catalog_settings(llm_catalog_settings)
+        .build();
+    {
+        let mut vault = state.vault.write().await;
+        vault
+            .set("ALPHA_API_KEY", "alpha-key", SecretType::Token, None)
+            .unwrap();
+        vault
+            .set("ZETA_API_KEY", "zeta-key", SecretType::Token, None)
+            .unwrap();
+    }
+    let app = crate::test_support::build_test_router(state);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(api("/providers/test"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    let results = body["data"].as_array().unwrap();
+
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0]["provider"], "alpha");
+    assert_eq!(results[0]["model_id"], "alpha-probe");
+    assert_eq!(results[0]["status"], "ok");
+    assert_eq!(results[1]["provider"], "zeta");
+    assert_eq!(results[1]["model_id"], "zeta-probe");
+    assert_eq!(results[1]["status"], "error");
+    assert_eq!(body["summary"]["status"], "error");
+    assert_eq!(body["summary"]["total"], 2);
+    assert_eq!(body["summary"]["passed"], 1);
+    assert_eq!(body["summary"]["failed"], 1);
+    alpha_mock.assert_async().await;
+    zeta_mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn test_providers_response_does_not_leak_api_keys() {
+    let leaked_key = "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789";
+    let server = MockServer::start_async().await;
+    let response_mock = server
+        .mock_async(move |when, then| {
+            when.method(POST)
+                .path("/v1/responses")
+                .header("authorization", format!("Bearer {leaked_key}"));
+            then.status(401)
+                .header("content-type", "application/json")
+                .json_body(json!({
+                    "error": {
+                        "message": format!("invalid api key {leaked_key}"),
+                        "type": "invalid_request_error"
+                    }
+                }));
+        })
+        .await;
+    let state = TestAppStateBuilder::new()
+        .runtime_settings(default_test_server_settings(), RunLayer::default())
+        .max_concurrent_runs(5)
+        .provider_base_url("openai", server.url("/v1"))
+        .build();
+    state
+        .vault
+        .write()
+        .await
+        .set(EnvVars::OPENAI_API_KEY, leaked_key, SecretType::Token, None)
+        .unwrap();
+    let app = crate::test_support::build_test_router(state);
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(api("/providers/test"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    let body = response_json!(response, StatusCode::OK).await;
+    let serialized = body.to_string();
+
+    assert!(
+        !serialized.contains(leaked_key),
+        "provider test response leaked API key: {serialized}"
+    );
+    assert!(
+        serialized.contains("REDACTED"),
+        "provider test response should include a redacted error: {serialized}"
+    );
+    response_mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn test_providers_requires_user_auth() {
+    let app = build_router(test_app_state(), test_auth_mode());
+
+    let req = Request::builder()
+        .method("POST")
+        .uri(api("/providers/test"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(req).await.unwrap();
+    assert_status!(response, StatusCode::UNAUTHORIZED).await;
 }
 
 #[tokio::test]
@@ -8731,6 +9346,7 @@ async fn run_tools_worker_cannot_call_user_only_non_mcp_routes() {
 
     for (method, path) in [
         (Method::POST, format!("/runs/{target_run_id}/approve")),
+        (Method::POST, format!("/runs/{target_run_id}/deny")),
         (Method::GET, format!("/runs/{target_run_id}/timeline")),
     ] {
         let response = app
@@ -9269,6 +9885,20 @@ async fn worker_started_child_run_requires_approval_before_becoming_runnable() {
         pending_body["lifecycle"]["approval"]["state"].as_str(),
         Some("pending")
     );
+
+    let response = app
+        .clone()
+        .oneshot(bearer_request(
+            Method::GET,
+            "/system/info",
+            &user_jwt,
+            Body::empty(),
+        ))
+        .await
+        .unwrap();
+    let info_body = response_json!(response, StatusCode::OK).await;
+    assert_eq!(info_body["runs"]["active"], 1);
+    assert_eq!(info_body["runs"]["scheduler_slots_used"], 0);
 
     {
         let runs = state.runs.lock().expect("runs lock poisoned");
@@ -10926,7 +11556,7 @@ async fn create_preserved_local_sandbox_run(state: &Arc<AppState>, run_id: RunId
             definition_blob: None,
         },
         workflow_event::Event::SandboxInitialized {
-            provider:          SandboxProvider::Local,
+            provider:          SandboxProviderKind::Local,
             id:                "sandbox-preserve-1".to_string(),
             working_directory: "/tmp/fabro-preserved-sandbox".to_string(),
             repo_cloned:       None,
@@ -11677,7 +12307,7 @@ async fn delete_run_retry_after_missing_provider_resource_removes_metadata() {
         workflow_event::Event::RunStarting,
         workflow_event::Event::RunRunning,
         workflow_event::Event::SandboxInitialized {
-            provider:          SandboxProvider::Docker,
+            provider:          SandboxProviderKind::Docker,
             id:                "missing-sandbox".to_string(),
             working_directory: "/tmp/fabro-missing-sandbox".to_string(),
             repo_cloned:       Some(false),
@@ -12809,6 +13439,31 @@ async fn queue_position_reported_for_runnable_runs() {
     assert_eq!(positions.get(&second_id).copied(), Some(2));
 }
 
+#[test]
+fn scheduler_capacity_counts_only_runs_occupying_slots() {
+    assert!(!counts_toward_scheduler_capacity(RunStatus::Submitted));
+    assert!(!counts_toward_scheduler_capacity(RunStatus::Pending {
+        reason: PendingReason::ApprovalRequired,
+    }));
+    assert!(!counts_toward_scheduler_capacity(RunStatus::Runnable));
+    assert!(counts_toward_scheduler_capacity(RunStatus::Starting));
+    assert!(counts_toward_scheduler_capacity(RunStatus::Running));
+    assert!(counts_toward_scheduler_capacity(RunStatus::Blocked {
+        blocked_reason: BlockedReason::HumanInputRequired,
+    }));
+    assert!(counts_toward_scheduler_capacity(RunStatus::Paused {
+        prior_block: None,
+    }));
+    assert!(!counts_toward_scheduler_capacity(RunStatus::Removing));
+    assert!(!counts_toward_scheduler_capacity(RunStatus::Succeeded {
+        reason: SuccessReason::Completed,
+    }));
+    assert!(!counts_toward_scheduler_capacity(RunStatus::Failed {
+        reason: FailureReason::WorkflowError,
+    }));
+    assert!(!counts_toward_scheduler_capacity(RunStatus::Dead));
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn concurrency_limit_respected() {
     let state = test_app_state_with_options(default_test_server_settings(), RunLayer::default(), 1);
@@ -13546,7 +14201,7 @@ async fn list_runs_includes_live_metadata_from_run_state() {
         workflow_event::Event::RunStarting,
         workflow_event::Event::RunRunning,
         workflow_event::Event::SandboxInitialized {
-            provider:          SandboxProvider::Local,
+            provider:          SandboxProviderKind::Local,
             id:                "sb-test".to_string(),
             working_directory: "/sandbox/workdir".to_string(),
             repo_cloned:       None,
@@ -13625,7 +14280,7 @@ async fn list_runs_page_limit_preserves_metadata_for_paged_items() {
             workflow_event::Event::RunStarting,
             workflow_event::Event::RunRunning,
             workflow_event::Event::SandboxInitialized {
-                provider:          SandboxProvider::Local,
+                provider:          SandboxProviderKind::Local,
                 id:                sandbox_id.to_string(),
                 working_directory: "/sandbox/workdir".to_string(),
                 repo_cloned:       None,

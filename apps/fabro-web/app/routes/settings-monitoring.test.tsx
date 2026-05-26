@@ -21,14 +21,14 @@ mock.module("../lib/queries", () => ({
   useSystemResources: () => ({ data: systemResources }),
 }));
 
-const { default: SettingsResources } = await import("./settings-resources");
+const { default: SettingsMonitoring } = await import("./settings-monitoring");
 
 const mountedRenderers: TestRenderer.ReactTestRenderer[] = [];
 
-function renderSettingsResources() {
+function renderSettingsMonitoring() {
   let renderer: TestRenderer.ReactTestRenderer | undefined;
   act(() => {
-    renderer = TestRenderer.create(<SettingsResources />);
+    renderer = TestRenderer.create(<SettingsMonitoring />);
   });
   mountedRenderers.push(renderer!);
   return renderer!;
@@ -103,10 +103,10 @@ function sampleServerSettings(maxConcurrentRuns = 8): ServerSettings {
   } as unknown as ServerSettings;
 }
 
-describe("SettingsResources route", () => {
+describe("SettingsMonitoring route", () => {
   beforeEach(() => {
     teardownReactTestEnv = setupReactTestEnv();
-    systemInfo = { runs: { active: 3, total: 12 } };
+    systemInfo = { runs: { active: 3, scheduler_slots_used: 1, total: 12 } };
     serverSettings = sampleServerSettings();
   });
 
@@ -126,14 +126,15 @@ describe("SettingsResources route", () => {
   test("renders loaded resource data", () => {
     systemResources = sampleResources();
 
-    const renderer = renderSettingsResources();
+    const renderer = renderSettingsMonitoring();
     const text = textContent(renderer.toJSON());
 
     expect(text).toContain("18%");
     expect(text).toContain("5s");
     expect(text).toContain("3 GiB");
     expect(text).toContain("8 GiB");
-    expect(text).toContain("3 / 8 active");
+    expect(text).toContain("1 / 8 slots used");
+    expect(text).not.toContain("3 / 8 active");
   });
 
   test("shows CPU warmup state while usage is null", () => {
@@ -148,7 +149,7 @@ describe("SettingsResources route", () => {
       },
     });
 
-    const renderer = renderSettingsResources();
+    const renderer = renderSettingsMonitoring();
 
     expect(textContent(renderer.toJSON())).toContain("Collecting sample");
   });
@@ -179,7 +180,7 @@ describe("SettingsResources route", () => {
       },
     });
 
-    const renderer = renderSettingsResources();
+    const renderer = renderSettingsMonitoring();
     const text = textContent(renderer.toJSON());
 
     expect(text).toContain("Unsupported");
@@ -192,7 +193,7 @@ describe("SettingsResources route", () => {
       notes: ["Memory is scoped to the current container."],
     });
 
-    const renderer = renderSettingsResources();
+    const renderer = renderSettingsMonitoring();
 
     expect(textContent(renderer.toJSON())).toContain(
       "Memory is scoped to the current container.",

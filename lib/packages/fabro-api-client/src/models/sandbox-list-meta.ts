@@ -13,10 +13,13 @@
  */
 
 
+// May contain unused imports in some cases
+// @ts-ignore
+import type { SandboxProviderLookupError } from './sandbox-provider-lookup-error';
 
 /**
- * Updated browser demo-mode state.
+ * Metadata for provider-backed sandbox inventory.
  */
-export interface DemoToggleResponse {
-    'enabled': boolean;
+export interface SandboxListMeta {
+    'provider_errors': Array<SandboxProviderLookupError>;
 }

@@ -29,10 +29,10 @@ const LABEL_CLASS =
 const VALUE_WRAPPER_CLASS = "mt-1.5";
 const VALUE_CLASS = "text-sm text-fg";
 const VALUE_MONO_CLASS = "text-sm text-fg font-mono tabular-nums";
-const EM_DASH_CLASS = "text-sm text-fg-muted font-mono";
+const EMPTY_VALUE_CLASS = "text-sm text-fg-muted";
 
-function EmDash() {
-  return <span className={EM_DASH_CLASS}>—</span>;
+function EmptyValue() {
+  return <span className={EMPTY_VALUE_CLASS}>Not available</span>;
 }
 
 function Skeleton({ widthClass }: { widthClass: string }) {
@@ -138,8 +138,7 @@ function SandboxValue({
     <div className="flex items-center gap-2">
       <Tooltip label={display.description}>
         <span
-          role="img"
-          aria-label={`Sandbox ${display.label}`}
+          aria-hidden="true"
           className={`size-2 rounded-full ${display.dot}`}
         />
       </Tooltip>
@@ -173,7 +172,7 @@ export function RunSummaryPanelView({
               <span className={VALUE_CLASS}>{created.label}</span>
             </div>
           ) : (
-            <EmDash />
+          <EmptyValue />
           )}
         </Cell>
 
@@ -183,15 +182,15 @@ export function RunSummaryPanelView({
           ) : diff ? (
             <div className="flex items-baseline gap-2 text-sm">
               <span className="font-mono tabular-nums">
-                <span className="text-mint">+{diff.additions}</span>{" "}
-                <span className="text-coral">−{diff.deletions}</span>
+                <span className="text-mint">+{diff.additions.toLocaleString()}</span>{" "}
+                <span className="text-coral">−{diff.deletions.toLocaleString()}</span>
               </span>
               <span className="text-fg-3">
-                in {diff.files_changed} {diff.files_changed === 1 ? "file" : "files"}
+                in {diff.files_changed.toLocaleString()} {diff.files_changed === 1 ? "file" : "files"}
               </span>
             </div>
           ) : (
-            <EmDash />
+          <EmptyValue />
           )}
         </Cell>
 
@@ -201,7 +200,7 @@ export function RunSummaryPanelView({
           ) : sandboxState ? (
             <SandboxValue state={sandboxState} resources={sandboxResources} />
           ) : (
-            <EmDash />
+          <EmptyValue />
           )}
         </Cell>
 
@@ -211,7 +210,7 @@ export function RunSummaryPanelView({
           ) : cost != null ? (
             <span className={VALUE_MONO_CLASS}>{cost}</span>
           ) : (
-            <EmDash />
+          <EmptyValue />
           )}
         </Cell>
 
@@ -221,7 +220,7 @@ export function RunSummaryPanelView({
           ) : artifactsCount != null && artifactsCount > 0 ? (
             <span className={VALUE_MONO_CLASS}>{artifactsCount}</span>
           ) : (
-            <EmDash />
+          <EmptyValue />
           )}
         </Cell>
 

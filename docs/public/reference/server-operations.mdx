@@ -21,7 +21,7 @@ This starts the server on a Unix socket at `~/.fabro/fabro.sock` by default. Use
 
 If `~/.fabro/settings.toml` does not yet exist, `fabro server start` enters **install mode**: it prints an install URL and a one-time install token, attempts to open the URL in your default browser, and serves a web wizard that walks you through configuring your server URL, shared object store, LLM provider, and GitHub integration.
 
-The LLM step can be completed with one or more provider keys, or explicitly skipped so you can finish server setup first and add model credentials later. A skipped LLM step writes no LLM vault credentials; LLM-dependent workflows keep failing with provider-not-configured errors until credentials are added.
+The LLM step can be completed with one or more provider keys, or explicitly skipped so you can finish server setup first and add model credentials later. A skipped LLM step writes no LLM vault credentials; LLM-dependent workflows keep failing with provider-not-configured errors until credentials are added. Optional integration secrets collected by install mode, including LLM keys and GitHub App secrets, are written to the server vault rather than `server.env`.
 
 When Fabro can construct a direct install URL, the token is embedded in the URL and also printed on its own line for copying. If you open the server root through a reverse proxy or another machine, paste the printed install token when prompted.
 
@@ -61,12 +61,12 @@ Workflows are submitted via the REST API and executed in the background. The exa
 curl -X POST http://localhost:3000/api/v1/runs
 ```
 
-The server returns immediately with a run ID. After a start request, a background scheduler promotes `runnable` runs to `running` in FIFO order, up to the concurrency limit. Parent-generated child runs can remain `pending` until a user approves them.
+The server returns immediately with a run ID. After a start request, a background scheduler promotes `runnable` runs to `running` in FIFO order, up to the concurrency limit. Parent-generated [child runs](/execution/child-runs) can remain `pending` until a user approves them.
 
 ## Run lifecycle
 
 1. **Submit** — `POST /api/v1/runs` creates the run with status `submitted`.
-2. **Start request** — `POST /api/v1/runs/{id}/start` makes normal runs `runnable`; parent-generated child runs may become `pending` with `approval_required`.
+2. **Start request** — `POST /api/v1/runs/{id}/start` makes normal runs `runnable`; parent-generated [child runs](/execution/child-runs) may become `pending` with `approval_required`.
 3. **Approve if needed** — Approving a pending child run makes it `runnable`; denying it fails with `approval_denied`.
 4. **Schedule** — The scheduler picks up `runnable` runs up to `max_concurrent_runs`.
 5. **Execute** — The engine walks the graph, streaming events to all subscribers.
@@ -120,7 +120,7 @@ allowed_usernames = ["alice", "bob"]
 
 ## Demo mode
 
-Send the `X-Fabro-Demo: 1` header on any API request to get static mock data with authentication disabled. The web UI enables this automatically with the `FABRO_DEMO=1` environment variable. This lets you explore the UI without API keys or real workflow execution. See [Demo Mode](/api-reference/demo-mode) for details.
+Send the `X-Fabro-Demo: 1` header on any API request to get static mock data. To enable demo mode in the web UI, set the `fabro-demo=1` cookie in your browser devtools (Application → Cookies). This lets you explore the UI without API keys or real workflow execution.
 
 ## Pointing the CLI at a server
 

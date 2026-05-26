@@ -1,6 +1,6 @@
 use fabro_test::{fabro_snapshot, test_context};
 
-use super::support::fixture;
+use super::support::{fixture, read_text};
 
 #[test]
 fn help() {
@@ -61,6 +61,9 @@ fn help() {
               
               [env: FABRO_QUIET=]
 
+          --allow-invalid
+              Render even when workflow validation reports errors
+
           --verbose
               Enable verbose output
               
@@ -70,6 +73,37 @@ fn help() {
               Print help (see a summary with '-h')
     ----- stderr -----
     ");
+}
+
+#[test]
+fn graph_allow_invalid_renders_after_diagnostics() {
+    let context = test_context!();
+    let workflow = fixture("invalid.fabro");
+    let output_path = context.temp_dir.join("invalid.svg");
+    let mut cmd = context.command();
+    cmd.args([
+        "graph",
+        "--allow-invalid",
+        "-o",
+        output_path.to_str().unwrap(),
+        workflow.to_str().unwrap(),
+    ]);
+
+    fabro_snapshot!(context.filters(), cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ----- stderr -----
+    error: Pipeline must have exactly one start node (shape=Mdiamond or id start/Start) (start_node)
+    error [node: exit]: Exit node 'exit' has 1 outgoing edge(s) but must have none (exit_no_outgoing)
+    ");
+
+    let svg = read_text(&output_path);
+    assert!(
+        svg.contains("<svg") && svg.contains("Invalid"),
+        "expected invalid workflow to render as SVG, got: {}",
+        &svg[..svg.len().min(200)]
+    );
 }
 
 #[test]

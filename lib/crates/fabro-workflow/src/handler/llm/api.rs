@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use fabro_agent::subagent::{SessionFactory, SubAgentManager};
@@ -7,7 +8,7 @@ use fabro_agent::tool_registry::{RegisteredTool, ToolContext, ToolRegistry, Tool
 use fabro_agent::{
     AgentEvent, AgentProfile, AnthropicProfile, CompletionCoordinator, GeminiProfile,
     Message as AgentMessage, OpenAiProfile, Sandbox, Session, SessionOptions, StaticEnvProvider,
-    ToolEnvProvider, register_question_tools,
+    ToolEnvProvider, ToolSecrets, register_question_tools,
 };
 use fabro_auth::{CredentialSource, EnvCredentialSource};
 use fabro_graphviz::graph::{AttrValue, Node};
@@ -21,7 +22,7 @@ use fabro_mcp::config::McpServerSettings;
 use fabro_model::catalog::LlmCatalogSettings;
 use fabro_model::{AgentProfileKind, Catalog, FallbackTarget, ModelRef, ProviderId};
 use fabro_types::settings::run::RunModelControls;
-use fabro_types::{PermissionLevel, RunId, SessionCapability, StageId};
+use fabro_types::{PermissionLevel, RunId, SessionCapability, StageId, StageTiming};
 use serde::de::DeserializeOwned;
 use tokio::sync::Mutex as TokioMutex;
 use tokio::task::JoinHandle;
@@ -287,11 +288,13 @@ async fn execute_fabro_run_tool(
         }
         fabro_tool::FABRO_RUN_INTERACT_TOOL_NAME => {
             let params = parse_fabro_tool_args::<fabro_tool::FabroRunInteractParams>(name, args)?;
-            let result = fabro_tool::interact_run(
-                Arc::clone(&services.backend),
-                fabro_tool::ValidatedInteractRun::try_from(params)?,
-            )
-            .await?;
+            let validated = fabro_tool::ValidatedInteractRun::try_from(params)?;
+            if validated.action.requires_user() {
+                return Err(fabro_tool::ToolError::message(
+                    "Run approval must be performed by a user through the API, CLI, web UI, or human MCP server.",
+                ));
+            }
+            let result = fabro_tool::interact_run(Arc::clone(&services.backend), validated).await?;
             let summary = fabro_tool::interact_run_text(&result);
             render_fabro_tool_result(&summary, &result)
         }
@@ -574,6 +577,7 @@ pub struct AgentApiBackend {
     sessions:           Mutex<HashMap<String, Session>>,
     tool_env:           Option<Arc<dyn ToolEnvProvider>>,
     mcp_servers:        Vec<McpServerSettings>,
+    tool_secrets:       ToolSecrets,
     run_model_controls: RunModelControls,
     source:             Arc<dyn CredentialSource>,
     steering_hub:       Arc<SteeringHub>,
@@ -622,6 +626,7 @@ impl AgentApiBackend {
             sessions: Mutex::new(HashMap::new()),
             tool_env: None,
             mcp_servers: Vec::new(),
+            tool_secrets: ToolSecrets::default(),
             run_model_controls: RunModelControls::default(),
             source,
             steering_hub,
@@ -661,6 +666,12 @@ impl AgentApiBackend {
     #[must_use]
     pub fn with_mcp_servers(mut self, servers: Vec<McpServerSettings>) -> Self {
         self.mcp_servers = servers;
+        self
+    }
+
+    #[must_use]
+    pub fn with_tool_secrets(mut self, tool_secrets: ToolSecrets) -> Self {
+        self.tool_secrets = tool_secrets;
         self
     }
 
@@ -720,6 +731,7 @@ impl AgentApiBackend {
             self.tool_env.as_ref(),
             tool_hooks,
             self.mcp_servers.clone(),
+            self.tool_secrets.clone(),
             self.fabro_run_tools.clone(),
         )
         .await
@@ -736,6 +748,7 @@ impl AgentApiBackend {
         tool_env: Option<&Arc<dyn ToolEnvProvider>>,
         tool_hooks: Option<Arc<dyn fabro_agent::ToolHookCallback>>,
         mcp_servers: Vec<McpServerSettings>,
+        tool_secrets: ToolSecrets,
         fabro_run_tools: Option<FabroRunToolServices>,
     ) -> Result<Session, Error> {
         let controls = effective_request_controls(run_model_controls, node)?;
@@ -756,6 +769,7 @@ impl AgentApiBackend {
             speed: controls.speed,
             tool_hooks,
             mcp_servers,
+            tool_secrets,
             // Workflow agents run with no `tool_access_policy`, which exposes
             // the entire tool registry (read, write, shell, subagent, MCP) and
             // skips approval gating. Report that truthfully so the UI doesn't
@@ -779,6 +793,7 @@ impl AgentApiBackend {
         let factory_tool_env = tool_env.cloned();
         let factory_fabro_run_tools = fabro_run_tools.clone();
         let factory_permission_level = config.permission_level;
+        let factory_tool_secrets = config.tool_secrets.clone();
         let factory: SessionFactory = Arc::new(move || {
             let mut child_profile = build_profile(
                 &factory_model,
@@ -798,6 +813,7 @@ impl AgentApiBackend {
                     reasoning_effort: controls.reasoning_effort,
                     speed: controls.speed,
                     permission_level: factory_permission_level,
+                    tool_secrets: factory_tool_secrets.clone(),
                     ..SessionOptions::default()
                 },
                 None,
@@ -1031,6 +1047,7 @@ impl CodergenBackend for AgentApiBackend {
             .map(structured_output::prompt_response_format);
         let mut repair_attempts = 0_i64;
         let mut total_usage = TokenCounts::default();
+        let mut inference_duration = Duration::ZERO;
 
         loop {
             let request = Request {
@@ -1050,7 +1067,8 @@ impl CodergenBackend for AgentApiBackend {
                 provider_options: None,
             };
 
-            let completion = self
+            let inference_start = Instant::now();
+            let completion_result = self
                 .complete_one_shot_request(
                     &client,
                     node,
@@ -1060,7 +1078,9 @@ impl CodergenBackend for AgentApiBackend {
                     controls,
                     fallback_chain,
                 )
-                .await?;
+                .await;
+            inference_duration = inference_duration.saturating_add(inference_start.elapsed());
+            let completion = completion_result?;
             total_usage += completion.response.usage.clone();
             let response_text = completion.response.text();
 
@@ -1096,6 +1116,10 @@ impl CodergenBackend for AgentApiBackend {
                 usage:             Some(stage_usage),
                 files_touched:     Vec::new(),
                 last_file_touched: None,
+                timing:            StageTiming::active_only(
+                    crate::millis_u64(inference_duration),
+                    0,
+                ),
             });
         }
     }
@@ -1176,6 +1200,8 @@ impl CodergenBackend for AgentApiBackend {
 
         // Record turn count before processing so we only aggregate new usage.
         let mut turns_before = session.history().turns().len();
+        let mut inference_duration = Duration::ZERO;
+        let mut tool_duration = Duration::ZERO;
 
         // Activate with the steering hub after initialization so HTTP
         // `POST /runs/{id}/steer` calls reach this session. The activation
@@ -1228,9 +1254,13 @@ impl CodergenBackend for AgentApiBackend {
                 if !is_reused {
                     emit_agent_tools_available(&session, &node.id, &stage_id, emitter);
                 }
-                session
+                let process_result = session
                     .process_input_with_runtime(prompt, agent_tool_runtime.clone())
-                    .await
+                    .await;
+                let timing = session.last_input_timing();
+                inference_duration = inference_duration.saturating_add(timing.inference);
+                tool_duration = tool_duration.saturating_add(timing.tool);
+                process_result
             }
             Err(err) => Err(err),
         };
@@ -1293,6 +1323,7 @@ impl CodergenBackend for AgentApiBackend {
                             self.tool_env.as_ref(),
                             tool_hooks.clone(),
                             self.mcp_servers.clone(),
+                            self.tool_secrets.clone(),
                             self.fabro_run_tools.clone(),
                         )
                         .await;
@@ -1355,10 +1386,13 @@ impl CodergenBackend for AgentApiBackend {
                             }
                         }
                         emit_agent_tools_available(&session, &node.id, &stage_id, emitter);
-                        match session
+                        let process_result = session
                             .process_input_with_runtime(prompt, agent_tool_runtime.clone())
-                            .await
-                        {
+                            .await;
+                        let timing = session.last_input_timing();
+                        inference_duration = inference_duration.saturating_add(timing.inference);
+                        tool_duration = tool_duration.saturating_add(timing.tool);
+                        match process_result {
                             Ok(()) => {
                                 succeeded = true;
                                 break;
@@ -1419,7 +1453,16 @@ impl CodergenBackend for AgentApiBackend {
                             ));
                         }
                         let repair_message = error.repair_message(schema);
-                        match session.process_input(&repair_message).await {
+                        let repair_result = session
+                            .process_input_with_runtime(
+                                &repair_message,
+                                fabro_agent::AgentToolRuntime::default(),
+                            )
+                            .await;
+                        let timing = session.last_input_timing();
+                        inference_duration = inference_duration.saturating_add(timing.inference);
+                        tool_duration = tool_duration.saturating_add(timing.tool);
+                        match repair_result {
                             Ok(()) => {
                                 repair_attempts += 1;
                                 response = last_assistant_response(&session);
@@ -1494,6 +1537,10 @@ impl CodergenBackend for AgentApiBackend {
             usage: Some(stage_usage),
             files_touched,
             last_file_touched,
+            timing: StageTiming::active_only(
+                crate::millis_u64(inference_duration),
+                crate::millis_u64(tool_duration),
+            ),
         })
     }
 }
@@ -1539,8 +1586,8 @@ mod tests {
     use fabro_llm::{Error as LlmError, ProviderErrorDetail, ProviderErrorKind};
     use fabro_tool::FabroToolBackend;
     use fabro_types::{
-        EventEnvelope, Run, RunId, RunLifecycle, RunLinks, RunOrigin, RunPairStatusResponse,
-        RunProjection, RunStatus, RunTimestamps, SuccessReason, WorkflowRef,
+        EventEnvelope, FailureReason, Run, RunId, RunLifecycle, RunLinks, RunOrigin,
+        RunPairStatusResponse, RunProjection, RunStatus, RunTimestamps, SuccessReason, WorkflowRef,
     };
     use fabro_vault::{SecretType, Vault};
     use futures::stream;
@@ -1948,6 +1995,38 @@ reasoning = false
     }
 
     #[tokio::test]
+    async fn agent_run_interact_rejects_approval_actions_before_backend_dispatch() {
+        for action in ["approve", "deny"] {
+            let (services, backend) = fabro_run_tool_services();
+            let mut registry = ToolRegistry::new();
+            register_fabro_run_tools(&mut registry, &services);
+            let tool = registry
+                .get(fabro_tool::FABRO_RUN_INTERACT_TOOL_NAME)
+                .expect("interact tool should be registered");
+
+            let err = (tool.executor)(
+                serde_json::json!({
+                    "run_id": child_run_id().to_string(),
+                    "action": action
+                }),
+                tool_context(),
+            )
+            .await
+            .expect_err("workflow agents must not approve or deny runs");
+
+            assert!(err.contains("must be performed by a user"), "{err}");
+            assert!(
+                backend.approved_run_ids.lock().unwrap().is_empty(),
+                "approve backend should not be called for {action}"
+            );
+            assert!(
+                backend.denied_run_ids.lock().unwrap().is_empty(),
+                "deny backend should not be called for {action}"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn agent_run_pair_dispatches_to_shared_backend() {
         let (services, backend) = fabro_run_tool_services();
         let mut registry = ToolRegistry::new();
@@ -1978,6 +2057,8 @@ reasoning = false
             child_id:            child_run_id(),
             created_parent_ids:  Mutex::new(Vec::new()),
             started_run_ids:     Mutex::new(Vec::new()),
+            approved_run_ids:    Mutex::new(Vec::new()),
+            denied_run_ids:      Mutex::new(Vec::new()),
             pair_status_run_ids: Mutex::new(Vec::new()),
         });
         let services = FabroRunToolServices {
@@ -2078,6 +2159,8 @@ reasoning = false
         child_id:            RunId,
         created_parent_ids:  Mutex<Vec<Option<RunId>>>,
         started_run_ids:     Mutex<Vec<RunId>>,
+        approved_run_ids:    Mutex<Vec<RunId>>,
+        denied_run_ids:      Mutex<Vec<RunId>>,
         pair_status_run_ids: Mutex<Vec<RunId>>,
     }
 
@@ -2114,6 +2197,28 @@ reasoning = false
                 0,
                 RunStatus::Pending {
                     reason: fabro_types::PendingReason::ApprovalRequired,
+                },
+            ))
+        }
+
+        async fn approve_run(&self, run_id: &RunId) -> anyhow::Result<Run> {
+            self.approved_run_ids.lock().unwrap().push(*run_id);
+            Ok(run_with_status(
+                *run_id,
+                Some(current_run_id()),
+                0,
+                RunStatus::Runnable,
+            ))
+        }
+
+        async fn deny_run(&self, run_id: &RunId, _reason: Option<String>) -> anyhow::Result<Run> {
+            self.denied_run_ids.lock().unwrap().push(*run_id);
+            Ok(run_with_status(
+                *run_id,
+                Some(current_run_id()),
+                0,
+                RunStatus::Failed {
+                    reason: FailureReason::ApprovalDenied,
                 },
             ))
         }

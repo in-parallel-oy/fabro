@@ -85,11 +85,7 @@ export function ViewToggle({
 }) {
   const btn = "rounded px-3 py-1.5 text-xs font-medium transition-colors";
   return (
-    <div
-      role="group"
-      aria-label="Settings view"
-      className="inline-flex shrink-0 rounded-md border border-line bg-panel/80 p-0.5"
-    >
+    <div className="inline-flex shrink-0 rounded-md border border-line bg-panel/80 p-0.5">
       <button
         type="button"
         onClick={() => setView("settings")}
@@ -110,11 +106,17 @@ export function ViewToggle({
   );
 }
 
-export function Mono({ children }: { children: ReactNode }) {
+export function Mono({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title?: string;
+}) {
   return (
     <div
       className="truncate font-mono text-xs text-fg-2"
-      title={typeof children === "string" ? children : undefined}
+      title={title}
     >
       {children}
     </div>
@@ -224,36 +226,6 @@ export function ObjectStoreRows({
   );
 }
 
-export function ObjectStoreValue({
-  store,
-  prefix,
-}: {
-  store: ObjectStoreSettings;
-  prefix: string;
-}) {
-  if (store.type === "s3") {
-    const target = `s3://${store.bucket}${prefix ? `/${prefix}` : ""}`;
-    return (
-      <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-        <Badge>s3</Badge>
-        <span className="truncate font-mono text-xs text-fg-2" title={target}>
-          {target}
-        </span>
-        <span className="font-mono text-[11px] text-fg-muted">{store.region}</span>
-      </span>
-    );
-  }
-  const target = `${store.root}${prefix ? `/${prefix}` : ""}`;
-  return (
-    <span className="inline-flex items-center gap-2">
-      <Badge>local</Badge>
-      <span className="truncate font-mono text-xs text-fg-2" title={target}>
-        {target}
-      </span>
-    </span>
-  );
-}
-
 export function UsernameList({ names }: { names: string[] }) {
   const visible = names.slice(0, 3);
   const remaining = names.length - visible.length;
@@ -288,8 +260,4 @@ export function Count({
       {suffix ? <span className="ml-1 text-fg-muted">{suffix}</span> : null}
     </span>
   );
-}
-
-export function plural(n: number, singular: string, pluralForm: string) {
-  return n === 1 ? singular : pluralForm;
 }

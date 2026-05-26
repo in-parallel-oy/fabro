@@ -21,7 +21,7 @@ const MarkdownText = makeMarkdownText({ remarkPlugins: [remarkGfm] });
 export const SIDEBAR_WIDTH = 420;
 
 /** The user can drag the sidebar wider, but never past twice its default. */
-export const SIDEBAR_MAX_WIDTH = SIDEBAR_WIDTH * 2;
+const SIDEBAR_MAX_WIDTH = SIDEBAR_WIDTH * 2;
 
 /**
  * Right-docked "Ask Fabro" assistant panel. An animated-width column that
@@ -108,6 +108,7 @@ export default function AskFabroSidebar({
         }`}
         style={{ width }}
       >
+        {/* react-doctor-disable-next-line react-doctor/prefer-tag-over-role -- This is an interactive, draggable splitter; <hr> would not convey the resize behavior. */}
         <div
           role="separator"
           aria-orientation="vertical"

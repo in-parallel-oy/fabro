@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type ReactElement,
+  type RefObject,
 } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import {
@@ -85,7 +86,6 @@ function useNarrowViewport(): boolean {
     if (typeof window === "undefined") return;
     const mql = window.matchMedia(`(max-width: ${MD_BREAKPOINT_PX - 1}px)`);
     const apply = () => setNarrow(mql.matches);
-    apply();
     mql.addEventListener("change", apply);
     return () => mql.removeEventListener("change", apply);
   }, []);
@@ -326,26 +326,123 @@ const RunFileRow = memo(function RunFileRow({
   }
 
   return (
-    <div
+    <section
       id={fileRowId(display)}
       tabIndex={-1}
       data-run-file-row="true"
-      role="region"
       aria-label={`${file.change_kind ?? "modified"}: ${display}`}
       className="focus:outline-2 focus:outline-focus focus:outline-offset-2 rounded-md"
     >
       {body}
-    </div>
+    </section>
   );
 });
 
+function RunFilesLoaded({
+  containerRef,
+  toolbar,
+  files,
+  meta,
+  revalidationError,
+  onRetry,
+  narrow,
+  hashFile,
+  onFileSelect,
+  effectiveScope,
+  diffStyle,
+  runId,
+  runStatus,
+}: {
+  containerRef: RefObject<HTMLDivElement | null>;
+  toolbar: ReactElement;
+  files: ApiFileDiff[];
+  meta: PaginatedRunFileList["meta"];
+  revalidationError: string | null;
+  onRetry: () => void;
+  narrow: boolean;
+  hashFile: string | null;
+  onFileSelect: (path: string) => void;
+  effectiveScope: string;
+  diffStyle: DiffStyle;
+  runId: string;
+  runStatus: string | undefined;
+}) {
+  if (files.length === 0) {
+    return (
+      <div ref={containerRef} className="flex min-h-0 flex-1 flex-col gap-4">
+        {toolbar}
+        {meta.degraded ? (
+          <DegradedBanner reason={meta.degraded_reason} />
+        ) : null}
+        <EmptyState
+          kind={deriveEmptyKind({
+            runStatus,
+            totalChanged: meta.total_changed,
+            degraded: meta.degraded ?? false,
+          })}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="flex min-h-0 flex-1 flex-col gap-4">
+      <div className="shrink-0 space-y-4">
+        {toolbar}
+        {revalidationError ? (
+          <InlineErrorBanner message={revalidationError} onRetry={onRetry} />
+        ) : null}
+        {meta.degraded ? (
+          <DegradedBanner reason={meta.degraded_reason} />
+        ) : null}
+      </div>
+      <div className="flex min-h-0 flex-1 gap-4">
+        {!narrow ? (
+          <Suspense fallback={<FileTreeSidebarSkeleton />}>
+            <FileTreeSidebar
+              files={files}
+              selectedPath={hashFile}
+              onSelect={onFileSelect}
+            />
+          </Suspense>
+        ) : null}
+        <div className="flex min-w-0 min-h-0 flex-1 flex-col">
+          <VirtualizedDiffList>
+            {files.map((file, idx) => {
+              const display = file.new_file.name || file.old_file.name;
+              const isDeepLinkTarget =
+                !!hashFile &&
+                (file.new_file.name === hashFile || file.old_file.name === hashFile);
+              return (
+                <RunFileRow
+                  key={fileDiffRenderKey({
+                    file,
+                    index: idx,
+                    scope: effectiveScope,
+                    toSha: meta.to_sha,
+                  })}
+                  file={file}
+                  diffStyle={diffStyle}
+                  isDeepLinkTarget={isDeepLinkTarget}
+                  runId={runId}
+                  toSha={meta.to_sha}
+                />
+              );
+            })}
+          </VirtualizedDiffList>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function RunFiles() {
   const params = useParams();
-  const location = useLocation();
+  const routeLocation = useLocation();
   const navigate = useNavigate();
   const searchParams = useMemo(
-    () => new URLSearchParams(location.search),
-    [location.search],
+    () => new URLSearchParams(routeLocation.search),
+    [routeLocation.search],
   );
   const selectedScope = normalizeRunFileScope(searchParams.get("scope"));
   const selectedCommitSha = searchParams.get("commit");
@@ -433,14 +530,26 @@ export default function RunFiles() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const lastDeepLinkToastRef = useRef<string | null>(null);
 
-  const [minSpinUntil, setMinSpinUntil] = useState(0);
+  const minRefreshTimerRef = useRef<number | null>(null);
+  const [minRefreshActive, setMinRefreshActive] = useState(false);
+  const clearMinRefreshTimer = useCallback(() => {
+    if (minRefreshTimerRef.current !== null) {
+      window.clearTimeout(minRefreshTimerRef.current);
+      minRefreshTimerRef.current = null;
+    }
+  }, []);
   const handleRefresh = useCallback(() => {
-    setMinSpinUntil(Date.now() + MIN_REFRESH_SPIN_MS);
+    clearMinRefreshTimer();
+    setMinRefreshActive(true);
+    minRefreshTimerRef.current = window.setTimeout(() => {
+      setMinRefreshActive(false);
+      minRefreshTimerRef.current = null;
+    }, MIN_REFRESH_SPIN_MS);
     void filesQuery.mutate();
-  }, [filesQuery]);
+  }, [clearMinRefreshTimer, filesQuery]);
   const handlePickerChange = useCallback(
     (selection: DiffPickerValue) => {
-      const search = new URLSearchParams(location.search);
+      const search = new URLSearchParams(routeLocation.search);
       if (selection.kind === "commit") {
         search.set("commit", selection.sha);
         search.delete("scope");
@@ -449,29 +558,22 @@ export default function RunFiles() {
         search.delete("commit");
       }
       navigate({
-        pathname: location.pathname,
+        pathname: routeLocation.pathname,
         search:   `?${search.toString()}`,
-        hash:     location.hash,
+        hash:     routeLocation.hash,
       });
     },
-    [location.hash, location.pathname, location.search, navigate],
+    [routeLocation.hash, routeLocation.pathname, routeLocation.search, navigate],
   );
-  useEffect(() => {
-    if (minSpinUntil === 0) return;
-    const remaining = minSpinUntil - Date.now();
-    if (remaining <= 0) {
-      setMinSpinUntil(0);
-      return;
-    }
-    const id = window.setTimeout(() => setMinSpinUntil(0), remaining);
-    return () => window.clearTimeout(id);
-  }, [minSpinUntil]);
-  const showRefreshing = isRevalidating || minSpinUntil > 0;
+  useEffect(() => clearMinRefreshTimer, [clearMinRefreshTimer]);
+  // react-doctor-disable-next-line react-doctor/no-event-handler -- The refresh spinner is driven by both SWR revalidation and the click-owned minimum timer.
+  const showRefreshing = isRevalidating || minRefreshActive;
 
   // Return focus to the Refresh button after a refresh visibly completes so
   // keyboard-first users stay oriented.
   const refreshingPrev = useRef(false);
   useEffect(() => {
+    // react-doctor-disable-next-line react-doctor/no-event-handler -- Returning focus after async refresh completion is an accessibility sync effect.
     if (refreshingPrev.current && !showRefreshing) {
       refreshButtonRef.current?.focus({ preventScroll: true });
     }
@@ -498,7 +600,9 @@ export default function RunFiles() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  // react-doctor-disable-next-line react-doctor/no-event-handler -- Deep-link focus has to run after URL hash and file data have both rendered matching DOM rows.
   useEffect(() => {
+    // react-doctor-disable-next-line react-doctor/no-event-handler -- Toasting missing deep links also depends on resolved file data.
     const toast = resolveDeepLinkToast(hashFile, data);
     if (toast) {
       if (lastDeepLinkToastRef.current !== toast.key) {
@@ -590,74 +694,21 @@ export default function RunFiles() {
     />
   );
 
-  if (files.length === 0) {
-    return (
-      <div ref={containerRef} className="flex min-h-0 flex-1 flex-col gap-4">
-        {toolbar}
-        {meta.degraded ? (
-          <DegradedBanner reason={meta.degraded_reason} />
-        ) : null}
-        <EmptyState
-          kind={deriveEmptyKind({
-            runStatus,
-            totalChanged: meta.total_changed,
-            degraded: meta.degraded ?? false,
-          })}
-        />
-      </div>
-    );
-  }
-
   return (
-    <div ref={containerRef} className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="shrink-0 space-y-4">
-        {toolbar}
-        {revalidationError ? (
-          <InlineErrorBanner
-            message={revalidationError}
-            onRetry={() => void filesQuery.mutate()}
-          />
-        ) : null}
-        {meta.degraded ? (
-          <DegradedBanner reason={meta.degraded_reason} />
-        ) : null}
-      </div>
-      <div className="flex min-h-0 flex-1 gap-4">
-        {!narrow ? (
-          <Suspense fallback={<FileTreeSidebarSkeleton />}>
-            <FileTreeSidebar
-              files={files}
-              selectedPath={hashFile}
-              onSelect={handleFileSelect}
-            />
-          </Suspense>
-        ) : null}
-        <div className="flex min-w-0 min-h-0 flex-1 flex-col">
-          <VirtualizedDiffList>
-            {files.map((file, idx) => {
-              const display = file.new_file.name || file.old_file.name;
-              const isDeepLinkTarget =
-                !!hashFile &&
-                (file.new_file.name === hashFile || file.old_file.name === hashFile);
-              return (
-                <RunFileRow
-                  key={fileDiffRenderKey({
-                    file,
-                    index: idx,
-                    scope: effectiveScope,
-                    toSha: meta.to_sha,
-                  })}
-                  file={file}
-                  diffStyle={diffStyle}
-                  isDeepLinkTarget={isDeepLinkTarget}
-                  runId={params.id ?? "unknown-run"}
-                  toSha={meta.to_sha}
-                />
-              );
-            })}
-          </VirtualizedDiffList>
-        </div>
-      </div>
-    </div>
+    <RunFilesLoaded
+      containerRef={containerRef}
+      toolbar={toolbar}
+      files={files}
+      meta={meta}
+      revalidationError={revalidationError}
+      onRetry={() => void filesQuery.mutate()}
+      narrow={narrow}
+      hashFile={hashFile}
+      onFileSelect={handleFileSelect}
+      effectiveScope={effectiveScope}
+      diffStyle={diffStyle}
+      runId={params.id ?? "unknown-run"}
+      runStatus={runStatus}
+    />
   );
 }

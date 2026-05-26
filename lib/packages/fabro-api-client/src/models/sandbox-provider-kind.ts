@@ -15,8 +15,13 @@
 
 
 /**
- * Desired browser demo-mode state.
+ * Sandbox provider discriminator.
  */
-export interface DemoToggleRequest {
-    'enabled': boolean;
-}
+
+export const SandboxProviderKind = {
+    LOCAL: 'local',
+    DOCKER: 'docker',
+    DAYTONA: 'daytona'
+} as const;
+
+export type SandboxProviderKind = typeof SandboxProviderKind[keyof typeof SandboxProviderKind];

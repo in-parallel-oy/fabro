@@ -18,12 +18,11 @@ export type EmptyKind =
 
 export function EmptyState({ kind }: { kind: EmptyKind }) {
   return (
-    <div
-      role="status"
+    <output
       className="rounded-md border border-dashed border-line bg-panel/40 px-6 py-10 text-center text-sm text-fg-muted"
     >
       {emptyStateCopy(kind)}
-    </div>
+    </output>
   );
 }
 
@@ -101,28 +100,30 @@ export function FileTreeSidebarSkeleton() {
   );
 }
 
-export function LoadingSkeleton({
-  reserveSidebar = false,
-}: {
-  reserveSidebar?: boolean;
-} = {}) {
-  const diffSkeleton = (
+function DiffSkeleton() {
+  return (
     <div className="flex min-w-0 min-h-0 flex-1 flex-col gap-3">
       <div className="h-32 rounded-md bg-panel/60 motion-safe:animate-pulse" />
       <div className="h-32 rounded-md bg-panel/60 motion-safe:animate-pulse" />
     </div>
   );
+}
 
+export function LoadingSkeleton({
+  reserveSidebar = false,
+}: {
+  reserveSidebar?: boolean;
+} = {}) {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3" aria-label="Loading files">
       <div className="h-8 shrink-0 rounded-md bg-panel/60 motion-safe:animate-pulse" />
       {reserveSidebar ? (
         <div className="flex min-h-0 flex-1 gap-4">
           <FileTreeSidebarSkeleton />
-          {diffSkeleton}
+          <DiffSkeleton />
         </div>
       ) : (
-        diffSkeleton
+        <DiffSkeleton />
       )}
     </div>
   );
@@ -163,12 +164,11 @@ export function renderStatusError(args: {
   const { status, requestId, onRetry } = args;
   if (status === 401 || status === 403) {
     return (
-      <div
-        role="status"
+      <output
         className="rounded-md border border-dashed border-line bg-panel/40 px-6 py-10 text-center text-sm text-fg-muted"
       >
         You don't have access to this run's files.
-      </div>
+      </output>
     );
   }
   if (status === 429 || status === 503) {
@@ -182,12 +182,11 @@ export function renderStatusError(args: {
   if (status >= 500) {
     const suffix = requestId ? ` Request ID: ${requestId}.` : "";
     return (
-      <div
-        role="status"
+      <output
         className="rounded-md border border-dashed border-line bg-panel/40 px-6 py-10 text-center text-sm text-fg-muted"
       >
         Something went wrong.{suffix} Please contact support if this persists.
-      </div>
+      </output>
     );
   }
   return (
@@ -213,11 +212,10 @@ export function RunFilesErrorBoundary() {
     });
   }
   return (
-    <div
-      role="status"
+    <output
       className="rounded-md border border-dashed border-line bg-panel/40 px-6 py-10 text-center text-sm text-fg-muted"
     >
       Something went wrong loading this run's files.
-    </div>
+    </output>
   );
 }

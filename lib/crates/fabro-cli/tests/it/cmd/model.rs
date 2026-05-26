@@ -76,70 +76,93 @@ fn list() {
 }
 
 #[test]
-fn list_provider() {
+fn list_with_filters_renders_server_models_table() {
     let context = test_context!();
-    let mut cmd = context.model();
-    cmd.args(["list", "--provider", "anthropic"]);
-    fabro_snapshot!(context.filters(), cmd, @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    MODEL              PROVIDER   ALIASES                CONTEXT          COST      SPEED 
-     claude-haiku-4-5   anthropic  haiku, claude-haiku       200k   $0.8 / $4.0  100 tok/s 
-     claude-opus-4-6    anthropic                              1m  $5.0 / $25.0   25 tok/s 
-     claude-opus-4-7    anthropic  opus, claude-opus           1m  $5.0 / $25.0   25 tok/s 
-     claude-sonnet-4-5  anthropic                            200k  $3.0 / $15.0   50 tok/s 
-     claude-sonnet-4-6  anthropic  sonnet, claude-sonnet     200k  $3.0 / $15.0   50 tok/s
-    ----- stderr -----
-    ");
-}
+    let server = MockServer::start();
+    let mock = server.mock(|when, then| {
+        when.method("GET")
+            .path("/api/v1/models")
+            .query_param("page[limit]", "100")
+            .query_param("page[offset]", "0")
+            .query_param("provider", "fixture")
+            .query_param("query", "stable");
+        then.status(200)
+            .header("Content-Type", "application/json")
+            .body(
+                serde_json::json!({
+                    "data": [
+                        {
+                            "id": "fixture-128k",
+                            "display_name": "Fixture 128k",
+                            "provider": "fixture",
+                            "family": "test",
+                            "aliases": ["stable", "fixture-alias"],
+                            "limits": {
+                                "context_window": 128_000,
+                                "max_output": 4096
+                            },
+                            "training": null,
+                            "knowledge_cutoff": null,
+                            "features": {
+                                "tools": true,
+                                "vision": false,
+                                "reasoning": false
+                            },
+                            "costs": {
+                                "input_cost_per_mtok": 1.2,
+                                "output_cost_per_mtok": 3.4,
+                                "cache_input_cost_per_mtok": null
+                            },
+                            "estimated_output_tps": 88.0,
+                            "default": false,
+                            "configured": false
+                        },
+                        {
+                            "id": "fixture-1m",
+                            "display_name": "Fixture 1m",
+                            "provider": "fixture",
+                            "family": "test",
+                            "aliases": [],
+                            "limits": {
+                                "context_window": 1_000_000,
+                                "max_output": 4096
+                            },
+                            "training": null,
+                            "knowledge_cutoff": null,
+                            "features": {
+                                "tools": false,
+                                "vision": true,
+                                "reasoning": true
+                            },
+                            "costs": {
+                                "input_cost_per_mtok": null,
+                                "output_cost_per_mtok": null,
+                                "cache_input_cost_per_mtok": null
+                            },
+                            "estimated_output_tps": null,
+                            "default": false,
+                            "configured": false
+                        }
+                    ],
+                    "meta": { "has_more": false }
+                })
+                .to_string(),
+            );
+    });
+    context.set_http_target(&server.base_url());
 
-#[test]
-fn list_query() {
-    let context = test_context!();
     let mut cmd = context.model();
-    cmd.args(["list", "--query", "opus"]);
+    cmd.args(["list", "--provider", "fixture", "--query", "stable"]);
     fabro_snapshot!(context.filters(), cmd, @"
     success: true
     exit_code: 0
     ----- stdout -----
-    MODEL            PROVIDER   ALIASES            CONTEXT          COST     SPEED 
-     claude-opus-4-6  anthropic                          1m  $5.0 / $25.0  25 tok/s 
-     claude-opus-4-7  anthropic  opus, claude-opus       1m  $5.0 / $25.0  25 tok/s
+    MODEL         PROVIDER  ALIASES                CONTEXT         COST     SPEED 
+     fixture-128k  fixture   stable, fixture-alias     128k  $1.2 / $3.4  88 tok/s 
+     fixture-1m    fixture                               1m        - / -         -
     ----- stderr -----
     ");
-}
-
-#[test]
-fn list_query_aliases() {
-    let context = test_context!();
-    let mut cmd = context.model();
-    cmd.args(["list", "--query", "codex"]);
-    fabro_snapshot!(context.filters(), cmd, @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    MODEL                PROVIDER  ALIASES      CONTEXT          COST       SPEED 
-     gpt-5.3-codex        openai    codex             1m  $1.8 / $14.0   100 tok/s 
-     gpt-5.3-codex-spark  openai    codex-spark     131k         - / -  1000 tok/s
-    ----- stderr -----
-    ");
-}
-
-#[test]
-fn list_query_case_insensitive() {
-    let context = test_context!();
-    let mut cmd = context.model();
-    cmd.args(["list", "--query", "OPUS"]);
-    fabro_snapshot!(context.filters(), cmd, @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    MODEL            PROVIDER   ALIASES            CONTEXT          COST     SPEED 
-     claude-opus-4-6  anthropic                          1m  $5.0 / $25.0  25 tok/s 
-     claude-opus-4-7  anthropic  opus, claude-opus       1m  $5.0 / $25.0  25 tok/s
-    ----- stderr -----
-    ");
+    mock.assert();
 }
 
 #[test]

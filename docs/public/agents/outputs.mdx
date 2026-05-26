@@ -79,15 +79,25 @@ review [
 
 With `output_schema="routing"`, the routing JSON must be an object with at least one recognized routing field (`preferred_next_label`, `outcome`, `failure_reason`, `suggested_next_ids`, or `context_updates`) and those fields must have the expected types. Malformed routing JSON fails validation instead of being silently ignored.
 
-Fabro repairs invalid structured output inside the same LLM context before failing the node. For prompt nodes, Fabro appends the invalid assistant response and a corrective user message to the same message list. For agent nodes using the API backend, Fabro sends the corrective message to the same live agent session. `output_retries` controls these repair turns and defaults to `2`; `output_retries=0` validates once and fails without a repair turn. These repair turns are separate from workflow `max_retries` and do not consume node retry attempts.
+Validated routing uses the same reverse scan as normal routing extraction: Fabro validates the last parsable JSON object that contains a recognized routing field. If a routing object is present but malformed or has invalid field types, Fabro repairs that response instead of falling through to a file fallback.
 
-### Fallback: status.json file
+Fabro repairs invalid structured output inside the same LLM context before failing the node. For prompt nodes, Fabro appends the invalid assistant response and a corrective user message to the same message list. For agent nodes using the API backend, Fabro sends the corrective message to the same live agent session. `output_retries` controls these repair turns and defaults to `2`; `output_retries=0` validates once and fails without a repair turn. Negative values are treated as `0`. These repair turns are separate from workflow `max_retries` and do not consume node retry attempts.
 
-If no routing directives are found in the response text, Fabro checks whether the agent wrote a `status.json` file into the sandbox working directory. If the file exists, Fabro extracts routing directives from it using the same logic. This is useful for agents that write structured output to files rather than including JSON in their response text.
+### Routing fallback sources
 
-Response text directives always take priority -- `status.json` is only read as a fallback when the response contains no recognized routing fields.
+Agent nodes can provide routing directives through fallback files. Fabro checks sources in this order:
 
-If neither source provides routing directives, the transition falls through to condition matching, unconditional edges, or weight-based tiebreaking as described in [Transitions](/workflows/transitions).
+| Order | Source |
+|---|---|
+| 1 | The final response text |
+| 2 | `status.json` in the sandbox working directory |
+| 3 | The last file touched by the agent |
+
+This fallback chain applies to normal routing extraction and to `output_schema="routing"`. For validated routing, Fabro only advances to the next source when the current source has no JSON object or no object with recognized routing fields. If the current source contains malformed routing JSON or valid JSON with wrong routing field types, validation fails and Fabro starts the repair loop instead.
+
+Prompt nodes do not use file fallbacks; they validate or extract routing directives from the response text only.
+
+If no source provides routing directives, the transition falls through to condition matching, unconditional edges, or weight-based tiebreaking as described in [Transitions](/workflows/transitions).
 
 ### Instructing the agent
 
@@ -121,6 +131,8 @@ audit [
 ```
 
 `output_schema="@path/to/schema.json"` uses the same workflow file-reference rules as prompt files: the schema is loaded relative to the workflow file and inlined before execution. The final JSON object in the LLM response is validated with `jsonschema`.
+
+Custom schema validation only reads the response text. It does not fall back to `status.json` or the last file touched by the agent.
 
 When custom schema validation succeeds, Fabro stores the parsed JSON value in context at:
 

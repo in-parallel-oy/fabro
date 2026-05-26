@@ -12,9 +12,11 @@ tags:
   - name: Integrations
     description: External provider callbacks and integration endpoints
   - name: Auth
-    description: Browser authentication and demo-mode controls
+    description: Browser authentication
   - name: Runs
     description: Run management operations
+  - name: Sandboxes
+    description: Provider-backed sandbox inventory
   - name: Sessions
     description: Ask Fabro sessions bound to runs
   - name: Human-in-the-Loop
@@ -743,35 +745,6 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Session not found
-          headers:
-            x-request-id:
-              $ref: "#/components/headers/XRequestId"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/v1/demo/toggle:
-    post:
-      operationId: toggleDemo
-      tags: [Auth]
-      summary: Toggle browser demo mode
-      description: Enables or disables demo-mode routing for the current browser session.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DemoToggleRequest"
-      responses:
-        "200":
-          description: Demo-mode state updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DemoToggleResponse"
-        "401":
-          description: Not authenticated
           headers:
             x-request-id:
               $ref: "#/components/headers/XRequestId"
@@ -3661,6 +3634,67 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/sandboxes:
+    get:
+      operationId: listSandboxes
+      tags: [Sandboxes]
+      summary: List Sandboxes
+      description: Lists Fabro-managed sandboxes directly from configured sandbox providers.
+      responses:
+        "200":
+          description: Provider-backed sandbox inventory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxListResponse"
+
+  /api/v1/sandboxes/{id}:
+    get:
+      operationId: retrieveSandbox
+      tags: [Sandboxes]
+      summary: Retrieve Sandbox
+      description: Retrieves a Fabro-managed sandbox by provider-native id by searching all configured sandbox providers.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Sandbox found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SandboxInfo"
+        "404":
+          description: No provider found a Fabro-managed sandbox with this id
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: More than one provider matched this sandbox id
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Provider lookup failed before a definitive result could be determined
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/runs/{id}/sandbox:
     get:
       operationId: retrieveRunSandbox
@@ -4495,6 +4529,22 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProviderList"
 
+  /api/v1/providers/test:
+    post:
+      operationId: testProviders
+      tags: [Models]
+      summary: Test Providers
+      description: >
+        Tests every configured LLM provider once using the catalog probe model.
+        Provider-level failures are returned in the response body with HTTP 200.
+      responses:
+        "200":
+          description: Provider test results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderTestList"
+
   # ── Completions ───────────────────────────────────────────────────────
 
   /api/v1/completions:
@@ -4763,7 +4813,7 @@ components:
       description: Field to sort by. Defaults to `created_at`.
       schema:
         type: string
-        enum: [created_at, updated_at, status, elapsed, repo, title, workflow, changes]
+        enum: [created_at, updated_at, status, elapsed, repo, title, workflow, changes, size]
         default: created_at
       example: created_at
 
@@ -4931,24 +4981,6 @@ components:
           type: string
         userUrl:
           type: string
-
-    DemoToggleRequest:
-      description: Desired browser demo-mode state.
-      type: object
-      required:
-        - enabled
-      properties:
-        enabled:
-          type: boolean
-
-    DemoToggleResponse:
-      description: Updated browser demo-mode state.
-      type: object
-      required:
-        - enabled
-      properties:
-        enabled:
-          type: boolean
 
     DevTokenLoginRequest:
       description: Browser login payload for development-token auth.
@@ -6224,6 +6256,75 @@ components:
           items:
             $ref: "#/components/schemas/Provider"
 
+    ProviderTestList:
+      description: Results from testing all configured LLM providers.
+      type: object
+      required:
+        - data
+        - summary
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderTestResult"
+        summary:
+          $ref: "#/components/schemas/ProviderTestSummary"
+
+    ProviderTestResult:
+      description: Result of testing one configured LLM provider.
+      type: object
+      required:
+        - provider
+        - model_id
+        - status
+        - error_message
+      properties:
+        provider:
+          $ref: "#/components/schemas/ProviderId"
+        model_id:
+          type: ["string", "null"]
+          description: Catalog probe model ID used for the provider, or null when no probe was sent.
+          example: "gpt-5.4-mini"
+        status:
+          $ref: "#/components/schemas/ProviderTestStatus"
+        error_message:
+          type: ["string", "null"]
+          description: Error details when status is "error".
+
+    ProviderTestSummary:
+      description: Aggregate provider test status and counts.
+      type: object
+      required:
+        - status
+        - total
+        - passed
+        - failed
+      properties:
+        status:
+          $ref: "#/components/schemas/ProviderTestStatus"
+        total:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of configured providers tested or evaluated.
+        passed:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of providers whose probe succeeded.
+        failed:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of providers with configuration, auth, registration, or probe errors.
+
+    ProviderTestStatus:
+      description: Provider test status.
+      type: string
+      enum:
+        - ok
+        - error
+
     Provider:
       description: An LLM provider from the catalog with effective config and configured status.
       type: object
@@ -7498,7 +7599,7 @@ components:
       required: [provider, id]
       properties:
         provider:
-          $ref: "#/components/schemas/SandboxProvider"
+          $ref: "#/components/schemas/SandboxProviderKind"
         id:
           type: string
 
@@ -10139,8 +10240,8 @@ components:
           description: Equals `inference_time_ms + tool_time_ms`.
           example: 180000
 
-    SandboxProvider:
-      description: Sandbox execution provider.
+    SandboxProviderKind:
+      description: Sandbox provider discriminator.
       type: string
       enum:
         - local
@@ -10157,7 +10258,7 @@ components:
         - runtime
       properties:
         provider:
-          $ref: "#/components/schemas/SandboxProvider"
+          $ref: "#/components/schemas/SandboxProviderKind"
         image:
           type: ["string", "null"]
         snapshot:
@@ -11058,6 +11159,95 @@ components:
           description: Provider-reported labels.
         timestamps:
           $ref: "#/components/schemas/SandboxTimestamps"
+
+    SandboxInfo:
+      description: Provider-backed inventory record for a Fabro-managed sandbox.
+      type: object
+      required:
+        - provider
+        - id
+        - state
+        - resources
+        - network
+        - labels
+        - timestamps
+      properties:
+        provider:
+          $ref: "#/components/schemas/SandboxProviderKind"
+        id:
+          type: string
+          description: Provider-native sandbox id.
+        display_name:
+          type: ["string", "null"]
+          description: Provider display name when distinct from the native id.
+        state:
+          $ref: "#/components/schemas/SandboxState"
+        native_state:
+          type: ["string", "null"]
+          description: Original provider state string before normalization. Display/debugging only; UI behavior keys off `state`.
+        image:
+          type: ["string", "null"]
+          description: Provider image when surfaced by the sandbox provider.
+        snapshot:
+          type: ["string", "null"]
+          description: Provider snapshot when surfaced by the sandbox provider.
+        region:
+          type: ["string", "null"]
+          description: Provider region or target. Null for local-style providers.
+        web_url:
+          type: ["string", "null"]
+          description: Provider dashboard URL for this sandbox when available.
+        working_directory:
+          type: ["string", "null"]
+          description: Provider-reported or Fabro-default working directory when available.
+        resources:
+          $ref: "#/components/schemas/SandboxResources"
+        network:
+          $ref: "#/components/schemas/SandboxNetwork"
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: Provider-reported labels.
+        timestamps:
+          $ref: "#/components/schemas/SandboxTimestamps"
+
+    SandboxProviderLookupError:
+      description: Provider error captured during fail-soft sandbox inventory lookup.
+      type: object
+      required:
+        - provider
+        - message
+      properties:
+        provider:
+          $ref: "#/components/schemas/SandboxProviderKind"
+        message:
+          type: string
+
+    SandboxListMeta:
+      description: Metadata for provider-backed sandbox inventory.
+      type: object
+      required:
+        - provider_errors
+      properties:
+        provider_errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/SandboxProviderLookupError"
+
+    SandboxListResponse:
+      description: Non-paginated provider-backed sandbox inventory response.
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SandboxInfo"
+        meta:
+          $ref: "#/components/schemas/SandboxListMeta"
 
     SandboxFileEntry:
       description: A directory entry in a run sandbox.
@@ -12338,6 +12528,10 @@ components:
           type: integer
           format: int64
           description: Runs currently pending, runnable, or executing.
+        scheduler_slots_used:
+          type: integer
+          format: int64
+          description: Runs currently occupying scheduler concurrency slots.
 
     SystemResourcesResponse:
       description: Server-visible runtime resource usage for the active Fabro process environment.

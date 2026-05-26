@@ -17,13 +17,13 @@ import {
 } from "../components/settings-panel";
 
 export function meta() {
-  return [{ title: "Resources — Fabro" }];
+  return [{ title: "Monitoring — Fabro" }];
 }
 
 const DESCRIPTION =
   "Server-visible run concurrency, CPU, memory, and storage filesystem usage for this Fabro process.";
 
-export default function SettingsResources() {
+export default function SettingsMonitoring() {
   const resourcesQuery = useSystemResources();
   const resources = resourcesQuery.data;
 
@@ -59,17 +59,14 @@ function RunsPanel() {
     return <PanelSkeleton />;
   }
 
-  const active = info.runs?.active ?? 0;
+  const slotsUsed = info.runs?.scheduler_slots_used ?? 0;
   const max = settings.server.scheduler.max_concurrent_runs;
-  const percent = max > 0 ? (active / max) * 100 : null;
+  const percent = max > 0 ? (slotsUsed / max) * 100 : null;
 
   return (
     <Panel title="Runs">
-      <Row
-        title="Active"
-        help="Runs currently pending, runnable, or executing against the scheduler ceiling."
-      >
-        <UsageMeter percent={percent} label={`${active} / ${max} active`} />
+      <Row title="Concurrency used" help="Runs currently occupying scheduler slots.">
+        <UsageMeter percent={percent} label={`${slotsUsed} / ${max} slots used`} />
       </Row>
     </Panel>
   );
@@ -202,13 +199,16 @@ function UsageMeter({
           <span className="font-mono text-xs tabular-nums text-fg-muted">{value}</span>
         ) : null}
       </div>
-      <div
-        role="meter"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={safePercent ?? undefined}
-        className="h-2 overflow-hidden rounded-sm bg-overlay-strong"
+      <meter
+        min={0}
+        max={100}
+        value={safePercent ?? 0}
+        aria-label={label ?? "Usage"}
+        className="sr-only"
       >
+        {value}
+      </meter>
+      <div className="h-2 overflow-hidden rounded-sm bg-overlay-strong" aria-hidden="true">
         <div
           className="h-full rounded-sm bg-teal-500 transition-[width]"
           style={{ width: `${safePercent ?? 0}%` }}

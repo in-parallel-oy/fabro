@@ -41,7 +41,7 @@ use crate::server::{
     spawn_scheduler,
 };
 use crate::server_secrets::{ServerSecrets, process_env_snapshot};
-use crate::startup::resolve_startup;
+use crate::startup::{prepare_startup_vault, resolve_startup, validate_startup_configuration};
 use crate::static_files;
 
 pub const DEFAULT_TCP_PORT: u16 = 32276;
@@ -730,18 +730,25 @@ where
         llm_catalog_settings:          runtime_settings.llm_catalog_settings,
     };
     let resolved_server_settings = resolved_app_settings.server_settings.server.clone();
+    validate_startup_configuration(&resolved_server_settings)?;
+    let env_entries = process_env_snapshot();
+    let startup_vault = prepare_startup_vault(&vault_path, &server_env_path, &env_entries)?;
     let (auth_mode, server_secrets) = resolve_startup(
         &server_env_path,
-        process_env_snapshot(),
+        env_entries,
         &resolved_server_settings,
+        &startup_vault,
     )?;
     // Bridge server.env entries to process env so InterpString
     // resolution (`{{ env.X }}` in run.sandbox.docker.env_vars, etc.)
     // can resolve against operator-managed secrets stored in
     // ~/.fabro/storage/server.env. Process-env entries already win.
     // This runs single-threaded at startup, before any worker spawn.
+    // Note: upstream now migrates known optional secrets from server.env
+    // into the vault, so this only bridges arbitrary operator-set keys
+    // (e.g. license tokens) that the vault migration doesn't touch.
     server_secrets.expose_file_entries_to_process_env();
-    let webhook_secret_present = server_secrets.get(WEBHOOK_SECRET_ENV).is_some();
+    let webhook_secret_present = startup_vault.get(WEBHOOK_SECRET_ENV).is_some();
     let bind_request = resolve_bind_request_from_server_settings(
         &resolved_app_settings.server_settings,
         args.bind.as_deref(),
@@ -806,11 +813,13 @@ where
         store,
         artifact_store,
         vault_path,
+        preloaded_vault: Some(startup_vault),
         server_secrets,
         env_lookup,
         github_api_base_url: None,
         active_config_path,
         http_client: None,
+        sandbox_provider_registry: None,
         shutdown: shutdown.clone(),
     })?;
     let reconciled = reconcile_incomplete_runs_on_startup(&state).await?;

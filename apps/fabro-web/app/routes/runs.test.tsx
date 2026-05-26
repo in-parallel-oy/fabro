@@ -9,8 +9,8 @@ import {
   RUNS_PREFERENCES_STORAGE_KEY,
   runsQuickStartCommands,
   shouldRefreshBoardForEvent,
-  summarizeBatchLifecycleAction,
 } from "./runs";
+import { summarizeBatchLifecycleAction } from "../components/runs-list/batch-lifecycle";
 
 function boardRun(id: string, column: BoardColumn, questionText?: string): Run {
   const status =
@@ -249,7 +249,7 @@ describe("runs route workspace preferences", () => {
       }),
     );
 
-    expect(loadStoredRunsWorkspaceSearchParams(storage).toString()).toBe("hide=elapsed%2Crepo");
+    expect(loadStoredRunsWorkspaceSearchParams(storage).toString()).toBe("hide=repo%2Celapsed");
   });
 
   test("valid stored preferences produce canonical URL params", () => {

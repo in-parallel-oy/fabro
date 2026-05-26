@@ -12,6 +12,7 @@ api/repos-api.ts
 api/run-internals-api.ts
 api/run-outputs-api.ts
 api/runs-api.ts
+api/sandboxes-api.ts
 api/secrets-api.ts
 api/sessions-api.ts
 api/settings-api.ts
@@ -89,8 +90,6 @@ models/create-secret-request.ts
 models/delete-run-response.ts
 models/delete-run-sandbox.ts
 models/delete-secret-request.ts
-models/demo-toggle-request.ts
-models/demo-toggle-response.ts
 models/deny-run-request.ts
 models/dev-token-login-request.ts
 models/dev-token-login-response.ts
@@ -261,6 +260,10 @@ models/principal-worker.ts
 models/principal.ts
 models/project-namespace.ts
 models/provider-list.ts
+models/provider-test-list.ts
+models/provider-test-result.ts
+models/provider-test-status.ts
+models/provider-test-summary.ts
 models/provider.ts
 models/prune-run-entry.ts
 models/prune-runs-request.ts
@@ -368,10 +371,14 @@ models/run.ts
 models/sandbox-details.ts
 models/sandbox-file-entry.ts
 models/sandbox-file-list-response.ts
+models/sandbox-info.ts
+models/sandbox-list-meta.ts
+models/sandbox-list-response.ts
 models/sandbox-network-policy-mode.ts
 models/sandbox-network-policy.ts
 models/sandbox-network.ts
-models/sandbox-provider.ts
+models/sandbox-provider-kind.ts
+models/sandbox-provider-lookup-error.ts
 models/sandbox-resources.ts
 models/sandbox-service-discovery-source.ts
 models/sandbox-service-list-meta.ts

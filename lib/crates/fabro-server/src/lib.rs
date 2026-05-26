@@ -25,6 +25,7 @@ pub mod install;
 pub mod ip_allowlist;
 pub mod jwt_auth;
 pub mod manifest_validation;
+mod migrations;
 mod principal_middleware;
 mod request_id;
 mod run_files;
@@ -42,11 +43,10 @@ mod startup;
 pub mod static_files;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
-mod vault_legacy_migration;
 pub mod web_auth;
 mod worker_token;
 
 pub use error::{ApiError, Error, Result};
 pub use run_manifest::workflow_bundle_from_manifest;
 pub use server_secrets::process_env_snapshot;
-pub use startup::validate_startup;
+pub use startup::{load_startup_vault, validate_startup, validate_startup_configuration};

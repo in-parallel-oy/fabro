@@ -7,9 +7,11 @@ import {
   DebugEventRow,
   EventSearchInput,
   MultiSelectFilter,
+} from "../components/event-debug";
+import {
   debugCategory,
   debugCategoryLabel,
-} from "../components/event-debug";
+} from "../components/event-debug-helpers";
 import { RunWaterfall } from "../components/run-waterfall";
 import { StageSidebar } from "../components/stage-sidebar";
 import { EmptyState, ErrorState, LoadingState } from "../components/state";
@@ -19,6 +21,8 @@ import { mapRunStagesToSidebarStages } from "../lib/stage-sidebar";
 export const handle = { wide: true, fullHeight: true };
 
 type ViewMode = "waterfall" | "events";
+
+const EMPTY_EVENTS: EventEnvelope[] = [];
 
 export default function RunEvents() {
   const { id } = useParams();
@@ -101,11 +105,7 @@ function ViewToggle({
     { value: "events", label: "Events" },
   ];
   return (
-    <div
-      role="group"
-      aria-label="View"
-      className="inline-flex rounded-md bg-panel p-0.5 outline-1 -outline-offset-1 outline-line-strong"
-    >
+    <div className="inline-flex rounded-md bg-panel p-0.5 outline-1 -outline-offset-1 outline-line-strong">
       {options.map((opt) => {
         const active = value === opt.value;
         return (
@@ -206,7 +206,7 @@ function EventsView({
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [search, setSearch] = useState("");
 
-  const all = events ?? [];
+  const all = events ?? EMPTY_EVENTS;
 
   const availableCategories = useMemo<string[]>(() => {
     const set = new Set<string>();

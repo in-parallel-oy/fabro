@@ -1910,35 +1910,26 @@ enabled = true
     fn builtin_small_defaults_are_marked_per_provider() {
         let catalog = Catalog::builtin();
 
-        assert_eq!(
-            catalog
-                .small_default_for_provider(&ProviderId::anthropic())
-                .unwrap()
-                .id,
-            "claude-haiku-4-5"
-        );
-        assert_eq!(
-            catalog
-                .small_default_for_provider(&ProviderId::openai())
-                .unwrap()
-                .id,
-            "gpt-5.4-mini"
-        );
-        assert_eq!(
-            catalog
-                .small_default_for_provider(&ProviderId::gemini())
-                .unwrap()
-                .id,
-            "gemini-3.1-flash-lite-preview"
-        );
-        assert!(catalog.get("claude-haiku-4-5").unwrap().small_default);
-        assert!(catalog.get("gpt-5.4-mini").unwrap().small_default);
+        let small_defaults = catalog
+            .list(None)
+            .into_iter()
+            .filter(|model| model.small_default)
+            .collect::<Vec<_>>();
+
         assert!(
-            catalog
-                .get("gemini-3.1-flash-lite-preview")
-                .unwrap()
-                .small_default
+            !small_defaults.is_empty(),
+            "built-in catalog should mark at least one small default model"
         );
+
+        for model in small_defaults {
+            assert_eq!(
+                catalog
+                    .small_default_for_provider(&model.provider)
+                    .unwrap()
+                    .id,
+                model.id
+            );
+        }
     }
 
     #[test]
@@ -3676,83 +3667,8 @@ reasoning_effort = "levels"
     }
 
     #[test]
-    fn get_model_info_by_alias() {
-        assert_eq!(
-            Catalog::builtin().get("opus").unwrap().id,
-            "claude-opus-4-7"
-        );
-        assert_eq!(
-            Catalog::builtin().get("sonnet").unwrap().id,
-            "claude-sonnet-4-6"
-        );
-        assert_eq!(Catalog::builtin().get("codex").unwrap().id, "gpt-5.3-codex");
-    }
-
-    #[test]
     fn get_model_info_returns_none_for_unknown() {
         assert!(Catalog::builtin().get("nonexistent-model").is_none());
-    }
-
-    #[test]
-    fn gemini_3_1_flash_lite_in_catalog() {
-        let m = Catalog::builtin()
-            .get("gemini-3.1-flash-lite-preview")
-            .unwrap();
-        insta::assert_debug_snapshot!(m, @r#"
-        Model {
-            id: "gemini-3.1-flash-lite-preview",
-            provider: gemini,
-            family: "gemini-3",
-            display_name: "Gemini 3.1 Flash Lite (Preview)",
-            limits: ModelLimits {
-                context_window: 1048576,
-                max_output: Some(
-                    65536,
-                ),
-            },
-            training: Some(
-                "2025-01-01",
-            ),
-            knowledge_cutoff: Some(
-                "January 2025",
-            ),
-            features: ModelFeatures {
-                tools: true,
-                vision: true,
-                reasoning: true,
-                reasoning_effort: Levels,
-                prompt_cache: false,
-            },
-            costs: ModelCosts {
-                input_cost_per_mtok: Some(
-                    0.25,
-                ),
-                output_cost_per_mtok: Some(
-                    1.5,
-                ),
-                cache_input_cost_per_mtok: Some(
-                    0.0625,
-                ),
-            },
-            estimated_output_tps: Some(
-                200.0,
-            ),
-            aliases: [
-                "gemini-flash-lite",
-            ],
-            default: false,
-            small_default: true,
-            configured: false,
-        }
-        "#);
-    }
-
-    #[test]
-    fn gemini_flash_lite_alias() {
-        assert_eq!(
-            Catalog::builtin().get("gemini-flash-lite").unwrap().id,
-            "gemini-3.1-flash-lite-preview"
-        );
     }
 
     #[test]
@@ -3874,59 +3790,6 @@ reasoning_effort = "levels"
     }
 
     #[test]
-    fn gpt_5_4_in_catalog() {
-        let m = Catalog::builtin().get("gpt-5.4").unwrap();
-        insta::assert_debug_snapshot!(m, @r#"
-        Model {
-            id: "gpt-5.4",
-            provider: openai,
-            family: "gpt-5",
-            display_name: "GPT-5.4",
-            limits: ModelLimits {
-                context_window: 272000,
-                max_output: Some(
-                    128000,
-                ),
-            },
-            training: Some(
-                "2025-08-31",
-            ),
-            knowledge_cutoff: Some(
-                "April 2025",
-            ),
-            features: ModelFeatures {
-                tools: true,
-                vision: true,
-                reasoning: true,
-                reasoning_effort: Levels,
-                prompt_cache: false,
-            },
-            costs: ModelCosts {
-                input_cost_per_mtok: Some(
-                    2.5,
-                ),
-                output_cost_per_mtok: Some(
-                    15.0,
-                ),
-                cache_input_cost_per_mtok: Some(
-                    0.25,
-                ),
-            },
-            estimated_output_tps: Some(
-                70.0,
-            ),
-            aliases: [
-                "gpt54",
-                "gpt-54",
-            ],
-            default: true,
-            small_default: false,
-            configured: false,
-        }
-        "#);
-    }
-
-    #[test]
     fn gpt_5_4_pro_in_catalog() {
         let m = Catalog::builtin().get("gpt-5.4-pro").unwrap();
         insta::assert_debug_snapshot!(m, @r#"
@@ -4002,60 +3865,6 @@ reasoning_effort = "levels"
         assert_eq!(
             Catalog::builtin().get("gpt-54-mini").unwrap().id,
             "gpt-5.4-mini"
-        );
-    }
-
-    #[test]
-    fn gpt_5_3_codex_spark_in_catalog() {
-        let m = Catalog::builtin().get("gpt-5.3-codex-spark").unwrap();
-        insta::assert_debug_snapshot!(m, @r#"
-        Model {
-            id: "gpt-5.3-codex-spark",
-            provider: openai,
-            family: "gpt-5",
-            display_name: "GPT-5.3 Codex Spark",
-            limits: ModelLimits {
-                context_window: 131072,
-                max_output: Some(
-                    128000,
-                ),
-            },
-            training: Some(
-                "2025-08-31",
-            ),
-            knowledge_cutoff: Some(
-                "April 2025",
-            ),
-            features: ModelFeatures {
-                tools: true,
-                vision: false,
-                reasoning: true,
-                reasoning_effort: Levels,
-                prompt_cache: false,
-            },
-            costs: ModelCosts {
-                input_cost_per_mtok: None,
-                output_cost_per_mtok: None,
-                cache_input_cost_per_mtok: None,
-            },
-            estimated_output_tps: Some(
-                1000.0,
-            ),
-            aliases: [
-                "codex-spark",
-            ],
-            default: false,
-            small_default: false,
-            configured: false,
-        }
-        "#);
-    }
-
-    #[test]
-    fn codex_spark_alias() {
-        assert_eq!(
-            Catalog::builtin().get("codex-spark").unwrap().id,
-            "gpt-5.3-codex-spark"
         );
     }
 

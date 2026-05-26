@@ -23,7 +23,7 @@ use crate::auth::{GithubEndpoints, browser_shell};
 use crate::error::ApiError;
 use crate::jwt_auth::{AuthMode, auth_method_name, dev_token_matches};
 use crate::principal_middleware::{
-    RequestAuth, RequestAuthContext, RequiredUser, UserProfile, require_authenticated_user,
+    RequestAuth, RequestAuthContext, UserProfile, require_authenticated_user,
 };
 use crate::server::AppState;
 
@@ -68,11 +68,6 @@ struct OAuthStateCookie {
 #[derive(Deserialize)]
 struct DevTokenLoginRequest {
     token: String,
-}
-
-#[derive(Deserialize)]
-struct DemoToggleRequest {
-    enabled: bool,
 }
 
 #[derive(Serialize)]
@@ -158,7 +153,6 @@ pub fn api_routes() -> Router<Arc<AppState>> {
         .route("/auth/me", get(auth_me))
         .route("/auth/sessions", get(list_auth_sessions))
         .route("/auth/sessions/{id}", delete(delete_auth_session))
-        .route("/demo/toggle", post(toggle_demo))
 }
 
 pub fn parse_cookie_header(headers: &HeaderMap) -> CookieJar {
@@ -613,7 +607,7 @@ async fn callback_github(
             );
         }
     };
-    let Some(client_secret) = state.server_secret(EnvVars::GITHUB_APP_CLIENT_SECRET) else {
+    let Some(client_secret) = state.vault_secret(EnvVars::GITHUB_APP_CLIENT_SECRET) else {
         error!("OAuth callback failed: GITHUB_APP_CLIENT_SECRET not configured");
         return json_response(
             StatusCode::CONFLICT,
@@ -1026,26 +1020,6 @@ async fn delete_auth_session(
     StatusCode::NO_CONTENT.into_response()
 }
 
-async fn toggle_demo(
-    _auth: RequiredUser,
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<DemoToggleRequest>,
-) -> Response {
-    let mut jar = CookieJar::new();
-    jar.add(
-        Cookie::build(("fabro-demo", if payload.enabled { "1" } else { "0" }))
-            .path("/")
-            .http_only(true)
-            .same_site(SameSite::Lax)
-            .secure(session_cookie_secure(state.as_ref()))
-            .max_age(Duration::days(365))
-            .build(),
-    );
-    let mut response = Json(json!({ "enabled": payload.enabled })).into_response();
-    append_jar_delta(response.headers_mut(), &jar);
-    response
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
@@ -1055,8 +1029,10 @@ mod tests {
     use axum::http::{HeaderMap, Request, StatusCode, header};
     use axum_extra::extract::cookie::Key;
     use fabro_config::{RunLayer, ServerSettingsBuilder};
+    use fabro_static::EnvVars;
     use fabro_types::settings::server::ServerAuthMethod;
     use fabro_types::{AuthMethod, IdpIdentity, Principal};
+    use fabro_vault::SecretType;
     use serde_json::json;
     use tower::ServiceExt;
 
@@ -1670,6 +1646,107 @@ client_id = "github-client-id"
                 "/auth/cli/resume?error=access_denied&error_description=Authorization%20denied&state=fabro-test-state"
             )
         );
+    }
+
+    #[tokio::test]
+    async fn callback_github_reads_client_secret_from_vault() {
+        let github = httpmock::MockServer::start_async().await;
+        let token = github
+            .mock_async(|when, then| {
+                when.method(httpmock::Method::POST)
+                    .path("/login/oauth/access_token")
+                    .body_includes("client_secret=vault-client-secret");
+                then.status(200)
+                    .header("content-type", "application/json")
+                    .json_body(json!({ "access_token": "gho_test" }));
+            })
+            .await;
+        let user = github
+            .mock_async(|when, then| {
+                when.method(httpmock::Method::GET)
+                    .path("/api/user")
+                    .header("authorization", "Bearer gho_test");
+                then.status(200)
+                    .header("content-type", "application/json")
+                    .json_body(json!({
+                        "id": 12345,
+                        "login": "octocat",
+                        "name": "The Octocat",
+                        "avatar_url": "https://github.example/avatar.png"
+                    }));
+            })
+            .await;
+        let emails = github
+            .mock_async(|when, then| {
+                when.method(httpmock::Method::GET).path("/api/user/emails");
+                then.status(200)
+                    .header("content-type", "application/json")
+                    .json_body(json!([]));
+            })
+            .await;
+        let state = crate::test_support::test_app_state_with_runtime_settings_and_session_key(
+            github_settings("https://fabro.example"),
+            RunLayer::default(),
+            Some("web-auth-test-key-material-0123456789"),
+        );
+        state
+            .vault
+            .write()
+            .await
+            .set(
+                EnvVars::GITHUB_APP_CLIENT_SECRET,
+                "vault-client-secret",
+                SecretType::Token,
+                None,
+            )
+            .unwrap();
+        let app = server::build_router_with_options(
+            state,
+            &github_auth_mode(),
+            Arc::new(crate::ip_allowlist::IpAllowlistConfig::default()),
+            server::RouterOptions {
+                web_enabled: true,
+                github_endpoints: Some(Arc::new(GithubEndpoints::with_bases(
+                    github.url("/").parse().expect("oauth base should parse"),
+                    github.url("/api/").parse().expect("api base should parse"),
+                ))),
+                ..server::RouterOptions::default()
+            },
+        );
+        let key = test_cookie_key();
+        let mut jar = cookie::CookieJar::new();
+        super::add_oauth_state_cookie(
+            &mut jar,
+            &key,
+            &super::OAuthStateCookie {
+                state:     "fabro-test-state".to_string(),
+                exp:       (chrono::Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+                return_to: None,
+            },
+            true,
+        );
+        let cookie = jar
+            .delta()
+            .next()
+            .expect("private oauth cookie should exist")
+            .encoded()
+            .to_string();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/auth/callback/github?code=test-code&state=fabro-test-state")
+                    .header(header::COOKIE, cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_status!(response, StatusCode::SEE_OTHER).await;
+        token.assert_async().await;
+        user.assert_async().await;
+        emails.assert_async().await;
     }
 
     #[test]

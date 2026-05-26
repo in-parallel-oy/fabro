@@ -35,7 +35,7 @@ pub mod types;
 pub use agent_profile::AgentProfile;
 pub use config::{
     SessionOptions, ToolAccess, ToolAccessPolicy, ToolApprovalAdapter, ToolExposureMode,
-    ToolHookCallback, ToolHookDecision,
+    ToolHookCallback, ToolHookDecision, ToolSecrets,
 };
 #[cfg(feature = "docker")]
 pub use docker_sandbox::{DockerSandbox, DockerSandboxOptions};
@@ -61,8 +61,8 @@ pub use sandbox::{
     shell_quote,
 };
 pub use session::{
-    CompletionCoordinator, Session, SessionControlHandle, StaticEnvProvider, SteeringItem,
-    ToolEnvProvider,
+    CompletionCoordinator, Session, SessionControlHandle, SessionInputTiming, StaticEnvProvider,
+    SteeringItem, ToolEnvProvider,
 };
 pub use skills::Skill;
 pub use subagent::{

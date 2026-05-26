@@ -1,7 +1,7 @@
 import {
   createContext,
+  use,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -43,7 +43,7 @@ function toastClassName(tone: ToastTone): string {
     : "border-line bg-panel/95 text-fg-2";
 }
 
-export function ToastRoot({
+function ToastRoot({
   toasts,
   onDismiss,
 }: {
@@ -53,8 +53,7 @@ export function ToastRoot({
   if (toasts.length === 0) return null;
 
   return (
-    <div
-      role="status"
+    <output
       aria-live="polite"
       aria-atomic="false"
       className="pointer-events-none fixed right-4 bottom-6 z-50 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2 sm:right-6"
@@ -94,7 +93,7 @@ export function ToastRoot({
           )}
         </div>
       ))}
-    </div>
+    </output>
   );
 }
 
@@ -157,7 +156,7 @@ export function ToastProvider({
 }
 
 export function useToast(): ToastContextValue {
-  const value = useContext(ToastContext);
+  const value = use(ToastContext);
   if (!value) {
     throw new Error("useToast must be used within a ToastProvider");
   }
