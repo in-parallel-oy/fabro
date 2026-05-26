@@ -1265,6 +1265,50 @@ fn event_body_from_event(event: &Event) -> EventBody {
             stderr:      stderr.clone(),
             duration_ms: *duration_ms,
         }),
+        Event::AgentAcpToolCall {
+            tool_call_id,
+            visit,
+            call,
+            ..
+        } => EventBody::AgentAcpToolCall(fabro_types::AgentAcpToolCallProps {
+            tool_call_id: tool_call_id.clone(),
+            visit:        *visit,
+            call:         call.clone(),
+        }),
+        Event::AgentAcpToolCallUpdate {
+            tool_call_id,
+            visit,
+            fields,
+            ..
+        } => EventBody::AgentAcpToolCallUpdate(fabro_types::AgentAcpToolCallUpdateProps {
+            tool_call_id: tool_call_id.clone(),
+            visit:        *visit,
+            fields:       fields.clone(),
+        }),
+        Event::AgentAcpMessage { visit, content, .. } => {
+            EventBody::AgentAcpMessage(fabro_types::AgentAcpMessageProps {
+                visit:   *visit,
+                content: content.clone(),
+            })
+        }
+        Event::AgentAcpThought { visit, content, .. } => {
+            EventBody::AgentAcpThought(fabro_types::AgentAcpThoughtProps {
+                visit:   *visit,
+                content: content.clone(),
+            })
+        }
+        Event::AgentAcpPlan { visit, entries, .. } => {
+            EventBody::AgentAcpPlan(fabro_types::AgentAcpPlanProps {
+                visit:   *visit,
+                entries: entries.clone(),
+            })
+        }
+        Event::AgentAcpUserMessage { visit, content, .. } => {
+            EventBody::AgentAcpUserMessage(fabro_types::AgentAcpUserMessageProps {
+                visit:   *visit,
+                content: content.clone(),
+            })
+        }
         Event::PullRequestCreated {
             pr_url,
             pr_number,

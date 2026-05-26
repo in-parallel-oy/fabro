@@ -712,6 +712,38 @@ pub enum Event {
         stderr:      String,
         duration_ms: u64,
     },
+    AgentAcpToolCall {
+        node_id:      String,
+        tool_call_id: String,
+        visit:        u32,
+        call:         serde_json::Value,
+    },
+    AgentAcpToolCallUpdate {
+        node_id:      String,
+        tool_call_id: String,
+        visit:        u32,
+        fields:       serde_json::Value,
+    },
+    AgentAcpMessage {
+        node_id: String,
+        visit:   u32,
+        content: serde_json::Value,
+    },
+    AgentAcpThought {
+        node_id: String,
+        visit:   u32,
+        content: serde_json::Value,
+    },
+    AgentAcpPlan {
+        node_id: String,
+        visit:   u32,
+        entries: serde_json::Value,
+    },
+    AgentAcpUserMessage {
+        node_id: String,
+        visit:   u32,
+        content: serde_json::Value,
+    },
     PullRequestCreated {
         pr_url:      String,
         pr_number:   u64,
@@ -1561,6 +1593,32 @@ impl Event {
                 ..
             } => {
                 debug!(node_id, duration_ms, "Agent ACP timed out");
+            }
+            Self::AgentAcpToolCall {
+                node_id,
+                tool_call_id,
+                ..
+            } => {
+                debug!(node_id, tool_call_id, "Agent ACP tool call");
+            }
+            Self::AgentAcpToolCallUpdate {
+                node_id,
+                tool_call_id,
+                ..
+            } => {
+                debug!(node_id, tool_call_id, "Agent ACP tool call update");
+            }
+            Self::AgentAcpMessage { node_id, .. } => {
+                debug!(node_id, "Agent ACP message");
+            }
+            Self::AgentAcpThought { node_id, .. } => {
+                debug!(node_id, "Agent ACP thought");
+            }
+            Self::AgentAcpPlan { node_id, .. } => {
+                debug!(node_id, "Agent ACP plan");
+            }
+            Self::AgentAcpUserMessage { node_id, .. } => {
+                debug!(node_id, "Agent ACP user message");
             }
             Self::PullRequestCreated {
                 pr_url,
