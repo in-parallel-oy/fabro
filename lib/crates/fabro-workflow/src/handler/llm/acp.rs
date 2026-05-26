@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use fabro_acp::{
     AcpCommandError, AcpControlHandle, AcpError, AcpLiveControl, AcpProcessSpec, AcpRunRequest,
-    render_stop_reason,
+    SessionUpdate, render_stop_reason,
 };
 use fabro_agent::{AgentEvent, Sandbox, StaticEnvProvider, SteeringItem, ToolEnvProvider};
 use fabro_graphviz::graph::Node;
@@ -137,6 +137,21 @@ impl AgentAcpBackend {
             }) as Arc<dyn Fn(String, Option<Principal>) + Send + Sync>
         });
 
+        let on_session_update = {
+            let emitter = Arc::clone(emitter);
+            let stage_scope = stage_scope.clone();
+            let node_id = node.id.clone();
+            let visit = stage_scope.visit;
+            Arc::new(move |update: &SessionUpdate| {
+                let Some(event) =
+                    map_session_update_to_event(update, &node_id, visit)
+                else {
+                    return;
+                };
+                emitter.emit_scoped(&event, &stage_scope);
+            }) as Arc<dyn Fn(&SessionUpdate) + Send + Sync>
+        };
+
         let files_before = changed_files::detect_changed_files(sandbox).await;
         let launch_start = std::time::Instant::now();
         let result = match fabro_acp::run_acp_turn(AcpRunRequest {
@@ -148,6 +163,7 @@ impl AgentAcpBackend {
             sandbox: Arc::clone(sandbox),
             cancel_token: cancel_token.child_token(),
             on_activity: Some(on_activity),
+            on_session_update: Some(on_session_update),
             live_control: Some(AcpLiveControl {
                 handle: control_handle.clone(),
                 on_natural_completion,
@@ -408,6 +424,78 @@ fn acp_error_to_workflow(error: AcpError) -> Error {
                 exec_output_tail,
             )
         }
+    }
+}
+
+/// Translate an ACP `SessionUpdate` notification into a workflow
+/// `Event`. Returns `None` for variants we deliberately do not
+/// persist (e.g. `available_commands_update` — introspection-only,
+/// not worth a per-occurrence event).
+///
+/// The ACP payloads are forwarded verbatim as `serde_json::Value`
+/// so consumers downstream of `fabro-types` (which intentionally
+/// does not depend on `agent-client-protocol`) can deserialize
+/// them into the typed ACP schema or work with the raw JSON.
+fn map_session_update_to_event(
+    update: &SessionUpdate,
+    node_id: &str,
+    visit: u32,
+) -> Option<Event> {
+    match update {
+        SessionUpdate::ToolCall(call) => {
+            let value = serde_json::to_value(call).ok()?;
+            let tool_call_id = value
+                .get("toolCallId")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .unwrap_or_default();
+            Some(Event::AgentAcpToolCall {
+                node_id: node_id.to_string(),
+                tool_call_id,
+                visit,
+                call: value,
+            })
+        }
+        SessionUpdate::ToolCallUpdate(update) => {
+            let value = serde_json::to_value(update).ok()?;
+            let tool_call_id = value
+                .get("toolCallId")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .unwrap_or_default();
+            Some(Event::AgentAcpToolCallUpdate {
+                node_id: node_id.to_string(),
+                tool_call_id,
+                visit,
+                fields: value,
+            })
+        }
+        SessionUpdate::AgentMessageChunk(chunk) => Some(Event::AgentAcpMessage {
+            node_id: node_id.to_string(),
+            visit,
+            content: serde_json::to_value(&chunk.content).ok()?,
+        }),
+        SessionUpdate::AgentThoughtChunk(chunk) => Some(Event::AgentAcpThought {
+            node_id: node_id.to_string(),
+            visit,
+            content: serde_json::to_value(&chunk.content).ok()?,
+        }),
+        SessionUpdate::Plan(plan) => Some(Event::AgentAcpPlan {
+            node_id: node_id.to_string(),
+            visit,
+            entries: serde_json::to_value(&plan.entries).ok()?,
+        }),
+        SessionUpdate::UserMessageChunk(chunk) => Some(Event::AgentAcpUserMessage {
+            node_id: node_id.to_string(),
+            visit,
+            content: serde_json::to_value(&chunk.content).ok()?,
+        }),
+        // Introspection / session-state variants; not persisted today.
+        // SessionUpdate is #[non_exhaustive] — the wildcard catches
+        // both the currently-defined non-persisted variants
+        // (AvailableCommandsUpdate, CurrentModeUpdate, ConfigOptionUpdate,
+        // SessionInfoUpdate, UsageUpdate) and any future additions.
+        _ => None,
     }
 }
 
