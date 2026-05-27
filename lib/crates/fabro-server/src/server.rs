@@ -1236,6 +1236,30 @@ impl AppState {
             .and_then(|vault| vault.get(name).map(str::to_string))
     }
 
+    /// Snapshot every vault entry as `(name, value)` pairs. Used by the
+    /// run-worker spawn path to forward operator-set secrets through to
+    /// the worker's process env, so `{{ env.X }}` in project.toml
+    /// `[environments.default.env]` can resolve against any
+    /// `fabro secret set X` value without each name being listed in
+    /// `WORKER_ENV_ALLOWLIST`. Falls back to an empty vec if the vault
+    /// lock is contended — worker startup is best-effort here, the
+    /// run will fail loudly downstream if a referenced secret is
+    /// missing.
+    pub(crate) fn vault_entries(&self) -> Vec<(String, String)> {
+        let Ok(vault) = self.vault.try_read() else {
+            return Vec::new();
+        };
+        vault
+            .list()
+            .into_iter()
+            .filter_map(|meta| {
+                vault
+                    .get(&meta.name)
+                    .map(|value| (meta.name, value.to_string()))
+            })
+            .collect()
+    }
+
     pub(crate) fn config_env_lookup(&self, name: &str) -> Option<String> {
         (self.env_lookup)(name)
     }
@@ -3296,8 +3320,15 @@ fn worker_command(
     cmd.env(EnvVars::FABRO_CONFIG, state.active_config_path());
     cmd.env_remove(EnvVars::FABRO_WORKER_TOKEN);
     cmd.env(EnvVars::FABRO_WORKER_TOKEN, worker_token);
-    if let Some(pem) = state.vault_secret(EnvVars::GITHUB_APP_PRIVATE_KEY) {
-        cmd.env(EnvVars::GITHUB_APP_PRIVATE_KEY, pem);
+    // Forward every vault entry to the worker's process env. The worker
+    // calls `resolve_env(process_env_var)` against `{{ env.X }}` tokens
+    // in project.toml `[environments.default.env]`, so any
+    // `fabro secret set X` value becomes available without each name
+    // being listed in `WORKER_ENV_ALLOWLIST`. Covers `GITHUB_APP_PRIVATE_KEY`
+    // (which previously had a dedicated forward block here) along with
+    // any operator-added secret.
+    for (name, value) in state.vault_entries() {
+        cmd.env(name, value);
     }
 
     #[cfg(unix)]
