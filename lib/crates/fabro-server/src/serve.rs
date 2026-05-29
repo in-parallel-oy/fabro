@@ -1,5 +1,4 @@
 use std::future::{Future, IntoFuture};
-use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -34,7 +33,6 @@ use tracing::{error, info, warn};
 
 use crate::canonical_origin::resolve_canonical_origin;
 use crate::github_webhooks::{TailscaleFunnelManager, WEBHOOK_ROUTE, WEBHOOK_SECRET_ENV};
-use crate::ip_allowlist::{GitHubMetaResolver, IpAllowlistConfig, resolve_ip_allowlist_config};
 use crate::server::{
     AppState, AppStateConfig, ResolvedAppStateSettings, RouterOptions, build_app_state,
     build_router_with_options, reconcile_incomplete_runs_on_startup, shutdown_active_workers,
@@ -249,40 +247,6 @@ fn serve_overrides(args: &ServeArgs) -> (Option<RunLayer>, Option<ServerLayer>) 
         (run != RunLayer::default()).then_some(run),
         (server != ServerLayer::default()).then_some(server),
     )
-}
-
-async fn resolve_github_webhook_ip_allowlist(
-    resolved_server_settings: &ServerNamespace,
-    github_meta_resolver: &GitHubMetaResolver,
-) -> anyhow::Result<Arc<IpAllowlistConfig>> {
-    let config = resolve_ip_allowlist_config(
-        &resolved_server_settings.ip_allowlist,
-        resolved_server_settings
-            .integrations
-            .github
-            .webhooks
-            .as_ref()
-            .and_then(|webhooks| webhooks.ip_allowlist.as_ref()),
-        github_meta_resolver,
-    )
-    .await
-    .context("resolving GitHub webhook IP allowlist")?;
-
-    Ok(Arc::new(config))
-}
-
-async fn resolve_startup_github_webhook_ip_allowlist(
-    resolved_server_settings: &ServerNamespace,
-    github_meta_resolver: &GitHubMetaResolver,
-    webhook_secret_present: bool,
-) -> anyhow::Result<Option<Arc<IpAllowlistConfig>>> {
-    if !webhook_secret_present {
-        return Ok(None);
-    }
-
-    resolve_github_webhook_ip_allowlist(resolved_server_settings, github_meta_resolver)
-        .await
-        .map(Some)
 }
 
 enum WebhookPreconditions {
@@ -714,6 +678,7 @@ where
     };
     let storage = Storage::new(&data_dir);
     let vault_path = storage.secrets_path();
+    let variables_path = storage.variables_path();
     let server_env_path = storage.runtime_directory().env_path();
     runtime_settings.server_settings = runtime_settings
         .server_settings
@@ -723,11 +688,9 @@ where
         effective_log_destination,
     );
     let resolved_app_settings = ResolvedAppStateSettings {
-        server_settings:               runtime_settings.server_settings,
-        manifest_run_defaults:         runtime_settings.manifest_run_defaults,
-        manifest_environment_defaults: runtime_settings.manifest_environment_defaults,
-        manifest_run_settings:         runtime_settings.manifest_run_settings,
-        llm_catalog_settings:          runtime_settings.llm_catalog_settings,
+        server_settings:       runtime_settings.server_settings,
+        manifest_run_defaults: runtime_settings.manifest_run_defaults,
+        llm_catalog_settings:  runtime_settings.llm_catalog_settings,
     };
     let resolved_server_settings = resolved_app_settings.server_settings.server.clone();
     validate_startup_configuration(&resolved_server_settings)?;
@@ -777,8 +740,6 @@ where
     } else {
         false
     };
-    let github_meta_resolver = GitHubMetaResolver::from_cache_dir(&storage.cache_dir())?;
-
     let (object_store, slatedb_prefix, flush_interval, disk_cache) =
         build_slatedb_store_with_server_secrets(&resolved_server_settings, &server_secrets)?;
     let cache_path = if disk_cache {
@@ -813,6 +774,7 @@ where
         store,
         artifact_store,
         vault_path,
+        variables_path,
         preloaded_vault: Some(startup_vault),
         server_secrets,
         env_lookup,
@@ -821,6 +783,12 @@ where
         http_client: None,
         sandbox_provider_registry: None,
         shutdown: shutdown.clone(),
+        #[cfg(test)]
+        worker_control_bus: None,
+        #[cfg(test)]
+        worker_runtime: None,
+        #[cfg(any(test, feature = "test-support"))]
+        automation_materializer_override: None,
     })?;
     let reconciled = reconcile_incomplete_runs_on_startup(&state).await?;
     if reconciled > 0 {
@@ -830,33 +798,12 @@ where
         );
     }
     spawn_scheduler(Arc::clone(&state));
-    let default_ip_allowlist = Arc::new(
-        resolve_ip_allowlist_config(
-            &resolved_server_settings.ip_allowlist,
-            None,
-            &github_meta_resolver,
-        )
-        .await
-        .context("resolving server IP allowlist")?,
-    );
-    let github_webhook_ip_allowlist = resolve_startup_github_webhook_ip_allowlist(
-        &resolved_server_settings,
-        &github_meta_resolver,
-        webhook_secret_present,
-    )
-    .await?;
-    let router = build_router_with_options(
-        Arc::clone(&state),
-        &auth_mode,
-        Arc::clone(&default_ip_allowlist),
-        RouterOptions {
-            web_enabled,
-            github_webhook_ip_allowlist,
-            #[cfg(debug_assertions)]
-            watch_web,
-            ..RouterOptions::default()
-        },
-    );
+    let router = build_router_with_options(Arc::clone(&state), &auth_mode, RouterOptions {
+        web_enabled,
+        #[cfg(debug_assertions)]
+        watch_web,
+        ..RouterOptions::default()
+    });
     let bound_listener = bind_listener(&bind_request).await?;
     let bind_addr = bound_listener.bind.clone();
 
@@ -910,12 +857,9 @@ where
                                 .server_settings
                                 .with_storage_override(&data_dir_for_poll);
                             ResolvedAppStateSettings {
-                                server_settings:               resolved.server_settings,
-                                manifest_run_defaults:         resolved.manifest_run_defaults,
-                                manifest_environment_defaults: resolved
-                                    .manifest_environment_defaults,
-                                manifest_run_settings:         resolved.manifest_run_settings,
-                                llm_catalog_settings:          resolved.llm_catalog_settings,
+                                server_settings:       resolved.server_settings,
+                                manifest_run_defaults: resolved.manifest_run_defaults,
+                                llm_catalog_settings:  resolved.llm_catalog_settings,
                             }
                         });
                         match resolved {
@@ -1000,11 +944,7 @@ where
         BoundListener::Tcp(listener) => {
             announce_server_ready(&bind_addr, styles);
             serve_until_shutdown(
-                axum::serve(
-                    listener,
-                    router.into_make_service_with_connect_info::<SocketAddr>(),
-                )
-                .with_graceful_shutdown({
+                axum::serve(listener, router).with_graceful_shutdown({
                     let token = shutdown.clone();
                     async move { token.cancelled().await }
                 }),
@@ -1109,17 +1049,23 @@ async fn shutdown_signal() {
     use tokio::signal;
 
     let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
+        if let Err(err) = signal::ctrl_c().await {
+            warn!(%err, "failed to install Ctrl+C handler; Ctrl+C will not trigger graceful shutdown");
+            std::future::pending::<()>().await;
+        }
     };
 
     #[cfg(unix)]
     let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("failed to install SIGTERM handler")
-            .recv()
-            .await;
+        match signal::unix::signal(signal::unix::SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+            }
+            Err(err) => {
+                warn!(%err, "failed to install SIGTERM handler; SIGTERM will not trigger graceful shutdown");
+                std::future::pending::<()>().await;
+            }
+        }
     };
 
     #[cfg(not(unix))]
@@ -1238,8 +1184,8 @@ mod tests {
     use std::task::Poll;
     use std::time::Duration;
 
+    use fabro_config::ServerSettingsBuilder;
     use fabro_config::bind::{Bind, BindRequest};
-    use fabro_config::{RunSettingsBuilder, ServerSettingsBuilder};
     use fabro_types::ServerSettings;
     use fabro_types::settings::interp::InterpString;
     use fabro_types::settings::server::{LogDestination, ObjectStoreSettings};
@@ -1248,11 +1194,10 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::{
-        GitHubMetaResolver, SHUTDOWN_GRACE_PERIOD, ServeArgs, ServerTitlePhase,
-        apply_effective_log_destination, bind_tcp_host_with_fallback,
-        build_local_object_store_with_preference, build_object_store_from_settings_with_lookup,
-        build_slatedb_store, force_exit_after_shutdown, resolve_bind_request_from_server_settings,
-        resolve_github_webhook_ip_allowlist, resolve_startup_github_webhook_ip_allowlist,
+        SHUTDOWN_GRACE_PERIOD, ServeArgs, ServerTitlePhase, apply_effective_log_destination,
+        bind_tcp_host_with_fallback, build_local_object_store_with_preference,
+        build_object_store_from_settings_with_lookup, build_slatedb_store,
+        force_exit_after_shutdown, resolve_bind_request_from_server_settings, resolve_interp,
         serve_overrides, serve_until_shutdown, server_bind_title, server_title,
         spawn_shutdown_orchestrator_inner,
     };
@@ -1289,15 +1234,21 @@ mod tests {
         .expect("settings should resolve")
     }
 
+    #[test]
+    fn server_settings_interpolation_rejects_variables() {
+        let err = resolve_interp(&InterpString::parse("{{ vars.STORAGE_ROOT }}")).unwrap_err();
+
+        let rendered = format!("{err:#}");
+        assert!(rendered.contains("failed to resolve {{ vars.STORAGE_ROOT }}"));
+        assert!(rendered.contains("variable \"STORAGE_ROOT\""));
+        assert!(rendered.contains("not supported in this interpolation context"));
+    }
+
     fn resolved_runtime_settings(source: &str) -> ResolvedAppStateSettings {
-        let manifest_run_defaults = manifest_run_defaults(source);
         ResolvedAppStateSettings {
-            manifest_run_settings: RunSettingsBuilder::from_run_layer(&manifest_run_defaults)
-                .map_err(|err| fabro_util::error::SharedError::new(anyhow::Error::new(err))),
-            manifest_run_defaults,
-            manifest_environment_defaults: fabro_config::MergeMap::default(),
-            server_settings: server_settings(source),
-            llm_catalog_settings: fabro_model::catalog::LlmCatalogSettings::default(),
+            manifest_run_defaults: manifest_run_defaults(source),
+            server_settings:       server_settings(source),
+            llm_catalog_settings:  fabro_model::catalog::LlmCatalogSettings::default(),
         }
     }
 
@@ -1806,79 +1757,5 @@ disk_cache = true
 
         assert_ne!(resolved.port(), occupied_port);
         assert!(bound.used_random_port_fallback);
-    }
-
-    #[tokio::test]
-    async fn resolve_github_webhook_ip_allowlist_propagates_resolution_errors() {
-        let settings = server_settings(
-            r#"
-_version = 1
-
-[server.listen]
-type = "tcp"
-address = "127.0.0.1:0"
-
-[server.integrations.github]
-strategy = "app"
-app_id = "123"
-
-[server.integrations.github.webhooks.ip_allowlist]
-entries = ["github_meta_hooks"]
-"#,
-        )
-        .server;
-
-        let cache_dir = tempfile::tempdir().unwrap();
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        drop(listener);
-        let resolver = GitHubMetaResolver::new(
-            fabro_http::test_http_client().unwrap(),
-            format!("http://127.0.0.1:{port}/meta"),
-            cache_dir.path().join("github-meta.json"),
-        );
-
-        let error = resolve_github_webhook_ip_allowlist(&settings, &resolver)
-            .await
-            .expect_err("github webhook allowlist resolution should fail closed");
-
-        assert!(error.to_string().contains("GitHub webhook IP allowlist"));
-    }
-
-    #[tokio::test]
-    async fn resolve_startup_github_webhook_ip_allowlist_skips_resolution_without_webhook_secret() {
-        let settings = server_settings(
-            r#"
-_version = 1
-
-[server.listen]
-type = "tcp"
-address = "127.0.0.1:0"
-
-[server.integrations.github]
-strategy = "app"
-app_id = "123"
-
-[server.integrations.github.webhooks.ip_allowlist]
-entries = ["github_meta_hooks"]
-"#,
-        )
-        .server;
-
-        let cache_dir = tempfile::tempdir().unwrap();
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        drop(listener);
-        let resolver = GitHubMetaResolver::new(
-            fabro_http::test_http_client().unwrap(),
-            format!("http://127.0.0.1:{port}/meta"),
-            cache_dir.path().join("github-meta.json"),
-        );
-
-        let allowlist = resolve_startup_github_webhook_ip_allowlist(&settings, &resolver, false)
-            .await
-            .expect("inactive webhook route should skip GitHub meta resolution");
-
-        assert!(allowlist.is_none());
     }
 }

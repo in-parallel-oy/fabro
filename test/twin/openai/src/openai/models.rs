@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use axum::Json;
 use axum::extract::rejection::JsonRejection;
 use axum::http::StatusCode;
@@ -99,7 +101,7 @@ impl ResponsesRequest {
         )?;
         validate_tool_choice_requires_tools(self.tool_choice.as_ref(), self.tools.as_ref())?;
         validate_stop(self.stop.as_ref(), "stop")?;
-        validate_response_input(&self.input)?;
+        validate_response_input(&self.input, self.previous_response_id.as_deref())?;
 
         Ok(())
     }
@@ -160,7 +162,7 @@ pub struct InputItem {
 
 impl InputItem {
     fn extract_texts_for_fallback(&self) -> Vec<String> {
-        if self.item_type.as_deref() == Some("function_call_output") {
+        if self.kind().is_tool_output() {
             return self
                 .output
                 .as_ref()
@@ -173,6 +175,41 @@ impl InputItem {
         }
 
         Vec::new()
+    }
+
+    fn kind(&self) -> InputItemKind {
+        InputItemKind::from_wire(self.item_type.as_deref())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum InputItemKind {
+    Message,
+    FunctionCall,
+    CustomToolCall,
+    FunctionCallOutput,
+    CustomToolCallOutput,
+    Other,
+}
+
+impl InputItemKind {
+    fn from_wire(item_type: Option<&str>) -> Self {
+        match item_type {
+            None | Some("message") => Self::Message,
+            Some("function_call") => Self::FunctionCall,
+            Some("custom_tool_call") => Self::CustomToolCall,
+            Some("function_call_output") => Self::FunctionCallOutput,
+            Some("custom_tool_call_output") => Self::CustomToolCallOutput,
+            Some(_) => Self::Other,
+        }
+    }
+
+    fn is_tool_call(self) -> bool {
+        matches!(self, Self::FunctionCall | Self::CustomToolCall)
+    }
+
+    fn is_tool_output(self) -> bool {
+        matches!(self, Self::FunctionCallOutput | Self::CustomToolCallOutput)
     }
 }
 
@@ -223,25 +260,47 @@ impl ContentPart {
     }
 }
 
-fn validate_response_input(input: &ResponseInput) -> Result<(), OpenAiError> {
+fn validate_response_input(
+    input: &ResponseInput,
+    previous_response_id: Option<&str>,
+) -> Result<(), OpenAiError> {
     let ResponseInput::Items(items) = input else {
         return Ok(());
     };
 
+    let mut function_call_ids = HashSet::new();
     for item in items {
         validate_input_item(item)?;
+        let kind = item.kind();
+        if kind.is_tool_call() {
+            if let Some(call_id) = item.call_id.as_deref().filter(|id| !id.is_empty()) {
+                function_call_ids.insert(call_id);
+            }
+        } else if kind.is_tool_output() && previous_response_id.is_none() {
+            let call_id = item.call_id.as_deref().unwrap_or_default();
+            if !function_call_ids.contains(call_id) {
+                return Err(OpenAiError::invalid_request(
+                    "input",
+                    &format!("No tool call found for tool call output with call_id {call_id}."),
+                ));
+            }
+        }
     }
 
     Ok(())
 }
 
 fn validate_input_item(item: &InputItem) -> Result<(), OpenAiError> {
-    match item.item_type.as_deref() {
-        Some("function_call_output") => validate_function_call_output_item(item),
-        None => validate_message_input_item(item),
+    match item.kind() {
+        InputItemKind::FunctionCallOutput | InputItemKind::CustomToolCallOutput => {
+            validate_function_call_output_item(item)
+        }
+        InputItemKind::Message => validate_message_input_item(item),
         // Accept any other item type — the twin extracts user text for fallback
         // responses and ignores items it doesn't understand.
-        Some(_) => Ok(()),
+        InputItemKind::FunctionCall | InputItemKind::CustomToolCall | InputItemKind::Other => {
+            Ok(())
+        }
     }
 }
 

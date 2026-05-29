@@ -1,4 +1,50 @@
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct TokenUsage {
+    pub input_tokens:  u64,
+    pub output_tokens: u64,
+}
+
+impl TokenUsage {
+    #[must_use]
+    pub const fn new(input_tokens: u64, output_tokens: u64) -> Self {
+        Self {
+            input_tokens,
+            output_tokens,
+        }
+    }
+
+    #[must_use]
+    pub const fn total_tokens(self) -> u64 {
+        self.input_tokens + self.output_tokens
+    }
+
+    #[must_use]
+    pub fn responses_json(self) -> Value {
+        json!({
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "total_tokens": self.total_tokens(),
+        })
+    }
+
+    #[must_use]
+    pub fn chat_completions_json(self) -> Value {
+        json!({
+            "prompt_tokens": self.input_tokens,
+            "completion_tokens": self.output_tokens,
+            "total_tokens": self.total_tokens(),
+        })
+    }
+}
+
+impl Default for TokenUsage {
+    fn default() -> Self {
+        Self::new(1, 5)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct ResponsePlan {
@@ -9,25 +55,32 @@ pub struct ResponsePlan {
     pub structured_output: Option<Value>,
     pub reasoning:         Vec<String>,
     pub tool_calls:        Vec<ToolCallPlan>,
-    pub input_tokens:      u64,
-    pub output_tokens:     u64,
+    pub usage:             TokenUsage,
 }
 
 #[derive(Clone, Debug)]
 pub struct ToolCallPlan {
-    pub id:        String,
-    pub name:      String,
-    pub arguments: Value,
+    pub id:            String,
+    pub name:          String,
+    pub arguments:     Value,
+    pub raw_arguments: Option<String>,
 }
 
 impl ResponsePlan {
+    pub fn tool_call_arguments_text(tool_call: &ToolCallPlan) -> String {
+        tool_call
+            .raw_arguments
+            .clone()
+            .unwrap_or_else(|| tool_call.arguments.to_string())
+    }
+
     fn responses_tool_call_item(tool_call: &ToolCallPlan) -> Value {
         json!({
             "id": format!("fc_{}", tool_call.id),
             "type": "function_call",
             "call_id": tool_call.id,
             "name": tool_call.name,
-            "arguments": tool_call.arguments.to_string(),
+            "arguments": Self::tool_call_arguments_text(tool_call),
         })
     }
 
@@ -77,11 +130,7 @@ impl ResponsePlan {
             "status": "completed",
             "reasoning": self.reasoning,
             "output": output,
-            "usage": {
-                "input_tokens": self.input_tokens,
-                "output_tokens": self.output_tokens,
-                "total_tokens": self.input_tokens + self.output_tokens,
-            }
+            "usage": self.usage.responses_json()
         })
     }
 
@@ -103,16 +152,12 @@ impl ResponsePlan {
                         "type": "function",
                         "function": {
                             "name": tool_call.name,
-                            "arguments": tool_call.arguments.to_string(),
+                            "arguments": Self::tool_call_arguments_text(tool_call),
                         }
                     })).collect::<Vec<_>>(),
                 }
             }],
-            "usage": {
-                "prompt_tokens": self.input_tokens,
-                "completion_tokens": self.output_tokens,
-                "total_tokens": self.input_tokens + self.output_tokens,
-            }
+            "usage": self.usage.chat_completions_json()
         })
     }
 }

@@ -43,9 +43,11 @@ pub mod stage_id;
 pub mod start;
 pub mod status;
 pub mod steering;
+pub mod system_integrations;
 pub mod timing;
 pub mod todo;
 pub mod transcript;
+pub mod variable;
 
 pub use artifact::ArtifactUpload;
 pub use auth::{IdpIdentity, IdpIdentityError};
@@ -111,7 +113,10 @@ pub use run_projection::{
     StageContextWindowStaleness, StageContextWindowUnavailableReason, StageContextWindowWarning,
     StageModelUsage, StageProjection, SubAgentProjection, SubAgentStatus, first_event_seq,
 };
-pub use run_sandbox::{RunSandbox, RunSandboxRuntime};
+pub use run_sandbox::{
+    RunSandbox, RunSandboxFailure, RunSandboxInstance, RunSandboxKind, RunSandboxPlan,
+    RunSandboxRuntime,
+};
 pub use run_summary::{
     AskFabro, AskFabroUnavailableReason, AutomationRef, Run, RunApproval, RunApprovalState,
     RunBillingSummary, RunError, RunLifecycle, RunLinks, RunModel, RunOrigin, RunOriginKind,
@@ -146,9 +151,16 @@ pub use status::{
     RunStatusKind, SuccessReason, TerminalStatus,
 };
 pub use steering::SteeringMessage;
+pub use system_integrations::{
+    IntegrationConnectionKind, IntegrationConnectionState, IntegrationConnectionStatus,
+    IntegrationProvider, IntegrationStatus, SystemIntegrationStatus, SystemIntegrationsResponse,
+};
 pub use timing::{RunTiming, StageTiming};
 pub use todo::{TodoListKind, TodoListProjection, TodoPatch, TodoProjection, TodoStatus};
 pub use transcript::{
     AudioData, ContentPart, DocumentData, ImageData, MessageId, MessageKind, MessageSource,
     PairMessageRef, ThinkingData, ToolCall, ToolResult, TranscriptMessage,
+};
+pub use variable::{
+    CreateVariableRequest, UpdateVariableRequest, Variable, VariableListResponse, is_env_style_name,
 };

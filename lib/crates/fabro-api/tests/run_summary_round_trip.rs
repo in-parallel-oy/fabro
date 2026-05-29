@@ -3,16 +3,16 @@ use std::collections::HashMap;
 
 use chrono::{TimeZone, Utc};
 use fabro_api::types::{
-    RepositoryRef as ApiRepositoryRef, Run as ApiRun, RunApproval as ApiRunApproval,
-    RunApprovalState as ApiRunApprovalState, RunRunnableSource as ApiRunRunnableSource,
-    RunSize as ApiRunSize,
+    AutomationRef as ApiAutomationRef, RepositoryRef as ApiRepositoryRef, Run as ApiRun,
+    RunApproval as ApiRunApproval, RunApprovalState as ApiRunApprovalState,
+    RunRunnableSource as ApiRunRunnableSource, RunSize as ApiRunSize,
 };
 use fabro_types::status::{RunStatus, SuccessReason};
 use fabro_types::{
-    AskFabro, AskFabroUnavailableReason, DiffSummary, PullRequestLink, RepositoryProvider,
-    RepositoryRef, Run, RunApproval, RunApprovalState, RunBillingSummary, RunId, RunLifecycle,
-    RunLinks, RunOrigin, RunRunnableSource, RunSize, RunTimestamps, RunTiming, WorkflowRef,
-    fixtures,
+    AskFabro, AskFabroUnavailableReason, AutomationRef, DiffSummary, PullRequestLink,
+    RepositoryProvider, RepositoryRef, Run, RunApproval, RunApprovalState, RunBillingSummary,
+    RunId, RunLifecycle, RunLinks, RunOrigin, RunRunnableSource, RunSize, RunTimestamps, RunTiming,
+    WorkflowRef, fixtures,
 };
 use serde_json::json;
 
@@ -24,6 +24,7 @@ fn run_summary_reuses_domain_types() {
     assert_same_type::<ApiRunApprovalState, RunApprovalState>();
     assert_same_type::<ApiRunRunnableSource, RunRunnableSource>();
     assert_same_type::<ApiRunSize, RunSize>();
+    assert_same_type::<ApiAutomationRef, AutomationRef>();
 }
 
 #[test]
@@ -77,7 +78,11 @@ fn run_summary_json_matches_openapi_shape() {
             node_count: 7,
             edge_count: 9,
         },
-        automation:       None,
+        automation:       Some(AutomationRef {
+            id:         "nightly".to_string(),
+            name:       Some("Nightly".to_string()),
+            trigger_id: Some("schedule_1".to_string()),
+        }),
         repository:       Some(RepositoryRef {
             name:       "fabro".to_string(),
             origin_url: None,
@@ -146,7 +151,11 @@ fn run_summary_json_matches_openapi_shape() {
                 "node_count": 7,
                 "edge_count": 9
             },
-            "automation": null,
+            "automation": {
+                "id": "nightly",
+                "name": "Nightly",
+                "trigger_id": "schedule_1"
+            },
             "repository": {
                 "name": "fabro",
                 "origin_url": null,

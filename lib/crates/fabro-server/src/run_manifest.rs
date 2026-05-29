@@ -7,6 +7,7 @@ use std::time::Duration;
 use anyhow::{Context as _, Result, anyhow, bail};
 use fabro_api::types;
 use fabro_auth::auth_issue_message;
+use fabro_config::parse::{self, SettingsSource};
 use fabro_config::{
     CliLayer, CliOutputLayer, EnvironmentDockerfileLayer, EnvironmentImageLayer, EnvironmentLayer,
     MergeMap, RunLayer, SettingsLayer, WorkflowSettingsBuilder, parse_input_overrides,
@@ -69,17 +70,6 @@ pub(crate) fn manifest_run_defaults(run: Option<&RunLayer>) -> RunLayer {
     run.cloned().unwrap_or_default()
 }
 
-pub(crate) fn prepare_manifest(
-    manifest_run_defaults: &RunLayer,
-    manifest: &types::RunManifest,
-) -> Result<PreparedManifest> {
-    prepare_manifest_with_environment_defaults(
-        manifest_run_defaults,
-        &MergeMap::default(),
-        manifest,
-    )
-}
-
 pub(crate) fn prepare_manifest_with_environment_defaults(
     manifest_run_defaults: &RunLayer,
     manifest_environment_defaults: &MergeMap<EnvironmentLayer>,
@@ -116,6 +106,7 @@ pub(crate) fn prepare_manifest_with_environment_defaults(
             &config.source,
             &config.path,
             &workflow_input.files,
+            SettingsSource::Workflow,
         )?;
         workflow_settings_builder = workflow_settings_builder.workflow_layer(layer);
     }
@@ -130,6 +121,7 @@ pub(crate) fn prepare_manifest_with_environment_defaults(
                 source,
                 &config_path,
                 &workflow_input.files,
+                SettingsSource::Project,
             )?;
             workflow_settings_builder = workflow_settings_builder.project_layer(layer);
         }
@@ -213,6 +205,7 @@ pub(crate) fn create_run_input(
         submitted_manifest_bytes: None,
         run_id: prepared.run_id,
         title: prepared.title,
+        automation: None,
         git: prepared.git,
         fork_source_ref: None,
         parent_id: prepared.parent_id,
@@ -330,12 +323,15 @@ fn settings_layer_with_resolved_dockerfiles(
     source: &str,
     config_path: &ManifestPath,
     files: &HashMap<ManifestPath, String>,
+    settings_source: SettingsSource,
 ) -> Result<SettingsLayer> {
     // Parse via `SettingsLayer` so unknown nested keys (like a stale
     // `[server.integrations.github.permissions]` after the move to
     // `[run.integrations.github.permissions]`) trip `deny_unknown_fields`.
     let mut layer = source
         .parse::<SettingsLayer>()
+        .context("Failed to parse run config TOML")?;
+    parse::validate_settings_source(&layer, settings_source)
         .context("Failed to parse run config TOML")?;
     resolve_manifest_dockerfiles(&mut layer, config_path, files)?;
     Ok(layer)
@@ -415,11 +411,6 @@ fn resolve_manifest_dockerfiles(
         .and_then(|environment| environment.image.as_mut())
     {
         resolve_manifest_dockerfile(image, config_path, files)?;
-    }
-    for environment in layer.environments.values_mut() {
-        if let Some(image) = environment.image.as_mut() {
-            resolve_manifest_dockerfile(image, config_path, files)?;
-        }
     }
     Ok(())
 }
@@ -1433,6 +1424,42 @@ mod tests {
         RunLayer::default()
     }
 
+    fn environment_defaults_fixture() -> MergeMap<EnvironmentLayer> {
+        MergeMap::from(HashMap::from([
+            ("default".to_string(), EnvironmentLayer {
+                provider: Some("local".to_string()),
+                ..EnvironmentLayer::default()
+            }),
+            ("local".to_string(), EnvironmentLayer {
+                provider: Some("local".to_string()),
+                ..EnvironmentLayer::default()
+            }),
+            ("daytona".to_string(), EnvironmentLayer {
+                provider: Some("daytona".to_string()),
+                ..EnvironmentLayer::default()
+            }),
+            ("selected".to_string(), EnvironmentLayer {
+                provider: Some("docker".to_string()),
+                ..EnvironmentLayer::default()
+            }),
+            ("cloud".to_string(), EnvironmentLayer {
+                provider: Some("daytona".to_string()),
+                ..EnvironmentLayer::default()
+            }),
+        ]))
+    }
+
+    fn prepare_manifest(
+        manifest_run_defaults: &RunLayer,
+        manifest: &types::RunManifest,
+    ) -> Result<PreparedManifest> {
+        super::prepare_manifest_with_environment_defaults(
+            manifest_run_defaults,
+            &environment_defaults_fixture(),
+            manifest,
+        )
+    }
+
     fn test_catalog() -> Arc<Catalog> {
         Arc::new(Catalog::from_builtin().unwrap())
     }
@@ -1483,18 +1510,21 @@ _version = 1
 [run.environment]
 id = "selected"
 
-[environments.selected]
-provider = "{provider}"
-
 [run.clone]
 enabled = {clone_enabled}
 "#
             )),
             type_:  types::ManifestConfigType::Project,
         });
+        let mut environment_defaults = environment_defaults_fixture();
+        environment_defaults.insert("selected".to_string(), EnvironmentLayer {
+            provider: Some(provider.to_string()),
+            ..EnvironmentLayer::default()
+        });
 
-        let prepared = prepare_manifest(
+        let prepared = super::prepare_manifest_with_environment_defaults(
             &manifest_run_defaults(Some(&default_settings_fixture())),
+            &environment_defaults,
             &manifest,
         )
         .unwrap();
@@ -1533,7 +1563,7 @@ enabled = {clone_enabled}
         assert_eq!(config.volumes[0].subpath.as_deref(), Some("agents"));
     }
     #[test]
-    fn prepare_manifest_inlines_project_config_daytona_dockerfile_from_bundle() {
+    fn prepare_manifest_accepts_project_environment_catalog_definitions() {
         let mut manifest = minimal_manifest();
         manifest.configs.push(types::ManifestConfig {
             path:   Some(".fabro/project.toml".to_string()),
@@ -1544,87 +1574,22 @@ enabled = {clone_enabled}
 id = "cloud"
 
 [environments.cloud]
-provider = "daytona"
-
-[environments.cloud.image]
-ref = "fabro-test"
-dockerfile = { path = "Dockerfile" }
+provider = "local"
 "#
                 .to_string(),
             ),
             type_:  types::ManifestConfigType::Project,
         });
-        manifest
-            .workflows
-            .get_mut("workflow.fabro")
-            .unwrap()
-            .files
-            .insert(".fabro/Dockerfile".to_string(), types::ManifestFileEntry {
-                content: "FROM ubuntu:24.04\n".to_string(),
-                ref_:    types::ManifestFileRef {
-                    from:     Some(".fabro/project.toml".to_string()),
-                    original: "Dockerfile".to_string(),
-                    type_:    types::ManifestFileRefType::Dockerfile,
-                },
-            });
 
         let prepared = prepare_manifest(
             &manifest_run_defaults(Some(&default_settings_fixture())),
             &manifest,
         )
-        .unwrap();
+        .expect("project environment catalog should resolve");
 
-        let dockerfile = prepared
-            .settings
-            .run
-            .environment
-            .image
-            .dockerfile
-            .as_ref()
-            .expect("project Dockerfile should resolve");
-        match dockerfile {
-            fabro_types::settings::run::DockerfileSource::Inline(value) => {
-                assert_eq!(value, "FROM ubuntu:24.04\n");
-            }
-            fabro_types::settings::run::DockerfileSource::Path { path } => {
-                panic!("project Dockerfile should be inline, got path {path}")
-            }
-        }
-    }
-
-    #[test]
-    fn prepare_manifest_errors_when_project_config_dockerfile_bundle_is_missing() {
-        let mut manifest = minimal_manifest();
-        manifest.configs.push(types::ManifestConfig {
-            path:   Some(".fabro/project.toml".to_string()),
-            source: Some(
-                r#"_version = 1
-
-[run.environment]
-id = "cloud"
-
-[environments.cloud]
-provider = "daytona"
-
-[environments.cloud.image]
-ref = "fabro-test"
-dockerfile = { path = "Dockerfile" }
-"#
-                .to_string(),
-            ),
-            type_:  types::ManifestConfigType::Project,
-        });
-
-        let Err(err) = prepare_manifest(
-            &manifest_run_defaults(Some(&default_settings_fixture())),
-            &manifest,
-        ) else {
-            panic!("missing bundled Dockerfile should fail");
-        };
-        let message = format!("{err:#}");
-        assert!(
-            message.contains("missing bundled dockerfile"),
-            "expected missing bundled dockerfile error, got: {message}"
+        assert_eq!(
+            prepared.settings.run.environment.provider,
+            EnvironmentProvider::Local
         );
     }
 
@@ -2535,6 +2500,7 @@ digraph Demo {
         //! unknown fields anywhere in the document trip
         //! `deny_unknown_fields`.
 
+        use fabro_config::parse::SettingsSource;
         use fabro_types::ManifestPath;
         use fabro_workflow::workflow_bundle::{BundledWorkflow, ParsedWorkflowConfig};
 
@@ -2567,6 +2533,7 @@ issues = "read"
                 &workflow.config.as_ref().unwrap().source,
                 &workflow.config.as_ref().unwrap().path,
                 &workflow.files,
+                SettingsSource::Workflow,
             )
             .expect("workflow.toml should parse");
             let run = layer.run.expect("run layer should be present");
@@ -2597,6 +2564,7 @@ issues = "read"
                 &workflow.config.as_ref().unwrap().source,
                 &workflow.config.as_ref().unwrap().path,
                 &workflow.files,
+                SettingsSource::Workflow,
             )
             .expect_err("stale [server.integrations.github.permissions] should be rejected");
             let message = format!("{err:#}");
@@ -2623,6 +2591,7 @@ contents = "read"
                 &workflow.config.as_ref().unwrap().source,
                 &workflow.config.as_ref().unwrap().path,
                 &workflow.files,
+                SettingsSource::Workflow,
             )
             .expect("workflow + run blocks should parse");
             let run = layer.run.expect("run layer should be present");

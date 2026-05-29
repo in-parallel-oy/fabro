@@ -3,7 +3,6 @@ import {
   memo,
   Suspense,
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -43,6 +42,10 @@ import {
 import { fileCacheKey, stringHash } from "./run-files/cache-keys";
 import { buildRunCommitOptions } from "./run-files/commit-options";
 import { VirtualizedDiffList } from "./run-files/virtualized-diff-list";
+import { useLocationHash, useMediaQuery } from "../hooks/effects";
+import { useFocusAfterRefreshCompletes } from "../hooks/use-focus-after-refresh";
+import { useMinimumRefreshSpinner } from "../hooks/use-minimum-refresh-spinner";
+import { useRunFileDeepLinkFocus } from "../hooks/use-run-file-deep-link";
 import { ApiError, extractRequestId } from "../lib/api-client";
 import { useRun, useRunCommits, useRunFiles } from "../lib/queries";
 import {
@@ -50,6 +53,7 @@ import {
   type RunFileScope,
   type RunFileSelection,
 } from "../lib/query-keys";
+import { useTickingNow } from "../lib/time";
 
 export { extractRequestId };
 
@@ -78,18 +82,7 @@ export function normalizeRunFileScope(value: string | null): RunFileScope {
 }
 
 function useNarrowViewport(): boolean {
-  const [narrow, setNarrow] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia(`(max-width: ${MD_BREAKPOINT_PX - 1}px)`).matches;
-  });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mql = window.matchMedia(`(max-width: ${MD_BREAKPOINT_PX - 1}px)`);
-    const apply = () => setNarrow(mql.matches);
-    mql.addEventListener("change", apply);
-    return () => mql.removeEventListener("change", apply);
-  }, []);
-  return narrow;
+  return useMediaQuery(`(max-width: ${MD_BREAKPOINT_PX - 1}px)`);
 }
 
 function useFreshness(
@@ -101,15 +94,9 @@ function useFreshness(
   // would show nothing.
   const hasLabel =
     !!meta && (!!meta.to_sha_committed_at || lastFetchedAt !== null);
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    if (!hasLabel) return undefined;
-    const id = setInterval(() => setTick((t) => t + 1), 10_000);
-    return () => clearInterval(id);
-  }, [hasLabel]);
+  const now = useTickingNow(hasLabel, 10_000);
 
   if (!meta) return null;
-  const now = Date.now();
   const captured = meta.to_sha_committed_at
     ? `Captured ${formatRelative(meta.to_sha_committed_at, now)}`
     : null;
@@ -464,6 +451,9 @@ export default function RunFiles() {
           toSha:   selectedCommit.toSha,
         }
       : runFileScopeSelection(selectedScope);
+  const effectiveScope = fileSelection.kind === "commit"
+    ? `commit:${fileSelection.toSha}`
+    : fileSelection.scope;
   const filesQuery = useRunFiles(
     waitingForCommitSelection ? undefined : params.id,
     fileSelection,
@@ -472,27 +462,14 @@ export default function RunFiles() {
   const { push } = useToast();
   const narrow = useNarrowViewport();
   const runStatus = runQuery.data?.lifecycle.status.kind;
-
-  // Preserve the last successful payload so a failed revalidation can keep
-  // rendering the previous files while surfacing an inline banner.
-  const lastGoodDataRef = useRef<PaginatedRunFileList | null>(null);
-  const lastFetchedAtRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!filesQuery.data) return;
-    const message = emptyTransitionToastMessage(
-      lastGoodDataRef.current?.data.length ?? null,
-      filesQuery.data.data.length,
-    );
-    if (message) {
-      push({ message });
-    }
-    lastGoodDataRef.current = filesQuery.data;
-    lastFetchedAtRef.current = Date.now();
-  }, [push, filesQuery.data]);
-
-  const data: PaginatedRunFileList | null =
-    filesQuery.data ?? lastGoodDataRef.current;
+  // `useRunFiles` owns server-state retention with SWR `keepPreviousData`; when
+  // a revalidation fails, SWR keeps the last successful payload in `data`.
+  const data: PaginatedRunFileList | null = filesQuery.data ?? null;
+  const dataFetchedAt = useMemo(() => data ? Date.now() : null, [data]);
+  const [refreshConfirmation, setRefreshConfirmation] = useState<{
+    scope: string;
+    toSha: string;
+  } | null>(null);
 
   const isInitialLoading = (waitingForCommitSelection || filesQuery.isLoading) && !data;
   const isRevalidating = filesQuery.isValidating;
@@ -504,12 +481,12 @@ export default function RunFiles() {
   // on with no data).
   const apiError = filesQuery.error instanceof ApiError ? filesQuery.error : null;
   const revalidationError =
-    apiError && lastGoodDataRef.current
+    apiError && data
       ? `Couldn't refresh (${apiError.status}).`
       : null;
-  const initialError = apiError && !lastGoodDataRef.current ? apiError : null;
+  const initialError = apiError && !data ? apiError : null;
 
-  const freshness = useFreshness(data?.meta ?? null, lastFetchedAtRef.current);
+  const freshness = useFreshness(data?.meta ?? null, dataFetchedAt);
 
   // Persisted desktop preference + md-breakpoint forced unified.
   const [persistedStyle, setPersistedStyle] = useState<DiffStyle>(
@@ -528,25 +505,33 @@ export default function RunFiles() {
 
   const refreshButtonRef = useRef<HTMLButtonElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const lastDeepLinkToastRef = useRef<string | null>(null);
-
-  const minRefreshTimerRef = useRef<number | null>(null);
-  const [minRefreshActive, setMinRefreshActive] = useState(false);
-  const clearMinRefreshTimer = useCallback(() => {
-    if (minRefreshTimerRef.current !== null) {
-      window.clearTimeout(minRefreshTimerRef.current);
-      minRefreshTimerRef.current = null;
-    }
-  }, []);
+  const {
+    active: minRefreshActive,
+    start: startMinRefresh,
+  } = useMinimumRefreshSpinner(MIN_REFRESH_SPIN_MS);
   const handleRefresh = useCallback(() => {
-    clearMinRefreshTimer();
-    setMinRefreshActive(true);
-    minRefreshTimerRef.current = window.setTimeout(() => {
-      setMinRefreshActive(false);
-      minRefreshTimerRef.current = null;
-    }, MIN_REFRESH_SPIN_MS);
-    void filesQuery.mutate();
-  }, [clearMinRefreshTimer, filesQuery]);
+    const previousFileCount = data?.data.length ?? null;
+    const previousToSha = data?.meta.to_sha ?? null;
+    startMinRefresh();
+    void filesQuery.mutate()
+      .then((nextData) => {
+        if (nextData) {
+          const message = emptyTransitionToastMessage(
+            previousFileCount,
+            nextData.data.length,
+          );
+          if (message) push({ message });
+        }
+
+        const nextToSha = nextData?.meta.to_sha ?? null;
+        setRefreshConfirmation(
+          previousToSha && nextToSha === previousToSha
+            ? { scope: effectiveScope, toSha: nextToSha }
+            : null,
+        );
+      })
+      .catch(() => undefined);
+  }, [data, effectiveScope, filesQuery, push, startMinRefresh]);
   const handlePickerChange = useCallback(
     (selection: DiffPickerValue) => {
       const search = new URLSearchParams(routeLocation.search);
@@ -565,20 +550,12 @@ export default function RunFiles() {
     },
     [routeLocation.hash, routeLocation.pathname, routeLocation.search, navigate],
   );
-  useEffect(() => clearMinRefreshTimer, [clearMinRefreshTimer]);
   // react-doctor-disable-next-line react-doctor/no-event-handler -- The refresh spinner is driven by both SWR revalidation and the click-owned minimum timer.
   const showRefreshing = isRevalidating || minRefreshActive;
 
   // Return focus to the Refresh button after a refresh visibly completes so
   // keyboard-first users stay oriented.
-  const refreshingPrev = useRef(false);
-  useEffect(() => {
-    // react-doctor-disable-next-line react-doctor/no-event-handler -- Returning focus after async refresh completion is an accessibility sync effect.
-    if (refreshingPrev.current && !showRefreshing) {
-      refreshButtonRef.current?.focus({ preventScroll: true });
-    }
-    refreshingPrev.current = showRefreshing;
-  }, [showRefreshing]);
+  useFocusAfterRefreshCompletes(showRefreshing, refreshButtonRef);
 
   const fileCount = data?.data.length ?? 0;
   useFileKeyboardNav(containerRef, fileCount);
@@ -588,37 +565,19 @@ export default function RunFiles() {
   // via per-file options on `RunFileRow` — @pierre/diffs 1.1.x
   // exposes no imperative expand API, so click-based "expand" is not
   // available.
-  const [hashFile, setHashFile] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return decodeDeepLinkFile(window.location.hash);
-  });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onHashChange = () =>
-      setHashFile(decodeDeepLinkFile(window.location.hash));
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
-  }, []);
+  const locationHash = useLocationHash();
+  const hashFile = useMemo(
+    () => decodeDeepLinkFile(locationHash),
+    [locationHash],
+  );
 
-  // react-doctor-disable-next-line react-doctor/no-event-handler -- Deep-link focus has to run after URL hash and file data have both rendered matching DOM rows.
-  useEffect(() => {
-    // react-doctor-disable-next-line react-doctor/no-event-handler -- Toasting missing deep links also depends on resolved file data.
-    const toast = resolveDeepLinkToast(hashFile, data);
-    if (toast) {
-      if (lastDeepLinkToastRef.current !== toast.key) {
-        push({ message: toast.message, autoDismissMs: 5000 });
-        lastDeepLinkToastRef.current = toast.key;
-      }
-      return;
-    }
-    lastDeepLinkToastRef.current = null;
-    if (!hashFile || !data) return;
-    const el = document.getElementById(fileRowId(hashFile));
-    if (el) {
-      el.scrollIntoView({ block: "start", behavior: "smooth" });
-      el.focus({ preventScroll: true });
-    }
-  }, [data, hashFile, push]);
+  useRunFileDeepLinkFocus({
+    data,
+    hashFile,
+    rowId: fileRowId,
+    resolveToast: resolveDeepLinkToast,
+    push,
+  });
 
   const handleFileSelect = useCallback((path: string) => {
     if (typeof window === "undefined") return;
@@ -660,17 +619,12 @@ export default function RunFiles() {
     selectedCommit && selectedCommit.fromSha
       ? { kind: "commit", sha: selectedCommit.sha }
       : { kind: "scope", scope: showScopePicker ? selectedScope : "committed" };
-  const effectiveScope = fileSelection.kind === "commit"
-    ? `commit:${fileSelection.toSha}`
-    : fileSelection.scope;
-
-  // Refresh is disabled when the server reports the same `to_sha` it
-  // reported on the previous successful fetch — no new checkpoint yet.
-  // `lastGoodDataRef.current` is updated in a useEffect, so during render
-  // it still holds the previous render's data (or null on first load).
-  const prevToSha = lastGoodDataRef.current?.meta?.to_sha ?? null;
+  // Refresh is disabled only after a user-triggered refresh confirms that the
+  // same selection still resolves to the same `to_sha` — no new checkpoint yet.
   const refreshDisabled =
-    !!meta.to_sha && prevToSha !== null && prevToSha === meta.to_sha;
+    !!meta.to_sha &&
+    refreshConfirmation?.scope === effectiveScope &&
+    refreshConfirmation.toSha === meta.to_sha;
 
   const toolbar = (
     <Toolbar

@@ -1454,6 +1454,13 @@ impl TestContext {
         cmd
     }
 
+    /// Build a `variable` subcommand.
+    pub fn variable(&self) -> Command {
+        let mut cmd = self.command();
+        cmd.arg("variable");
+        cmd
+    }
+
     /// Build a `doctor` subcommand.
     pub fn doctor(&self) -> Command {
         let mut cmd = self.command();
@@ -2149,6 +2156,20 @@ impl TwinScenario {
     }
 
     #[must_use]
+    pub fn chat_completions(model: impl Into<String>) -> Self {
+        Self {
+            matcher: Map::from_iter([
+                (
+                    "endpoint".to_string(),
+                    Value::String("chat.completions".to_string()),
+                ),
+                ("model".to_string(), Value::String(model.into())),
+            ]),
+            script:  json!({ "kind": "success" }),
+        }
+    }
+
+    #[must_use]
     pub fn text(mut self, text: impl Into<String>) -> Self {
         self.assert_script_kind("success", "text");
         self.script["response_text"] = Value::String(text.into());
@@ -2199,6 +2220,16 @@ impl TwinScenario {
     }
 
     #[must_use]
+    pub fn usage(mut self, input_tokens: u64, output_tokens: u64) -> Self {
+        self.assert_script_kind("success", "usage");
+        self.script["usage"] = json!({
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+        });
+        self
+    }
+
+    #[must_use]
     pub fn input_contains(mut self, needle: impl Into<String>) -> Self {
         self.matcher
             .insert("input_contains".to_string(), Value::String(needle.into()));
@@ -2238,8 +2269,9 @@ impl TwinScenario {
 
 #[derive(Debug, Clone)]
 pub struct TwinToolCall {
-    name:      String,
-    arguments: Value,
+    name:          String,
+    arguments:     Value,
+    raw_arguments: Option<String>,
 }
 
 impl TwinToolCall {
@@ -2248,6 +2280,20 @@ impl TwinToolCall {
         Self {
             name: name.into(),
             arguments,
+            raw_arguments: None,
+        }
+    }
+
+    #[must_use]
+    pub fn new_raw_arguments(
+        name: impl Into<String>,
+        arguments: Value,
+        raw_arguments: impl Into<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            arguments,
+            raw_arguments: Some(raw_arguments.into()),
         }
     }
 
@@ -2298,11 +2344,20 @@ impl TwinToolCall {
         Self::new("apply_patch", json!({ "patch": patch.into() }))
     }
 
+    #[must_use]
+    pub fn apply_patch_raw_arguments(patch: impl Into<String>) -> Self {
+        Self::new_raw_arguments("apply_patch", Value::Null, patch.into())
+    }
+
     fn into_json(self) -> Value {
-        json!({
+        let mut value = json!({
             "name": self.name,
             "arguments": self.arguments,
-        })
+        });
+        if let Some(raw_arguments) = self.raw_arguments {
+            value["raw_arguments"] = Value::String(raw_arguments);
+        }
+        value
     }
 }
 

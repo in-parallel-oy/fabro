@@ -232,7 +232,7 @@ pub struct EngineServices {
     /// Git state for the current run. Set via `set_git_state` at the start of
     /// `execute` and read by parallel/fan-in handlers.
     pub(crate) git_state: std::sync::RwLock<Option<Arc<GitState>>>,
-    /// Environment variables from devcontainer and `[sandbox.env]` config.
+    /// Environment variables from `[sandbox.env]` config.
     pub base_env:         HashMap<String, String>,
     /// GitHub token source used to inject `GITHUB_TOKEN` at the point of use.
     pub github_token:     Option<Arc<GitHubTokenSource>>,
@@ -254,12 +254,19 @@ impl EngineServices {
 
     /// Read the current git state (if any).
     pub fn git_state(&self) -> Option<Arc<GitState>> {
-        self.git_state.read().unwrap().clone()
+        self.git_state
+            .read()
+            .expect("git_state lock is never poisoned: no code panics while holding this lock")
+            .clone()
     }
 
     /// Set the git state for the current run.
     pub fn set_git_state(&self, state: Option<Arc<GitState>>) {
-        *self.git_state.write().unwrap() = state;
+        *self
+            .git_state
+            .write()
+            .expect("git_state lock is never poisoned: no code panics while holding this lock") =
+            state;
     }
 
     /// Test-only default: empty registry and cross-phase services.

@@ -8,7 +8,6 @@
 use std::net::SocketAddr;
 use std::time::Duration as StdDuration;
 
-use ipnet::IpNet;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -28,7 +27,6 @@ pub struct ServerNamespace {
     pub api:          ServerApiSettings,
     pub web:          ServerWebSettings,
     pub auth:         ServerAuthSettings,
-    pub ip_allowlist: ServerIpAllowlistSettings,
     pub sandbox:      ServerSandboxSettings,
     pub storage:      ServerStorageSettings,
     pub artifacts:    ServerArtifactsSettings,
@@ -50,7 +48,6 @@ impl ServerNamespace {
             api:          ServerApiSettings::default(),
             web:          ServerWebSettings::default(),
             auth:         ServerAuthSettings::default(),
-            ip_allowlist: ServerIpAllowlistSettings::default(),
             sandbox:      ServerSandboxSettings::default(),
             storage:      ServerStorageSettings::default(),
             artifacts:    ServerArtifactsSettings::default(),
@@ -124,18 +121,6 @@ pub struct ServerAuthGithubSettings {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ServerIpAllowlistSettings {
-    pub entries:             Vec<IpAllowEntry>,
-    pub trusted_proxy_count: u32,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ServerIpAllowlistOverrideSettings {
-    pub entries:             Option<Vec<IpAllowEntry>>,
-    pub trusted_proxy_count: Option<u32>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ServerSandboxSettings {
     pub providers: ServerSandboxProvidersSettings,
 }
@@ -172,24 +157,6 @@ impl Default for ServerSandboxProviderSettings {
     // aligned with that so callers that bypass the resolver behave identically.
     fn default() -> Self {
         Self { enabled: true }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum IpAllowEntry {
-    Literal(IpNet),
-    GitHubMetaHooks,
-}
-
-impl IpAllowEntry {
-    pub const GITHUB_META_HOOKS_KEYWORD: &str = "github_meta_hooks";
-
-    pub fn parse_literal(value: &str) -> Result<Self, String> {
-        value
-            .parse::<IpNet>()
-            .or_else(|_| value.parse::<std::net::IpAddr>().map(IpNet::from))
-            .map_err(|error| error.to_string())
-            .map(Self::Literal)
     }
 }
 
@@ -314,16 +281,24 @@ pub struct GithubIntegrationSettings {
     pub webhooks:  Option<IntegrationWebhooksSettings>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SlackIntegrationSettings {
     pub enabled:         bool,
     pub default_channel: Option<InterpString>,
 }
 
+impl Default for SlackIntegrationSettings {
+    fn default() -> Self {
+        Self {
+            enabled:         true,
+            default_channel: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IntegrationWebhooksSettings {
-    pub strategy:     Option<WebhookStrategy>,
-    pub ip_allowlist: Option<ServerIpAllowlistOverrideSettings>,
+    pub strategy: Option<WebhookStrategy>,
 }
 
 fn serialize_socket_addr<S>(value: &SocketAddr, serializer: S) -> Result<S::Ok, S::Error>

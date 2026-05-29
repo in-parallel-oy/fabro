@@ -67,10 +67,18 @@ pub fn strategy_for(
             Box::new(ApiKeyStrategy::new(provider))
         }
         AuthMethod::CodexDevice(config) => {
+            // Programming invariant: every call site that constructs
+            // `AuthMethod::CodexDevice` pairs it with `ProviderId::OPENAI`.
+            // `pick_auth_method` returns CodexDevice only when provider ==
+            // openai(), and the install flow hard-codes `ProviderId::openai()`.
+            // This check catches future regressions where a new call site
+            // forgets the constraint.
             assert_eq!(
                 provider_id.as_str(),
                 ProviderId::OPENAI,
-                "Codex device auth is only supported for OpenAI"
+                "CodexDevice auth is only constructed by CLI code for the \
+                 OpenAI provider; all existing call sites enforce this pairing: \
+                 got provider_id={provider_id}"
             );
             Box::new(CodexDeviceStrategy::new(config))
         }

@@ -57,8 +57,7 @@
               "execution/checkpoints",
               "execution/outcomes",
               "execution/failures",
-              "execution/observability",
-              "execution/devcontainers"
+              "execution/observability"
             ]
           },
           {
@@ -256,6 +255,8 @@
             "group": "May 2026",
             "icon": "clock-rotate-left",
             "pages": [
+              "changelog/2026-05-26",
+              "changelog/2026-05-25",
               "changelog/2026-05-24",
               "changelog/2026-05-23",
               "changelog/2026-05-22",

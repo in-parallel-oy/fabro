@@ -146,6 +146,8 @@ INFO Slack integration disabled; missing credentials
 
 Foreground servers log to stdout by default. Daemonized servers log under `<storage>/logs/server.log` unless you configure `[server.logging]` differently.
 
+You can also check **Settings > Integrations** in the web UI. The Slack row is computed from server configuration, vault credential presence, and the live Socket Mode connection state, so it can distinguish missing credentials, connecting, connected, and error states.
+
 ## How it works
 
 Fabro uses the same [web interviewer](/execution/interviews#web) that powers the web UI. When a human gate fires:

@@ -7,31 +7,32 @@ use std::path::{Path, PathBuf};
 
 use fabro_types::settings::InterpString;
 
+use crate::parse::{SettingsSource, validate_settings_source};
 use crate::{Error, Result, RunGoalLayer, SettingsLayer, migrations};
 
 #[expect(
     clippy::print_stderr,
     reason = "startup config auto-migration warning must be visible before caller logging is configured"
 )]
-pub(crate) fn load_settings_path(path: &Path) -> Result<SettingsLayer> {
+pub(crate) fn load_settings_path(path: &Path, source: SettingsSource) -> Result<SettingsLayer> {
     let content = std::fs::read_to_string(path).map_err(|source| Error::read_file(path, source))?;
-    let mut layer = match content.parse::<SettingsLayer>() {
-        Ok(layer) => layer,
-        Err(err) => match migrations::run_migrations(path, &content)? {
+    let content = if source.runs_settings_migrations() {
+        match migrations::run_migrations(path, &content)? {
             Some(report) => {
                 tracing::warn!("{}", report.warning);
                 eprintln!("{}", report.warning);
-                report.layer
+                report.contents
             }
-            None => {
-                return Err(Error::parse_file(
-                    "Failed to parse settings file",
-                    path,
-                    err,
-                ));
-            }
-        },
+            None => content,
+        }
+    } else {
+        content
     };
+    let mut layer = content
+        .parse::<SettingsLayer>()
+        .map_err(|err| Error::parse_file("Failed to parse settings file", path, err))?;
+    validate_settings_source(&layer, source)
+        .map_err(|err| Error::parse_file("Failed to parse settings file", path, err))?;
     let base_dir = path.parent().unwrap_or_else(|| Path::new("."));
     resolve_goal_file_paths(&mut layer, base_dir);
     Ok(layer)
@@ -66,8 +67,6 @@ pub(crate) fn resolve_goal_file_path(path_str: &str, base_dir: &Path) -> PathBuf
 
 #[cfg(test)]
 mod tests {
-    use fabro_types::settings::run::EnvironmentProvider;
-
     use super::*;
 
     #[test]
@@ -85,16 +84,47 @@ provider = "daytona"
         )
         .expect("write legacy settings");
 
-        let layer = load_settings_path(&path).expect("legacy settings should auto-migrate");
-        let resolved = crate::WorkflowSettingsBuilder::from_layer(&layer)
-            .expect("migrated settings should resolve")
-            .run;
+        let layer = load_settings_path(&path, SettingsSource::ActiveSettings)
+            .expect("legacy settings should auto-migrate");
 
-        assert_eq!(resolved.environment.provider, EnvironmentProvider::Daytona);
+        assert_eq!(
+            layer
+                .run
+                .as_ref()
+                .and_then(|run| run.environment.as_ref())
+                .and_then(|environment| environment.id.as_deref()),
+            Some("daytona")
+        );
         assert!(
             std::fs::read_to_string(&path)
                 .expect("read rewritten settings")
                 .contains("[run.environment]")
         );
+        let environment = std::fs::read_to_string(dir.path().join("environments/daytona.toml"))
+            .expect("read migrated environment file");
+        assert!(environment.contains("provider = \"daytona\""));
+    }
+
+    #[test]
+    fn load_settings_path_keeps_user_environment_catalog_in_file() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("settings.toml");
+        let source = r#"
+_version = 1
+
+[run.environment]
+id = "client"
+
+[environments.client]
+provider = "local"
+"#;
+        std::fs::write(&path, source).expect("write user settings");
+
+        let layer =
+            load_settings_path(&path, SettingsSource::User).expect("user settings should load");
+
+        assert!(layer.environments.contains_key("client"));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), source);
+        assert!(!dir.path().join("environments/client.toml").exists());
     }
 }

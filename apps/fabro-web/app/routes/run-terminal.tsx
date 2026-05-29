@@ -1,22 +1,20 @@
-import { useEffect } from "react";
+import { Toaster } from "sonner";
 
 import TerminalView from "../components/terminal-view";
 import { ToastProvider } from "../components/toast";
+import { useDocumentTitle } from "../hooks/effects";
 
 export default function RunTerminal({ params }: { params: { id: string } }) {
-  useEffect(() => {
-    const previous = document.title;
-    document.title = `Terminal · ${params.id} · Fabro`;
-    return () => {
-      document.title = previous;
-    };
-  }, [params.id]);
+  useDocumentTitle(`Terminal · ${params.id} · Fabro`);
 
   return (
     <ToastProvider>
       <div className="h-screen w-screen overflow-hidden">
         <TerminalView runId={params.id} chromeless />
       </div>
+      {typeof document !== "undefined" && (
+        <Toaster richColors position="bottom-right" />
+      )}
     </ToastProvider>
   );
 }

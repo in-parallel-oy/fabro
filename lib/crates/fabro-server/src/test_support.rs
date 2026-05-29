@@ -13,7 +13,7 @@ use axum::middleware::Next;
 use axum::response::Response;
 use axum::{Router, middleware};
 use chrono::Duration as ChronoDuration;
-use fabro_config::{RunLayer, RunSettingsBuilder, ServerSettingsBuilder, envfile};
+use fabro_config::{RunLayer, ServerSettingsBuilder, envfile};
 use fabro_interview::Interviewer;
 use fabro_model::catalog::{LlmCatalogSettings, ProviderCatalogSettings};
 use fabro_sandbox::SandboxProviderRegistry;
@@ -21,7 +21,6 @@ use fabro_static::EnvVars;
 use fabro_store::{ArtifactStore, Database};
 use fabro_types::settings::ServerAuthMethod;
 use fabro_types::{AuthMethod, IdpIdentity, ServerSettings};
-use fabro_util::error::SharedError;
 use fabro_vault::{SecretType, Vault};
 use fabro_workflow::handler::HandlerRegistry;
 use object_store::memory::InMemory as MemoryObjectStore;
@@ -29,7 +28,8 @@ use tokio_util::sync::CancellationToken;
 use ulid::Ulid;
 
 use crate::auth;
-use crate::ip_allowlist::IpAllowlistConfig;
+use crate::automation_materializer::AutomationRunMaterializer;
+pub use crate::automation_materializer::TestAutomationRunMaterializer;
 use crate::jwt_auth::{AuthMode, ConfiguredAuth};
 #[cfg(test)]
 use crate::principal_middleware::{AuthContextSlot, RequestAuthContext};
@@ -38,6 +38,8 @@ use crate::server::{
     RouterOptions, build_app_state, process_env_var,
 };
 use crate::server_secrets::ServerSecrets;
+#[cfg(test)]
+use crate::worker_runtime::WorkerRuntime;
 
 pub const TEST_DEV_TOKEN: &str =
     "fabro_dev_abababababababababababababababababababababababababababababababab";
@@ -71,24 +73,30 @@ pub struct TestAppStateBuilder {
     server_secret_env:         HashMap<String, String>,
     env_lookup:                EnvLookup,
     llm_catalog_settings:      LlmCatalogSettings,
+    automation_materializer:   Option<Arc<dyn AutomationRunMaterializer>>,
+    #[cfg(test)]
+    worker_runtime:            Option<Arc<dyn WorkerRuntime>>,
 }
 
 impl Default for TestAppStateBuilder {
     fn default() -> Self {
         Self {
-            server_settings:           default_test_server_settings(),
-            manifest_run_defaults:     RunLayer::default(),
-            max_concurrent_runs:       5,
-            registry_factory_override: None,
-            sandbox_provider_registry: None,
-            store_bundle:              None,
-            vault_path:                None,
-            vault_entries:             Vec::new(),
-            server_env_path:           None,
-            active_config_path:        None,
-            server_secret_env:         HashMap::new(),
-            env_lookup:                default_env_lookup(),
-            llm_catalog_settings:      LlmCatalogSettings::default(),
+            server_settings:             default_test_server_settings(),
+            manifest_run_defaults:       RunLayer::default(),
+            max_concurrent_runs:         5,
+            registry_factory_override:   None,
+            sandbox_provider_registry:   None,
+            store_bundle:                None,
+            vault_path:                  None,
+            vault_entries:               Vec::new(),
+            server_env_path:             None,
+            active_config_path:          None,
+            server_secret_env:           HashMap::new(),
+            env_lookup:                  default_env_lookup(),
+            llm_catalog_settings:        LlmCatalogSettings::default(),
+            automation_materializer:     None,
+            #[cfg(test)]
+            worker_runtime:              None,
         }
     }
 }
@@ -145,6 +153,17 @@ impl TestAppStateBuilder {
         self
     }
 
+    pub fn automation_materializer(mut self, materializer: TestAutomationRunMaterializer) -> Self {
+        self.automation_materializer = Some(materializer.into_materializer());
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn worker_runtime(mut self, worker_runtime: Arc<dyn WorkerRuntime>) -> Self {
+        self.worker_runtime = Some(worker_runtime);
+        self
+    }
+
     pub fn provider_base_url(
         mut self,
         provider: impl Into<String>,
@@ -198,6 +217,10 @@ impl TestAppStateBuilder {
     }
 
     pub fn build(self) -> Arc<AppState> {
+        self.try_build().expect("test app state should build")
+    }
+
+    pub fn try_build(self) -> anyhow::Result<Arc<AppState>> {
         let (store, artifact_store) = self.store_bundle.unwrap_or_else(test_store_bundle);
         let vault_path = self.vault_path.unwrap_or_else(test_secret_store_path);
         if !self.vault_entries.is_empty() {
@@ -211,9 +234,9 @@ impl TestAppStateBuilder {
         let server_env_path = self
             .server_env_path
             .unwrap_or_else(|| vault_path.with_file_name("server.env"));
-        let active_config_path = self.active_config_path.unwrap_or_else(|| {
-            std::env::temp_dir().join(format!("fabro-test-settings-{}.toml", Ulid::new()))
-        });
+        let active_config_path = self
+            .active_config_path
+            .unwrap_or_else(|| vault_path.with_file_name("settings.toml"));
         build_app_state(AppStateConfig {
             resolved_settings: resolved_runtime_settings_for_tests(
                 self.server_settings,
@@ -224,6 +247,7 @@ impl TestAppStateBuilder {
             max_concurrent_runs: self.max_concurrent_runs,
             store,
             artifact_store,
+            variables_path: vault_path.with_file_name("variables.json"),
             vault_path,
             preloaded_vault: None,
             server_secrets: load_test_server_secrets(server_env_path, self.server_secret_env),
@@ -235,8 +259,12 @@ impl TestAppStateBuilder {
             ),
             sandbox_provider_registry: self.sandbox_provider_registry,
             shutdown: CancellationToken::new(),
+            #[cfg(test)]
+            worker_control_bus: None,
+            #[cfg(test)]
+            worker_runtime: self.worker_runtime,
+            automation_materializer_override: self.automation_materializer,
         })
-        .expect("test app state should build")
     }
 }
 
@@ -306,13 +334,9 @@ pub(crate) fn resolved_runtime_settings_for_tests(
     manifest_run_defaults: RunLayer,
     llm_catalog_settings: LlmCatalogSettings,
 ) -> ResolvedAppStateSettings {
-    let manifest_environment_defaults = fabro_config::MergeMap::default();
     ResolvedAppStateSettings {
-        manifest_run_settings: RunSettingsBuilder::from_run_layer(&manifest_run_defaults)
-            .map_err(|err| SharedError::new(anyhow::Error::new(err))),
-        manifest_run_defaults,
-        manifest_environment_defaults,
         server_settings,
+        manifest_run_defaults,
         llm_catalog_settings,
     }
 }
@@ -517,15 +541,10 @@ pub fn build_test_router(state: Arc<AppState>) -> Router {
     with_test_user(server::build_router(state, test_auth_mode()))
 }
 
-pub fn build_test_router_with_options(
-    state: Arc<AppState>,
-    ip_allowlist_config: Arc<IpAllowlistConfig>,
-    options: RouterOptions,
-) -> Router {
+pub fn build_test_router_with_options(state: Arc<AppState>, options: RouterOptions) -> Router {
     with_test_user(server::build_router_with_options(
         state,
         &test_auth_mode(),
-        ip_allowlist_config,
         options,
     ))
 }

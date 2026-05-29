@@ -24,7 +24,7 @@ pub(crate) fn cyan_spinner(message: impl Into<std::borrow::Cow<'static, str>>) -
     let spinner = ProgressBar::new_spinner();
     spinner.set_style(
         ProgressStyle::with_template("{spinner:.cyan} {msg}")
-            .expect("valid template")
+            .expect("hardcoded progress template is always syntactically valid")
             .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", ""]),
     );
     spinner.set_message(message);
@@ -192,6 +192,21 @@ pub(crate) fn format_duration_ms(ms: u64) -> String {
         format!("{secs}s")
     } else {
         format!("{}ms", duration.as_millis())
+    }
+}
+
+/// Format a UTC timestamp as a coarse "N{d,h,m} ago" string relative to `now`.
+pub(crate) fn format_age(
+    dt: chrono::DateTime<chrono::Utc>,
+    now: chrono::DateTime<chrono::Utc>,
+) -> String {
+    let dur = now.signed_duration_since(dt);
+    if dur.num_days() > 0 {
+        format!("{}d ago", dur.num_days())
+    } else if dur.num_hours() > 0 {
+        format!("{}h ago", dur.num_hours())
+    } else {
+        format!("{}m ago", dur.num_minutes().max(1))
     }
 }
 

@@ -148,7 +148,7 @@ Control the embedded SPA and browser-oriented routes.
 | `enabled` | Serve the embedded SPA, `/auth/*`, and the web-only helper endpoints under `/api/v1` | `true` |
 | `url` | Required single canonical origin for the server. The browser UI and `/auth/*` routes use this origin, and it must be an absolute `http(s)` URL. | `http://localhost:3000` |
 
-When `enabled = false`, the server still exposes the machine API and `/health`, but `/`, `/auth/*`, SPA client routes, `/api/v1/auth/me`, `/api/v1/setup/*`, and `/api/v1/demo/toggle` all return `404`.
+When `enabled = false`, the server still exposes the machine API and `/health`, but `/`, `/auth/*`, SPA client routes, `/api/v1/auth/me`, and `/api/v1/setup/*` all return `404`.
 
 `server.web.url` is not a secondary web host. Fabro supports a single public origin for API and web traffic. In local development that can be plain HTTP such as `http://localhost:3000` or `http://127.0.0.1:3000`. In production, operators are responsible for terminating HTTPS upstream.
 

@@ -17,14 +17,15 @@ pub fn build_run_tool_manifest(
     catalog: Arc<Catalog>,
 ) -> ToolResult<types::RunManifest> {
     let built = fabro_manifest::build_run_manifest(ManifestBuildInput {
-        workflow:           PathBuf::from(&spec.workflow),
-        cwd:                cwd.to_path_buf(),
-        run_overrides:      run_tool_run_overrides(spec),
-        cli_overrides:      Some(CliLayer::default()),
-        input_overrides:    spec.inputs.clone(),
-        args:               run_tool_manifest_args(spec),
-        run_id:             spec.run_id,
-        user_settings_path: Some(user_settings_path.to_path_buf()),
+        workflow:             PathBuf::from(&spec.workflow),
+        cwd:                  cwd.to_path_buf(),
+        run_overrides:        run_tool_run_overrides(spec),
+        cli_overrides:        Some(CliLayer::default()),
+        input_overrides:      spec.inputs.clone(),
+        args:                 run_tool_manifest_args(spec),
+        run_id:               spec.run_id,
+        environment_defaults: fabro_environment::seeded_catalog_layer(),
+        user_settings_path:   Some(user_settings_path.to_path_buf()),
     })
     .map_err(|err| ToolError::from_anyhow(&err))?;
 

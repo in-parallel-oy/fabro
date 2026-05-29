@@ -1,11 +1,9 @@
 import {
   useCallback,
-  useEffect,
   useMemo,
-  useRef,
 } from "react";
 import { useSearchParams } from "react-router";
-import type { ListRunsSortEnum } from "@qltysh/fabro-api-client";
+import type { BoardColumn, ListRunsSortEnum } from "@qltysh/fabro-api-client";
 
 import {
   hiddenColumnsFromSearchParams,
@@ -32,11 +30,18 @@ export function useRunsWorkspacePreferences() {
     () => resolveRunsWorkspaceSearchParams(urlSearchParams),
     [urlSearchParams],
   );
-  const query = searchParams.get("search") ?? "";
-  const repoFilter = searchParams.get("repo") ?? "all";
-  const workflowFilter = searchParams.get("workflow") ?? "all";
-  const createdFilter = parseCreatedFilter(searchParams.get("created"));
-  const includeArchived = searchParams.get("archived") === "1";
+  const hydratedSearch =
+    searchParams === urlSearchParams ? null : `?${searchParams.toString()}`;
+  const preferences = useMemo(
+    () => runsWorkspacePreferencesFromSearchParams(searchParams),
+    [searchParams],
+  );
+  const query = preferences.search;
+  const repoFilter = preferences.repo;
+  const workflowFilter = preferences.workflow;
+  const createdFilter = preferences.created;
+  const statusFilter = preferences.status;
+  const includeArchived = preferences.archived;
   const view = parseView(searchParams.get("view"));
   const sort = parseSort(searchParams.get("sort"));
   const direction = parseDirection(searchParams.get("direction"));
@@ -69,6 +74,8 @@ export function useRunsWorkspacePreferences() {
     updatePreferences((prev) => ({ ...prev, workflow: value }));
   const setCreatedFilter = (value: CreatedFilter) =>
     updatePreferences((prev) => ({ ...prev, created: value }));
+  const setStatusFilter = (value: Set<BoardColumn>) =>
+    updatePreferences((prev) => ({ ...prev, status: value }));
   const setIncludeArchived = (value: boolean) =>
     updatePreferences((prev) => ({ ...prev, archived: value }));
   const setView = (value: ViewMode) =>
@@ -96,19 +103,13 @@ export function useRunsWorkspacePreferences() {
     [updatePreferences],
   );
 
-  const hydratedFromStorage = useRef(false);
-  useEffect(() => {
-    if (hydratedFromStorage.current) return;
-    hydratedFromStorage.current = true;
-    if (searchParams === urlSearchParams) return;
-    setSearchParams(searchParams, { replace: true });
-  }, [searchParams, urlSearchParams, setSearchParams]);
-
   return {
+    hydratedSearch,
     query,
     repoFilter,
     workflowFilter,
     createdFilter,
+    statusFilter,
     includeArchived,
     view,
     sort,
@@ -120,6 +121,7 @@ export function useRunsWorkspacePreferences() {
     setRepoFilter,
     setWorkflowFilter,
     setCreatedFilter,
+    setStatusFilter,
     setIncludeArchived,
     setView,
     setPage,

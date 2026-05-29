@@ -1,11 +1,10 @@
-import { startTransition, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useMemo, useReducer, useRef, useState } from "react";
 import type { FormEvent, ReactNode, Ref } from "react";
 import {
   Link,
   Navigate,
   useLocation,
   useNavigate,
-  type NavigateFunction,
 } from "react-router";
 import {
   ArrowLeftIcon,
@@ -43,12 +42,7 @@ import {
   testInstallSandbox,
 } from "./install-api";
 import { INSTALL_PROVIDERS } from "./install-config";
-import { shouldRedirectAfterHealthPoll } from "./install-flow";
-import {
-  consumeInstallGithubErrorFromUrl,
-  consumeInstallTokenFromUrl,
-  shouldConsumeInstallGithubErrorForPath,
-} from "./mode";
+import { useInstallSessionQuery } from "./install-query";
 import {
   CopyButton,
   ErrorMessage,
@@ -57,6 +51,12 @@ import {
   SECONDARY_BUTTON_CLASS,
 } from "./components/ui";
 import { LoadingState } from "./components/state";
+import {
+  useInstallGithubCallbackError,
+  useInstallRestartHealthPolling,
+  useInstallTokenFromUrl,
+} from "./hooks/use-install-effects";
+import { consumeInstallTokenFromUrl } from "./mode";
 
 const INSTALL_STEPS = [
   { id: "welcome", label: "Welcome", href: "/install/welcome" },
@@ -77,9 +77,9 @@ type GithubOwnerKind = "personal" | "org";
 
 type SessionState =
   | { status: "idle" }
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; data: InstallSessionResponse };
+  | { status: "loading"; token: string }
+  | { status: "error"; token: string | null; message: string }
+  | { status: "ready"; token: string; data: InstallSessionResponse };
 
 type TokenForm = { token: string; username: string };
 
@@ -134,9 +134,8 @@ type InstallState = {
 type InstallAction =
   | { type: "manualTokenChanged"; value: string }
   | { type: "sessionCleared" }
-  | { type: "sessionRequested" }
-  | { type: "sessionReady"; session: InstallSessionResponse }
-  | { type: "sessionFailed"; message: string }
+  | { type: "sessionReady"; token: string; session: InstallSessionResponse }
+  | { type: "sessionFailed"; token: string | null; message: string }
   | { type: "saveErrorChanged"; message: string | null }
   | { type: "submittingChanged"; submitting: boolean }
   | { type: "timedOutChanged"; timedOut: boolean }
@@ -177,6 +176,7 @@ function initialInstallState(): InstallState {
 
 function hydrateInstallState(
   state: InstallState,
+  token: string,
   session: InstallSessionResponse,
 ): InstallState {
   let githubStrategy = state.githubStrategy;
@@ -200,7 +200,7 @@ function hydrateInstallState(
 
   return {
     ...state,
-    sessionState:    { status: "ready", data: session },
+    sessionState:    { status: "ready", token, data: session },
     canonicalUrl:
       state.canonicalUrl ||
       session.server?.canonical_url ||
@@ -220,12 +220,10 @@ function installReducer(state: InstallState, action: InstallAction): InstallStat
       return { ...state, manualToken: action.value };
     case "sessionCleared":
       return { ...state, sessionState: { status: "idle" } };
-    case "sessionRequested":
-      return { ...state, sessionState: { status: "loading" } };
     case "sessionReady":
-      return hydrateInstallState(state, action.session);
+      return hydrateInstallState(state, action.token, action.session);
     case "sessionFailed":
-      return { ...state, sessionState: { status: "error", message: action.message } };
+      return { ...state, sessionState: { status: "error", token: action.token, message: action.message } };
     case "saveErrorChanged":
       return { ...state, saveError: action.message };
     case "submittingChanged":
@@ -286,10 +284,55 @@ function installReducer(state: InstallState, action: InstallAction): InstallStat
   }
 }
 
+function installSessionErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Install session failed";
+}
+
+function sessionStateForInstallToken(
+  installToken: string | null,
+  sessionState: SessionState,
+  queryError: unknown,
+): SessionState {
+  if (!installToken) {
+    return sessionState.status === "error" && sessionState.token === null
+      ? sessionState
+      : { status: "idle" };
+  }
+
+  if (
+    (sessionState.status === "ready" || sessionState.status === "error") &&
+    sessionState.token === installToken
+  ) {
+    return sessionState;
+  }
+
+  if (queryError) {
+    return {
+      status:  "error",
+      token:   installToken,
+      message: installSessionErrorMessage(queryError),
+    };
+  }
+
+  return { status: "loading", token: installToken };
+}
+
+function readInitialInstallToken(): string | null {
+  const stored = readStoredInstallToken();
+  if (stored) return stored;
+  if (typeof window === "undefined") return null;
+  return consumeInstallTokenFromUrl(window.location.href).token;
+}
+
+/**
+ * Coordinates install-mode browser integrations: token/error URL scrubbing,
+ * install-session query state, and restart health polling. Timers, intervals,
+ * and in-flight requests are cancelled when their install identity changes.
+ */
 function useInstallController() {
   const { pathname } = useLocation();
   const [installToken, setInstallToken] = useState<string | null>(() =>
-    readStoredInstallToken(),
+    readInitialInstallToken(),
   );
   const [installState, dispatchInstall] = useReducer(
     installReducer,
@@ -297,128 +340,54 @@ function useInstallController() {
     initialInstallState,
   );
   const { finishState } = installState;
+  const installSessionQuery = useInstallSessionQuery(installToken, {
+    onSuccess: (session) => {
+      if (!installToken) return;
+      dispatchInstall({ type: "sessionReady", token: installToken, session });
+    },
+    onError: (error) => {
+      dispatchInstall({
+        type:    "sessionFailed",
+        token:   installToken,
+        message: installSessionErrorMessage(error),
+      });
+    },
+  });
 
-  useEffect(() => {
-    const { token, sanitizedUrl } = consumeInstallTokenFromUrl(window.location.href);
-    if (!token) return;
-
-    persistInstallToken(token);
-    // react-doctor-disable-next-line react-doctor/no-initialize-state -- The token is persisted and scrubbed from the URL after the client mounts.
-    setInstallToken(token);
-    window.history.replaceState(window.history.state, "", sanitizedUrl);
-  }, []);
-
-  useEffect(() => {
-    if (shouldConsumeInstallGithubErrorForPath(pathname)) {
-      const { error, sanitizedUrl } = consumeInstallGithubErrorFromUrl(window.location.href);
-      if (error) {
-        dispatchInstall({ type: "saveErrorChanged", message: error });
-        window.history.replaceState(window.history.state, "", sanitizedUrl);
-        return;
-      }
-    }
-    dispatchInstall({ type: "saveErrorChanged", message: null });
-  }, [pathname]);
-
-  useEffect(() => {
+  useInstallTokenFromUrl({ setInstallToken });
+  useInstallGithubCallbackError({ dispatchInstall, pathname });
+  useInstallRestartHealthPolling({ dispatchInstall, finishState });
+  const sessionState = sessionStateForInstallToken(
+    installToken,
+    installState.sessionState,
+    installSessionQuery.error,
+  );
+  const controllerState =
+    sessionState === installState.sessionState
+      ? installState
+      : { ...installState, sessionState };
+  const refreshInstallSession = async () => {
     if (!installToken) {
-      dispatchInstall({ type: "sessionCleared" });
-      return;
+      throw new Error("Install token is required to refresh the session.");
     }
+    const nextSession = await getInstallSession(installToken);
+    dispatchInstall({
+      type:    "sessionReady",
+      token:   installToken,
+      session: nextSession,
+    });
+    await installSessionQuery.mutate(nextSession, { revalidate: false });
+    return nextSession;
+  };
 
-    let cancelled = false;
-    dispatchInstall({ type: "sessionRequested" });
-    getInstallSession(installToken)
-      .then((nextSession) => {
-        if (cancelled) return;
-        dispatchInstall({ type: "sessionReady", session: nextSession });
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        dispatchInstall({
-          type:    "sessionFailed",
-          message: error instanceof Error ? error.message : "Install session failed",
-        });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [installToken]);
-
-  // react-doctor-disable-next-line react-doctor/no-fetch-in-effect -- This is install-mode restart polling, not cacheable app data.
-  useEffect(() => {
-    if (!finishState) return;
-
-    dispatchInstall({ type: "timedOutChanged", timedOut: false });
-    const deadline = window.setTimeout(() => {
-      dispatchInstall({ type: "timedOutChanged", timedOut: true });
-    }, 30_000);
-
-    const controller = new AbortController();
-    let inFlight = false;
-    const poll = async () => {
-      if (inFlight || controller.signal.aborted) return;
-      inFlight = true;
-      try {
-        // react-doctor-disable-next-line react-doctor/no-fetch-in-effect -- This health probe is tied to install restart polling, not cacheable app data.
-        const response = await fetch("/health", { signal: controller.signal });
-        const body = response.ok
-          ? ((await response.json()) as { mode?: string })
-          : undefined;
-        if (
-          shouldRedirectAfterHealthPoll({
-            kind: "response",
-            ok: response.ok,
-            mode: body?.mode,
-          })
-        ) {
-          window.location.href = finishState.restart_url;
-        }
-      } catch {
-        if (controller.signal.aborted) return;
-        if (shouldRedirectAfterHealthPoll({ kind: "error" })) {
-          window.location.href = finishState.restart_url;
-        }
-      } finally {
-        inFlight = false;
-      }
-    };
-    const interval = window.setInterval(poll, 2_000);
-
-    return () => {
-      controller.abort();
-      window.clearTimeout(deadline);
-      window.clearInterval(interval);
-    };
-  }, [finishState]);
-
-  return { pathname, installToken, setInstallToken, installState, dispatchInstall };
-}
-
-function useInstallRootRedirect({
-  installToken,
-  session,
-  finishState,
-  pathname,
-  navigate,
-}: {
-  installToken: string | null;
-  session: InstallSessionResponse | null;
-  finishState: FinishState;
-  pathname: string;
-  navigate: NavigateFunction;
-}) {
-  // react-doctor-disable-next-line react-doctor/no-effect-chain -- Navigation waits for the async install session before leaving the token/root entry route.
-  useEffect(() => {
-    if (!installToken || !session) return;
-    // react-doctor-disable-next-line react-doctor/no-event-handler -- This redirects from root/install exactly once after the async session becomes available.
-    if ((pathname === "/" || pathname === "/install") && !finishState) {
-      startTransition(() => {
-        navigate("/install/welcome", { replace: true });
-      });
-    }
-  }, [finishState, installToken, pathname, navigate, session]);
+  return {
+    pathname,
+    installToken,
+    setInstallToken,
+    installState: controllerState,
+    dispatchInstall,
+    refreshInstallSession,
+  };
 }
 
 export default function InstallApp() {
@@ -429,6 +398,7 @@ export default function InstallApp() {
     setInstallToken,
     installState,
     dispatchInstall,
+    refreshInstallSession,
   } = useInstallController();
   const {
     sessionState,
@@ -446,8 +416,6 @@ export default function InstallApp() {
     timedOut,
   } = installState;
   const session = sessionState.status === "ready" ? sessionState.data : null;
-
-  useInstallRootRedirect({ installToken, session, finishState, pathname, navigate });
 
   const currentStep = useMemo<StepId>(
     () =>
@@ -474,6 +442,7 @@ export default function InstallApp() {
           if (!nextToken) {
             dispatchInstall({
               type:    "sessionFailed",
+              token:   null,
               message: "Paste the install token from the server logs.",
             });
             return;
@@ -497,8 +466,7 @@ export default function InstallApp() {
     try {
       await args.action();
       if (args.next) {
-        const nextSession = await getInstallSession(installToken);
-        dispatchInstall({ type: "sessionReady", session: nextSession });
+        await refreshInstallSession();
         navigate(args.next);
       }
     } catch (error) {
@@ -528,8 +496,8 @@ export default function InstallApp() {
     );
   }
 
-  // Covers both sessionState "loading" AND the brief "idle" window between
-  // the initial render and the session-fetch useEffect. Without this guard,
+  // Covers both sessionState "loading" AND the brief "idle" window before the
+  // install session query reports data. Without this guard,
   // screens like GithubAppDoneScreen see `session == null` and navigate away
   // before the first fetch finishes — trapping the user in a redirect loop.
   if (!session) {
@@ -538,6 +506,10 @@ export default function InstallApp() {
         <LoadingState label="Connecting to install session…" />
       </InstallLayout>
     );
+  }
+
+  if ((pathname === "/" || pathname === "/install") && !finishState) {
+    return <Navigate to="/install/welcome" replace />;
   }
 
   if (finishState && pathname !== "/install/finishing") {

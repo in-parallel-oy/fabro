@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 
 use ::fabro_types::{
-    BilledTokenCounts, BlockedReason, CommandTermination, DiffSummary, FailureReason,
-    ForkSourceRef, GitContext, PairId, PairMessageId, PairSystemMessageKind, PairTarget,
-    ParallelBranchId, PendingReason, PermissionLevel, Principal, PullRequestLink, RunBlobId,
-    RunFailure, RunId, RunNoticeLevel, RunPairEndedReason, RunPairFailedReason, RunProvenance,
-    RunRunnableSource, RunTiming, SandboxProviderKind, StageId, StageTiming, SuccessReason,
-    run_event as fabro_types,
+    AutomationRef, BilledTokenCounts, BlockedReason, CommandTermination, DiffSummary,
+    FailureReason, ForkSourceRef, GitContext, PairId, PairMessageId, PairSystemMessageKind,
+    PairTarget, ParallelBranchId, PendingReason, PermissionLevel, Principal, PullRequestLink,
+    RunBlobId, RunFailure, RunId, RunNoticeLevel, RunPairEndedReason, RunPairFailedReason,
+    RunProvenance, RunRunnableSource, RunTiming, SandboxProviderKind, StageId, StageTiming,
+    SuccessReason, run_event as fabro_types,
 };
 use fabro_agent::{AgentEvent, SandboxEvent};
 use fabro_model::{ReasoningEffort, Speed};
@@ -37,6 +37,8 @@ pub enum Event {
         source_directory: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workflow_slug:    Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        automation:       Option<AutomationRef>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         db_prefix:        Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -509,6 +511,10 @@ pub enum Event {
         provider:          SandboxProviderKind,
         id:                String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        image:             Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        snapshot:          Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         repo_cloned:       Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         clone_origin_url:  Option<String>,
@@ -766,41 +772,6 @@ pub enum Event {
     },
     PullRequestFailed {
         error: String,
-    },
-    DevcontainerResolved {
-        dockerfile_lines:        usize,
-        environment_count:       usize,
-        lifecycle_command_count: usize,
-        workspace_folder:        String,
-    },
-    DevcontainerLifecycleStarted {
-        phase:         String,
-        command_count: usize,
-    },
-    DevcontainerLifecycleCommandStarted {
-        phase:   String,
-        command: String,
-        index:   usize,
-    },
-    DevcontainerLifecycleCommandCompleted {
-        phase:       String,
-        command:     String,
-        index:       usize,
-        exit_code:   i32,
-        duration_ms: u64,
-    },
-    DevcontainerLifecycleCompleted {
-        phase:       String,
-        duration_ms: u64,
-    },
-    DevcontainerLifecycleFailed {
-        phase:            String,
-        command:          String,
-        index:            usize,
-        exit_code:        i32,
-        stderr:           String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        exec_output_tail: Option<fabro_types::ExecOutputTail>,
     },
 }
 
@@ -1650,77 +1621,6 @@ impl Event {
             }
             Self::PullRequestFailed { error, .. } => {
                 error!(error = %error, "Pull request creation failed");
-            }
-            Self::DevcontainerResolved {
-                dockerfile_lines,
-                environment_count,
-                lifecycle_command_count,
-                workspace_folder,
-            } => {
-                info!(
-                    dockerfile_lines,
-                    environment_count,
-                    lifecycle_command_count,
-                    workspace_folder,
-                    "Devcontainer resolved"
-                );
-            }
-            Self::DevcontainerLifecycleStarted {
-                phase,
-                command_count,
-            } => {
-                info!(phase, command_count, "Devcontainer lifecycle started");
-            }
-            Self::DevcontainerLifecycleCommandStarted {
-                phase,
-                command,
-                index,
-            } => {
-                debug!(
-                    phase,
-                    command, index, "Devcontainer lifecycle command started"
-                );
-            }
-            Self::DevcontainerLifecycleCommandCompleted {
-                phase,
-                command,
-                index,
-                exit_code,
-                duration_ms,
-            } => {
-                debug!(
-                    phase,
-                    command,
-                    index,
-                    exit_code,
-                    duration_ms,
-                    "Devcontainer lifecycle command completed"
-                );
-            }
-            Self::DevcontainerLifecycleCompleted { phase, duration_ms } => {
-                info!(phase, duration_ms, "Devcontainer lifecycle completed");
-            }
-            Self::DevcontainerLifecycleFailed {
-                phase,
-                command,
-                index,
-                exit_code,
-                exec_output_tail,
-                ..
-            } => {
-                let tail = fabro_types::ExecOutputTail::trace_summary(exec_output_tail.as_ref());
-                error!(
-                    phase,
-                    command,
-                    index,
-                    exit_code,
-                    exec_output_tail_present = tail.present,
-                    exec_stdout_tail_bytes = tail.stdout_bytes,
-                    exec_stderr_tail_bytes = tail.stderr_bytes,
-                    exec_stdout_truncated = tail.stdout_truncated,
-                    exec_stderr_truncated = tail.stderr_truncated,
-                    "Devcontainer lifecycle command failed"
-                );
             }
         }
     }

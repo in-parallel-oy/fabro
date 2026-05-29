@@ -98,6 +98,8 @@ Common categories include:
 | Git and checkpoints | `checkpoint.completed`, `git.commit`, `git.push` |
 | Setup and sandbox | `sandbox.initializing`, `sandbox.ready`, `setup.started` |
 
+`agent.message` is the canonical post-response event for agent turns. When context-window data is available, it appears on the message payload as `context_window`; there is no separate context-window snapshot event to consume.
+
 ## Sub-agent visibility
 
 Sub-agent activity now appears as normal agent events with session linkage:

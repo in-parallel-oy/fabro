@@ -2,15 +2,20 @@
 // exposes the primary button, secondary button, input, error message, and
 // copy button so the auth and in-app surfaces can match.
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import {
   ClipboardDocumentCheckIcon,
   ClipboardIcon,
 } from "@heroicons/react/16/solid";
-
-import { hoverCardStyle } from "./hover-card-style";
+import * as HoverCardPrimitive from "@radix-ui/react-hover-card";
+import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import {
+  createContext,
+  useContext,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 
 export const INPUT_CLASS =
   "block w-full rounded-lg bg-panel-alt px-3.5 py-2.5 text-base text-fg outline-1 -outline-offset-1 outline-white/10 placeholder:text-fg-muted focus:outline-2 focus:-outline-offset-1 focus:outline-teal-500 sm:text-sm";
@@ -133,49 +138,37 @@ export function ConfirmDialog({
   );
 }
 
-// Shared hover/focus state for `Tooltip` and `HoverCard`. Returns the trigger
-// props to spread and the trigger rect (only while open) for positioning.
-// `openDelay` (ms) defers showing the card until the pointer has dwelled on
-// the trigger long enough — protects against fetch-on-mount popovers being
-// triggered by an incidental cursor sweep through a list.
-function useHoverAnchor(openDelay = 0) {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLSpanElement>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+const TOOLTIP_DELAY_DURATION = 200;
+const TOOLTIP_SKIP_DELAY_DURATION = 300;
 
-  const clearTimer = () => {
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  };
-  const requestOpen = () => {
-    if (openDelay <= 0) {
-      setOpen(true);
-      return;
-    }
-    clearTimer();
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null;
-      setOpen(true);
-    }, openDelay);
-  };
-  const requestClose = () => {
-    clearTimer();
-    setOpen(false);
-  };
+const HasTooltipProviderContext = createContext(false);
 
-  useEffect(() => clearTimer, []);
+type TooltipProviderProps = ComponentProps<typeof TooltipPrimitive.Provider>;
 
-  const rect = open ? (triggerRef.current?.getBoundingClientRect() ?? null) : null;
-  const triggerProps = {
-    ref:          triggerRef,
-    onMouseEnter: requestOpen,
-    onMouseLeave: requestClose,
-    onFocus:      requestOpen,
-    onBlur:       requestClose,
-  };
-  return { open, rect, triggerProps };
+function canUseOverlayDom() {
+  return typeof window !== "undefined" && typeof document !== "undefined";
+}
+
+export function TooltipProvider({
+  delayDuration = TOOLTIP_DELAY_DURATION,
+  skipDelayDuration = TOOLTIP_SKIP_DELAY_DURATION,
+  children,
+  ...props
+}: TooltipProviderProps) {
+  if (!canUseOverlayDom()) {
+    return <>{children}</>;
+  }
+  return (
+    <HasTooltipProviderContext.Provider value={true}>
+      <TooltipPrimitive.Provider
+        delayDuration={delayDuration}
+        skipDelayDuration={skipDelayDuration}
+        {...props}
+      >
+        {children}
+      </TooltipPrimitive.Provider>
+    </HasTooltipProviderContext.Provider>
+  );
 }
 
 export function Tooltip({
@@ -185,33 +178,34 @@ export function Tooltip({
   label: ReactNode;
   children: ReactNode;
 }) {
-  const { open, rect, triggerProps } = useHoverAnchor();
-  const id = useId();
-  const portalTarget = typeof document === "undefined" ? null : document.body;
+  // Tests and isolated mounts may render <Tooltip> without an ancestor
+  // <TooltipProvider>; Radix throws in that case, so supply a local provider.
+  const hasProvider = useContext(HasTooltipProviderContext);
 
-  return (
-    <>
-      <span {...triggerProps} aria-describedby={open ? id : undefined} className="inline-flex">
-        {children}
-      </span>
-      {rect && portalTarget
-        ? createPortal(
-            <div
-              role="tooltip"
-              id={id}
-              style={{
-                top: rect.top - 6,
-                left: rect.left + rect.width / 2,
-              }}
-              className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-panel px-2 py-1 text-xs text-fg-2 shadow-lg outline-1 -outline-offset-1 outline-line-strong"
-            >
-              {label}
-            </div>,
-            portalTarget,
-          )
-        : null}
-    </>
+  if (!canUseOverlayDom()) {
+    return <span className="inline-flex">{children}</span>;
+  }
+
+  const root = (
+    <TooltipPrimitive.Root>
+      <TooltipPrimitive.Trigger asChild>
+        <span className="inline-flex">{children}</span>
+      </TooltipPrimitive.Trigger>
+      <TooltipPrimitive.Portal>
+        <TooltipPrimitive.Content
+          side="top"
+          align="center"
+          sideOffset={6}
+          collisionPadding={12}
+          className="pointer-events-none z-50 max-w-[min(32rem,calc(100vw-1.5rem))] rounded-md bg-panel px-2 py-1 text-xs text-fg-2 shadow-lg outline-1 -outline-offset-1 outline-line-strong"
+        >
+          {label}
+        </TooltipPrimitive.Content>
+      </TooltipPrimitive.Portal>
+    </TooltipPrimitive.Root>
   );
+
+  return hasProvider ? root : <TooltipProvider>{root}</TooltipProvider>;
 }
 
 /**
@@ -230,29 +224,26 @@ export function HoverCard({
   className?: string;
   openDelay?: number;
 }) {
-  const { open, rect, triggerProps } = useHoverAnchor(openDelay);
-  const id = useId();
-  const portalTarget = typeof document === "undefined" ? null : document.body;
-
+  if (!canUseOverlayDom()) {
+    return <span className={className}>{children}</span>;
+  }
   return (
-    <>
-      <span {...triggerProps} aria-describedby={open ? id : undefined} className={className}>
-        {children}
-      </span>
-      {rect && portalTarget
-        ? createPortal(
-            <div
-              role="tooltip"
-              id={id}
-              style={hoverCardStyle(rect)}
-              className="pointer-events-none fixed z-50 max-w-[18rem] rounded-lg bg-panel p-3 text-xs text-fg-2 shadow-xl outline-1 -outline-offset-1 outline-line-strong"
-            >
-              {content}
-            </div>,
-            portalTarget,
-          )
-        : null}
-    </>
+    <HoverCardPrimitive.Root openDelay={openDelay} closeDelay={0}>
+      <HoverCardPrimitive.Trigger asChild>
+        <span className={className}>{children}</span>
+      </HoverCardPrimitive.Trigger>
+      <HoverCardPrimitive.Portal>
+        <HoverCardPrimitive.Content
+          side="bottom"
+          align="start"
+          sideOffset={6}
+          collisionPadding={12}
+          className="pointer-events-none z-50 max-w-[18rem] rounded-lg bg-panel p-3 text-xs text-fg-2 shadow-xl outline-1 -outline-offset-1 outline-line-strong"
+        >
+          {content}
+        </HoverCardPrimitive.Content>
+      </HoverCardPrimitive.Portal>
+    </HoverCardPrimitive.Root>
   );
 }
 

@@ -12,9 +12,9 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { Link, Outlet, useLocation, useMatches } from "react-router";
+import { Toaster } from "sonner";
 import { ErrorState } from "../components/state";
-import { ToastProvider } from "../components/toast";
-import { AskFabroLayoutProvider, useAskFabroLayout } from "../lib/ask-fabro-layout";
+import { TooltipProvider } from "../components/ui";
 import { DemoModeProvider } from "../lib/demo-mode";
 import { useAuthMe } from "../lib/queries";
 import { allNavigation, getVisibleNavigation } from "./navigation";
@@ -63,8 +63,7 @@ export default function AppShell() {
 
   return (
     <DemoModeProvider value={demoMode}>
-    <ToastProvider>
-    <AskFabroLayoutProvider>
+    <TooltipProvider>
     <div
       className={classNames(
         "isolate",
@@ -247,8 +246,10 @@ export default function AppShell() {
       )}
       <ShellMain fullHeight={fullHeight} maxWidth={maxWidth} />
     </div>
-    </AskFabroLayoutProvider>
-    </ToastProvider>
+    {typeof document !== "undefined" && (
+      <Toaster richColors position="bottom-right" />
+    )}
+    </TooltipProvider>
     </DemoModeProvider>
   );
 }
@@ -265,15 +266,16 @@ function ShellMain({
   fullHeight: boolean;
   maxWidth: string;
 }) {
-  const { sidebarWidth, isResizing } = useAskFabroLayout();
   return (
     <main
       className={classNames(
-        !isResizing &&
-          "transition-[padding] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
         fullHeight && "min-h-0 flex-1",
       )}
-      style={{ paddingRight: sidebarWidth }}
+      style={{
+        paddingRight: "var(--fabro-ask-sidebar-width, 0px)",
+        transition:
+          "var(--fabro-ask-sidebar-transition, padding 300ms cubic-bezier(0.16, 1, 0.3, 1))",
+      }}
     >
       <div
         className={classNames(

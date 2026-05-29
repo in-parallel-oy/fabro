@@ -150,6 +150,7 @@ fn persisted_workflow(graph: Graph, source: String, run_dir: &Path, run_id: RunI
             graph,
             graph_source: None,
             workflow_slug: Some("test".to_string()),
+            automation: None,
             source_directory: Some(
                 std::env::current_dir()
                     .unwrap_or_else(|_| PathBuf::from("."))
@@ -176,7 +177,6 @@ fn test_lifecycle(setup_commands: Vec<String>) -> LifecycleOptions {
     LifecycleOptions {
         setup_commands,
         setup_command_timeout_ms: 300_000,
-        devcontainer_phases: Vec::new(),
     }
 }
 
@@ -206,6 +206,7 @@ async fn seed_created_and_starting(
         run_dir:          run_options.run_dir.display().to_string(),
         source_directory: Some(std::env::current_dir().unwrap().display().to_string()),
         workflow_slug:    run_options.workflow_slug.clone(),
+        automation:       None,
         db_prefix:        None,
         provenance:       None,
         manifest_blob:    None,
@@ -268,20 +269,17 @@ async fn execute_test_run_with_options(
             lifecycle: LifecycleOptions {
                 setup_commands:           vec![],
                 setup_command_timeout_ms: 1_000,
-                devcontainer_phases:      vec![],
             },
             run_options,
             workflow_path: None,
             workflow_bundle: None,
             hooks: HookSettings { hooks: vec![] },
             sandbox_env: SandboxEnvSpec {
-                devcontainer_env:   HashMap::new(),
                 toml_env:           HashMap::new(),
                 github_permissions: None,
                 origin_url:         None,
             },
             vault: None,
-            devcontainer: None,
             git: git_options,
             run_control: None,
             registry_override,
@@ -334,20 +332,17 @@ async fn execute_runs_start_to_exit_and_returns_final_context() {
             lifecycle: LifecycleOptions {
                 setup_commands:           vec![],
                 setup_command_timeout_ms: 1_000,
-                devcontainer_phases:      vec![],
             },
             run_options,
             workflow_path: None,
             workflow_bundle: None,
             hooks: HookSettings { hooks: vec![] },
             sandbox_env: SandboxEnvSpec {
-                devcontainer_env:   HashMap::new(),
                 toml_env:           HashMap::new(),
                 github_permissions: None,
                 origin_url:         None,
             },
             vault: None,
-            devcontainer: None,
             git: None,
             run_control: None,
             registry_override: None,
@@ -414,13 +409,11 @@ async fn run_with_lifecycle(
             workflow_bundle: None,
             hooks: HookSettings { hooks: vec![] },
             sandbox_env: SandboxEnvSpec {
-                devcontainer_env:   HashMap::new(),
                 toml_env:           HashMap::new(),
                 github_permissions: None,
                 origin_url:         None,
             },
             vault: None,
-            devcontainer: None,
             git: None,
             run_control: None,
             registry_override: Some(Arc::new(registry)),

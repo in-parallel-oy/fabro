@@ -37,12 +37,26 @@ pub(crate) fn resolve_run_environment(
         .clone()
         .into_environment_override()
         .combine(base.clone());
-    let environment = resolve_environment_layer(&merged, "run.environment", errors);
+    let environment = resolve_environment_fields(&merged, "run.environment", errors);
     validate_provider_capabilities(&environment, "run.environment", errors);
     RunEnvironmentSettings::from_environment(id, environment)
 }
 
-fn resolve_environment_layer(
+pub fn resolve_environment_layer(
+    layer: &EnvironmentLayer,
+    path: &str,
+) -> Result<EnvironmentSettings, Vec<ResolveError>> {
+    let mut errors = Vec::new();
+    let environment = resolve_environment_fields(layer, path, &mut errors);
+    validate_provider_capabilities(&environment, path, &mut errors);
+    if errors.is_empty() {
+        Ok(environment)
+    } else {
+        Err(errors)
+    }
+}
+
+fn resolve_environment_fields(
     layer: &EnvironmentLayer,
     path: &str,
     errors: &mut Vec<ResolveError>,
@@ -66,7 +80,7 @@ fn resolve_environment_layer(
         volumes: resolve_volumes(layer.volumes.as_deref()),
         env: layer.env.clone().into_inner(),
     };
-    validate_daytona_snapshot_name(&environment, path, errors);
+    validate_daytona_image_settings(&environment, path, errors);
     environment
 }
 
@@ -87,7 +101,7 @@ fn resolve_image(layer: Option<&EnvironmentImageLayer>) -> EnvironmentImageSetti
         return EnvironmentImageSettings::default();
     };
     EnvironmentImageSettings {
-        reference:  layer.reference.clone(),
+        docker:     layer.docker.clone(),
         dockerfile: layer.dockerfile.as_ref().map(dockerfile_source),
     }
 }
@@ -180,19 +194,15 @@ fn dockerfile_source(dockerfile: &EnvironmentDockerfileLayer) -> DockerfileSourc
     }
 }
 
-fn validate_daytona_snapshot_name(
+fn validate_daytona_image_settings(
     environment: &EnvironmentSettings,
     path: &str,
     errors: &mut Vec<ResolveError>,
 ) {
-    if environment.provider == EnvironmentProvider::Daytona
-        && environment.image.dockerfile.is_some()
-        && environment.image.reference.is_none()
-    {
+    if environment.provider == EnvironmentProvider::Daytona && environment.image.docker.is_some() {
         errors.push(ResolveError::Invalid {
             path:   format!("{path}.image"),
-            reason: "daytona environments with image.dockerfile must also set image.ref"
-                .to_string(),
+            reason: "daytona environments do not support image.docker; use image.dockerfile for custom snapshots".to_string(),
         });
     }
 }

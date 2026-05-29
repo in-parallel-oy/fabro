@@ -5,7 +5,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-version = "0.245.0-nightly.0"
+version = "0.247.0-nightly.0"
 license = "MIT"
 
 [workspace.dependencies]
@@ -15,6 +15,7 @@ anyhow = "1"
 axum = { version = "0.8" }
 axum-extra = { version = "0.10", features = ["cookie-private", "query"] }
 cookie = { version = "0.18", features = ["percent-encode", "private", "signed", "key-expansion"] }
+croner = "3.0.1"
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
@@ -83,6 +84,7 @@ percent-encoding = "2"
 minijinja = "=2.19.0"
 miette = { version = "7.6", features = ["fancy"] }
 fabro-http = { path = "lib/crates/fabro-http" }
+fabro-environment = { path = "lib/crates/fabro-environment" }
 fabro-options-metadata = { path = "lib/crates/fabro-options-metadata" }
 fabro-redact = { path = "lib/crates/fabro-redact" }
 fabro-static = { path = "lib/crates/fabro-static" }

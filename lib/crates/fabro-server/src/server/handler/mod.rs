@@ -6,6 +6,7 @@ use axum::routing::{get, post};
 use super::{ApiError, AppState, IntoResponse, Response, StatusCode, demo};
 
 mod artifacts;
+mod automations;
 mod billing;
 mod completions;
 pub(in crate::server) mod events;
@@ -14,13 +15,15 @@ mod lifecycle;
 mod models;
 mod pair;
 mod pull_requests;
-mod runs;
+pub(in crate::server) mod runs;
 mod sandbox;
 mod sandboxes;
 mod secrets;
 mod sessions;
 mod steer;
 pub(in crate::server) mod system;
+mod variables;
+mod worker_control;
 
 pub(super) use system::{health, openapi_spec};
 
@@ -116,6 +119,7 @@ pub(super) fn demo_routes() -> Router<Arc<AppState>> {
         .route("/health/diagnostics", post(demo::run_diagnostics))
         .route("/settings", get(demo::get_server_settings))
         .route("/system/info", get(demo::get_system_info))
+        .route("/system/integrations", get(demo::get_system_integrations))
         .route("/system/resources", get(demo::get_system_resources))
         .route("/system/df", get(demo::get_system_disk_usage))
         .route("/system/repair/runs", get(demo::get_system_repair_runs))
@@ -153,6 +157,7 @@ pub(super) fn real_routes() -> Router<Arc<AppState>> {
         .merge(billing::routes())
         .merge(pull_requests::routes())
         .merge(artifacts::routes())
+        .merge(automations::routes())
         .merge(sandbox::routes())
         .merge(sandboxes::routes())
         .merge(lifecycle::routes())
@@ -162,6 +167,8 @@ pub(super) fn real_routes() -> Router<Arc<AppState>> {
         .merge(graph::run_routes())
         .merge(models::routes())
         .merge(secrets::routes())
+        .merge(variables::routes())
+        .merge(worker_control::routes())
         .merge(sessions::routes())
         .merge(system::routes())
         .merge(completions::routes())

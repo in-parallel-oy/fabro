@@ -28,7 +28,10 @@ import type {
   ServerSettings,
   StageContextWindow,
   SystemInfoResponse,
+  SystemIntegrationsResponse,
   SystemResourcesResponse,
+  Variable,
+  VariableListResponse,
   VncPreviewResponse,
   WorkflowDetailResponse,
   WorkflowSettings,
@@ -51,6 +54,7 @@ import {
   secretsApi,
   settingsApi,
   systemApi,
+  variablesApi,
   workflowsApi,
   type PaginatedEnvelope,
 } from "./api-client";
@@ -108,6 +112,14 @@ export function useSystemInfo(refreshInterval?: number) {
     queryKeys.system.info(),
     () => apiData(() => systemApi.getSystemInfo()),
     refreshInterval ? { ...immutableOptions, refreshInterval } : immutableOptions,
+  );
+}
+
+export function useSystemIntegrations() {
+  return useSWR<SystemIntegrationsResponse>(
+    queryKeys.system.integrations(),
+    () => apiData(() => systemApi.getSystemIntegrations()),
+    { refreshInterval: 5_000 },
   );
 }
 
@@ -462,5 +474,19 @@ export function useSecrets() {
   return useSWR<SecretListResponse>(
     queryKeys.secrets.list(),
     () => apiData(() => secretsApi.listSecrets()),
+  );
+}
+
+export function useVariables() {
+  return useSWR<VariableListResponse>(
+    queryKeys.variables.list(),
+    () => apiData(() => variablesApi.listVariables()),
+  );
+}
+
+export function useVariable(name: string | undefined) {
+  return useSWR<Variable | null>(
+    name ? queryKeys.variables.detail(name) : null,
+    () => apiNullableData(() => variablesApi.getVariable(name!)),
   );
 }

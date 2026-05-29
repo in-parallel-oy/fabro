@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type {
+  BoardColumn,
   ListRunsDirectionEnum,
   ListRunsSortEnum,
   PaginatedRunList,
@@ -17,6 +18,7 @@ import { SortHeader } from "./sort-header";
 import type { ToggleableColumn } from "./toggleable-column";
 
 const EMPTY_SELECTION = new Set<string>();
+const EMPTY_STATUS_FILTER: ReadonlySet<BoardColumn> = new Set();
 
 export type RunsListViewProps = {
   data:             PaginatedRunList | undefined;
@@ -33,6 +35,7 @@ export type RunsListViewProps = {
   query:            string;
   repoFilter:       string;
   workflowFilter:   string;
+  statusFilter?:    ReadonlySet<BoardColumn>;
   createdCutoffMs:  number | null;
 };
 
@@ -51,15 +54,18 @@ export function RunsListView({
   query,
   repoFilter,
   workflowFilter,
+  statusFilter = EMPTY_STATUS_FILTER,
   createdCutoffMs,
 }: RunsListViewProps) {
   const show = (col: ToggleableColumn) => !hiddenColumns.has(col);
   const rows: RunWithStatus[] = useMemo(() => {
     const apiRuns = data?.data ?? [];
     const next: RunWithStatus[] = [];
+    const filterStatuses = statusFilter.size > 0;
     for (const run of apiRuns) {
       const item = toRunWithStatus(run);
       if (
+        (!filterStatuses || statusFilter.has(item.status)) &&
         (repoFilter === "all" || item.repo === repoFilter) &&
         (workflowFilter === "all" || item.workflow === workflowFilter) &&
         (createdCutoffMs == null ||
@@ -74,7 +80,7 @@ export function RunsListView({
       }
     }
     return next;
-  }, [data, repoFilter, workflowFilter, createdCutoffMs, query]);
+  }, [data, repoFilter, workflowFilter, statusFilter, createdCutoffMs, query]);
 
   const hasMore = data?.meta.has_more ?? false;
   const total = data?.meta.total ?? null;
@@ -83,7 +89,8 @@ export function RunsListView({
   const apiRunCount = data?.data.length ?? 0;
   const isEmptyServerSide = data !== undefined && apiRunCount === 0 && page === 1;
 
-  const selectionScopeKey = `${page}:${sort}:${direction}:${query}:${repoFilter}:${workflowFilter}:${createdCutoffMs ?? ""}`;
+  const statusScopeKey = [...statusFilter].sort().join(",");
+  const selectionScopeKey = `${page}:${sort}:${direction}:${query}:${repoFilter}:${workflowFilter}:${statusScopeKey}:${createdCutoffMs ?? ""}`;
   const [selection, setSelection] = useState<{
     scopeKey: string;
     ids: Set<string>;
@@ -145,6 +152,11 @@ export function RunsListView({
                   />
                 </th>
                 <SortHeader label="Status" sortKey="status" activeSort={sort} direction={direction} onClick={onSortClick} />
+                {show("created_by") && (
+                  <th scope="col" className="w-8 whitespace-nowrap px-3 py-2.5 font-medium">
+                    By
+                  </th>
+                )}
                 {show("repo") && (
                   <SortHeader label="Repo" sortKey="repo" activeSort={sort} direction={direction} onClick={onSortClick} />
                 )}

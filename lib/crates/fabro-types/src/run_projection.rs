@@ -424,7 +424,8 @@ pub enum McpServerStatus {
 /// `StageProjection::first_event_seq`. Run event seqs always start at 1.
 #[must_use]
 pub fn first_event_seq(seq: u32) -> NonZeroU32 {
-    NonZeroU32::new(seq).expect("event seq starts at 1")
+    NonZeroU32::new(seq)
+        .expect("event sequence numbers are 1-based so seq is always non-zero at this call site")
 }
 
 impl StageProjection {
@@ -696,6 +697,7 @@ mod title_tests {
             graph,
             graph_source: None,
             workflow_slug: None,
+            automation: None,
             source_directory: None,
             labels: HashMap::new(),
             provenance: None,
@@ -765,6 +767,7 @@ mod iter_stages_tests {
                 graph:            Graph::new("test"),
                 graph_source:     None,
                 workflow_slug:    None,
+                automation:       None,
                 source_directory: None,
                 labels:           HashMap::default(),
                 provenance:       None,

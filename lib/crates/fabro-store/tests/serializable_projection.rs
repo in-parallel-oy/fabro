@@ -6,9 +6,9 @@ use fabro_types::graph::Graph;
 use fabro_types::run::RunSpec;
 use fabro_types::{
     BilledModelUsage, BilledTokenCounts, Checkpoint, CheckpointRecord, InterviewQuestionRecord,
-    QuestionType, RunDiff, RunSandbox, RunSandboxRuntime, RunStatus, SandboxProviderKind,
-    StageCompletion, StageModelUsage, StageOutcome, StartRecord, WorkflowSettings, first_event_seq,
-    fixtures,
+    QuestionType, RunDiff, RunSandbox, RunSandboxInstance, RunSandboxPlan, RunSandboxRuntime,
+    RunStatus, SandboxProviderKind, StageCompletion, StageModelUsage, StageOutcome, StartRecord,
+    WorkflowSettings, first_event_seq, fixtures,
 };
 use serde_json::json;
 
@@ -19,6 +19,7 @@ fn sample_run_spec() -> RunSpec {
         graph:            Graph::new("ship"),
         graph_source:     None,
         workflow_slug:    Some("demo".to_string()),
+        automation:       None,
         source_directory: Some("/tmp/project".to_string()),
         labels:           HashMap::from([("team".to_string(), "platform".to_string())]),
         provenance:       None,
@@ -98,11 +99,16 @@ fn serializable_projection_round_trips_and_trims_bulky_node_fields() {
         checkpoint: sample_checkpoint(),
         diff:       RunDiff::default(),
     });
-    projection.sandbox = Some(RunSandbox {
+    let sandbox_plan = RunSandboxPlan {
         provider: SandboxProviderKind::Local,
         image:    None,
         snapshot: None,
-        runtime:  Some(RunSandboxRuntime {
+    };
+    projection.sandbox = Some(RunSandbox::ready(sandbox_plan, RunSandboxInstance {
+        provider: SandboxProviderKind::Local,
+        image:    None,
+        snapshot: None,
+        runtime:  RunSandboxRuntime {
             id:                "sandbox-1".to_string(),
             working_directory: "/tmp/project".to_string(),
             repo_cloned:       None,
@@ -112,8 +118,8 @@ fn serializable_projection_round_trips_and_trims_bulky_node_fields() {
             repos_root:        None,
             primary_repo_path: None,
             primary_repo_link: None,
-        }),
-    });
+        },
+    }));
     projection.pending_interviews = BTreeMap::new();
     let stage = projection.stage_entry(stage_id.node_id(), stage_id.visit(), first_event_seq(2));
     stage.prompt = Some("plan the work".to_string());

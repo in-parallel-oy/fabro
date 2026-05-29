@@ -937,8 +937,8 @@ fn attach_json_errors_without_prompting_for_human_input() {
                 "env": {},
                 "id": "local",
                 "image": {
-                  "dockerfile": null,
-                  "ref": null
+                  "docker": null,
+                  "dockerfile": null
                 },
                 "labels": {},
                 "lifecycle": {
@@ -991,7 +991,7 @@ fn attach_json_errors_without_prompting_for_human_input() {
                   "speed": null
                 },
                 "fallbacks": [],
-                "name": "gpt-5.4",
+                "name": "gpt-5.5",
                 "provider": "openai"
               },
               "notifications": {},

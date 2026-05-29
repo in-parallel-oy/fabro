@@ -301,7 +301,9 @@ fn translate_messages(messages: &[Message]) -> Vec<ChatMessage> {
                 Role::System | Role::Developer => "system",
                 Role::User => "user",
                 Role::Assistant => "assistant",
-                Role::Tool => unreachable!(),
+                Role::Tool => unreachable!(
+                    "Role::Tool is handled in the early-return branch above this match"
+                ),
             };
 
             let mut tool_calls: Vec<ChatToolCall> = Vec::new();
@@ -387,6 +389,31 @@ fn translate_tool_choice(choice: &ToolChoice) -> serde_json::Value {
         ToolChoice::Named { tool_name } => {
             serde_json::json!({"type": "function", "function": {"name": tool_name}})
         }
+    }
+}
+
+fn custom_tool_names(request: &Request) -> Vec<String> {
+    request
+        .tools
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .filter(|tool| tool.is_custom())
+        .map(|tool| tool.name.clone())
+        .collect()
+}
+
+fn parse_tool_arguments(
+    tool_name: &str,
+    raw_arguments: &str,
+    custom_tool_names: &[String],
+) -> serde_json::Value {
+    match serde_json::from_str(raw_arguments) {
+        Ok(arguments) => arguments,
+        Err(_) if custom_tool_names.iter().any(|name| name == tool_name) => {
+            serde_json::Value::String(raw_arguments.to_string())
+        }
+        Err(_) => serde_json::json!({}),
     }
 }
 
@@ -539,9 +566,13 @@ impl ProviderAdapter for Adapter {
             }
         }
         if let Some(tool_calls) = &choice.message.tool_calls {
+            let custom_tool_names = custom_tool_names(request);
             for tc in tool_calls {
-                let arguments = serde_json::from_str(&tc.function.arguments)
-                    .unwrap_or_else(|_| serde_json::json!({}));
+                let arguments = parse_tool_arguments(
+                    &tc.function.name,
+                    &tc.function.arguments,
+                    &custom_tool_names,
+                );
                 let mut tool_call = ToolCall::new(&tc.id, &tc.function.name, arguments);
                 tool_call.raw_arguments = Some(tc.function.arguments.clone());
                 content_parts.push(ContentPart::ToolCall(tool_call));
@@ -616,6 +647,7 @@ impl ProviderAdapter for Adapter {
         let model = request.model.clone();
         let rate_limit = parse_rate_limit_headers(http_resp.headers());
         let stream_read_timeout = self.http.stream_read_timeout;
+        let custom_tool_names = custom_tool_names(request);
 
         let stream = stream::unfold(
             StreamState::new(
@@ -624,6 +656,7 @@ impl ProviderAdapter for Adapter {
                 model,
                 rate_limit,
                 stream_read_timeout,
+                custom_tool_names,
             ),
             |mut state| async move {
                 loop {
@@ -729,6 +762,7 @@ struct StreamState {
     finish_reason:         FinishReason,
     text_started:          bool,
     done:                  bool,
+    custom_tool_names:     Vec<String>,
     /// True after `finish_events()` has been called (guards against
     /// duplicates).
     finished:              bool,
@@ -742,6 +776,7 @@ impl StreamState {
         model: String,
         rate_limit: Option<RateLimitInfo>,
         stream_read_timeout: Option<std::time::Duration>,
+        custom_tool_names: Vec<String>,
     ) -> Self {
         Self {
             line_reader: super::common::LineReader::new(response, stream_read_timeout),
@@ -756,6 +791,7 @@ impl StreamState {
             finish_reason: FinishReason::Stop,
             text_started: false,
             done: false,
+            custom_tool_names,
             finished: false,
             rate_limit,
         }
@@ -908,8 +944,11 @@ impl StreamState {
         }
 
         for accumulated in &self.tool_calls {
-            let arguments = serde_json::from_str(&accumulated.arguments)
-                .unwrap_or_else(|_| serde_json::json!({}));
+            let arguments = parse_tool_arguments(
+                &accumulated.name,
+                &accumulated.arguments,
+                &self.custom_tool_names,
+            );
             let mut tool_call = ToolCall::new(&accumulated.id, &accumulated.name, arguments);
             tool_call.raw_arguments = Some(accumulated.arguments.clone());
 
@@ -1027,6 +1066,7 @@ mod tests {
             "model".into(),
             None,
             Some(std::time::Duration::from_secs(30)),
+            Vec::new(),
         );
 
         // First text chunk should emit TextStart + TextDelta.
@@ -1059,6 +1099,7 @@ mod tests {
             "model".into(),
             None,
             Some(std::time::Duration::from_secs(30)),
+            Vec::new(),
         );
 
         // First tool call chunk (has id and name) -> ToolCallStart.
@@ -1090,6 +1131,7 @@ mod tests {
             "test-model".into(),
             None,
             Some(std::time::Duration::from_secs(30)),
+            Vec::new(),
         );
         state.response_id = "resp-1".into();
         state.response_model = "gpt-4".into();
@@ -1133,6 +1175,7 @@ mod tests {
             "model".into(),
             None,
             Some(std::time::Duration::from_secs(30)),
+            Vec::new(),
         );
         state.response_id = "resp-1".into();
         state.tool_calls.push(AccumulatedToolCall {
@@ -1178,6 +1221,7 @@ mod tests {
             "fallback-model".into(),
             None,
             Some(std::time::Duration::from_secs(30)),
+            Vec::new(),
         );
         // response_model is empty, so finish_events should use the request model.
         let events = state.finish_events();

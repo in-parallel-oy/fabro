@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useParams } from "react-router";
 import { ArrowDownTrayIcon, PaperClipIcon } from "@heroicons/react/24/outline";
 import type { RunArtifactEntry } from "@qltysh/fabro-api-client";
 
 import { EmptyState, ErrorState, LoadingState } from "../components/state";
 import { StageSidebar } from "../components/stage-sidebar";
-import { formatBytes } from "../lib/format";
 import { stageArtifactDownloadUrl } from "../lib/api-client";
+import { formatBytes } from "../lib/format";
 import { useRunArtifacts, useRunStages } from "../lib/queries";
 import { formatStageLabel, mapRunStagesToSidebarStages } from "../lib/stage-sidebar";
 
@@ -178,22 +178,12 @@ function StageGroupCard({ runId, group }: { runId: string; group: StageGroup }) 
 }
 
 function ArtifactRow({ runId, entry }: { runId: string; entry: RunArtifactEntry }) {
-  const [href, setHref] = useState<string>("#");
-
-  useEffect(() => {
-    let active = true;
-    void stageArtifactDownloadUrl(
-      runId,
-      entry.stage_id,
-      entry.relative_path,
-      entry.retry,
-    ).then((url) => {
-      if (active) setHref(url);
-    });
-    return () => {
-      active = false;
-    };
-  }, [entry.relative_path, entry.retry, entry.stage_id, runId]);
+  const href = stageArtifactDownloadUrl(
+    runId,
+    entry.stage_id,
+    entry.relative_path,
+    entry.retry,
+  );
 
   return (
     <li className="flex items-center gap-4 px-4 py-2">

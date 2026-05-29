@@ -9,6 +9,7 @@ use fabro_util::error::SharedError;
 
 use crate::defaults::DEFAULTS_LAYER;
 use crate::load::load_settings_path;
+use crate::parse::{SettingsSource, validate_settings_source};
 use crate::resolve::{
     ResolveError, resolve_cli, resolve_project, resolve_run, resolve_server, resolve_workflow,
 };
@@ -82,14 +83,12 @@ impl ServerSettingsBuilder {
     }
 
     pub fn load_from(path: &Path) -> Result<ServerSettings> {
-        let layer = load_settings_path(path)?;
+        let layer = load_settings_path(path, SettingsSource::ActiveSettings)?;
         Self::from_layer(&layer)
     }
 
     pub fn from_toml(source: &str) -> Result<ServerSettings> {
-        let layer = source
-            .parse::<SettingsLayer>()
-            .map_err(|err| Error::parse("Failed to parse settings file", err))?;
+        let layer = parse_settings_toml(source, SettingsSource::ActiveSettings)?;
         Self::from_layer(&layer)
     }
 
@@ -119,26 +118,22 @@ impl UserSettingsBuilder {
     }
 
     pub fn load_from(path: &Path) -> Result<UserSettings> {
-        let layer = load_settings_path(path)?;
+        let layer = load_settings_path(path, SettingsSource::User)?;
         Self::from_layer(&layer)
     }
 
     pub fn load_from_with_cli_overrides(path: &Path, cli: &CliLayer) -> Result<UserSettings> {
-        let layer = load_settings_path(path)?;
+        let layer = load_settings_path(path, SettingsSource::User)?;
         Self::from_layer_with_cli_overrides(&layer, cli)
     }
 
     pub fn from_toml(source: &str) -> Result<UserSettings> {
-        let layer = source
-            .parse::<SettingsLayer>()
-            .map_err(|err| Error::parse("Failed to parse settings file", err))?;
+        let layer = parse_settings_toml(source, SettingsSource::User)?;
         Self::from_layer(&layer)
     }
 
     pub fn from_toml_with_cli_overrides(source: &str, cli: &CliLayer) -> Result<UserSettings> {
-        let layer = source
-            .parse::<SettingsLayer>()
-            .map_err(|err| Error::parse("Failed to parse settings file", err))?;
+        let layer = parse_settings_toml(source, SettingsSource::User)?;
         Self::from_layer_with_cli_overrides(&layer, cli)
     }
 
@@ -175,15 +170,37 @@ impl RunSettingsBuilder {
         Self::from_layer(&layer)
     }
 
+    pub fn load_default_with_catalog(catalog: MergeMap<EnvironmentLayer>) -> Result<RunNamespace> {
+        let mut layer = load_settings_config(None)?;
+        layer.environments = layer.environments.combine(catalog);
+        Self::from_layer(&layer)
+    }
+
     pub fn load_from(path: &Path) -> Result<RunNamespace> {
-        let layer = load_settings_path(path)?;
+        let layer = load_settings_path(path, SettingsSource::DirectRun)?;
+        Self::from_layer(&layer)
+    }
+
+    pub fn load_from_with_catalog(
+        path: &Path,
+        catalog: MergeMap<EnvironmentLayer>,
+    ) -> Result<RunNamespace> {
+        let mut layer = load_settings_path(path, SettingsSource::DirectRun)?;
+        layer.environments = layer.environments.combine(catalog);
         Self::from_layer(&layer)
     }
 
     pub fn from_toml(source: &str) -> Result<RunNamespace> {
-        let layer = source
-            .parse::<SettingsLayer>()
-            .map_err(|err| Error::parse("Failed to parse settings file", err))?;
+        let layer = parse_settings_toml(source, SettingsSource::DirectRun)?;
+        Self::from_layer(&layer)
+    }
+
+    pub fn from_toml_with_catalog(
+        source: &str,
+        catalog: MergeMap<EnvironmentLayer>,
+    ) -> Result<RunNamespace> {
+        let mut layer = parse_settings_toml(source, SettingsSource::DirectRun)?;
+        layer.environments = layer.environments.combine(catalog);
         Self::from_layer(&layer)
     }
 
@@ -221,7 +238,7 @@ pub fn load_server_runtime_settings(
     server_overrides: Option<ServerLayer>,
 ) -> Result<ServerRuntimeSettings> {
     let layer = match path {
-        Some(path) => load_settings_path(path)?,
+        Some(path) => load_settings_path(path, SettingsSource::ActiveSettings)?,
         None => load_settings_config(None)?,
     };
     resolve_server_runtime_settings(layer, run_overrides, server_overrides)
@@ -229,7 +246,7 @@ pub fn load_server_runtime_settings(
 
 pub fn load_llm_catalog_settings(path: Option<&Path>) -> Result<model_catalog::LlmCatalogSettings> {
     let layer = match path {
-        Some(path) => load_settings_path(path)?,
+        Some(path) => load_settings_path(path, SettingsSource::ActiveSettings)?,
         None => load_settings_config(None)?,
     };
     Ok(llm_catalog_settings_from_layer(&layer))
@@ -241,9 +258,7 @@ pub fn server_runtime_settings_from_toml(
     run_overrides: Option<RunLayer>,
     server_overrides: Option<ServerLayer>,
 ) -> Result<ServerRuntimeSettings> {
-    let layer = source
-        .parse::<SettingsLayer>()
-        .map_err(|err| Error::parse("Failed to parse settings file", err))?;
+    let layer = parse_settings_toml(source, SettingsSource::ActiveSettings)?;
     resolve_server_runtime_settings(layer, run_overrides, server_overrides)
 }
 
@@ -412,6 +427,15 @@ fn cost_rates_to_catalog(rates: &CostRates) -> model_catalog::CostRates {
     }
 }
 
+fn parse_settings_toml(source: &str, kind: SettingsSource) -> Result<SettingsLayer> {
+    let layer = source
+        .parse::<SettingsLayer>()
+        .map_err(|err| Error::parse("Failed to parse settings file", err))?;
+    validate_settings_source(&layer, kind)
+        .map_err(|err| Error::parse("Failed to parse settings file", err))?;
+    Ok(layer)
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct WorkflowSettingsBuilder {
     args:     SettingsLayer,
@@ -428,9 +452,7 @@ impl WorkflowSettingsBuilder {
     }
 
     pub fn from_toml(source: &str) -> Result<WorkflowSettings> {
-        let layer = source
-            .parse::<SettingsLayer>()
-            .map_err(|err| Error::parse("Failed to parse settings file", err))?;
+        let layer = parse_settings_toml(source, SettingsSource::Workflow)?;
         Self::from_layer(&layer)
             .map_err(|errors| Error::resolve("failed to resolve workflow settings", errors.into()))
     }
@@ -456,16 +478,12 @@ impl WorkflowSettingsBuilder {
     }
 
     pub fn workflow_toml(self, source: &str) -> Result<Self> {
-        let layer = source
-            .parse::<SettingsLayer>()
-            .map_err(|err| Error::parse("Failed to parse settings file", err))?;
+        let layer = parse_settings_toml(source, SettingsSource::Workflow)?;
         Ok(self.workflow_layer(layer))
     }
 
     pub fn workflow_toml_with_run_layer(self, source: &str, run: RunLayer) -> Result<Self> {
-        let mut layer = source
-            .parse::<SettingsLayer>()
-            .map_err(|err| Error::parse("Failed to parse settings file", err))?;
+        let mut layer = parse_settings_toml(source, SettingsSource::Workflow)?;
         layer.run = Some(run);
         Ok(self.workflow_layer(layer))
     }
@@ -481,22 +499,18 @@ impl WorkflowSettingsBuilder {
     }
 
     pub fn project_toml(self, source: &str) -> Result<Self> {
-        let layer = source
-            .parse::<SettingsLayer>()
-            .map_err(|err| Error::parse("Failed to parse settings file", err))?;
+        let layer = parse_settings_toml(source, SettingsSource::Project)?;
         Ok(self.project_layer(layer))
     }
 
     pub fn project_toml_with_run_layer(self, source: &str, run: RunLayer) -> Result<Self> {
-        let mut layer = source
-            .parse::<SettingsLayer>()
-            .map_err(|err| Error::parse("Failed to parse settings file", err))?;
+        let mut layer = parse_settings_toml(source, SettingsSource::Project)?;
         layer.run = Some(run);
         Ok(self.project_layer(layer))
     }
 
     pub fn project_file(self, path: &Path) -> Result<Self> {
-        Ok(self.project_layer(load_settings_path(path)?))
+        Ok(self.project_layer(load_settings_path(path, SettingsSource::Project)?))
     }
 
     #[must_use]
@@ -506,14 +520,12 @@ impl WorkflowSettingsBuilder {
     }
 
     pub fn user_toml(self, source: &str) -> Result<Self> {
-        let layer = source
-            .parse::<SettingsLayer>()
-            .map_err(|err| Error::parse("Failed to parse settings file", err))?;
+        let layer = parse_settings_toml(source, SettingsSource::User)?;
         Ok(self.user_layer(layer))
     }
 
     pub fn user_file(self, path: &Path) -> Result<Self> {
-        Ok(self.user_layer(load_settings_path(path)?))
+        Ok(self.user_layer(load_settings_path(path, SettingsSource::User)?))
     }
 
     #[must_use]
@@ -640,14 +652,27 @@ mod tests {
 
     use fabro_types::settings::InterpString;
     use fabro_types::settings::cli::OutputVerbosity;
-    use fabro_types::settings::run::{ApprovalMode, RunMode};
+    use fabro_types::settings::run::{ApprovalMode, EnvironmentProvider, RunMode};
 
     use super::{RunSettingsBuilder, WorkflowSettingsBuilder, server_runtime_settings_from_toml};
-    use crate::{CliLayer, CliOutputLayer, ReplaceMap, RunExecutionLayer, RunLayer, RunModelLayer};
+    use crate::{
+        CliLayer, CliOutputLayer, ReplaceMap, RunExecutionLayer, RunLayer, RunModelLayer,
+        SettingsLayer,
+    };
+
+    fn seeded_environment_catalog() -> crate::MergeMap<crate::EnvironmentLayer> {
+        r#"
+[environments.default]
+provider = "local"
+"#
+        .parse::<SettingsLayer>()
+        .expect("seeded catalog should parse")
+        .environments
+    }
 
     #[test]
-    fn run_settings_builder_resolves_run_namespace() {
-        let settings = RunSettingsBuilder::from_toml(
+    fn run_settings_builder_requires_injected_environment_catalog() {
+        let err = RunSettingsBuilder::from_toml(
             r#"
 _version = 1
 
@@ -659,15 +684,19 @@ type = "stdio"
 command = ["demo-mcp"]
 "#,
         )
-        .expect("run settings should resolve");
+        .expect_err("run settings should not resolve without a server environment catalog");
 
-        assert_eq!(settings.execution.mode, RunMode::DryRun);
-        assert!(settings.agent.mcps.contains_key("demo"));
+        let message = err.to_string();
+        assert!(
+            message.contains("run.environment.id") && message.contains("unknown environment"),
+            "expected missing server environment catalog diagnostic, got: {message}"
+        );
     }
 
     #[test]
     fn workflow_builder_preserves_run_overrides_when_cli_overrides_are_added() {
         let settings = WorkflowSettingsBuilder::new()
+            .server_manifest_defaults(RunLayer::default(), seeded_environment_catalog())
             .run_overrides(RunLayer {
                 metadata: ReplaceMap::from(HashMap::from([("env".to_string(), "cli".to_string())])),
                 model: Some(RunModelLayer {
@@ -716,6 +745,59 @@ command = ["demo-mcp"]
         );
         assert_eq!(settings.run.execution.mode, RunMode::DryRun);
         assert_eq!(settings.run.execution.approval, ApprovalMode::Auto);
+    }
+
+    #[test]
+    fn workflow_environment_catalog_definition_overrides_server_catalog() {
+        let settings = WorkflowSettingsBuilder::new()
+            .server_manifest_defaults(RunLayer::default(), seeded_environment_catalog())
+            .workflow_toml(
+                r#"
+_version = 1
+
+[run.environment]
+id = "default"
+
+[environments.cloud]
+provider = "docker"
+
+[environments.default]
+provider = "local"
+"#,
+            )
+            .expect("workflow environment catalogs should be accepted")
+            .build()
+            .expect("settings should resolve");
+
+        assert_eq!(
+            settings.run.environment.provider,
+            EnvironmentProvider::Local
+        );
+    }
+
+    #[test]
+    fn project_environment_catalog_definition_is_accepted() {
+        let settings = WorkflowSettingsBuilder::new()
+            .server_manifest_defaults(RunLayer::default(), seeded_environment_catalog())
+            .project_toml(
+                r#"
+_version = 1
+
+[run.environment]
+id = "cloud"
+
+[environments.cloud]
+provider = "docker"
+"#,
+            )
+            .expect("project environment catalogs should be accepted")
+            .build()
+            .expect("settings should resolve");
+
+        assert_eq!(
+            settings.run.environment.provider,
+            EnvironmentProvider::Docker
+        );
     }
 
     #[test]

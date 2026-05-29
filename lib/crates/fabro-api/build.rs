@@ -245,21 +245,6 @@ fn main() {
             &[],
         ),
         (
-            "ServerIpAllowlistSettings",
-            "fabro_types::settings::server::ServerIpAllowlistSettings",
-            &[],
-        ),
-        (
-            "ServerIpAllowlistOverrideSettings",
-            "fabro_types::settings::server::ServerIpAllowlistOverrideSettings",
-            &[],
-        ),
-        (
-            "IpAllowEntry",
-            "fabro_types::settings::server::IpAllowEntry",
-            &[],
-        ),
-        (
             "ServerSandboxSettings",
             "fabro_types::settings::server::ServerSandboxSettings",
             &[],
@@ -437,6 +422,22 @@ fn main() {
             &[],
         ),
         ("SecretMetadata", "fabro_types::SecretMetadata", &[]),
+        ("Variable", "fabro_types::Variable", &[]),
+        (
+            "VariableListResponse",
+            "fabro_types::VariableListResponse",
+            &[],
+        ),
+        (
+            "CreateVariableRequest",
+            "fabro_types::CreateVariableRequest",
+            &[],
+        ),
+        (
+            "UpdateVariableRequest",
+            "fabro_types::UpdateVariableRequest",
+            &[],
+        ),
         ("InterviewOption", "fabro_types::InterviewOption", &[]),
         (
             "InterviewQuestionRecord",
@@ -518,6 +519,10 @@ fn main() {
             &[],
         ),
         ("RunSandboxRuntime", "fabro_types::RunSandboxRuntime", &[]),
+        ("RunSandboxKind", "fabro_types::RunSandboxKind", &[]),
+        ("RunSandboxPlan", "fabro_types::RunSandboxPlan", &[]),
+        ("RunSandboxInstance", "fabro_types::RunSandboxInstance", &[]),
+        ("RunSandboxFailure", "fabro_types::RunSandboxFailure", &[]),
         ("PullRequestUser", "fabro_types::PullRequestUser", &[]),
         ("PullRequestRef", "fabro_types::PullRequestRef", &[]),
         (
@@ -533,6 +538,37 @@ fn main() {
         (
             "SandboxProviderKind",
             "fabro_types::SandboxProviderKind",
+            &[],
+        ),
+        (
+            "SystemIntegrationsResponse",
+            "fabro_types::SystemIntegrationsResponse",
+            &[],
+        ),
+        (
+            "SystemIntegrationStatus",
+            "fabro_types::SystemIntegrationStatus",
+            &[],
+        ),
+        (
+            "IntegrationProvider",
+            "fabro_types::IntegrationProvider",
+            &[],
+        ),
+        ("IntegrationStatus", "fabro_types::IntegrationStatus", &[]),
+        (
+            "IntegrationConnectionStatus",
+            "fabro_types::IntegrationConnectionStatus",
+            &[],
+        ),
+        (
+            "IntegrationConnectionKind",
+            "fabro_types::IntegrationConnectionKind",
+            &[],
+        ),
+        (
+            "IntegrationConnectionState",
+            "fabro_types::IntegrationConnectionState",
             &[],
         ),
         ("RunSandbox", "fabro_types::RunSandbox", &[]),
@@ -580,6 +616,25 @@ fn main() {
         ("SandboxResources", "fabro_types::SandboxResources", &[]),
         ("SandboxTimestamps", "fabro_types::SandboxTimestamps", &[]),
         ("AskFabro", "fabro_types::AskFabro", &[]),
+        ("Automation", "fabro_automation::Automation", &[]),
+        ("AutomationRef", "fabro_types::AutomationRef", &[]),
+        ("AutomationTarget", "fabro_automation::AutomationTarget", &[
+        ]),
+        (
+            "AutomationTrigger",
+            "fabro_automation::AutomationTrigger",
+            &[],
+        ),
+        (
+            "CreateAutomationRequest",
+            "fabro_automation::AutomationDraft",
+            &[],
+        ),
+        (
+            "ReplaceAutomationRequest",
+            "fabro_automation::AutomationReplace",
+            &[],
+        ),
         ("SessionId", "fabro_types::SessionId", &[]),
         ("TurnId", "fabro_types::TurnId", &[]),
         ("SessionStatus", "fabro_types::SessionStatus", &[]),

@@ -263,6 +263,7 @@ describe("runs route workspace preferences", () => {
         repo:      "qlty/fabro",
         workflow:  "release",
         created:   "7d",
+        status:    "running,blocked",
         archived:  true,
         sort:      "updated_at",
         direction: "asc",
@@ -273,8 +274,23 @@ describe("runs route workspace preferences", () => {
     );
 
     expect(loadStoredRunsWorkspaceSearchParams(storage).toString()).toBe(
-      "view=list&search=retry+failures&repo=qlty%2Ffabro&workflow=release&created=7d&archived=1&sort=updated_at&direction=asc&size=50&hide=repo%2Cchanges",
+      "view=list&search=retry+failures&repo=qlty%2Ffabro&workflow=release&created=7d&status=running%2Cblocked&archived=1&sort=updated_at&direction=asc&size=50&hide=repo%2Cchanges",
     );
+  });
+
+  test("stored archived in a status string migrates into the standalone archived toggle", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(
+      RUNS_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({ version: 1, view: "list", status: "running,archived" }),
+    );
+
+    const params = loadStoredRunsWorkspaceSearchParams(storage);
+    expect(params.get("view")).toBe("list");
+    // The "archived" token is stripped out of the status filter and flipped
+    // into the separate archived toggle so the two controls don't entangle.
+    expect(params.get("status")).toBe("running");
+    expect(params.get("archived")).toBe("1");
   });
 
   test("persisting preferences omits page and stores canonical values", () => {
@@ -288,6 +304,7 @@ describe("runs route workspace preferences", () => {
         repo:      "all",
         workflow:  "all",
         created:   "1d",
+        status:    new Set<BoardColumn>(["running", "blocked"]),
         archived:  false,
         sort:      "created_at",
         direction: "asc",
@@ -305,6 +322,7 @@ describe("runs route workspace preferences", () => {
       repo:      "all",
       workflow:  "all",
       created:   "1d",
+      status:    "running,blocked",
       archived:  false,
       sort:      "created_at",
       direction: "asc",

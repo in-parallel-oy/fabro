@@ -702,13 +702,11 @@ async fn build_agent_session(
         .sandbox
         .as_ref()
         .ok_or(AskFabroBuildError::NoSandbox)?;
-    if sandbox_record.runtime.is_none() {
-        return Err(AskFabroBuildError::SandboxUnavailable(anyhow::anyhow!(
-            "run sandbox runtime is not ready"
-        )));
-    }
+    let sandbox_instance = sandbox_record.instance().ok_or_else(|| {
+        AskFabroBuildError::SandboxUnavailable(anyhow::anyhow!("run sandbox was not created"))
+    })?;
     let sandbox = reconnect_for_run(
-        sandbox_record,
+        sandbox_instance,
         state.vault_secret(EnvVars::DAYTONA_API_KEY),
         Some(run_id),
     )
@@ -1699,6 +1697,7 @@ mod tests {
             graph,
             graph_source: None,
             workflow_slug: None,
+            automation: None,
             source_directory: None,
             labels: HashMap::default(),
             provenance: None,

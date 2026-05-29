@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use fabro_llm::types::{ContentPart, Message as LlmMessage, Role, TokenCounts};
 use fabro_types::SessionMessage;
 
@@ -41,7 +43,20 @@ impl History {
         if self.turns.len() <= preserve_count {
             return;
         }
-        let mut preserved = self.turns.split_off(self.turns.len() - preserve_count);
+        let preserve_start = self.compact_preserve_start(preserve_count);
+        self.compact_from(preserve_start, summary);
+    }
+
+    #[must_use]
+    pub(crate) fn compact_preserve_start(&self, preserve_count: usize) -> usize {
+        compact_preserve_start(&self.turns, preserve_count)
+    }
+
+    pub(crate) fn compact_from(&mut self, preserve_start: usize, summary: String) {
+        if preserve_start == 0 || preserve_start > self.turns.len() {
+            return;
+        }
+        let mut preserved = self.turns.split_off(preserve_start);
         Self::invalidate_preserved_usage(&mut preserved);
         let discarded = std::mem::take(&mut self.turns);
         let extracted_user_messages =
@@ -165,6 +180,36 @@ fn extract_recent_user_messages(discarded: Vec<Message>, token_budget: usize) ->
         .collect()
 }
 
+fn compact_preserve_start(turns: &[Message], preserve_count: usize) -> usize {
+    let mut start = turns.len().saturating_sub(preserve_count);
+    let mut required_call_ids = HashSet::new();
+    add_tool_result_call_ids(&turns[start..], &mut required_call_ids);
+
+    loop {
+        let Some(call_index) = turns[..start].iter().rposition(|turn| {
+            let Message::Assistant { tool_calls, .. } = turn else {
+                return false;
+            };
+            tool_calls
+                .iter()
+                .any(|tool_call| required_call_ids.contains(tool_call.id.as_str()))
+        }) else {
+            return start;
+        };
+
+        add_tool_result_call_ids(&turns[call_index..start], &mut required_call_ids);
+        start = call_index;
+    }
+}
+
+fn add_tool_result_call_ids<'a>(turns: &'a [Message], call_ids: &mut HashSet<&'a str>) {
+    for turn in turns {
+        if let Message::ToolResults { results, .. } = turn {
+            call_ids.extend(results.iter().map(|result| result.tool_call_id.as_str()));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::SystemTime;
@@ -221,6 +266,85 @@ mod tests {
         assert!(matches!(&turns[6], Message::User { content, .. } if content == "msg 5"));
         assert!(matches!(&turns[7], Message::User { content, .. } if content == "msg 6"));
         assert!(matches!(&turns[8], Message::User { content, .. } if content == "msg 7"));
+    }
+
+    #[test]
+    fn compact_preserves_matching_tool_calls_for_preserved_tool_results() {
+        let mut history = History::default();
+        history.push(Message::User {
+            content:   "old msg".into(),
+            timestamp: SystemTime::now(),
+        });
+        for index in 0..3 {
+            let call_id = format!("call_{index}");
+            history.push(Message::Assistant {
+                content:        String::new(),
+                tool_calls:     vec![ToolCall::new(
+                    &call_id,
+                    "read_file",
+                    serde_json::json!({ "file_path": format!("{index}.txt") }),
+                )],
+                provider_parts: vec![],
+                usage:          Box::new(TokenCounts::default()),
+                response_id:    format!("resp_{index}"),
+                timestamp:      SystemTime::now(),
+            });
+            history.push(Message::ToolResults {
+                results:   vec![ToolResult::success(&call_id, serde_json::json!("ok"))],
+                timestamp: SystemTime::now(),
+            });
+        }
+        history.push(Message::Assistant {
+            content:        String::new(),
+            tool_calls:     vec![ToolCall::new(
+                "call_3",
+                "read_file",
+                serde_json::json!({ "file_path": "3.txt" }),
+            )],
+            provider_parts: vec![],
+            usage:          Box::new(TokenCounts::default()),
+            response_id:    "resp_3".into(),
+            timestamp:      SystemTime::now(),
+        });
+
+        history.compact(6, "Summary".into());
+        let messages = history.convert_to_messages();
+        let mut seen_tool_calls = Vec::new();
+        for message in messages {
+            for part in message.content {
+                match part {
+                    ContentPart::ToolCall(tool_call) => seen_tool_calls.push(tool_call.id),
+                    ContentPart::ToolResult(result) => assert!(
+                        seen_tool_calls.contains(&result.tool_call_id),
+                        "tool result {} should have a matching preserved tool call",
+                        result.tool_call_id
+                    ),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn compact_noops_when_preserved_tool_result_requires_first_turn() {
+        let mut history = History::default();
+        history.push(Message::Assistant {
+            content:        String::new(),
+            tool_calls:     vec![ToolCall::new("call_1", "read_file", serde_json::json!({}))],
+            provider_parts: vec![],
+            usage:          Box::new(TokenCounts::default()),
+            response_id:    "resp_1".into(),
+            timestamp:      SystemTime::now(),
+        });
+        history.push(Message::ToolResults {
+            results:   vec![ToolResult::success("call_1", serde_json::json!("ok"))],
+            timestamp: SystemTime::now(),
+        });
+
+        history.compact(1, "Summary".into());
+
+        assert_eq!(history.turns().len(), 2);
+        assert!(!matches!(history.turns()[0], Message::System { .. }));
     }
 
     #[test]

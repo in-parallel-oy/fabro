@@ -1,4 +1,5 @@
 export const TOGGLEABLE_COLUMNS = [
+  "created_by",
   "repo",
   "workflow",
   "created",
@@ -14,14 +15,15 @@ const TOGGLEABLE_COLUMN_SET = new Set<string>(TOGGLEABLE_COLUMNS);
 export type ToggleableColumn = (typeof TOGGLEABLE_COLUMNS)[number];
 
 export const toggleableColumnLabels: Record<ToggleableColumn, string> = {
-  repo:     "Repo",
-  workflow: "Workflow",
-  created:  "Created",
-  updated:  "Updated",
-  elapsed:  "Elapsed",
-  size:     "Size",
-  changes:  "Changes",
-  pr:       "PR",
+  repo:       "Repo",
+  workflow:   "Workflow",
+  created_by: "Created by",
+  created:    "Created",
+  updated:    "Updated",
+  elapsed:    "Elapsed",
+  size:       "Size",
+  changes:    "Changes",
+  pr:         "PR",
 };
 
 export function parseHiddenColumns(raw: string | null): Set<ToggleableColumn> {

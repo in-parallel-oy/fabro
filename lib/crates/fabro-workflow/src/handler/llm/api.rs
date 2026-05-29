@@ -482,14 +482,20 @@ fn track_file_event(event: &AgentEvent, state: &mut FileTracking) {
 fn file_tracking_snapshot(
     file_tracking: &Arc<Mutex<FileTracking>>,
 ) -> (Vec<String>, Option<String>) {
-    let state = file_tracking.lock().unwrap();
+    let state = file_tracking
+        .lock()
+        .expect("file_tracking mutex is never poisoned: no code panics while holding this lock");
     let mut files: Vec<String> = state.touched.iter().cloned().collect();
     files.sort();
     (files, state.last.clone())
 }
 
 fn last_touched_file(file_tracking: &Arc<Mutex<FileTracking>>) -> Option<String> {
-    file_tracking.lock().unwrap().last.clone()
+    file_tracking
+        .lock()
+        .expect("file_tracking mutex is never poisoned: no code panics while holding this lock")
+        .last
+        .clone()
 }
 
 fn last_assistant_response(session: &Session) -> String {
@@ -540,7 +546,12 @@ fn spawn_event_forwarder(
             emitter.touch();
 
             // Track file changes from tool calls (including sub-agent events)
-            track_file_event(&event.event, &mut file_tracking.lock().unwrap());
+            track_file_event(
+                &event.event,
+                &mut file_tracking.lock().expect(
+                    "file_tracking mutex is never poisoned: no code panics while holding this lock",
+                ),
+            );
 
             // Forward non-streaming agent events to pipeline
             if !event.event.is_streaming_noise()
@@ -888,7 +899,7 @@ impl AgentApiBackend {
         let sessions: Vec<Session> = self
             .sessions
             .lock()
-            .unwrap()
+            .expect("sessions mutex is never poisoned: no code panics while holding this lock")
             .drain()
             .map(|(_, s)| s)
             .collect();
@@ -1152,7 +1163,11 @@ impl CodergenBackend for AgentApiBackend {
             return Err(Error::Cancelled);
         }
         let (mut session, is_reused) = if let Some(ref key) = reuse_key {
-            let existing = self.sessions.lock().unwrap().remove(key);
+            let existing = self
+                .sessions
+                .lock()
+                .expect("sessions mutex is never poisoned: no code panics while holding this lock")
+                .remove(key);
             if let Some(s) = existing {
                 (s, true)
             } else {
@@ -1198,8 +1213,7 @@ impl CodergenBackend for AgentApiBackend {
             Arc::clone(&file_tracking),
         );
 
-        // Record turn count before processing so we only aggregate new usage.
-        let mut turns_before = session.history().turns().len();
+        let mut total_usage = TokenCounts::default();
         let mut inference_duration = Duration::ZERO;
         let mut tool_duration = Duration::ZERO;
 
@@ -1260,6 +1274,9 @@ impl CodergenBackend for AgentApiBackend {
                 let timing = session.last_input_timing();
                 inference_duration = inference_duration.saturating_add(timing.inference);
                 tool_duration = tool_duration.saturating_add(timing.tool);
+                if process_result.is_ok() {
+                    total_usage += session.last_input_usage();
+                }
                 process_result
             }
             Err(err) => Err(err),
@@ -1339,7 +1356,6 @@ impl CodergenBackend for AgentApiBackend {
                         };
                         session = new_session;
                         bridge.replace(cancel_token.clone(), &session);
-                        turns_before = session.history().turns().len();
 
                         // Re-subscribe to forward events + track files from the new session
                         spawn_event_forwarder(
@@ -1394,6 +1410,7 @@ impl CodergenBackend for AgentApiBackend {
                         tool_duration = tool_duration.saturating_add(timing.tool);
                         match process_result {
                             Ok(()) => {
+                                total_usage += session.last_input_usage();
                                 succeeded = true;
                                 break;
                             }
@@ -1464,6 +1481,7 @@ impl CodergenBackend for AgentApiBackend {
                         tool_duration = tool_duration.saturating_add(timing.tool);
                         match repair_result {
                             Ok(()) => {
+                                total_usage += session.last_input_usage();
                                 repair_attempts += 1;
                                 response = last_assistant_response(&session);
                             }
@@ -1490,15 +1508,6 @@ impl CodergenBackend for AgentApiBackend {
             }
         }
 
-        // Aggregate token usage only from new turns (prevents double-counting on
-        // reuse), including any output-schema repair turns.
-        let mut total_usage = TokenCounts::default();
-        for turn in &session.history().turns()[turns_before..] {
-            if let AgentMessage::Assistant { usage, .. } = turn {
-                total_usage += *usage.clone();
-            }
-        }
-
         let billing_controls = self.resolve_effective_request_controls(node)?;
         let stage_usage = billed_model_usage_from_llm(
             self.catalog.as_ref(),
@@ -1521,7 +1530,10 @@ impl CodergenBackend for AgentApiBackend {
         // the cached session is not left wired to this run's cancel token.
         if let Some(key) = reuse_key {
             bridge.abort();
-            self.sessions.lock().unwrap().insert(key, session);
+            self.sessions
+                .lock()
+                .expect("sessions mutex is never poisoned: no code panics while holding this lock")
+                .insert(key, session);
         } else {
             let session_id = session.id().to_string();
             if session.close() {

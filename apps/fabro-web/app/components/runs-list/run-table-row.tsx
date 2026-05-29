@@ -3,9 +3,11 @@ import { Link } from "react-router";
 import { ciConfig, columnStatusDisplay, deriveCiStatus } from "../../data/runs";
 import type { RunWithStatus } from "../../data/runs";
 import { formatRelativeTime } from "../../lib/format";
+import { principalDisplay } from "../../lib/principal-display";
 import { InlineMarkdown } from "../inline-markdown";
 import { PullRequestChip } from "../pull-request-chip";
 import { SizeChip } from "../size-chip";
+import { Tooltip } from "../ui";
 import { RowActionsMenu } from "./row-actions-menu";
 import { SelectionCheckbox } from "./selection-checkbox";
 import type { ToggleableColumn } from "./toggleable-column";
@@ -50,6 +52,18 @@ export function RunTableRow({
           <span className={`font-mono text-xs ${statusDisplay.text}`}>{run.statusLabel}</span>
         </span>
       </td>
+      {show("created_by") && (
+        <td className="relative z-10 w-8 whitespace-nowrap px-3 py-2.5">
+          {run.createdBy && (() => {
+            const display = principalDisplay(run.createdBy);
+            return (
+              <Tooltip label={display.label}>
+                <span aria-label={`Created by ${display.label}`}>{display.glyph}</span>
+              </Tooltip>
+            );
+          })()}
+        </td>
+      )}
       {show("repo") && (
         <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs font-medium text-teal-500">
           {run.repo}

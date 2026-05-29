@@ -95,7 +95,7 @@ Stylesheets support four properties:
 Not every task needs a frontier model:
 
 - **Spec writing, classification, summarization** — use a fast, cheap model (Haiku, Flash Lite)
-- **Code implementation, complex reasoning** — use a capable model (Sonnet, Opus, GPT-5.2)
+- **Code implementation, complex reasoning** — use a capable model (Sonnet, Opus, GPT-5.4)
 - **Cross-critique** — use a _different provider_ so the reviewer brings fresh eyes
 
 Model routing lets you optimize cost and latency without changing the workflow structure. Swap `claude-haiku-4-5` to `gemini-3-flash-preview` in the stylesheet and the workflow behaves the same — just with a different model underneath.

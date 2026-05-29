@@ -229,7 +229,8 @@ pub(crate) async fn list_run_commits_stub(
                 source:         RunCommitsMetaSource::Sandbox,
                 base_sha:       sha_newtype::<RunCommitsMetaBaseSha>(parent),
                 head_sha:       sha_newtype::<RunCommitsMetaHeadSha>(sha),
-                limit:          std::num::NonZeroU64::new(100).expect("literal is non-zero"),
+                limit:          std::num::NonZeroU64::new(100)
+                    .expect("hardcoded literal 100 is non-zero"),
                 total_returned: 1,
                 truncated:      false,
             },
@@ -243,7 +244,9 @@ where
     T: TryFrom<String>,
     <T as TryFrom<String>>::Error: std::fmt::Display,
 {
-    T::try_from(sha.to_string()).unwrap_or_else(|err| panic!("invalid demo SHA `{sha}`: {err}"))
+    T::try_from(sha.to_string()).unwrap_or_else(|err| {
+        panic!("demo SHA `{sha}` is a hardcoded constant and must match the hex pattern: {err}")
+    })
 }
 
 fn short_sha_newtype<T>(sha: &str) -> T
@@ -252,8 +255,11 @@ where
     <T as TryFrom<String>>::Error: std::fmt::Display,
 {
     let short = sha.chars().take(7).collect::<String>();
-    T::try_from(short.clone())
-        .unwrap_or_else(|err| panic!("invalid demo short SHA `{short}`: {err}"))
+    T::try_from(short.clone()).unwrap_or_else(|err| {
+        panic!(
+            "demo short SHA `{short}` is a hardcoded constant and must match the hex pattern: {err}"
+        )
+    })
 }
 
 fn demo_run_files() -> PaginatedRunFileList {
@@ -878,6 +884,48 @@ pub(crate) async fn get_system_info(
         .into_response()
 }
 
+pub(crate) async fn get_system_integrations(
+    _auth: RequiredUser,
+    State(_state): State<Arc<AppState>>,
+) -> Response {
+    (
+        StatusCode::OK,
+        Json(json!({
+            "data": [
+                {
+                    "provider": "github",
+                    "enabled": true,
+                    "configured": true,
+                    "status": "configured",
+                    "missing_credentials": [],
+                    "connection": null,
+                    "metadata": {
+                        "strategy": "app",
+                        "slug": "fabro-demo"
+                    }
+                },
+                {
+                    "provider": "slack",
+                    "enabled": true,
+                    "configured": true,
+                    "status": "connected",
+                    "missing_credentials": [],
+                    "connection": {
+                        "kind": "socket_mode",
+                        "status": "connected",
+                        "last_connected_at": "2026-05-20T15:42:10Z",
+                        "last_error": null
+                    },
+                    "metadata": {
+                        "default_channel": "#fabro-demo"
+                    }
+                }
+            ]
+        })),
+    )
+        .into_response()
+}
+
 pub(crate) async fn get_system_resources(
     _auth: RequiredUser,
     State(_state): State<Arc<AppState>>,
@@ -1128,7 +1176,7 @@ mod runs {
             labels: labels(entries),
             lifecycle: RunLifecycle {
                 status: parse_run_status(status, status_reason)
-                    .unwrap_or_else(|| panic!("invalid demo run status: {status}")),
+                    .unwrap_or_else(|| panic!("demo run status `{status}` is a hardcoded constant and must be a valid RunStatus variant")),
                 approval: None,
                 pending_control,
                 queue_position: None,
@@ -1709,7 +1757,7 @@ mod runs {
         let environment = EnvironmentSettings {
             provider: EnvironmentProvider::Daytona,
             image: EnvironmentImageSettings {
-                reference:  Some("api-server-dev".into()),
+                docker:     Some("api-server-dev".into()),
                 dockerfile: None,
             },
             resources: EnvironmentResourcesSettings {

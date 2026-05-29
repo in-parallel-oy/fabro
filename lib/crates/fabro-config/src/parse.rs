@@ -111,6 +111,32 @@ pub(crate) fn parse_settings(input: &str) -> Result<SettingsLayer, ParseError> {
         .map_err(|e| ParseError::Toml(e.to_string()))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingsSource {
+    ActiveSettings,
+    Project,
+    Workflow,
+    DirectRun,
+    User,
+}
+
+impl SettingsSource {
+    /// `ActiveSettings` is the aggregated server-side settings file. Other
+    /// sources are client-provided leaf configs and must not be rewritten while
+    /// building or preparing a run manifest.
+    #[must_use]
+    pub(crate) fn runs_settings_migrations(self) -> bool {
+        matches!(self, Self::ActiveSettings)
+    }
+}
+
+pub fn validate_settings_source(
+    _layer: &SettingsLayer,
+    _source: SettingsSource,
+) -> Result<(), ParseError> {
+    Ok(())
+}
+
 fn validate_version(raw: &toml::Value) -> Result<(), VersionError> {
     if let Some(table) = raw.as_table() {
         if table.contains_key("version") {

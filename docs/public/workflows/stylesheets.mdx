@@ -85,10 +85,10 @@ For example:
 ```
 *       { model: claude-haiku-4-5; }
 .coding { model: claude-sonnet-4-5; }
-#review { model: gpt-5.2; }
+#review { model: gpt-5.4; }
 ```
 
-A node with `id="review"` and `class="coding"` gets `gpt-5.2` because `#id` (specificity 3) beats `.class` (specificity 2).
+A node with `id="review"` and `class="coding"` gets `gpt-5.4` because `#id` (specificity 3) beats `.class` (specificity 2).
 
 If two rules have the same specificity, the **last one** in the stylesheet wins.
 

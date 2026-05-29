@@ -1,7 +1,40 @@
-import type { ListRunsDirectionEnum, ListRunsSortEnum } from "@qltysh/fabro-api-client";
+import type {
+  BoardColumn,
+  ListRunsDirectionEnum,
+  ListRunsSortEnum,
+} from "@qltysh/fabro-api-client";
 
+import { columnStatuses } from "../../data/runs";
 import { parseHiddenColumns, serializeHiddenColumns } from "./toggleable-column";
 import type { ToggleableColumn } from "./toggleable-column";
+
+// The Status filter is independent of the "Show archived" toggle; archived
+// runs are gated by that toggle and not by selecting "archived" here.
+export const STATUS_FILTER_OPTIONS: readonly BoardColumn[] = columnStatuses.filter(
+  (c) => c !== "archived",
+);
+
+const STATUS_FILTER_OPTION_SET = new Set<string>(STATUS_FILTER_OPTIONS);
+
+export function parseStatusFilter(raw: string): Set<BoardColumn> {
+  if (raw === "") return new Set<BoardColumn>();
+  const filter = new Set<BoardColumn>();
+  for (const value of raw.split(",")) {
+    const trimmed = value.trim();
+    if (STATUS_FILTER_OPTION_SET.has(trimmed)) filter.add(trimmed as BoardColumn);
+  }
+  return filter;
+}
+
+function serializeStatusFilter(filter: Set<BoardColumn>): string {
+  return STATUS_FILTER_OPTIONS.filter((c) => filter.has(c)).join(",");
+}
+
+// Empty set and a full selection both mean "no filter is narrowing results" —
+// canonicalize to empty in the URL so back-button history stays clean.
+function statusFilterIsTrivial(filter: Set<BoardColumn>): boolean {
+  return filter.size === 0 || filter.size === STATUS_FILTER_OPTIONS.length;
+}
 
 // Columns hidden by default in both the main runs list and the Children
 // sub-tab. Users can still reveal them via the column picker.
@@ -105,6 +138,7 @@ const RUNS_WORKSPACE_PARAM_KEYS = [
   "repo",
   "workflow",
   "created",
+  "status",
   "archived",
   "sort",
   "direction",
@@ -121,6 +155,7 @@ export interface RunsWorkspacePreferences {
   repo: string;
   workflow: string;
   created: CreatedFilter;
+  status: Set<BoardColumn>;
   archived: boolean;
   sort: ListRunsSortEnum;
   direction: ListRunsDirectionEnum;
@@ -138,6 +173,7 @@ export function defaultRunsWorkspacePreferences(): RunsWorkspacePreferences {
     repo:      "all",
     workflow:  "all",
     created:   "all",
+    status:    new Set<BoardColumn>(),
     archived:  false,
     sort:      "created_at",
     direction: "desc",
@@ -177,6 +213,11 @@ function normalizeStoredRunsWorkspacePreferences(value: unknown): RunsWorkspaceP
 
   const size = record.size;
 
+  const { status, archived } = normalizeStoredStatusAndArchived(
+    record.status,
+    record.archived,
+  );
+
   return {
     version:   RUNS_PREFERENCES_VERSION,
     view:      parseView(stringValue(record.view)),
@@ -184,13 +225,32 @@ function normalizeStoredRunsWorkspacePreferences(value: unknown): RunsWorkspaceP
     repo:      filterPreference(stringValue(record.repo)),
     workflow:  filterPreference(stringValue(record.workflow)),
     created:   parseCreatedFilter(stringValue(record.created)),
-    archived:  record.archived === true || record.archived === "1",
+    status,
+    archived,
     sort:      parseSort(stringValue(record.sort)),
     direction: parseDirection(stringValue(record.direction)),
     size:      parsePageSize(typeof size === "number" || typeof size === "string" ? String(size) : null),
     hide:      normalizeStoredHide(stringValue(record.hide)),
     page:      1,
   };
+}
+
+// Some intermediate records folded "archived" into the status string. Strip
+// that token out and flip the archived toggle instead, since "Show archived"
+// is owned by its own preference now.
+function normalizeStoredStatusAndArchived(
+  storedStatus: unknown,
+  storedArchived: unknown,
+): { status: Set<BoardColumn>; archived: boolean } {
+  let archived = storedArchived === true || storedArchived === "1";
+  let status = new Set<BoardColumn>();
+  if (typeof storedStatus === "string") {
+    status = parseStatusFilter(storedStatus);
+    if ((storedStatus.split(",").map((s) => s.trim())).includes("archived")) {
+      archived = true;
+    }
+  }
+  return { status, archived };
 }
 
 // Stored records from before the default-hidden-columns change have no `hide`
@@ -205,6 +265,7 @@ function normalizeStoredHide(stored: string | null): string {
 export function runsWorkspacePreferencesFromSearchParams(
   searchParams: URLSearchParams,
 ): RunsWorkspacePreferences {
+  const rawStatus = searchParams.get("status");
   return {
     version:   RUNS_PREFERENCES_VERSION,
     view:      parseView(searchParams.get("view")),
@@ -212,6 +273,7 @@ export function runsWorkspacePreferencesFromSearchParams(
     repo:      filterPreference(searchParams.get("repo")),
     workflow:  filterPreference(searchParams.get("workflow")),
     created:   parseCreatedFilter(searchParams.get("created")),
+    status:    rawStatus == null ? new Set<BoardColumn>() : parseStatusFilter(rawStatus),
     archived:  searchParams.get("archived") === "1",
     sort:      parseSort(searchParams.get("sort")),
     direction: parseDirection(searchParams.get("direction")),
@@ -230,6 +292,9 @@ export function runsWorkspacePreferencesToSearchParams(
   if (preferences.repo !== "all") params.set("repo", preferences.repo);
   if (preferences.workflow !== "all") params.set("workflow", preferences.workflow);
   if (preferences.created !== "all") params.set("created", preferences.created);
+  if (!statusFilterIsTrivial(preferences.status)) {
+    params.set("status", serializeStatusFilter(preferences.status));
+  }
   if (preferences.archived) params.set("archived", "1");
   if (preferences.sort !== "created_at") params.set("sort", preferences.sort);
   if (preferences.direction === "asc") params.set("direction", "asc");
@@ -263,7 +328,7 @@ export function loadStoredRunsWorkspaceSearchParams(
 // `/runs`), fall back to stored preferences so the first render already
 // reflects the user's view/archived/etc. choice instead of route defaults.
 // Without this, users whose only runs are archived briefly see the empty
-// Quick Start landing before a post-commit effect restores `archived=1`.
+// Quick Start landing before a post-commit URL repair restores `archived=1`.
 export function resolveRunsWorkspaceSearchParams(
   urlSearchParams: URLSearchParams,
 ): URLSearchParams {
@@ -278,7 +343,10 @@ export function persistRunsWorkspacePreferences(
 ) {
   if (storage == null) return;
   // `page` is URL-only ephemeral view state; strip it before persisting.
-  const { page: _page, ...storable } = preferences;
+  // `status` is a Set, which doesn't survive JSON.stringify — flatten to the
+  // same comma-separated form we use in the URL.
+  const { page: _page, status, ...rest } = preferences;
+  const storable = { ...rest, status: serializeStatusFilter(status) };
   try {
     storage.setItem(RUNS_PREFERENCES_STORAGE_KEY, JSON.stringify(storable));
   } catch {
@@ -287,7 +355,7 @@ export function persistRunsWorkspacePreferences(
 }
 
 const CHILD_RUNS_LIST_PREFERENCES_VERSION = 1;
-const CHILD_RUNS_LIST_PREFERENCES_STORAGE_KEY = "fabro:run-children-preferences:v1";
+export const CHILD_RUNS_LIST_PREFERENCES_STORAGE_KEY = "fabro:run-children-preferences:v1";
 const CHILD_RUNS_LIST_PARAM_KEYS = [
   "search",
   "created",

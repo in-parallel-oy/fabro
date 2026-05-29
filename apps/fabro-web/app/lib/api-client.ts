@@ -12,13 +12,13 @@ import {
   InstallApi,
   ModelsApi,
   RunInternalsApi,
-  RunInternalsApiAxiosParamCreator,
   RunOutputsApi,
   RunsApi,
   SecretsApi,
   SessionsApi,
   SettingsApi,
   SystemApi,
+  VariablesApi,
   WorkflowsApi,
 } from "@qltysh/fabro-api-client";
 
@@ -126,6 +126,11 @@ export const settingsApi = new SettingsApi(
   generatedAxios,
 );
 export const systemApi = new SystemApi(
+  generatedApiConfiguration,
+  "",
+  generatedAxios,
+);
+export const variablesApi = new VariablesApi(
   generatedApiConfiguration,
   "",
   generatedAxios,
@@ -385,14 +390,17 @@ export function requestSignalOptions(request?: Request): RawAxiosRequestConfig {
   return request?.signal ? { signal: request.signal } : {};
 }
 
-export async function stageArtifactDownloadUrl(
+export function stageArtifactDownloadUrl(
   id: string,
   stageId: string,
   filename: string,
   retry: number,
-): Promise<string> {
-  const requestArgs = await RunInternalsApiAxiosParamCreator(
-    generatedApiConfiguration,
-  ).getStageArtifact(id, stageId, filename, retry);
-  return `${generatedApiConfiguration.basePath ?? ""}${requestArgs.url}`;
+): string {
+  const searchParams = new URLSearchParams({
+    filename,
+    retry: String(retry),
+  });
+  return `${generatedApiConfiguration.basePath ?? ""}/api/v1/runs/${
+    encodeURIComponent(id)
+  }/stages/${encodeURIComponent(stageId)}/artifacts/download?${searchParams}`;
 }

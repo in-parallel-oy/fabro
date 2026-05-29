@@ -21,6 +21,7 @@ use axum_extra::extract::cookie::Key;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use bytes::Bytes;
+use chrono::{DateTime, Utc};
 pub use fabro_api::types::{
     AggregateBilling, AggregateBillingTotals, ApiQuestion, AppendEventResponse, ArtifactEntry,
     ArtifactListResponse, BatchDeleteRunsRequest, BatchDeleteRunsResponse, BatchDeleteRunsResult,
@@ -29,26 +30,30 @@ pub use fabro_api::types::{
     BatchRunLifecycleSummary, BillingByModel, BillingStageRef, CloseRunPullRequestResponse,
     CompletionContentPart, CompletionMessage, CompletionMessageRole, CompletionResponse,
     CompletionToolChoiceMode, CompletionUsage, CreateCompletionRequest,
-    CreateRunPullRequestRequest, CreateSecretRequest, DeleteRunResponse, DeleteRunSandbox,
-    DeleteSecretRequest, DenyRunRequest, DiskUsageResponse, DiskUsageRunRow, DiskUsageSummaryRow,
-    ErrorResponseEntry, ForkRequest, ForkResponse, LinkRunPullRequestRequest,
-    MergeRunPullRequestRequest, MergeRunPullRequestResponse, ModelReference, PaginatedEventList,
-    PaginatedRunList, PaginationMeta, PreflightResponse, PreviewUrlRequest, PreviewUrlResponse,
-    Provider, ProviderList, PruneRunEntry, PruneRunsRequest, PruneRunsResponse,
-    RenderWorkflowGraphDirection, RenderWorkflowGraphRequest, RewindRequest, RewindResponse, Run,
-    RunArtifactEntry, RunArtifactListResponse, RunBilling, RunBillingStage, RunBillingTotals,
-    RunError, RunManifest, RunStage, SandboxDetails, SandboxFileEntry, SandboxFileListResponse,
-    SandboxService, SandboxServiceListResponse, SshAccessRequest, SshAccessResponse, StageHandler,
-    StageState, StartRunRequest, SubmitAnswerRequest, SystemCpuResourceScope, SystemCpuResources,
-    SystemDiskResourceScope, SystemDiskResources, SystemInfoResponse, SystemMemoryResourceScope,
-    SystemMemoryResources, SystemRepairRunIssue, SystemRepairRunsResponse, SystemResourcesResponse,
-    SystemRunCounts, TimelineEntryResponse, VncPreviewResponse, WriteBlobResponse,
+    CreateRunPullRequestRequest, CreateSecretRequest, CreateVariableRequest, DeleteRunResponse,
+    DeleteRunSandbox, DeleteSecretRequest, DenyRunRequest, DiskUsageResponse, DiskUsageRunRow,
+    DiskUsageSummaryRow, ErrorResponseEntry, ForkRequest, ForkResponse, IntegrationConnectionKind,
+    IntegrationConnectionState, IntegrationConnectionStatus, IntegrationProvider,
+    IntegrationStatus, LinkRunPullRequestRequest, MergeRunPullRequestRequest,
+    MergeRunPullRequestResponse, ModelReference, PaginatedEventList, PaginatedRunList,
+    PaginationMeta, PreflightResponse, PreviewUrlRequest, PreviewUrlResponse, Provider,
+    ProviderList, PruneRunEntry, PruneRunsRequest, PruneRunsResponse, RenderWorkflowGraphDirection,
+    RenderWorkflowGraphRequest, RewindRequest, RewindResponse, Run, RunArtifactEntry,
+    RunArtifactListResponse, RunBilling, RunBillingStage, RunBillingTotals, RunError, RunManifest,
+    RunStage, SandboxDetails, SandboxFileEntry, SandboxFileListResponse, SandboxService,
+    SandboxServiceListResponse, SshAccessRequest, SshAccessResponse, StageHandler, StageState,
+    StartRunRequest, SubmitAnswerRequest, SystemCpuResourceScope, SystemCpuResources,
+    SystemDiskResourceScope, SystemDiskResources, SystemInfoResponse, SystemIntegrationStatus,
+    SystemIntegrationsResponse, SystemMemoryResourceScope, SystemMemoryResources,
+    SystemRepairRunIssue, SystemRepairRunsResponse, SystemResourcesResponse, SystemRunCounts,
+    TimelineEntryResponse, UpdateVariableRequest, VariableListResponse, VncPreviewResponse,
+    WriteBlobResponse,
 };
 use fabro_auth::{CredentialSource, VaultCredentialSource, auth_issue_message};
-#[cfg(test)]
-use fabro_config::RunSettingsBuilder;
+use fabro_automation::AutomationStore;
 use fabro_config::daemon::ServerDaemon;
-use fabro_config::{EnvironmentLayer, MergeMap, RunLayer, Storage};
+use fabro_config::{RunLayer, Storage, WorkflowSettingsBuilder};
+use fabro_environment::EnvironmentStore;
 use fabro_interview::{
     Answer, AnswerSubmission, ControlInterviewer, Interviewer, Question, WorkerControlEnvelope,
 };
@@ -99,6 +104,7 @@ use fabro_util::error::{
     SharedError, collect_causes, render_compact_with_causes, render_with_causes,
 };
 use fabro_util::version::FABRO_VERSION;
+use fabro_variable::{Error as VariableError, VariableStore};
 use fabro_vault::{Error as VaultError, SecretType, Vault};
 use fabro_workflow::artifact_upload::ArtifactSink;
 #[cfg(test)]
@@ -116,8 +122,8 @@ use futures_util::future::join_all;
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
 use tokio::fs;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{ChildStderr, ChildStdin, Command};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader};
+use tokio::process::Command;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{
     Mutex as AsyncMutex, Notify, OwnedMutexGuard, RwLock as AsyncRwLock, Semaphore, broadcast,
@@ -133,23 +139,30 @@ use tracing::{Instrument, debug, error, info, warn};
 use ulid::Ulid;
 
 use crate::auth::{self, GithubEndpoints, auth_translation_middleware, demo_routing_middleware};
+use crate::automation_materializer::{
+    AutomationRunMaterializeError, AutomationRunMaterializeInput, AutomationRunMaterialized,
+    AutomationRunMaterializer, ProductionAutomationRunMaterializer,
+};
 use crate::canonical_origin::resolve_canonical_origin;
 use crate::error::ApiError;
 use crate::github_webhooks::{
     WEBHOOK_ROUTE, WEBHOOK_SECRET_ENV, parse_event_metadata, verify_signature,
 };
-use crate::ip_allowlist::{IpAllowlistConfig, ip_allowlist_middleware};
 use crate::jwt_auth::{self, AuthMode};
 use crate::principal_middleware::{
     AuthContextSlot, RequestAuth, RequestAuthContext, RequireRunBlob, RequireRunManagementTarget,
-    RequireRunScoped, RequireRunStageScoped, RequireStageArtifact, RequiredUser,
-    principal_middleware,
+    RequireRunScoped, RequireRunStageScoped, RequireStageArtifact, RequireWorkerRunScoped,
+    RequiredUser, principal_middleware,
 };
 use crate::request_id::{self, RequestId};
 use crate::run_files::{FilesInFlight, new_files_in_flight};
 use crate::server_secrets::{LlmClientResult, ServerSecrets};
-use crate::spawn_env::{apply_render_graph_env, apply_worker_env};
+use crate::spawn_env::apply_render_graph_env;
 use crate::startup::load_startup_vault;
+use crate::worker_control::{LocalWorkerControlBus, WorkerControlBus, WorkerControlBusError};
+use crate::worker_runtime::{
+    LocalWorkerRuntime, WorkerExit, WorkerLaunchSpec, WorkerRef, WorkerRuntime,
+};
 use crate::worker_token::{WorkerScopeSet, WorkerTokenKeys, issue_worker_token_with_scopes};
 use crate::{
     canonical_host, demo, diagnostics, run_manifest, security_headers, static_files, web_auth,
@@ -242,8 +255,7 @@ struct ManagedRun {
     checkpoint: Option<Checkpoint>,
     cancel_tx: Option<oneshot::Sender<()>>,
     cancel_token: Option<CancellationToken>,
-    worker_pid: Option<u32>,
-    worker_pgid: Option<u32>,
+    worker_ref: Option<WorkerRef>,
     run_dir: Option<std::path::PathBuf>,
     execution_mode: RunExecutionMode,
 }
@@ -261,7 +273,6 @@ enum ExecutionResult {
 
 const WORKER_CANCEL_GRACE: Duration = Duration::from_secs(5);
 const TERMINAL_DELETE_WORKER_GRACE: Duration = Duration::from_millis(50);
-const WORKER_CONTROL_QUEUE_CAPACITY: usize = 8;
 const WORKER_CONTROL_ENQUEUE_TIMEOUT: Duration = Duration::from_secs(1);
 /// Per-model billing totals.
 #[derive(Default)]
@@ -283,8 +294,9 @@ pub(crate) type RegistryFactoryOverride =
 
 #[derive(Clone)]
 enum RunAnswerTransport {
-    Subprocess {
-        control_tx: mpsc::Sender<WorkerControlEnvelope>,
+    Worker {
+        run_id: RunId,
+        bus:    Arc<dyn WorkerControlBus>,
     },
     InProcess {
         interviewer:  Arc<ControlInterviewer>,
@@ -306,18 +318,46 @@ enum PairTransportError {
 }
 
 impl RunAnswerTransport {
+    async fn publish_worker_control(
+        run_id: RunId,
+        bus: &Arc<dyn WorkerControlBus>,
+        message: WorkerControlEnvelope,
+    ) -> Result<(), WorkerControlBusError> {
+        timeout(WORKER_CONTROL_ENQUEUE_TIMEOUT, bus.publish(run_id, message))
+            .await
+            .map_err(|_| WorkerControlBusError::PublishTimeout)?
+            .map(|_| ())
+    }
+
+    fn answer_error_from_bus(error: &WorkerControlBusError) -> AnswerTransportError {
+        match error {
+            WorkerControlBusError::PublishTimeout => AnswerTransportError::Timeout,
+            WorkerControlBusError::Closed
+            | WorkerControlBusError::Unavailable
+            | WorkerControlBusError::InvalidCursor { .. } => AnswerTransportError::Closed,
+        }
+    }
+
+    fn pair_error_from_bus(error: &WorkerControlBusError) -> PairTransportError {
+        match error {
+            WorkerControlBusError::PublishTimeout => PairTransportError::Timeout,
+            WorkerControlBusError::Closed
+            | WorkerControlBusError::Unavailable
+            | WorkerControlBusError::InvalidCursor { .. } => PairTransportError::Closed,
+        }
+    }
+
     async fn submit(
         &self,
         qid: &str,
         submission: AnswerSubmission,
     ) -> Result<(), AnswerTransportError> {
         match self {
-            Self::Subprocess { control_tx } => {
+            Self::Worker { run_id, bus } => {
                 let message = WorkerControlEnvelope::interview_answer(qid.to_string(), submission);
-                timeout(WORKER_CONTROL_ENQUEUE_TIMEOUT, control_tx.send(message))
+                Self::publish_worker_control(*run_id, bus, message)
                     .await
-                    .map_err(|_| AnswerTransportError::Timeout)?
-                    .map_err(|_| AnswerTransportError::Closed)
+                    .map_err(|err| Self::answer_error_from_bus(&err))
             }
             Self::InProcess { interviewer, .. } => interviewer
                 .submit(qid, submission)
@@ -328,12 +368,11 @@ impl RunAnswerTransport {
 
     async fn cancel_run(&self) -> Result<(), AnswerTransportError> {
         match self {
-            Self::Subprocess { control_tx } => {
+            Self::Worker { run_id, bus } => {
                 let message = WorkerControlEnvelope::cancel_run();
-                timeout(WORKER_CONTROL_ENQUEUE_TIMEOUT, control_tx.send(message))
+                Self::publish_worker_control(*run_id, bus, message)
                     .await
-                    .map_err(|_| AnswerTransportError::Timeout)?
-                    .map_err(|_| AnswerTransportError::Closed)
+                    .map_err(|err| Self::answer_error_from_bus(&err))
             }
             Self::InProcess { interviewer, .. } => {
                 interviewer.cancel_all().await;
@@ -346,12 +385,11 @@ impl RunAnswerTransport {
     /// in-process steering hub.
     async fn steer(&self, text: String, actor: Principal) -> Result<(), AnswerTransportError> {
         match self {
-            Self::Subprocess { control_tx } => {
+            Self::Worker { run_id, bus } => {
                 let message = WorkerControlEnvelope::steer(text, actor);
-                timeout(WORKER_CONTROL_ENQUEUE_TIMEOUT, control_tx.send(message))
+                Self::publish_worker_control(*run_id, bus, message)
                     .await
-                    .map_err(|_| AnswerTransportError::Timeout)?
-                    .map_err(|_| AnswerTransportError::Closed)
+                    .map_err(|err| Self::answer_error_from_bus(&err))
             }
             Self::InProcess { steering_hub, .. } => {
                 steering_hub.deliver_steer(text, Some(actor));
@@ -362,12 +400,11 @@ impl RunAnswerTransport {
 
     async fn interrupt(&self, actor: Principal) -> Result<(), AnswerTransportError> {
         match self {
-            Self::Subprocess { control_tx } => {
+            Self::Worker { run_id, bus } => {
                 let message = WorkerControlEnvelope::interrupt(actor);
-                timeout(WORKER_CONTROL_ENQUEUE_TIMEOUT, control_tx.send(message))
+                Self::publish_worker_control(*run_id, bus, message)
                     .await
-                    .map_err(|_| AnswerTransportError::Timeout)?
-                    .map_err(|_| AnswerTransportError::Closed)
+                    .map_err(|err| Self::answer_error_from_bus(&err))
             }
             Self::InProcess { steering_hub, .. } => {
                 steering_hub.interrupt(Some(&actor));
@@ -382,12 +419,11 @@ impl RunAnswerTransport {
         actor: Principal,
     ) -> Result<(), AnswerTransportError> {
         match self {
-            Self::Subprocess { control_tx } => {
+            Self::Worker { run_id, bus } => {
                 let message = WorkerControlEnvelope::interrupt_then_steer(text, actor);
-                timeout(WORKER_CONTROL_ENQUEUE_TIMEOUT, control_tx.send(message))
+                Self::publish_worker_control(*run_id, bus, message)
                     .await
-                    .map_err(|_| AnswerTransportError::Timeout)?
-                    .map_err(|_| AnswerTransportError::Closed)
+                    .map_err(|err| Self::answer_error_from_bus(&err))
             }
             Self::InProcess { steering_hub, .. } => {
                 steering_hub.interrupt_then_steer(&text, Some(&actor));
@@ -404,12 +440,14 @@ impl RunAnswerTransport {
         actor: Principal,
     ) -> Result<(), PairTransportError> {
         match self {
-            Self::Subprocess { control_tx } => {
+            Self::Worker {
+                run_id: worker_run_id,
+                bus,
+            } => {
                 let message = WorkerControlEnvelope::start_pair(run_id, pair_id, target, actor);
-                timeout(WORKER_CONTROL_ENQUEUE_TIMEOUT, control_tx.send(message))
+                Self::publish_worker_control(*worker_run_id, bus, message)
                     .await
-                    .map_err(|_| PairTransportError::Timeout)?
-                    .map_err(|_| PairTransportError::Closed)
+                    .map_err(|err| Self::pair_error_from_bus(&err))
             }
             Self::InProcess { steering_hub, .. } => steering_hub
                 .start_pair(run_id, pair_id, target, Some(actor))
@@ -427,7 +465,7 @@ impl RunAnswerTransport {
         actor: Principal,
     ) -> Result<(), PairTransportError> {
         match self {
-            Self::Subprocess { control_tx } => {
+            Self::Worker { run_id, bus } => {
                 let message = WorkerControlEnvelope::pair_message(
                     pair_id,
                     message_id,
@@ -435,10 +473,9 @@ impl RunAnswerTransport {
                     client_message_id.clone(),
                     actor,
                 );
-                timeout(WORKER_CONTROL_ENQUEUE_TIMEOUT, control_tx.send(message))
+                Self::publish_worker_control(*run_id, bus, message)
                     .await
-                    .map_err(|_| PairTransportError::Timeout)?
-                    .map_err(|_| PairTransportError::Closed)
+                    .map_err(|err| Self::pair_error_from_bus(&err))
             }
             Self::InProcess { steering_hub, .. } => steering_hub
                 .send_pair_message(pair_id, message_id, text, client_message_id, Some(actor))
@@ -449,17 +486,40 @@ impl RunAnswerTransport {
 
     async fn end_pair(&self, pair_id: PairId, actor: Principal) -> Result<(), PairTransportError> {
         match self {
-            Self::Subprocess { control_tx } => {
+            Self::Worker { run_id, bus } => {
                 let message = WorkerControlEnvelope::end_pair(pair_id, actor);
-                timeout(WORKER_CONTROL_ENQUEUE_TIMEOUT, control_tx.send(message))
+                Self::publish_worker_control(*run_id, bus, message)
                     .await
-                    .map_err(|_| PairTransportError::Timeout)?
-                    .map_err(|_| PairTransportError::Closed)
+                    .map_err(|err| Self::pair_error_from_bus(&err))
             }
             Self::InProcess { steering_hub, .. } => steering_hub
                 .end_pair(pair_id, Some(actor))
                 .map(|_| ())
                 .map_err(PairTransportError::Control),
+        }
+    }
+
+    async fn pause_run(&self) -> Result<(), AnswerTransportError> {
+        match self {
+            Self::Worker { run_id, bus } => {
+                let message = WorkerControlEnvelope::pause_run();
+                Self::publish_worker_control(*run_id, bus, message)
+                    .await
+                    .map_err(|err| Self::answer_error_from_bus(&err))
+            }
+            Self::InProcess { .. } => Err(AnswerTransportError::Closed),
+        }
+    }
+
+    async fn unpause_run(&self) -> Result<(), AnswerTransportError> {
+        match self {
+            Self::Worker { run_id, bus } => {
+                let message = WorkerControlEnvelope::unpause_run();
+                Self::publish_worker_control(*run_id, bus, message)
+                    .await
+                    .map_err(|err| Self::answer_error_from_bus(&err))
+            }
+            Self::InProcess { .. } => Err(AnswerTransportError::Closed),
         }
     }
 }
@@ -492,6 +552,29 @@ struct SlackLifecyclePullRequest {
     url:    Option<String>,
 }
 
+#[derive(Debug, Clone)]
+struct SlackConnectionRuntimeState {
+    status:            IntegrationConnectionState,
+    last_connected_at: Option<DateTime<Utc>>,
+    last_error:        Option<String>,
+}
+
+impl Default for SlackConnectionRuntimeState {
+    fn default() -> Self {
+        Self {
+            status:            IntegrationConnectionState::Connecting,
+            last_connected_at: None,
+            last_error:        None,
+        }
+    }
+}
+
+fn sanitize_integration_error(error: &str) -> String {
+    const MAX_ERROR_CHARS: usize = 240;
+    let sanitized = error.replace(['\r', '\n'], " ");
+    sanitized.chars().take(MAX_ERROR_CHARS).collect()
+}
+
 #[derive(Clone)]
 struct SlackService {
     client:          SlackClient,
@@ -499,6 +582,7 @@ struct SlackService {
     default_channel: Option<String>,
     posted_messages: Arc<Mutex<HashMap<(RunId, String), SlackPostedMessage>>>,
     thread_registry: Arc<ThreadRegistry>,
+    connection:      Arc<Mutex<SlackConnectionRuntimeState>>,
 }
 
 impl SlackService {
@@ -509,7 +593,46 @@ impl SlackService {
             default_channel,
             posted_messages: Arc::new(Mutex::new(HashMap::new())),
             thread_registry: Arc::new(ThreadRegistry::new()),
+            connection: Arc::new(Mutex::new(SlackConnectionRuntimeState::default())),
         }
+    }
+
+    fn connection_status(&self) -> IntegrationConnectionStatus {
+        let state = self
+            .connection
+            .lock()
+            .expect("slack connection state lock poisoned")
+            .clone();
+        IntegrationConnectionStatus {
+            kind:              IntegrationConnectionKind::SocketMode,
+            status:            state.status,
+            last_connected_at: state.last_connected_at,
+            last_error:        state.last_error,
+        }
+    }
+
+    fn status_sink(&self) -> slack_connection::ConnectionStatusSink {
+        let connection = Arc::clone(&self.connection);
+        Arc::new(move |update| {
+            let mut state = connection
+                .lock()
+                .expect("slack connection state lock poisoned");
+            match update {
+                slack_connection::ConnectionStatusUpdate::Connecting => {
+                    state.status = IntegrationConnectionState::Connecting;
+                    state.last_error = None;
+                }
+                slack_connection::ConnectionStatusUpdate::Connected => {
+                    state.status = IntegrationConnectionState::Connected;
+                    state.last_connected_at = Some(Utc::now());
+                    state.last_error = None;
+                }
+                slack_connection::ConnectionStatusUpdate::Error(error) => {
+                    state.status = IntegrationConnectionState::Error;
+                    state.last_error = Some(sanitize_integration_error(&error));
+                }
+            }
+        })
     }
 
     async fn handle_event(
@@ -938,10 +1061,16 @@ pub struct AppState {
     store: Arc<Database>,
     session_runtimes: SessionRuntimeManager,
     artifact_store: ArtifactStore,
+    automation_store: Arc<AutomationStore>,
+    environment_store: Arc<EnvironmentStore>,
+    #[cfg(any(test, feature = "test-support"))]
+    automation_materializer_override: Option<Arc<dyn AutomationRunMaterializer>>,
     worker_tokens: WorkerTokenKeys,
     started_at: Instant,
     resource_sampler: resource_sampler::ResourceSampler,
     max_concurrent_runs: usize,
+    pub(crate) worker_control_bus: Arc<dyn WorkerControlBus>,
+    pub(crate) worker_runtime: Arc<dyn WorkerRuntime>,
     scheduler_notify: Notify,
     global_event_tx: broadcast::Sender<EventEnvelope>,
     /// Per-run coalescing registry for `GET /runs/{id}/files`. Concurrent
@@ -952,10 +1081,10 @@ pub struct AppState {
     parent_link_lock: AsyncMutex<()>,
 
     pub(crate) vault: Arc<AsyncRwLock<Vault>>,
+    pub(crate) variables: Arc<AsyncRwLock<VariableStore>>,
     pub(super) server_secrets: ServerSecrets,
     pub(crate) llm_source: Arc<dyn CredentialSource>,
     manifest_run_defaults: RwLock<Arc<RunLayer>>,
-    manifest_environment_defaults: RwLock<Arc<MergeMap<EnvironmentLayer>>>,
     manifest_run_settings: RwLock<std::result::Result<RunNamespace, SharedError>>,
     pub(crate) server_settings: RwLock<Arc<ServerSettings>>,
     catalog: RwLock<Arc<Catalog>>,
@@ -973,6 +1102,40 @@ pub struct AppState {
 
 type PullRequestCreateLocks = Arc<Mutex<HashMap<RunId, Arc<AsyncMutex<()>>>>>;
 
+impl AppState {
+    pub(crate) fn automation_store(&self) -> &AutomationStore {
+        &self.automation_store
+    }
+
+    pub(crate) fn environment_store(&self) -> &EnvironmentStore {
+        &self.environment_store
+    }
+
+    pub(crate) async fn materialize_automation_run(
+        &self,
+        input: AutomationRunMaterializeInput,
+    ) -> Result<AutomationRunMaterialized, AutomationRunMaterializeError> {
+        #[cfg(any(test, feature = "test-support"))]
+        if let Some(materializer) = self.automation_materializer_override.as_ref() {
+            return materializer.materialize(input).await;
+        }
+
+        let settings = self.server_settings();
+        let credentials = self
+            .github_credentials(&settings.server.integrations.github)
+            .ok()
+            .flatten();
+        ProductionAutomationRunMaterializer::new(
+            credentials,
+            self.github_api_base_url.clone(),
+            self.http_client.clone(),
+            (*self.environment_store.catalog_layer()).clone(),
+        )
+        .materialize(input)
+        .await
+    }
+}
+
 pub(crate) struct AskFabroReadiness {
     default_model: Option<String>,
 }
@@ -989,7 +1152,7 @@ impl AskFabroReadiness {
         } else if run
             .sandbox
             .as_ref()
-            .and_then(|sandbox| sandbox.runtime.as_ref())
+            .and_then(fabro_types::RunSandbox::instance)
             .is_none()
         {
             Some(AskFabroUnavailableReason::SandboxNotReady)
@@ -1052,29 +1215,34 @@ async fn lock_pull_request_create(
 }
 
 pub(crate) struct AppStateConfig {
-    pub(crate) resolved_settings:         ResolvedAppStateSettings,
+    pub(crate) resolved_settings: ResolvedAppStateSettings,
     pub(crate) registry_factory_override: Option<Box<RegistryFactoryOverride>>,
-    pub(crate) max_concurrent_runs:       usize,
-    pub(crate) store:                     Arc<Database>,
-    pub(crate) artifact_store:            ArtifactStore,
-    pub(crate) vault_path:                PathBuf,
-    pub(crate) preloaded_vault:           Option<Vault>,
-    pub(crate) server_secrets:            ServerSecrets,
-    pub(crate) env_lookup:                EnvLookup,
-    pub(crate) github_api_base_url:       Option<String>,
-    pub(crate) active_config_path:        PathBuf,
-    pub(crate) http_client:               Option<fabro_http::HttpClient>,
+    pub(crate) max_concurrent_runs: usize,
+    pub(crate) store: Arc<Database>,
+    pub(crate) artifact_store: ArtifactStore,
+    pub(crate) vault_path: PathBuf,
+    pub(crate) variables_path: PathBuf,
+    pub(crate) preloaded_vault: Option<Vault>,
+    pub(crate) server_secrets: ServerSecrets,
+    pub(crate) env_lookup: EnvLookup,
+    pub(crate) github_api_base_url: Option<String>,
+    pub(crate) active_config_path: PathBuf,
+    pub(crate) http_client: Option<fabro_http::HttpClient>,
     pub(crate) sandbox_provider_registry: Option<SandboxProviderRegistry>,
-    pub(crate) shutdown:                  CancellationToken,
+    pub(crate) shutdown: CancellationToken,
+    #[cfg(test)]
+    pub(crate) worker_control_bus: Option<Arc<dyn WorkerControlBus>>,
+    #[cfg(test)]
+    pub(crate) worker_runtime: Option<Arc<dyn WorkerRuntime>>,
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) automation_materializer_override: Option<Arc<dyn AutomationRunMaterializer>>,
 }
 
 #[derive(Clone)]
 pub(crate) struct ResolvedAppStateSettings {
-    pub(crate) server_settings:               ServerSettings,
-    pub(crate) manifest_run_defaults:         RunLayer,
-    pub(crate) manifest_environment_defaults: MergeMap<EnvironmentLayer>,
-    pub(crate) manifest_run_settings:         std::result::Result<RunNamespace, SharedError>,
-    pub(crate) llm_catalog_settings:          LlmCatalogSettings,
+    pub(crate) server_settings:       ServerSettings,
+    pub(crate) manifest_run_defaults: RunLayer,
+    pub(crate) llm_catalog_settings:  LlmCatalogSettings,
 }
 
 fn accumulate_billing_rollup(
@@ -1120,15 +1288,6 @@ impl AppState {
                 .manifest_run_defaults
                 .read()
                 .expect("manifest run defaults lock poisoned"),
-        )
-    }
-
-    pub(crate) fn manifest_environment_defaults(&self) -> Arc<MergeMap<EnvironmentLayer>> {
-        Arc::clone(
-            &self
-                .manifest_environment_defaults
-                .read()
-                .expect("manifest environment defaults lock poisoned"),
         )
     }
 
@@ -1234,30 +1393,6 @@ impl AppState {
             .try_read()
             .ok()
             .and_then(|vault| vault.get(name).map(str::to_string))
-    }
-
-    /// Snapshot every vault entry as `(name, value)` pairs. Used by the
-    /// run-worker spawn path to forward operator-set secrets through to
-    /// the worker's process env, so `{{ env.X }}` in project.toml
-    /// `[environments.default.env]` can resolve against any
-    /// `fabro secret set X` value without each name being listed in
-    /// `WORKER_ENV_ALLOWLIST`. Falls back to an empty vec if the vault
-    /// lock is contended — worker startup is best-effort here, the
-    /// run will fail loudly downstream if a referenced secret is
-    /// missing.
-    pub(crate) fn vault_entries(&self) -> Vec<(String, String)> {
-        let Ok(vault) = self.vault.try_read() else {
-            return Vec::new();
-        };
-        vault
-            .list()
-            .into_iter()
-            .filter_map(|meta| {
-                vault
-                    .get(&meta.name)
-                    .map(|value| (meta.name, value.to_string()))
-            })
-            .collect()
     }
 
     pub(crate) fn config_env_lookup(&self, name: &str) -> Option<String> {
@@ -1398,13 +1533,14 @@ impl AppState {
         let ResolvedAppStateSettings {
             server_settings,
             manifest_run_defaults,
-            manifest_environment_defaults,
-            manifest_run_settings,
             llm_catalog_settings,
         } = resolved_settings;
         let server_settings = Arc::new(server_settings);
         let manifest_run_defaults = Arc::new(manifest_run_defaults);
-        let manifest_environment_defaults = Arc::new(manifest_environment_defaults);
+        let manifest_run_settings = resolve_manifest_run_settings_with_catalog(
+            manifest_run_defaults.as_ref(),
+            &self.environment_store,
+        );
         let catalog = Arc::new(
             Catalog::from_builtin_with_overrides(&llm_catalog_settings)
                 .context("building LLM model catalog")?,
@@ -1416,10 +1552,6 @@ impl AppState {
             .manifest_run_defaults
             .write()
             .expect("manifest run defaults lock poisoned") = manifest_run_defaults;
-        *self
-            .manifest_environment_defaults
-            .write()
-            .expect("manifest environment defaults lock poisoned") = manifest_environment_defaults;
         *self
             .manifest_run_settings
             .write()
@@ -1517,11 +1649,12 @@ fn start_optional_slack_service(state: &Arc<AppState>) {
                     service.submit_answer(state, submission).await;
                 });
             });
-        slack_connection::run(
+        slack_connection::run_with_status(
             &service.client,
             &service.app_token,
             &service.thread_registry,
             on_submit,
+            service.status_sink(),
         )
         .await;
     });
@@ -1533,35 +1666,28 @@ fn start_optional_slack_service(state: &Arc<AppState>) {
     reason = "Public router helper keeps the existing ergonomic API and forwards by reference."
 )]
 pub fn build_router(state: Arc<AppState>, auth_mode: AuthMode) -> Router {
-    build_router_with_options(
-        state,
-        &auth_mode,
-        Arc::new(IpAllowlistConfig::default()),
-        RouterOptions::default(),
-    )
+    build_router_with_options(state, &auth_mode, RouterOptions::default())
 }
 
 #[derive(Clone, Debug)]
 pub struct RouterOptions {
-    pub web_enabled:                 bool,
-    pub static_asset_root:           Option<PathBuf>,
-    pub github_endpoints:            Option<Arc<GithubEndpoints>>,
-    pub github_webhook_ip_allowlist: Option<Arc<IpAllowlistConfig>>,
+    pub web_enabled:       bool,
+    pub static_asset_root: Option<PathBuf>,
+    pub github_endpoints:  Option<Arc<GithubEndpoints>>,
     /// Set when serving with the `--watch-web` dev flag. The static-file
     /// handler then refuses to fall back to the embedded SPA snapshot and
     /// returns a 503 "build in progress" page on miss, so developers see
     /// their edits or a clear signal — never stale embedded bytes.
-    pub watch_web:                   bool,
+    pub watch_web:         bool,
 }
 
 impl Default for RouterOptions {
     fn default() -> Self {
         Self {
-            web_enabled:                 true,
-            static_asset_root:           None,
-            github_endpoints:            None,
-            github_webhook_ip_allowlist: None,
-            watch_web:                   false,
+            web_enabled:       true,
+            static_asset_root: None,
+            github_endpoints:  None,
+            watch_web:         false,
         }
     }
 }
@@ -1574,20 +1700,19 @@ fn removed_web_route(path: &str) -> bool {
 pub fn build_router_with_options(
     state: Arc<AppState>,
     auth_mode: &AuthMode,
-    ip_allowlist_config: Arc<IpAllowlistConfig>,
     options: RouterOptions,
 ) -> Router {
     start_optional_slack_service(&state);
-    let web_enabled = options.web_enabled;
-    let static_asset_root = options.static_asset_root.clone();
-    let watch_web = options.watch_web;
-    let webhook_ip_allowlist = options.github_webhook_ip_allowlist;
+    let RouterOptions {
+        web_enabled,
+        static_asset_root,
+        github_endpoints,
+        watch_web,
+    } = options;
     let translation_state = Arc::clone(&state);
     let state_for_canonical_host = Arc::clone(&state);
-    let github_endpoints = options
-        .github_endpoints
-        .clone()
-        .unwrap_or_else(|| Arc::new(GithubEndpoints::production_defaults()));
+    let github_endpoints =
+        github_endpoints.unwrap_or_else(|| Arc::new(GithubEndpoints::production_defaults()));
     let webhook_secret = state.vault_secret(WEBHOOK_SECRET_ENV);
     let principal_layer = middleware::from_fn_with_state(Arc::clone(&state), principal_middleware);
     let api_common = if web_enabled {
@@ -1670,10 +1795,6 @@ pub fn build_router_with_options(
         }));
 
     app_router = app_router.layer(middleware::from_fn_with_state(
-        Arc::clone(&ip_allowlist_config),
-        ip_allowlist_middleware,
-    ));
-    app_router = app_router.layer(middleware::from_fn_with_state(
         translation_state,
         auth_translation_middleware,
     ));
@@ -1682,9 +1803,8 @@ pub fn build_router_with_options(
 
     let mut router = app_router;
     if let Some(secret) = webhook_secret {
-        let allowlist = webhook_ip_allowlist.unwrap_or(ip_allowlist_config);
         let secret: Arc<[u8]> = Arc::from(secret.into_bytes().into_boxed_slice());
-        router = github_webhook_routes(secret, allowlist).merge(router);
+        router = github_webhook_routes(secret).merge(router);
     }
 
     router
@@ -1793,14 +1913,10 @@ async fn http_log_middleware(mut req: axum_extract::Request, next: Next) -> Resp
     response
 }
 
-fn github_webhook_routes(secret: Arc<[u8]>, ip_allowlist_config: Arc<IpAllowlistConfig>) -> Router {
+fn github_webhook_routes(secret: Arc<[u8]>) -> Router {
     Router::new()
         .route(WEBHOOK_ROUTE, post(github_webhook))
         .with_state(secret)
-        .layer(middleware::from_fn_with_state(
-            ip_allowlist_config,
-            ip_allowlist_middleware,
-        ))
 }
 
 async fn github_webhook(
@@ -2023,12 +2139,18 @@ fn build_prune_plan(
     })
 }
 
-#[cfg(test)]
-fn resolve_manifest_run_settings(
+fn resolve_manifest_run_settings_with_catalog(
     manifest_run_defaults: &RunLayer,
+    environment_store: &EnvironmentStore,
 ) -> std::result::Result<RunNamespace, SharedError> {
-    RunSettingsBuilder::from_run_layer(manifest_run_defaults)
-        .map_err(|err| SharedError::new(anyhow::Error::new(err)))
+    WorkflowSettingsBuilder::new()
+        .server_manifest_defaults(
+            manifest_run_defaults.clone(),
+            (*environment_store.catalog_layer()).clone(),
+        )
+        .build()
+        .map(|settings| settings.run)
+        .map_err(|err| SharedError::new(anyhow::Error::msg(err.to_string())))
 }
 
 fn system_sandbox_provider(
@@ -2115,6 +2237,20 @@ fn build_sandbox_provider_registry(
     SandboxProviderRegistry::new(providers)
 }
 
+fn automation_dir_for_active_config(active_config_path: &std::path::Path) -> PathBuf {
+    active_config_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join("automations")
+}
+
+fn environment_dir_for_active_config(active_config_path: &std::path::Path) -> PathBuf {
+    active_config_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join("environments")
+}
+
 pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppState>> {
     let AppStateConfig {
         resolved_settings,
@@ -2123,6 +2259,7 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
         store,
         artifact_store,
         vault_path,
+        variables_path,
         preloaded_vault,
         server_secrets,
         env_lookup,
@@ -2131,8 +2268,28 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
         http_client,
         sandbox_provider_registry,
         shutdown,
+        #[cfg(test)]
+        worker_control_bus,
+        #[cfg(test)]
+        worker_runtime,
+        #[cfg(any(test, feature = "test-support"))]
+        automation_materializer_override,
     } = config;
 
+    let automation_dir = automation_dir_for_active_config(&active_config_path);
+    let automation_store = Arc::new(
+        AutomationStore::load(automation_dir)
+            .map_err(anyhow::Error::new)
+            .context("load automations")?,
+    );
+    let environment_dir = environment_dir_for_active_config(&active_config_path);
+    let environment_store = Arc::new(
+        EnvironmentStore::load_or_seed(environment_dir)
+            .map_err(anyhow::Error::new)
+            .context("load environments")?,
+    );
+    let variables = VariableStore::load(variables_path).context("load variables")?;
+    let variables = Arc::new(AsyncRwLock::new(variables));
     let vault = match preloaded_vault {
         Some(vault) => vault,
         None => load_startup_vault(&vault_path)?,
@@ -2146,9 +2303,10 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
     let (global_event_tx, _) = broadcast::channel(4096);
     let current_server_settings = Arc::new(resolved_settings.server_settings);
     let current_manifest_run_defaults = Arc::new(resolved_settings.manifest_run_defaults);
-    let current_manifest_environment_defaults =
-        Arc::new(resolved_settings.manifest_environment_defaults);
-    let current_manifest_run_settings = resolved_settings.manifest_run_settings;
+    let current_manifest_run_settings = resolve_manifest_run_settings_with_catalog(
+        current_manifest_run_defaults.as_ref(),
+        &environment_store,
+    );
     let current_catalog = Arc::new(
         Catalog::from_builtin_with_overrides(&resolved_settings.llm_catalog_settings)
             .context("building LLM model catalog")?,
@@ -2162,67 +2320,96 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
         )
     });
     let slack_service = {
-        let default_channel = current_server_settings
-            .server
-            .integrations
-            .slack
-            .default_channel
-            .as_ref()
-            .map(|value| {
-                value
-                    .resolve(process_env_var)
-                    .map(|resolved| resolved.value)
-                    .map_err(anyhow::Error::from)
-            })
-            .transpose()?;
-        let vault_guard = vault.try_read().ok();
-        match resolve_slack_credentials_status_with_lookup(|name| {
-            vault_guard
+        let slack_settings = &current_server_settings.server.integrations.slack;
+        if slack_settings.enabled {
+            let default_channel = slack_settings
+                .default_channel
                 .as_ref()
-                .and_then(|vault| vault.get(name).map(str::to_string))
-        }) {
-            SlackCredentialResolution::Configured(credentials) => {
-                info!(
-                    default_channel_configured = default_channel.is_some(),
-                    "Slack integration enabled"
-                );
-                Some(Arc::new(SlackService::new(
-                    credentials.bot_token,
-                    credentials.app_token,
-                    default_channel,
-                )))
+                .map(|value| {
+                    value
+                        .resolve(process_env_var)
+                        .map(|resolved| resolved.value)
+                        .map_err(anyhow::Error::from)
+                })
+                .transpose()?;
+            let vault_guard = vault.try_read().ok();
+            match resolve_slack_credentials_status_with_lookup(|name| {
+                vault_guard
+                    .as_ref()
+                    .and_then(|vault| vault.get(name).map(str::to_string))
+            }) {
+                SlackCredentialResolution::Configured(credentials) => {
+                    info!(
+                        default_channel_configured = default_channel.is_some(),
+                        "Slack integration enabled"
+                    );
+                    Some(Arc::new(SlackService::new(
+                        credentials.bot_token,
+                        credentials.app_token,
+                        default_channel,
+                    )))
+                }
+                SlackCredentialResolution::Missing { env_vars } => {
+                    info!(
+                        missing_env_vars = %env_vars.join(","),
+                        "Slack integration disabled; missing credentials"
+                    );
+                    None
+                }
             }
-            SlackCredentialResolution::Missing { env_vars } => {
-                info!(
-                    missing_env_vars = %env_vars.join(","),
-                    "Slack integration disabled; missing credentials"
-                );
-                None
-            }
+        } else {
+            info!("Slack integration disabled by server configuration");
+            None
         }
     };
     let worker_tokens = worker_token_keys_from_server_secrets(&server_secrets)?;
     let github_api_base_url = github_api_base_url.unwrap_or_else(fabro_github::github_api_base_url);
+    let worker_control_bus: Arc<dyn WorkerControlBus> = {
+        #[cfg(test)]
+        {
+            worker_control_bus.unwrap_or_else(|| Arc::new(LocalWorkerControlBus::new()))
+        }
+        #[cfg(not(test))]
+        {
+            Arc::new(LocalWorkerControlBus::new())
+        }
+    };
+    let worker_runtime: Arc<dyn WorkerRuntime> = {
+        #[cfg(test)]
+        {
+            worker_runtime.unwrap_or_else(|| Arc::new(LocalWorkerRuntime::new()))
+        }
+        #[cfg(not(test))]
+        {
+            Arc::new(LocalWorkerRuntime::new())
+        }
+    };
     Ok(Arc::new(AppState {
         runs: Mutex::new(HashMap::new()),
         aggregate_billing: Mutex::new(BillingAccumulator::default()),
         store,
         session_runtimes: SessionRuntimeManager::new(),
         artifact_store,
+        automation_store,
+        environment_store,
+        #[cfg(any(test, feature = "test-support"))]
+        automation_materializer_override,
         worker_tokens,
         started_at: Instant::now(),
         resource_sampler: resource_sampler::ResourceSampler::new(),
         max_concurrent_runs,
+        worker_control_bus,
+        worker_runtime,
         scheduler_notify: Notify::new(),
         global_event_tx,
         files_in_flight: new_files_in_flight(),
         pull_request_create_locks: Arc::new(Mutex::new(HashMap::new())),
         parent_link_lock: AsyncMutex::new(()),
         vault,
+        variables,
         server_secrets,
         llm_source,
         manifest_run_defaults: RwLock::new(current_manifest_run_defaults),
-        manifest_environment_defaults: RwLock::new(current_manifest_environment_defaults),
         manifest_run_settings: RwLock::new(current_manifest_run_settings),
         server_settings: RwLock::new(current_server_settings),
         catalog: RwLock::new(current_catalog),
@@ -2290,7 +2477,7 @@ async fn delete_run_internal(
                 let _ = cancel_tx.send(());
             }
         }
-        // Terminal runs can still carry a stale worker PID briefly after their
+        // Terminal runs can still carry a stale worker ref briefly after their
         // completion events land, so avoid paying the full cancellation grace.
         let delete_grace = if should_signal_cancel && managed_run.status.requires_force_to_delete()
         {
@@ -2299,8 +2486,8 @@ async fn delete_run_internal(
             TERMINAL_DELETE_WORKER_GRACE
         };
         terminate_worker_for_deletion(
-            managed_run.worker_pid,
-            managed_run.worker_pgid,
+            &state.worker_runtime,
+            managed_run.worker_ref.clone(),
             delete_grace,
         )
         .await;
@@ -2384,12 +2571,15 @@ async fn delete_run_sandbox_resource(
         .environment
         .lifecycle
         .preserve;
-    let Some(record) = projection.sandbox else {
+    let Some(record) = projection
+        .sandbox
+        .as_ref()
+        .and_then(fabro_types::RunSandbox::instance)
+        .cloned()
+    else {
         return Ok(SandboxDeleteOutcome::Cleaned);
     };
-    let Some(runtime) = record.runtime.as_ref() else {
-        return Ok(SandboxDeleteOutcome::Cleaned);
-    };
+    let runtime = &record.runtime;
     if preserve {
         return Ok(SandboxDeleteOutcome::Preserved(DeleteRunResponse {
             deleted:           true,
@@ -2478,47 +2668,26 @@ fn active_run_delete_message(run_id: RunId, status: impl std::fmt::Display) -> S
 }
 
 async fn terminate_worker_for_deletion(
-    worker_pid: Option<u32>,
-    worker_pgid: Option<u32>,
+    worker_runtime: &Arc<dyn WorkerRuntime>,
+    worker_ref: Option<WorkerRef>,
     grace: Duration,
 ) {
-    #[cfg(unix)]
-    if let Some(process_group_id) = worker_pgid.or(worker_pid) {
-        fabro_proc::sigterm_process_group(process_group_id);
+    let Some(worker_ref) = worker_ref else {
+        return;
+    };
 
-        let deadline = Instant::now() + grace;
-        while Instant::now() < deadline && fabro_proc::process_group_alive(process_group_id) {
-            sleep(Duration::from_millis(50)).await;
-        }
+    worker_runtime.request_stop(&worker_ref).await;
 
-        if fabro_proc::process_group_alive(process_group_id) {
-            fabro_proc::sigkill_process_group(process_group_id);
-
-            let kill_deadline = Instant::now() + Duration::from_secs(1);
-            while Instant::now() < kill_deadline
-                && fabro_proc::process_group_alive(process_group_id)
-            {
-                sleep(Duration::from_millis(50)).await;
-            }
-        }
+    let deadline = Instant::now() + grace;
+    while Instant::now() < deadline && worker_runtime.is_alive(&worker_ref).await {
+        sleep(Duration::from_millis(50)).await;
     }
 
-    #[cfg(not(unix))]
-    if let Some(worker_pid) = worker_pid {
-        fabro_proc::sigterm(worker_pid);
-
-        let deadline = Instant::now() + grace;
-        while Instant::now() < deadline && fabro_proc::process_running(worker_pid) {
+    if worker_runtime.is_alive(&worker_ref).await {
+        worker_runtime.force_stop(&worker_ref).await;
+        let kill_deadline = Instant::now() + Duration::from_secs(1);
+        while Instant::now() < kill_deadline && worker_runtime.is_alive(&worker_ref).await {
             sleep(Duration::from_millis(50)).await;
-        }
-
-        if fabro_proc::process_running(worker_pid) {
-            fabro_proc::sigkill(worker_pid);
-
-            let kill_deadline = Instant::now() + Duration::from_secs(1);
-            while Instant::now() < kill_deadline && fabro_proc::process_running(worker_pid) {
-                sleep(Duration::from_millis(50)).await;
-            }
         }
     }
 }
@@ -2653,8 +2822,14 @@ fn clear_live_run_state(run: &mut ManagedRun) {
     run.event_tx = None;
     run.cancel_tx = None;
     run.cancel_token = None;
-    run.worker_pid = None;
-    run.worker_pgid = None;
+    run.worker_ref = None;
+}
+
+fn cleanup_worker_control_bus_for_run(state: &AppState, run_id: RunId) {
+    let bus = Arc::clone(&state.worker_control_bus);
+    tokio::spawn(async move {
+        bus.cleanup_run(run_id).await;
+    });
 }
 
 fn reconcile_live_interview_state_for_event(run: &mut ManagedRun, event: &RunEvent) {
@@ -2701,10 +2876,10 @@ fn release_run_answer_claim(state: &AppState, run_id: RunId, qid: &str) {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct LiveWorkerProcess {
-    run_id:           RunId,
-    process_group_id: u32,
+    run_id:     RunId,
+    worker_ref: WorkerRef,
 }
 
 fn failure_for_incomplete_run(
@@ -2772,11 +2947,11 @@ fn live_worker_processes(state: &AppState) -> Vec<LiveWorkerProcess> {
     runs.iter()
         .filter_map(|(run_id, managed_run)| {
             managed_run
-                .worker_pgid
-                .or(managed_run.worker_pid)
-                .map(|process_group_id| LiveWorkerProcess {
+                .worker_ref
+                .clone()
+                .map(|worker_ref| LiveWorkerProcess {
                     run_id: *run_id,
-                    process_group_id,
+                    worker_ref,
                 })
         })
         .collect()
@@ -2829,47 +3004,62 @@ async fn shutdown_active_workers_with_grace(
     state.begin_shutdown();
     let workers = live_worker_processes(state.as_ref());
 
-    #[cfg(unix)]
-    {
-        let process_groups = workers
+    join_all(
+        workers
             .iter()
-            .map(|worker| worker.process_group_id)
-            .collect::<HashSet<_>>();
+            .map(|worker| state.worker_runtime.request_stop(&worker.worker_ref)),
+    )
+    .await;
 
-        for process_group_id in &process_groups {
-            fabro_proc::sigterm_process_group(*process_group_id);
-        }
+    let survivors = poll_until_dead(state.as_ref(), &workers, grace, poll_interval).await;
 
-        let deadline = Instant::now() + grace;
-        while Instant::now() < deadline
-            && process_groups
+    if !survivors.is_empty() {
+        join_all(
+            survivors
                 .iter()
-                .any(|process_group_id| fabro_proc::process_group_alive(*process_group_id))
+                .map(|worker_ref| state.worker_runtime.force_stop(worker_ref)),
+        )
+        .await;
+        // Wait for the kernel to reap the killed workers so callers can
+        // assume the processes are actually gone when shutdown returns.
+        let kill_deadline = Instant::now() + Duration::from_secs(1);
+        while Instant::now() < kill_deadline
+            && !alive_refs(state.as_ref(), &survivors).await.is_empty()
         {
             sleep(poll_interval).await;
-        }
-
-        let survivors = process_groups
-            .into_iter()
-            .filter(|process_group_id| fabro_proc::process_group_alive(*process_group_id))
-            .collect::<Vec<_>>();
-        for process_group_id in &survivors {
-            fabro_proc::sigkill_process_group(*process_group_id);
-        }
-        if !survivors.is_empty() {
-            let kill_deadline = Instant::now() + Duration::from_secs(1);
-            while Instant::now() < kill_deadline
-                && survivors
-                    .iter()
-                    .any(|process_group_id| fabro_proc::process_group_alive(*process_group_id))
-            {
-                sleep(poll_interval).await;
-            }
         }
     }
 
     persist_shutdown_run_failures(state, &workers).await?;
     Ok(workers.len())
+}
+
+/// Poll until either the deadline expires or every worker is dead, returning
+/// the set of workers still alive when polling stopped.
+async fn poll_until_dead(
+    state: &AppState,
+    workers: &[LiveWorkerProcess],
+    grace: Duration,
+    poll_interval: Duration,
+) -> Vec<WorkerRef> {
+    let refs: Vec<WorkerRef> = workers.iter().map(|w| w.worker_ref.clone()).collect();
+    let deadline = Instant::now() + grace;
+    loop {
+        let alive = alive_refs(state, &refs).await;
+        if alive.is_empty() || Instant::now() >= deadline {
+            return alive;
+        }
+        sleep(poll_interval).await;
+    }
+}
+
+async fn alive_refs(state: &AppState, refs: &[WorkerRef]) -> Vec<WorkerRef> {
+    let liveness = join_all(refs.iter().map(|r| state.worker_runtime.is_alive(r))).await;
+    refs.iter()
+        .zip(liveness)
+        .filter(|(_, alive)| *alive)
+        .map(|(r, _)| r.clone())
+        .collect()
 }
 
 async fn persist_cancelled_run_status(state: &AppState, run_id: RunId) -> anyhow::Result<()> {
@@ -2904,6 +3094,7 @@ async fn finish_cancelled_run_before_execution(state: &Arc<AppState>, run_id: Ru
         clear_live_run_state(managed_run);
     }
     drop(runs);
+    cleanup_worker_control_bus_for_run(state.as_ref(), run_id);
     state.scheduler_notify.notify_one();
 }
 
@@ -2997,8 +3188,7 @@ fn managed_run(
         checkpoint: None,
         cancel_tx: None,
         cancel_token: None,
-        worker_pid: None,
-        worker_pgid: None,
+        worker_ref: None,
         run_dir: Some(run_dir),
         execution_mode,
     }
@@ -3039,6 +3229,7 @@ fn fail_managed_run(state: &Arc<AppState>, run_id: RunId, reason: FailureReason,
         managed_run.error = Some(message);
         clear_live_run_state(managed_run);
     }
+    cleanup_worker_control_bus_for_run(state.as_ref(), run_id);
 }
 
 fn update_live_run_from_event(state: &AppState, run_id: RunId, event: &RunEvent) {
@@ -3103,7 +3294,9 @@ fn update_live_run_from_event(state: &AppState, run_id: RunId, event: &RunEvent)
         EventBody::RunRemoving(_) => managed_run.status = RunStatus::Removing,
         EventBody::RunCompleted(_) => {
             let EventBody::RunCompleted(props) = &event.body else {
-                unreachable!();
+                unreachable!(
+                    "outer match arm already verified event.body is EventBody::RunCompleted"
+                )
             };
             managed_run.status = RunStatus::Succeeded {
                 reason: props.reason,
@@ -3112,6 +3305,7 @@ fn update_live_run_from_event(state: &AppState, run_id: RunId, event: &RunEvent)
             managed_run.active_api_targets.clear();
             managed_run.active_steerable_stages.clear();
             managed_run.active_non_steerable_stages.clear();
+            cleanup_worker_control_bus_for_run(state, run_id);
         }
         EventBody::RunFailed(props) => {
             managed_run.status = RunStatus::Failed {
@@ -3124,6 +3318,7 @@ fn update_live_run_from_event(state: &AppState, run_id: RunId, event: &RunEvent)
             managed_run.active_api_targets.clear();
             managed_run.active_steerable_stages.clear();
             managed_run.active_non_steerable_stages.clear();
+            cleanup_worker_control_bus_for_run(state, run_id);
         }
         // Track active agent sessions by steerability. Activated/deactivated
         // are leased by session id so stale deactivations cannot clear a newer
@@ -3198,7 +3393,10 @@ fn update_live_run_from_event(state: &AppState, run_id: RunId, event: &RunEvent)
     }
 }
 
-async fn drain_worker_stderr(run_id: RunId, stderr: ChildStderr) -> anyhow::Result<()> {
+async fn drain_worker_stderr(
+    run_id: RunId,
+    stderr: std::pin::Pin<Box<dyn AsyncRead + Send + 'static>>,
+) -> anyhow::Result<()> {
     let mut lines = BufReader::new(stderr).lines();
 
     while let Some(line) = lines.next_line().await? {
@@ -3208,24 +3406,32 @@ async fn drain_worker_stderr(run_id: RunId, stderr: ChildStderr) -> anyhow::Resu
     Ok(())
 }
 
-async fn pump_worker_control_jsonl(
-    mut stdin: ChildStdin,
-    mut control_rx: mpsc::Receiver<WorkerControlEnvelope>,
-) -> anyhow::Result<()> {
-    while let Some(message) = control_rx.recv().await {
-        let mut line = serde_json::to_vec(&message)?;
-        line.push(b'\n');
-        stdin.write_all(&line).await?;
-        stdin.flush().await?;
-    }
-
-    Ok(())
+async fn fail_worker_launch(
+    state: &Arc<AppState>,
+    run_store: &fabro_store::RunDatabase,
+    run_id: RunId,
+    err: anyhow::Error,
+) {
+    tracing::error!(run_id = %run_id, error = %err, "Failed to spawn worker");
+    let message = format!("Failed to spawn worker: {err}");
+    let failure_event = workflow_event::Event::workflow_run_failed_from_error(
+        &WorkflowError::engine_with_anyhow("Failed to spawn worker", err),
+        fabro_types::RunTiming::default(),
+        FailureReason::LaunchFailed,
+        None,
+        None,
+        None,
+        None,
+    );
+    let _ = workflow_event::append_event(run_store, &run_id, &failure_event).await;
+    fail_managed_run(state, run_id, FailureReason::LaunchFailed, message);
+    state.scheduler_notify.notify_one();
 }
 
 async fn append_worker_exit_failure(
     run_store: &fabro_store::RunDatabase,
     run_id: RunId,
-    wait_status: &std::process::ExitStatus,
+    worker_exit: &WorkerExit,
 ) {
     let state = match run_store.state().await {
         Ok(state) => state,
@@ -3242,7 +3448,10 @@ async fn append_worker_exit_failure(
 
     let (error, reason) = failure_for_incomplete_run(
         state.pending_control,
-        format!("Worker exited before emitting a terminal run event: {wait_status}"),
+        format!(
+            "Worker exited before emitting a terminal run event: {}",
+            worker_exit.detail
+        ),
     );
     let failure_event = workflow_event::Event::workflow_run_failed_from_error(
         &error,
@@ -3263,15 +3472,16 @@ async fn append_worker_exit_failure(
     clippy::disallowed_methods,
     reason = "Worker subprocess startup resolves Cargo's test binary env override when present."
 )]
-fn worker_command(
+fn worker_launch_spec(
     state: &AppState,
     run_id: RunId,
     mode: RunExecutionMode,
     run_dir: &std::path::Path,
     agent_fabro_tools_enabled: bool,
-) -> anyhow::Result<Command> {
+) -> anyhow::Result<WorkerLaunchSpec> {
     let current_exe = std::env::current_exe().context("reading current executable path")?;
-    let exe = std::env::var_os(EnvVars::CARGO_BIN_EXE_FABRO).map_or(current_exe, PathBuf::from);
+    let executable =
+        std::env::var_os(EnvVars::CARGO_BIN_EXE_FABRO).map_or(current_exe, PathBuf::from);
     let storage_dir = state.server_storage_dir();
     let runtime_directory = Storage::new(&storage_dir).runtime_directory();
     let daemon = ServerDaemon::read(&runtime_directory)?.with_context(|| {
@@ -3280,7 +3490,6 @@ fn worker_command(
             runtime_directory.record_path().display()
         )
     })?;
-    let server_target = daemon.bind.to_target();
     let scopes = if agent_fabro_tools_enabled {
         WorkerScopeSet::run_worker_with_agent_run_tools()
     } else {
@@ -3288,53 +3497,26 @@ fn worker_command(
     };
     let worker_token = issue_worker_token_with_scopes(state.worker_token_keys(), &run_id, scopes)
         .map_err(|_| anyhow::anyhow!("failed to sign worker token"))?;
-    let server_destination = resolved_log_destination(state)?;
-    let worker_stdout = match server_destination {
-        LogDestination::Stdout => Stdio::inherit(),
-        LogDestination::File => Stdio::null(),
+    let log_destination = resolved_log_destination(state)?;
+    let fabro_log = if (state.env_lookup)(EnvVars::FABRO_LOG).is_none() {
+        state.server_settings().server.logging.level.clone()
+    } else {
+        None
     };
-    let mut cmd = Command::new(exe);
-    cmd.arg("__run-worker")
-        .arg("--server")
-        .arg(server_target)
-        .arg("--storage-dir")
-        .arg(&storage_dir)
-        .arg("--run-dir")
-        .arg(run_dir)
-        .arg("--run-id")
-        .arg(run_id.to_string())
-        .arg("--mode")
-        .arg(worker_mode_arg(mode))
-        .stdin(Stdio::piped())
-        .stdout(worker_stdout)
-        .stderr(Stdio::piped());
 
-    apply_worker_env(&mut cmd);
-    if (state.env_lookup)(EnvVars::FABRO_LOG).is_none() {
-        if let Some(level) = state.server_settings().server.logging.level.as_deref() {
-            cmd.env(EnvVars::FABRO_LOG, level);
-        }
-    }
-    let value: &'static str = server_destination.into();
-    cmd.env(EnvVars::FABRO_LOG_DESTINATION, value);
-    cmd.env(EnvVars::FABRO_CONFIG, state.active_config_path());
-    cmd.env_remove(EnvVars::FABRO_WORKER_TOKEN);
-    cmd.env(EnvVars::FABRO_WORKER_TOKEN, worker_token);
-    // Forward every vault entry to the worker's process env. The worker
-    // calls `resolve_env(process_env_var)` against `{{ env.X }}` tokens
-    // in project.toml `[environments.default.env]`, so any
-    // `fabro secret set X` value becomes available without each name
-    // being listed in `WORKER_ENV_ALLOWLIST`. Covers `GITHUB_APP_PRIVATE_KEY`
-    // (which previously had a dedicated forward block here) along with
-    // any operator-added secret.
-    for (name, value) in state.vault_entries() {
-        cmd.env(name, value);
-    }
-
-    #[cfg(unix)]
-    fabro_proc::pre_exec_setpgid(cmd.as_std_mut());
-
-    Ok(cmd)
+    Ok(WorkerLaunchSpec {
+        executable,
+        server_target: daemon.bind.to_target(),
+        storage_dir,
+        run_dir: run_dir.to_path_buf(),
+        run_id,
+        mode: worker_mode_arg(mode),
+        worker_token,
+        log_destination,
+        fabro_log,
+        active_config_path: state.active_config_path().to_path_buf(),
+        github_app_private_key: state.vault_secret(EnvVars::GITHUB_APP_PRIVATE_KEY),
+    })
 }
 
 fn resolved_log_destination(state: &AppState) -> anyhow::Result<LogDestination> {
@@ -3927,8 +4109,8 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
 
     let state_for_build = Arc::clone(&state);
     let run_dir_for_build = run_dir.clone();
-    let build_cmd_result = spawn_blocking(move || {
-        worker_command(
+    let start_result = spawn_blocking(move || {
+        worker_launch_spec(
             state_for_build.as_ref(),
             run_id,
             execution_mode,
@@ -3936,116 +4118,43 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
             agent_fabro_tools_enabled,
         )
     })
-    .await;
+    .await
+    .context("worker_launch_spec task failed")
+    .and_then(|inner| inner);
 
-    let mut child = match build_cmd_result
-        .context("worker_command task failed")
-        .and_then(|inner| inner)
-        .and_then(|mut cmd| cmd.spawn().context("spawning run worker process"))
-    {
-        Ok(child) => child,
+    let launch_result = match start_result {
+        Ok(spec) => state.worker_runtime.start(spec).await,
+        Err(err) => Err(err),
+    };
+    let started_worker = match launch_result {
+        Ok(worker) => worker,
         Err(err) => {
-            tracing::error!(run_id = %run_id, error = %err, "Failed to spawn worker");
-            let message = format!("Failed to spawn worker: {err}");
-            let failure_event = workflow_event::Event::workflow_run_failed_from_error(
-                &WorkflowError::engine_with_anyhow("Failed to spawn worker", err),
-                fabro_types::RunTiming::default(),
-                FailureReason::LaunchFailed,
-                None,
-                None,
-                None,
-                None,
-            );
-            let _ = workflow_event::append_event(&run_store, &run_id, &failure_event).await;
-            fail_managed_run(&state, run_id, FailureReason::LaunchFailed, message);
-            state.scheduler_notify.notify_one();
+            fail_worker_launch(&state, &run_store, run_id, err).await;
             return;
         }
     };
-
-    let Some(worker_pid) = child.id() else {
-        let message = "Worker process did not report a PID".to_string();
-        tracing::error!(run_id = %run_id, "{message}");
-        let _ = child.start_kill();
-        let failure_event = workflow_event::Event::workflow_run_failed_from_error(
-            &WorkflowError::engine(message.clone()),
-            fabro_types::RunTiming::default(),
-            FailureReason::LaunchFailed,
-            None,
-            None,
-            None,
-            None,
-        );
-        let _ = workflow_event::append_event(&run_store, &run_id, &failure_event).await;
-        fail_managed_run(&state, run_id, FailureReason::LaunchFailed, message);
-        state.scheduler_notify.notify_one();
-        return;
-    };
+    let worker_ref = started_worker.worker_ref.clone();
 
     {
         let mut runs = state.runs.lock().expect("runs lock poisoned");
         if let Some(managed_run) = runs.get_mut(&run_id) {
-            managed_run.worker_pid = Some(worker_pid);
-            managed_run.worker_pgid = Some(worker_pid);
+            managed_run.worker_ref = Some(worker_ref.clone());
             managed_run.run_dir = Some(run_dir.clone());
+            managed_run.answer_transport = Some(RunAnswerTransport::Worker {
+                run_id,
+                bus: Arc::clone(&state.worker_control_bus),
+            });
         }
     }
 
-    let Some(stdin) = child.stdin.take() else {
-        let message = "Worker stdin pipe was unavailable".to_string();
-        tracing::error!(run_id = %run_id, "{message}");
-        let _ = child.start_kill();
-        let failure_event = workflow_event::Event::workflow_run_failed_from_error(
-            &WorkflowError::engine(message.clone()),
-            fabro_types::RunTiming::default(),
-            FailureReason::LaunchFailed,
-            None,
-            None,
-            None,
-            None,
-        );
-        let _ = workflow_event::append_event(&run_store, &run_id, &failure_event).await;
-        fail_managed_run(&state, run_id, FailureReason::LaunchFailed, message);
-        state.scheduler_notify.notify_one();
-        return;
-    };
+    let stderr_task = tokio::spawn(drain_worker_stderr(run_id, started_worker.stderr));
 
-    let Some(stderr) = child.stderr.take() else {
-        let message = "Worker stderr pipe was unavailable".to_string();
-        tracing::error!(run_id = %run_id, "{message}");
-        let _ = child.start_kill();
-        let failure_event = workflow_event::Event::workflow_run_failed_from_error(
-            &WorkflowError::engine(message.clone()),
-            fabro_types::RunTiming::default(),
-            FailureReason::LaunchFailed,
-            None,
-            None,
-            None,
-            None,
-        );
-        let _ = workflow_event::append_event(&run_store, &run_id, &failure_event).await;
-        fail_managed_run(&state, run_id, FailureReason::LaunchFailed, message);
-        state.scheduler_notify.notify_one();
-        return;
-    };
-
-    let (control_tx, control_rx) = mpsc::channel(WORKER_CONTROL_QUEUE_CAPACITY);
-    {
-        let mut runs = state.runs.lock().expect("runs lock poisoned");
-        if let Some(managed_run) = runs.get_mut(&run_id) {
-            managed_run.answer_transport = Some(RunAnswerTransport::Subprocess { control_tx });
-        }
-    }
-
-    let control_task = tokio::spawn(pump_worker_control_jsonl(stdin, control_rx));
-    let stderr_task = tokio::spawn(drain_worker_stderr(run_id, stderr));
-
-    let wait_status = match child.wait().await {
-        Ok(status) => status,
+    let worker_exit = match started_worker.wait.await {
+        Ok(exit) => exit,
         Err(err) => {
             tracing::error!(run_id = %run_id, error = %err, "Failed while waiting on worker");
             let message = format!("Worker wait failed: {err}");
-            let _ = child.start_kill();
+            state.worker_runtime.force_stop(&worker_ref).await;
             let failure_event = workflow_event::Event::workflow_run_failed_from_error(
                 &WorkflowError::engine_with_source("Worker wait failed", err),
                 fabro_types::RunTiming::default(),
@@ -4062,9 +4171,6 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
         }
     };
 
-    control_task.abort();
-    let _ = control_task.await;
-
     match stderr_task.await {
         Ok(Ok(())) => {}
         Ok(Err(err)) => {
@@ -4078,18 +4184,18 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
     let superseded = {
         let runs = state.runs.lock().expect("runs lock poisoned");
         runs.get(&run_id)
-            .is_some_and(|managed_run| managed_run.worker_pid != Some(worker_pid))
+            .is_some_and(|managed_run| managed_run.worker_ref.as_ref() != Some(&worker_ref))
     };
     if superseded {
         tracing::info!(
             run_id = %run_id,
-            worker_pid,
+            worker_ref = ?worker_ref,
             "Skipping stale worker cleanup for superseded run execution"
         );
         return;
     }
 
-    append_worker_exit_failure(&run_store, run_id, &wait_status).await;
+    append_worker_exit_failure(&run_store, run_id, &worker_exit).await;
 
     let final_state = match run_store.state().await {
         Ok(state) => state,
@@ -4121,7 +4227,7 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
     if let Some(managed_run) = runs.get_mut(&run_id) {
         if final_state.status != managed_run.status {
             managed_run.status = final_state.status;
-        } else if !wait_status.success() {
+        } else if !worker_exit.success {
             managed_run.status = RunStatus::Failed {
                 reason: FailureReason::Terminated,
             };

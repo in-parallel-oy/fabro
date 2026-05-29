@@ -9,6 +9,11 @@
 )]
 
 pub mod auth;
+#[allow(
+    dead_code,
+    reason = "Automation materializer test hooks and helpers are only referenced by selected targets."
+)]
+mod automation_materializer;
 mod canonical_host;
 mod canonical_origin;
 pub mod csp;
@@ -22,7 +27,6 @@ pub mod diagnostics;
 pub mod error;
 pub mod github_webhooks;
 pub mod install;
-pub mod ip_allowlist;
 pub mod jwt_auth;
 pub mod manifest_validation;
 mod migrations;
@@ -44,6 +48,8 @@ pub mod static_files;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 pub mod web_auth;
+mod worker_control;
+mod worker_runtime;
 mod worker_token;
 
 pub use error::{ApiError, Error, Result};

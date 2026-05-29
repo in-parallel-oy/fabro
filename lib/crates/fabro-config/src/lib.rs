@@ -55,16 +55,16 @@ pub use layers::{
     RunGitLayer, RunGoalLayer, RunIntegrationsGithubLayer, RunIntegrationsLayer, RunLayer,
     RunMetaBranchLayer, RunModelControlsLayer, RunModelLayer, RunPrepareLayer, RunPullRequestLayer,
     RunRunBranchLayer, RunScmLayer, ScmGitHubLayer, ServerApiLayer, ServerArtifactsLayer,
-    ServerAuthGithubLayer, ServerAuthLayer, ServerIntegrationsLayer, ServerIpAllowlistLayer,
-    ServerIpAllowlistOverrideLayer, ServerLayer, ServerListenLayer, ServerLoggingLayer,
-    ServerSandboxLayer, ServerSandboxProviderLayer, ServerSandboxProvidersLayer,
-    ServerSchedulerLayer, ServerSlateDbLayer, ServerStorageLayer, ServerWebLayer, SettingsLayer,
-    SlackIntegrationLayer, StickyMap, StringOrSplice, WorkflowLayer,
+    ServerAuthGithubLayer, ServerAuthLayer, ServerIntegrationsLayer, ServerLayer,
+    ServerListenLayer, ServerLoggingLayer, ServerSandboxLayer, ServerSandboxProviderLayer,
+    ServerSandboxProvidersLayer, ServerSchedulerLayer, ServerSlateDbLayer, ServerStorageLayer,
+    ServerWebLayer, SettingsLayer, SlackIntegrationLayer, StickyMap, StringOrSplice, WorkflowLayer,
 };
 pub use logging::{resolve_log_destination, resolve_log_destination_with_env};
 pub use parse::ParseError;
 pub use resolve::{
-    ResolveError, resolve_cli, resolve_project, resolve_run, resolve_server, resolve_workflow,
+    ResolveError, resolve_cli, resolve_environment_layer, resolve_project, resolve_run,
+    resolve_server, resolve_workflow,
 };
 use serde::de::DeserializeOwned;
 pub use storage::{RunScratch, RuntimeDirectory, Storage};

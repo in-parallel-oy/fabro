@@ -26,6 +26,7 @@ use fabro_types::{ManifestPath, RunId, RunRunnableSource, SandboxProviderKind};
 use fabro_vault::Vault;
 use tokio::runtime::Handle;
 use tokio::sync::RwLock as AsyncRwLock;
+use tokio::time;
 use tokio_util::sync::CancellationToken;
 
 use crate::artifact_upload::ArtifactSink;
@@ -38,8 +39,8 @@ use crate::handler::HandlerRegistry;
 use crate::handler::llm::routing;
 use crate::outcome::{Outcome, StageOutcome};
 use crate::pipeline::{
-    self, DevcontainerSpec, FinalizeOptions, Finalized, InitOptions, LlmSpec, Persisted,
-    PullRequestOptions, SandboxEnvSpec, build_conclusion_from_store, classify_engine_result,
+    self, FinalizeOptions, Finalized, InitOptions, LlmSpec, Persisted, PullRequestOptions,
+    SandboxEnvSpec, build_conclusion_from_store, classify_engine_result,
 };
 use crate::records::Checkpoint;
 use crate::run_control::RunControlState;
@@ -62,7 +63,6 @@ struct RunSession {
     lifecycle:         LifecycleOptions,
     hooks:             fabro_hooks::HookSettings,
     sandbox_env:       SandboxEnvSpec,
-    devcontainer:      Option<DevcontainerSpec>,
     seed_context:      Option<Context>,
     run_store:         RunStoreHandle,
     event_sink:        RunEventSink,
@@ -421,13 +421,10 @@ impl RunSession {
         let github_permissions: Option<HashMap<String, String>> =
             (!services.github_permissions.is_empty()).then(|| services.github_permissions.clone());
         let sandbox_env = SandboxEnvSpec {
-            devcontainer_env: HashMap::new(),
             toml_env,
             github_permissions,
             origin_url: record.repo_origin_url().map(str::to_string),
         };
-
-        let devcontainer = None;
 
         let interviewer: Arc<dyn Interviewer> = if resolved.execution.approval == ApprovalMode::Auto
         {
@@ -458,13 +455,11 @@ impl RunSession {
             lifecycle: LifecycleOptions {
                 setup_commands:           resolved.prepare.commands.clone(),
                 setup_command_timeout_ms: resolved.prepare.timeout_ms,
-                devcontainer_phases:      Vec::new(),
             },
             hooks: fabro_hooks::HookSettings {
                 hooks: resolved.hooks.iter().map(runtime_hook_definition).collect(),
             },
             sandbox_env,
-            devcontainer,
             seed_context: None,
             run_store: services.run_store,
             artifact_sink: services.artifact_sink,
@@ -804,27 +799,31 @@ impl RunSession {
                 event if matches!(&event.body, EventBody::CheckpointCompleted(_)) => {
                     if let EventBody::CheckpointCompleted(props) = &event.body {
                         if let Some(sha) = props.git_commit_sha.as_ref() {
-                            *sha_clone.lock().unwrap() = Some(sha.clone());
+                            *sha_clone.lock()
+                                .expect("sha_clone mutex should not be poisoned: no code panics while holding this lock") = Some(sha.clone());
                         }
                     }
                 }
                 event if matches!(&event.body, EventBody::RunCompleted(_)) => {
                     if let EventBody::RunCompleted(props) = &event.body {
                         if let Some(sha) = props.final_git_commit_sha.as_ref() {
-                            *sha_clone.lock().unwrap() = Some(sha.clone());
+                            *sha_clone.lock()
+                                .expect("sha_clone mutex should not be poisoned: no code panics while holding this lock") = Some(sha.clone());
                         }
                     }
                 }
                 event if matches!(&event.body, EventBody::RunFailed(_)) => {
                     if let EventBody::RunFailed(props) = &event.body {
                         if let Some(sha) = props.final_git_commit_sha.as_ref() {
-                            *sha_clone.lock().unwrap() = Some(sha.clone());
+                            *sha_clone.lock()
+                                .expect("sha_clone mutex should not be poisoned: no code panics while holding this lock") = Some(sha.clone());
                         }
                     }
                 }
                 event if matches!(&event.body, EventBody::GitCommit(_)) => {
                     if let EventBody::GitCommit(props) = &event.body {
-                        *sha_clone.lock().unwrap() = Some(props.sha.clone());
+                        *sha_clone.lock()
+                            .expect("sha_clone mutex should not be poisoned: no code panics while holding this lock") = Some(props.sha.clone());
                     }
                 }
                 _ => {}
@@ -851,7 +850,6 @@ impl RunSession {
             hooks: self.hooks,
             sandbox_env: self.sandbox_env,
             vault: self.vault,
-            devcontainer: self.devcontainer,
             git: self.git,
             registry_override: self.registry_override,
             artifact_sink: self.artifact_sink,
@@ -894,7 +892,9 @@ impl RunSession {
             workflow_name:    executed.graph.name.clone(),
             preserve_sandbox: self.preserve_sandbox,
             stop_on_terminal: self.stop_on_terminal,
-            last_git_sha:     last_git_sha.lock().unwrap().clone(),
+            last_git_sha:     last_git_sha.lock()
+                .expect("last_git_sha mutex should not be poisoned: no code panics while holding this lock")
+                .clone(),
         };
         let pr_opts = PullRequestOptions {
             pr_config:  self.pr_config,
@@ -988,6 +988,24 @@ impl Drop for DetachedRunBootstrapGuard {
 
 const POSTRUN_INTERRUPTED_MESSAGE: &str = "Run interrupted before post-run finalization completed.";
 const POSTRUN_CANCELLED_MESSAGE: &str = "Run cancelled before post-run finalization completed.";
+const DETACHED_COMPLETION_GUARD_TERMINAL_GRACE: Duration = Duration::from_millis(25);
+
+async fn run_store_reaches_terminal(run_store: &RunStoreHandle, timeout: Duration) -> bool {
+    let start = Instant::now();
+    loop {
+        if run_store
+            .state()
+            .await
+            .is_ok_and(|state| state.status.is_terminal())
+        {
+            return true;
+        }
+        if start.elapsed() >= timeout {
+            return false;
+        }
+        time::sleep(Duration::from_millis(10)).await;
+    }
+}
 
 struct DetachedRunCompletionGuard {
     event_sink:   RunEventSink,
@@ -1045,6 +1063,11 @@ impl Drop for DetachedRunCompletionGuard {
         let run_store = self.run_store.clone();
         if let Ok(handle) = Handle::try_current() {
             handle.spawn(async move {
+                if run_store_reaches_terminal(&run_store, DETACHED_COMPLETION_GUARD_TERMINAL_GRACE)
+                    .await
+                {
+                    return;
+                }
                 emit_workflow_run_failed(
                     run_id,
                     &run_store,
@@ -1190,6 +1213,10 @@ mod tests {
 
     fn settings_from_run_layer(run: RunLayer) -> WorkflowSettings {
         WorkflowSettingsBuilder::new()
+            .server_manifest_defaults(
+                RunLayer::default(),
+                fabro_environment::seeded_catalog_layer(),
+            )
             .run_overrides(run)
             .build()
             .expect("settings should resolve")
@@ -1296,7 +1323,7 @@ reasoning = false
         let settings = settings_from_run_layer(RunLayer {
             environment: Some(RunEnvironmentLayer {
                 image: Some(EnvironmentImageLayer {
-                    reference: Some("ubuntu:24.04".to_string()),
+                    docker: Some("ubuntu:24.04".to_string()),
                     ..EnvironmentImageLayer::default()
                 }),
                 resources: Some(EnvironmentResourcesLayer {
@@ -1408,6 +1435,7 @@ reasoning = false
                 submitted_manifest_bytes: None,
                 run_id: Some(fixtures::RUN_1),
                 title: None,
+                automation: None,
                 git: None,
                 fork_source_ref: None,
                 parent_id: None,
@@ -1829,6 +1857,7 @@ reasoning = false
                 submitted_manifest_bytes: None,
                 run_id: Some(fixtures::RUN_1),
                 title: None,
+                automation: None,
                 git: None,
                 fork_source_ref: None,
                 parent_id: None,

@@ -1,14 +1,5 @@
 import type { ReactNode } from "react";
-import {
-  BoltIcon,
-  ChatBubbleLeftEllipsisIcon,
-  Cog6ToothIcon,
-  CpuChipIcon,
-  QuestionMarkCircleIcon,
-  ServerIcon,
-} from "@heroicons/react/20/solid";
 import type {
-  Principal,
   Run,
   SandboxResources,
   SandboxState,
@@ -20,7 +11,13 @@ import {
   formatCpuCores,
   formatUsdMicros,
 } from "../lib/format";
+import { principalDisplay } from "../lib/principal-display";
 import { useRun, useRunArtifacts, useRunSandboxDetails } from "../lib/queries";
+import {
+  SANDBOX_LIFECYCLE_DISPLAY,
+  sandboxIsReady,
+  sandboxLifecycleKind,
+} from "../lib/run-sandbox-lifecycle";
 import { SANDBOX_STATE_DISPLAY } from "../lib/sandbox-state";
 import { Tooltip } from "./ui";
 
@@ -51,62 +48,6 @@ function Cell({ label, children }: { label: string; children: ReactNode }) {
       <div className={VALUE_WRAPPER_CLASS}>{children}</div>
     </div>
   );
-}
-
-interface CreatedByDisplay {
-  glyph: ReactNode;
-  label: string;
-}
-
-function principalGlyph(icon: ReactNode) {
-  return (
-    <span className="grid size-5 place-items-center rounded-full bg-teal-500/20 text-teal-500">
-      {icon}
-    </span>
-  );
-}
-
-function createdByDisplay(actor: Principal): CreatedByDisplay {
-  switch (actor.kind) {
-    case "user": {
-      let glyph: ReactNode;
-      if (actor.avatar_url) {
-        glyph = (
-          <img
-            alt=""
-            src={actor.avatar_url}
-            className="size-5 rounded-full outline -outline-offset-1 outline-line-strong"
-          />
-        );
-      } else {
-        const initial = actor.login.charAt(0).toUpperCase() || "?";
-        glyph = (
-          <span className="grid size-5 place-items-center rounded-full bg-teal-500/20 font-mono text-[10px] font-medium text-teal-500">
-            {initial}
-          </span>
-        );
-      }
-      return { glyph, label: actor.login };
-    }
-    case "agent":
-      return { glyph: principalGlyph(<CpuChipIcon className="size-3" />), label: "agent" };
-    case "system":
-      return { glyph: principalGlyph(<Cog6ToothIcon className="size-3" />), label: "system" };
-    case "slack":
-      return {
-        glyph: principalGlyph(<ChatBubbleLeftEllipsisIcon className="size-3" />),
-        label: "slack",
-      };
-    case "webhook":
-      return { glyph: principalGlyph(<BoltIcon className="size-3" />), label: "webhook" };
-    case "worker":
-      return { glyph: principalGlyph(<ServerIcon className="size-3" />), label: "worker" };
-    case "anonymous":
-      return {
-        glyph: principalGlyph(<QuestionMarkCircleIcon className="size-3" />),
-        label: "anonymous",
-      };
-  }
 }
 
 export interface RunSummaryPanelViewProps {
@@ -147,6 +88,25 @@ function SandboxValue({
   );
 }
 
+function SandboxLifecycleValue({
+  kind,
+}: {
+  kind: keyof typeof SANDBOX_LIFECYCLE_DISPLAY;
+}) {
+  const display = SANDBOX_LIFECYCLE_DISPLAY[kind];
+  return (
+    <div className="flex items-center gap-2">
+      <Tooltip label={display.description}>
+        <span
+          aria-hidden="true"
+          className={`size-2 rounded-full ${display.dot}`}
+        />
+      </Tooltip>
+      <span className={`${VALUE_CLASS} ${display.text}`}>{display.label}</span>
+    </div>
+  );
+}
+
 export function RunSummaryPanelView({
   run,
   runLoading,
@@ -156,9 +116,10 @@ export function RunSummaryPanelView({
   artifactsCount,
   artifactsLoading,
 }: RunSummaryPanelViewProps) {
-  const created = run?.created_by ? createdByDisplay(run.created_by) : null;
+  const created = run?.created_by ? principalDisplay(run.created_by) : null;
   const diff = run?.diff ?? null;
   const cost = formatUsdMicros(run?.billing?.total_usd_micros);
+  const sandboxKind = sandboxLifecycleKind(run?.sandbox);
 
   return (
     <div className="rounded-md border border-line bg-panel/60 px-6 py-4">
@@ -199,6 +160,8 @@ export function RunSummaryPanelView({
             <Skeleton widthClass="w-24" />
           ) : sandboxState ? (
             <SandboxValue state={sandboxState} resources={sandboxResources} />
+          ) : sandboxKind ? (
+            <SandboxLifecycleValue kind={sandboxKind} />
           ) : (
           <EmptyValue />
           )}
@@ -241,8 +204,11 @@ export function RunSummaryPanelView({
 
 export function RunSummaryPanel({ runId }: { runId: string }) {
   const runQuery = useRun(runId);
-  const sandboxQuery = useRunSandboxDetails(runId);
+  const sandboxQuery = useRunSandboxDetails(
+    sandboxIsReady(runQuery.data?.sandbox) ? runId : undefined,
+  );
   const artifactsQuery = useRunArtifacts(runId);
+  const sandboxReady = sandboxIsReady(runQuery.data?.sandbox);
 
   return (
     <RunSummaryPanelView
@@ -250,7 +216,7 @@ export function RunSummaryPanel({ runId }: { runId: string }) {
       runLoading={runQuery.isLoading && !runQuery.data}
       sandboxState={sandboxQuery.data?.state ?? null}
       sandboxResources={sandboxQuery.data?.resources ?? null}
-      sandboxLoading={sandboxQuery.isLoading && !sandboxQuery.data}
+      sandboxLoading={sandboxReady && sandboxQuery.isLoading && !sandboxQuery.data}
       artifactsCount={artifactsQuery.data?.data.length ?? null}
       artifactsLoading={artifactsQuery.isLoading && !artifactsQuery.data}
     />

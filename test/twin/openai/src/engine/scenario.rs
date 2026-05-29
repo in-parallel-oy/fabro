@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use super::failures::{ErrorOutcome, ExecutionOutcome, SuccessOutcome, TransportOptions};
-use super::plan::{ResponsePlan, ToolCallPlan};
+use super::plan::{ResponsePlan, TokenUsage, ToolCallPlan};
 use crate::openai::models::{ChatCompletionsRequest, ResponsesRequest};
 
 #[derive(Clone, Debug, Deserialize)]
@@ -35,6 +35,7 @@ pub enum ScenarioScript {
         reasoning:               Option<Vec<String>>,
         structured_output:       Option<Value>,
         tool_calls:              Option<Vec<ToolCallTemplate>>,
+        usage:                   Option<TokenUsage>,
         delay_before_headers_ms: Option<u64>,
         inter_event_delay_ms:    Option<u64>,
         close_after_chunks:      Option<usize>,
@@ -55,9 +56,11 @@ pub enum ScenarioScript {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ToolCallTemplate {
-    pub id:        Option<String>,
-    pub name:      String,
-    pub arguments: Value,
+    pub id:            Option<String>,
+    pub name:          String,
+    pub arguments:     Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_arguments: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -123,6 +126,7 @@ impl Scenario {
                 reasoning,
                 structured_output,
                 tool_calls,
+                usage,
                 delay_before_headers_ms,
                 inter_event_delay_ms,
                 close_after_chunks,
@@ -136,6 +140,7 @@ impl Scenario {
                     reasoning.clone().unwrap_or_default(),
                     structured_output.clone(),
                     tool_calls.clone().unwrap_or_default(),
+                    *usage,
                 ),
                 transport: TransportOptions {
                     delay_before_headers_ms: delay_before_headers_ms.unwrap_or_default(),
@@ -178,6 +183,7 @@ impl Scenario {
                 reasoning,
                 structured_output,
                 tool_calls,
+                usage,
                 delay_before_headers_ms,
                 inter_event_delay_ms,
                 close_after_chunks,
@@ -191,6 +197,7 @@ impl Scenario {
                     reasoning.clone().unwrap_or_default(),
                     structured_output.clone(),
                     tool_calls.clone().unwrap_or_default(),
+                    *usage,
                 ),
                 transport: TransportOptions {
                     delay_before_headers_ms: delay_before_headers_ms.unwrap_or_default(),
@@ -231,6 +238,7 @@ fn build_plan_from_script(
     reasoning: Vec<String>,
     structured_output: Option<Value>,
     tool_calls: Vec<ToolCallTemplate>,
+    usage: Option<TokenUsage>,
 ) -> ResponsePlan {
     let output_text = match response_text {
         Some(response_text) => response_text,
@@ -250,14 +258,14 @@ fn build_plan_from_script(
             .into_iter()
             .enumerate()
             .map(|(index, tool_call)| ToolCallPlan {
-                id:        tool_call
+                id:            tool_call
                     .id
                     .unwrap_or_else(|| format!("call_{response_number}_{index}")),
-                name:      tool_call.name,
-                arguments: tool_call.arguments,
+                name:          tool_call.name,
+                arguments:     tool_call.arguments,
+                raw_arguments: tool_call.raw_arguments,
             })
             .collect(),
-        input_tokens: 1,
-        output_tokens: 5,
+        usage: usage.unwrap_or_default(),
     }
 }

@@ -12,6 +12,15 @@ Operators can enable or disable which providers the server may launch with
 `enabled = true`; setting `enabled = false` rejects new runs whose effective provider is disabled.
 Dry-run Docker/Daytona runs execute locally, so they are governed by the `local` provider policy.
 
+The API can also list Fabro-managed sandboxes directly from configured providers:
+
+```http
+GET /api/v1/sandboxes
+GET /api/v1/sandboxes/{id}
+```
+
+Provider-backed inventory is useful when you need to inspect Docker or Daytona resources independent of a single run projection. Listing is fail-soft: available provider results are returned with provider errors in response metadata.
+
 ## Network access control
 
 For cloud sandboxes (Daytona), you can control outbound network access with `[environments.<slug>.network]`. Three modes are available: `"allow_all"` (default), `"block"`, and `"cidr_allow_list"` with an `allow = ["..."]` CIDR list.

@@ -1,4 +1,5 @@
 import { ArchiveBoxIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import type { BoardColumn } from "@qltysh/fabro-api-client";
 
 import { ColumnPickerButton } from "../../components/runs-list/column-picker-button";
 import { FilterButton } from "../../components/runs-list/filter-button";
@@ -7,6 +8,7 @@ import {
   type CreatedFilter,
   type ViewMode,
 } from "../../components/runs-list/preferences";
+import { StatusFilterButton } from "../../components/runs-list/status-filter-button";
 import type { ToggleableColumn } from "../../components/runs-list/toggleable-column";
 
 interface RunsToolbarProps {
@@ -14,6 +16,7 @@ interface RunsToolbarProps {
   repoFilter: string;
   workflowFilter: string;
   createdFilter: CreatedFilter;
+  statusFilter: Set<BoardColumn>;
   includeArchived: boolean;
   view: ViewMode;
   hiddenColumns: Set<ToggleableColumn>;
@@ -23,6 +26,7 @@ interface RunsToolbarProps {
   onRepoFilterChange: (value: string) => void;
   onWorkflowFilterChange: (value: string) => void;
   onCreatedFilterChange: (value: CreatedFilter) => void;
+  onStatusFilterChange: (value: Set<BoardColumn>) => void;
   onIncludeArchivedChange: (value: boolean) => void;
   onViewChange: (value: ViewMode) => void;
   onHiddenColumnsChange: (value: Set<ToggleableColumn>) => void;
@@ -33,6 +37,7 @@ export function RunsToolbar({
   repoFilter,
   workflowFilter,
   createdFilter,
+  statusFilter,
   includeArchived,
   view,
   hiddenColumns,
@@ -42,6 +47,7 @@ export function RunsToolbar({
   onRepoFilterChange,
   onWorkflowFilterChange,
   onCreatedFilterChange,
+  onStatusFilterChange,
   onIncludeArchivedChange,
   onViewChange,
   onHiddenColumnsChange,
@@ -61,6 +67,7 @@ export function RunsToolbar({
         />
       </div>
 
+      <StatusFilterButton value={statusFilter} onChange={onStatusFilterChange} />
       <FilterButton
         label="Time"
         value={createdFilter}

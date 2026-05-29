@@ -48,7 +48,7 @@ GitHub to Railway validated by code review only — no live deployment execution
         fallback_retry_target="plan_fanout",
         model_stylesheet="
             *          { model: claude-opus-4-6;      }
-            .hard      { model: gpt-5.3-codex;       }
+            .hard      { model: gpt-5.4;              }
             .verify    { model: claude-opus-4-6;      }
             .branch-a  { model: claude-opus-4-6;      }
             .branch-b  { model: gemini-3-flash-preview;}
@@ -694,7 +694,7 @@ The stylesheet assigns models based on task difficulty:
 
 ```
 *          { model: claude-opus-4-6; }        // Default: spec expansion, debate, postmortem
-.hard      { model: gpt-5.3-codex; }         // Implementation: optimized for code generation
+.hard      { model: gpt-5.4; }                // Implementation: optimized for code generation
 .verify    { model: claude-opus-4-6; }        // Fidelity verification: careful analysis
 .branch-a  { model: claude-opus-4-6; }        // Plan A, Review A: Anthropic perspective
 .branch-b  { model: gemini-3-flash-preview; } // Plan B, Review B: Google perspective

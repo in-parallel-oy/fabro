@@ -276,20 +276,20 @@ Otherwise set preferred_next_label to \"more_work_needed\"."
   <img src="/images/example-dod-multimodel.svg" alt="Multi-model Definition of Done workflow: Start → Dual Audit (Opus+GPT) → Critique → Consensus → Triage (Opus+GPT) → Fix Cycle (Codex↔Opus) → Build → Verify (Opus+GPT) → Review → Exit, with Fix Cycle self-loop, Build/Build Fix loop, and Verify back to Triage" />
 </Frame>
 
-The multi-model variant applies the same audit-triage-fix-verify structure but uses independent assessments from two models (Claude Opus and GPT-5.2) at each phase, with cross-critique and consensus merging. This catches blind spots that a single model might miss.
+The multi-model variant applies the same audit-triage-fix-verify structure but uses independent assessments from two models (Claude Opus and GPT-5.4) at each phase, with cross-critique and consensus merging. This catches blind spots that a single model might miss.
 
 ```dot title="spec-dod-multimodel.fabro"
 digraph SpecDoDMultiModel {
     graph [
-        goal="Satisfy every Definition of Done checkbox across both specs (unified-llm-spec.md, coding-agent-loop-spec.md). The implementation is in Rust under crates/. Do NOT modify the spec files. Only modify implementation code. Uses multi-model consensus: Opus 4.6 and GPT-5.2 compete on audits and planning, GPT-5.2-codex and Opus 4.6 alternate on implementation.",
+        goal="Satisfy every Definition of Done checkbox across both specs (unified-llm-spec.md, coding-agent-loop-spec.md). The implementation is in Rust under crates/. Do NOT modify the spec files. Only modify implementation code. Uses multi-model consensus: Opus 4.6 and GPT-5.4 compete on audits and planning, GPT-5.4 and Opus 4.6 alternate on implementation.",
         default_max_retries="3",
         retry_target="triage_merge",
         default_fidelity="full",
         model_stylesheet="
             * { model: claude-opus-4-6;}
             .opus   { model: claude-opus-4-6;reasoning_effort: high; }
-            .gpt    { model: gpt-5.2;        reasoning_effort: high; }
-            .codex  { model: gpt-5.3-codex;  reasoning_effort: high; }
+            .gpt    { model: gpt-5.4;        reasoning_effort: high; }
+            .codex  { model: gpt-5.4;        reasoning_effort: high; }
             .merge  { model: claude-opus-4-6; reasoning_effort: high; }
         "
     ]
@@ -335,7 +335,7 @@ Be thorough. Check every single checkbox."
     ]
 
     audit_llm_gpt [
-        label="GPT-5.2: Audit LLM DoD",
+        label="GPT-5.4: Audit LLM DoD",
         shape=box,
         class="gpt",
         fidelity="truncate",
@@ -346,7 +346,7 @@ For EACH checkbox in sections 8.1 through 8.10, evaluate whether the current Rus
 Respond with ONLY a JSON object (no prose) -- don't write it out as a file:
 {
   \"spec\": \"unified-llm\",
-  \"model\": \"gpt-5.2\",
+  \"model\": \"gpt-5.4\",
   \"sections\": {
     \"8.1\": { \"title\": \"Core Infrastructure\", \"items\": [ {\"text\": \"...\", \"pass\": true/false, \"reason\": \"...\"} ] },
     ...
@@ -386,7 +386,7 @@ Be thorough. Check every single checkbox."
     ]
 
     audit_agent_gpt [
-        label="GPT-5.2: Audit Agent DoD",
+        label="GPT-5.4: Audit Agent DoD",
         shape=box,
         class="gpt",
         fidelity="truncate",
@@ -397,7 +397,7 @@ For EACH checkbox in sections 9.1 through 9.13, evaluate whether the current Rus
 Respond with ONLY a JSON object (no prose) -- don't write it out as a file:
 {
   \"spec\": \"coding-agent-loop\",
-  \"model\": \"gpt-5.2\",
+  \"model\": \"gpt-5.4\",
   \"sections\": { ... },
   \"total\": N,
   \"passed\": M,
@@ -416,7 +416,7 @@ Be thorough. Check every single checkbox."
      *======================================================================*/
 
     critique_by_gpt [
-        label="GPT-5.2: Critique Opus Audits",
+        label="GPT-5.4: Critique Opus Audits",
         shape=box,
         class="gpt",
         fidelity="full",
@@ -453,15 +453,15 @@ Be rigorous. When in doubt, fail the checkbox — strictness prevents false conf
     ]
 
     critique_by_opus [
-        label="Opus: Critique GPT-5.2 Audits",
+        label="Opus: Critique GPT-5.4 Audits",
         shape=box,
         class="opus",
         fidelity="full",
         prompt="You have all four audit reports available in context. The full outputs are in these context keys:
 
 GPT AUDITS:
-- response.audit_llm_gpt — GPT-5.2's audit of unified-llm-spec.md Section 8
-- response.audit_agent_gpt — GPT-5.2's audit of coding-agent-loop-spec.md Section 9
+- response.audit_llm_gpt — GPT-5.4's audit of unified-llm-spec.md Section 8
+- response.audit_agent_gpt — GPT-5.4's audit of coding-agent-loop-spec.md Section 9
 
 OPUS AUDITS (your own):
 - response.audit_llm_opus — your audit of unified-llm-spec.md Section 8
@@ -559,7 +559,7 @@ Respond with JSON (not by writing out a file):
     ]
 
     triage_gpt [
-        label="GPT-5.2: Triage & Prioritize",
+        label="GPT-5.4: Triage & Prioritize",
         shape=box,
         class="gpt",
         fidelity="full",
@@ -574,7 +574,7 @@ For each IMPLEMENTABLE item, identify the exact file(s) to modify and briefly de
 
 Respond with JSON (not by writing out a file):
 {
-  \"model\": \"gpt-5.2\",
+  \"model\": \"gpt-5.4\",
   \"total_failing\": N,
   \"implementable\": [ {\"rank\": 1, \"spec\": \"...\", \"section\": \"...\", \"text\": \"...\", \"files\": [\"...\"], \"fix\": \"...\", \"impact\": \"high|medium|low\"} ],
   \"structural\": [ ... ],
@@ -765,7 +765,7 @@ Respond with JSON (not by writing out a file):
     ]
 
     final_audit_gpt [
-        label="GPT-5.2: Final Verification",
+        label="GPT-5.4: Final Verification",
         shape=box,
         class="gpt",
         fidelity="full",
@@ -781,7 +781,7 @@ Check ONLY the items that were previously failing. Have they been fixed?
 
 Respond with JSON (not by writing out a file):
 {
-  \"model\": \"gpt-5.2\",
+  \"model\": \"gpt-5.4\",
   \"verified_fixed\": [ {\"spec\": \"...\", \"section\": \"...\", \"text\": \"...\"} ],
   \"still_failing\": [ {\"spec\": \"...\", \"section\": \"...\", \"text\": \"...\", \"reason\": \"...\"} ],
   \"newly_broken\": [ ... ],

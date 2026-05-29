@@ -473,9 +473,9 @@ mod tests {
     use fabro_types::graph::Graph;
     use fabro_types::run::RunSpec;
     use fabro_types::{
-        Checkpoint, CheckpointRecord, Conclusion, RunDiff, RunSandbox, RunStatus,
-        SandboxProviderKind, StageCompletion, StageModelUsage, StageOutcome, StartRecord,
-        SuccessReason, WorkflowSettings, first_event_seq, fixtures,
+        Checkpoint, CheckpointRecord, Conclusion, RunDiff, RunSandbox, RunSandboxInstance,
+        RunSandboxPlan, RunStatus, SandboxProviderKind, StageCompletion, StageModelUsage,
+        StageOutcome, StartRecord, SuccessReason, WorkflowSettings, first_event_seq, fixtures,
     };
     use futures::executor;
 
@@ -488,6 +488,7 @@ mod tests {
             graph:            Graph::new("ship"),
             graph_source:     Some("digraph Ship {}".to_string()),
             workflow_slug:    Some("demo".to_string()),
+            automation:       None,
             source_directory: Some("/tmp/project".to_string()),
             git:              Some(fabro_types::GitContext {
                 origin_url:   "https://github.com/fabro-sh/fabro.git".to_string(),
@@ -557,22 +558,29 @@ mod tests {
             total_retries:        0,
             diff:                 RunDiff::default(),
         });
-        projection.sandbox = Some(RunSandbox {
-            provider: SandboxProviderKind::Local,
-            image:    None,
-            snapshot: None,
-            runtime:  Some(fabro_types::RunSandboxRuntime {
-                id:                "sandbox-1".to_string(),
-                working_directory: "/tmp/project".to_string(),
-                repo_cloned:       None,
-                clone_origin_url:  None,
-                clone_branch:      None,
-                workspace_root:    None,
-                repos_root:        None,
-                primary_repo_path: None,
-                primary_repo_link: None,
-            }),
-        });
+        projection.sandbox = Some(RunSandbox::ready(
+            RunSandboxPlan {
+                provider: SandboxProviderKind::Local,
+                image:    None,
+                snapshot: None,
+            },
+            RunSandboxInstance {
+                provider: SandboxProviderKind::Local,
+                image:    None,
+                snapshot: None,
+                runtime:  fabro_types::RunSandboxRuntime {
+                    id:                "sandbox-1".to_string(),
+                    working_directory: "/tmp/project".to_string(),
+                    repo_cloned:       None,
+                    clone_origin_url:  None,
+                    clone_branch:      None,
+                    workspace_root:    None,
+                    repos_root:        None,
+                    primary_repo_path: None,
+                    primary_repo_link: None,
+                },
+            },
+        ));
         let stage =
             projection.stage_entry(stage_id.node_id(), stage_id.visit(), first_event_seq(2));
         stage.prompt = Some("plan".to_string());

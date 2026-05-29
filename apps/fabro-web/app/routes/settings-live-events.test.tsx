@@ -15,11 +15,15 @@ mock.module("../lib/live-events", () => ({
       if (capturedOnEvent === onEvent) capturedOnEvent = null;
     };
   },
+  useLiveEventsSubscription: (onEvent: (payload: LiveEventPayload) => void) => {
+    capturedOnEvent = onEvent;
+  },
 }));
 
 const { default: SettingsLiveEvents, appendLiveEvent, MAX_EVENTS } = await import(
   "./settings-live-events"
 );
+mock.restore();
 
 const mountedRenderers: TestRenderer.ReactTestRenderer[] = [];
 

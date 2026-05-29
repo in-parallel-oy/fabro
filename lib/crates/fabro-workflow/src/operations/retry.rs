@@ -48,6 +48,7 @@ pub async fn retry_run(
         graph,
         graph_source,
         workflow_slug,
+        automation,
         source_directory,
         labels,
         provenance: _,
@@ -76,6 +77,7 @@ pub async fn retry_run(
         run_dir: String::new(),
         source_directory,
         workflow_slug,
+        automation,
         db_prefix: None,
         provenance: input.provenance.clone(),
         manifest_blob,
@@ -101,11 +103,12 @@ pub async fn retry_run(
 }
 
 fn ensure_retryable(status: RunStatus, run_id: &RunId) -> std::result::Result<(), Error> {
-    match status {
-        RunStatus::Failed { .. } | RunStatus::Dead => Ok(()),
-        other => Err(Error::Precondition(format!(
-            "run {run_id} cannot be retried from status {other}; expected failed or dead"
-        ))),
+    if status.is_terminal() {
+        Ok(())
+    } else {
+        Err(Error::Precondition(format!(
+            "run {run_id} cannot be retried from status {status}; expected terminal"
+        )))
     }
 }
 
@@ -186,6 +189,7 @@ mod tests {
             run_dir: "/tmp/source".to_string(),
             source_directory: Some("/workspace/source".to_string()),
             workflow_slug: Some("retry-source".to_string()),
+            automation: None,
             db_prefix: None,
             provenance: Some(provenance("source-user")),
             manifest_blob,
@@ -230,6 +234,23 @@ mod tests {
             None,
         );
         event::append_event(store, &run_id, &event).await.unwrap();
+    }
+
+    async fn append_succeeded(store: &fabro_store::RunDatabase, run_id: RunId) {
+        append_started(store, run_id).await;
+        event::append_event(store, &run_id, &Event::WorkflowRunCompleted {
+            timing:               RunTiming::wall_only(10),
+            artifact_count:       0,
+            status:               "succeeded".to_string(),
+            reason:               fabro_types::SuccessReason::Completed,
+            total_usd_micros:     None,
+            final_git_commit_sha: None,
+            final_patch:          None,
+            diff_summary:         None,
+            billing:              None,
+        })
+        .await
+        .unwrap();
     }
 
     async fn seed_retryable_failed_source(
@@ -304,6 +325,8 @@ mod tests {
             provider:          fabro_types::SandboxProviderKind::Local,
             id:                "sandbox-source".to_string(),
             working_directory: "/tmp/source".to_string(),
+            image:             None,
+            snapshot:          None,
             repo_cloned:       None,
             clone_origin_url:  None,
             clone_branch:      None,
@@ -401,7 +424,7 @@ mod tests {
             retry_state
                 .sandbox
                 .as_ref()
-                .and_then(|sandbox| sandbox.runtime.as_ref())
+                .and_then(fabro_types::RunSandbox::instance)
                 .is_none()
         );
 
@@ -419,26 +442,51 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn retry_rejects_non_retryable_sources() {
+    async fn retry_creates_fresh_run_from_succeeded_source() {
         let store = memory_store();
-
-        let succeeded = fixtures::RUN_1;
-        let succeeded_store = store.create_run(&succeeded).await.unwrap();
-        append_created(&succeeded_store, succeeded, None, None).await;
-        append_started(&succeeded_store, succeeded).await;
-        event::append_event(&succeeded_store, &succeeded, &Event::WorkflowRunCompleted {
-            timing:               RunTiming::wall_only(10),
-            artifact_count:       0,
-            status:               "succeeded".to_string(),
-            reason:               fabro_types::SuccessReason::Completed,
-            total_usd_micros:     None,
-            final_git_commit_sha: None,
-            final_patch:          None,
-            diff_summary:         None,
-            billing:              None,
+        let source_run_id = fixtures::RUN_1;
+        let source_store = store.create_run(&source_run_id).await.unwrap();
+        append_created(&source_store, source_run_id, None, None).await;
+        let definition_blob = Some(
+            source_store
+                .write_blob(br#"{\"definition\":true}"#)
+                .await
+                .unwrap(),
+        );
+        event::append_event(&source_store, &source_run_id, &Event::RunSubmitted {
+            definition_blob,
         })
         .await
         .unwrap();
+        append_succeeded(&source_store, source_run_id).await;
+
+        let outcome = retry_run(&store, &RetryRunInput {
+            source_run_id,
+            new_run_id: RunId::new(),
+            provenance: Some(provenance("retry-user")),
+            web_url: None,
+        })
+        .await
+        .unwrap();
+
+        let retry_store = store.open_run(&outcome.new_run_id).await.unwrap();
+        let retry_events = retry_store.list_events().await.unwrap();
+        let retry_state = fabro_store::RunProjection::apply_events(&retry_events).unwrap();
+        assert_eq!(retry_events.len(), 2);
+        assert_eq!(retry_state.status, RunStatus::Submitted);
+        assert_eq!(retry_state.retried_from, Some(source_run_id));
+        assert_eq!(retry_state.spec.definition_blob, definition_blob);
+        assert_eq!(
+            source_store.state().await.unwrap().status,
+            RunStatus::Succeeded {
+                reason: fabro_types::SuccessReason::Completed,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn retry_rejects_active_and_archived_sources() {
+        let store = memory_store();
 
         let active = fixtures::RUN_2;
         let active_store = store.create_run(&active).await.unwrap();
@@ -465,7 +513,7 @@ mod tests {
         .await
         .unwrap();
 
-        for run_id in [succeeded, active, archived] {
+        for run_id in [active, archived] {
             let err = retry_run(&store, &RetryRunInput {
                 source_run_id: run_id,
                 new_run_id:    RunId::new(),
@@ -502,6 +550,17 @@ mod tests {
     #[test]
     fn dead_status_is_retryable() {
         ensure_retryable(RunStatus::Dead, &fixtures::RUN_1).unwrap();
+    }
+
+    #[test]
+    fn succeeded_status_is_retryable() {
+        ensure_retryable(
+            RunStatus::Succeeded {
+                reason: fabro_types::SuccessReason::Completed,
+            },
+            &fixtures::RUN_1,
+        )
+        .unwrap();
     }
 
     #[test]

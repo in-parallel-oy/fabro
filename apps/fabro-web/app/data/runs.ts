@@ -1,10 +1,12 @@
 import { formatDurationMs } from "../lib/format";
 import {
   BoardColumn,
+  type Principal,
   type Run,
   type RunSize,
   type RunStatus as ApiRunStatus,
 } from "@qltysh/fabro-api-client";
+import { sandboxRuntime } from "../lib/run-sandbox-lifecycle";
 
 export type CiStatus = "passing" | "failing" | "pending";
 
@@ -39,6 +41,7 @@ export interface RunItem {
   sandboxWorkingDirectory?: string;
   sourceDirectory?: string;
   createdAt?: string;
+  createdBy?: Principal | null;
   lastEventAt?: string;
   size?: RunSize;
 }
@@ -87,7 +90,7 @@ function runStatusKind(status: ApiRunStatus | null | undefined): RunStatus | nul
 
 export function mapRunListItem(item: Run): RunItem {
   const lifecycleStatus = item.lifecycle.archived ? "archived" : runStatusKind(item.lifecycle.status);
-  const runtime = item.sandbox?.runtime;
+  const runtime = sandboxRuntime(item.sandbox);
   return {
     id: item.id,
     repo: displayRepoName(item.repository?.name ?? "unknown"),
@@ -108,6 +111,7 @@ export function mapRunListItem(item: Run): RunItem {
     sandboxWorkingDirectory: runtime?.working_directory ?? undefined,
     sourceDirectory: item.source_directory ?? undefined,
     createdAt: item.timestamps.created_at,
+    createdBy: item.created_by,
     lastEventAt: item.timestamps.last_event_at ?? undefined,
     additions: item.diff?.additions,
     deletions: item.diff?.deletions,

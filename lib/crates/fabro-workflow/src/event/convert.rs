@@ -34,6 +34,7 @@ fn event_body_from_event(event: &Event) -> EventBody {
             run_dir,
             source_directory,
             workflow_slug,
+            automation,
             db_prefix,
             provenance,
             manifest_blob,
@@ -46,14 +47,15 @@ fn event_body_from_event(event: &Event) -> EventBody {
         } => EventBody::RunCreated(fabro_types::RunCreatedProps {
             title:            title.clone(),
             settings:         serde_json::from_value(settings.clone())
-                .expect("run.created settings"),
-            graph:            serde_json::from_value(graph.clone()).expect("run.created graph"),
+                .expect("run.created settings should deserialize: value was serialized from a typed struct in this session"),
+            graph:            serde_json::from_value(graph.clone()).expect("run.created graph should deserialize: value was serialized from a typed struct in this session"),
             workflow_source:  workflow_source.clone(),
             workflow_config:  workflow_config.clone(),
             labels:           labels.clone(),
             run_dir:          run_dir.clone(),
             source_directory: source_directory.clone(),
             workflow_slug:    workflow_slug.clone(),
+            automation:       automation.clone(),
             db_prefix:        db_prefix.clone(),
             provenance:       provenance.clone(),
             manifest_blob:    *manifest_blob,
@@ -651,7 +653,7 @@ fn event_body_from_event(event: &Event) -> EventBody {
                 turn_id:      None,
             }),
             AgentEvent::Error { error } => EventBody::AgentError(fabro_types::AgentErrorProps {
-                error: serde_json::to_value(error).expect("serializable agent error"),
+                error: serde_json::to_value(error).expect("agent Error derives Serialize with no custom logic that can fail"),
                 visit: *visit,
             }),
             AgentEvent::Warning {
@@ -710,7 +712,7 @@ fn event_body_from_event(event: &Event) -> EventBody {
                 model:      model.clone(),
                 attempt:    *attempt,
                 delay_secs: *delay_secs,
-                error:      serde_json::to_value(error).expect("serializable sdk error"),
+                error:      serde_json::to_value(error).expect("LLM SDK error derives Serialize with no custom logic that can fail"),
                 visit:      *visit,
             }),
             AgentEvent::SubAgentSpawned {
@@ -742,7 +744,7 @@ fn event_body_from_event(event: &Event) -> EventBody {
             } => EventBody::AgentSubFailed(fabro_types::AgentSubFailedProps {
                 agent_id: agent_id.clone(),
                 depth:    *depth,
-                error:    serde_json::to_value(error).expect("serializable agent error"),
+                error:    serde_json::to_value(error).expect("agent Error derives Serialize with no custom logic that can fail"),
                 visit:    *visit,
             }),
             AgentEvent::SubAgentClosed { agent_id, depth } => {
@@ -834,8 +836,9 @@ fn event_body_from_event(event: &Event) -> EventBody {
             | AgentEvent::ReasoningDelta { .. }
             | AgentEvent::ToolCallOutputDelta { .. }
             | AgentEvent::SessionStarted { .. }
-            | AgentEvent::SessionEnded => panic!(
-                "agent event should not be converted through the stage-scoped Event::Agent wrapper"
+            | AgentEvent::SessionEnded => unreachable!(
+                "streaming noise and session lifecycle events are filtered out before wrapping in \
+                 Event::Agent; if this is reached, the emitter has a routing bug"
             ),
         },
         Event::SubgraphStarted { start_node, .. } => {
@@ -1014,6 +1017,8 @@ fn event_body_from_event(event: &Event) -> EventBody {
             working_directory,
             provider,
             id,
+            image,
+            snapshot,
             repo_cloned,
             clone_origin_url,
             clone_branch,
@@ -1025,6 +1030,8 @@ fn event_body_from_event(event: &Event) -> EventBody {
             working_directory: working_directory.clone(),
             provider:          *provider,
             id:                id.clone(),
+            image:             image.clone(),
+            snapshot:          snapshot.clone(),
             repo_cloned:       *repo_cloned,
             clone_origin_url:  clone_origin_url.clone(),
             clone_branch:      clone_branch.clone(),
@@ -1359,77 +1366,6 @@ fn event_body_from_event(event: &Event) -> EventBody {
                 error: error.clone(),
             })
         }
-        Event::DevcontainerResolved {
-            dockerfile_lines,
-            environment_count,
-            lifecycle_command_count,
-            workspace_folder,
-        } => EventBody::DevcontainerResolved(fabro_types::DevcontainerResolvedProps {
-            dockerfile_lines:        *dockerfile_lines,
-            environment_count:       *environment_count,
-            lifecycle_command_count: *lifecycle_command_count,
-            workspace_folder:        workspace_folder.clone(),
-        }),
-        Event::DevcontainerLifecycleStarted {
-            phase,
-            command_count,
-        } => EventBody::DevcontainerLifecycleStarted(
-            fabro_types::DevcontainerLifecycleStartedProps {
-                phase:         phase.clone(),
-                command_count: *command_count,
-            },
-        ),
-        Event::DevcontainerLifecycleCommandStarted {
-            phase,
-            command,
-            index,
-        } => EventBody::DevcontainerLifecycleCommandStarted(
-            fabro_types::DevcontainerLifecycleCommandStartedProps {
-                phase:   phase.clone(),
-                command: command.clone(),
-                index:   *index,
-            },
-        ),
-        Event::DevcontainerLifecycleCommandCompleted {
-            phase,
-            command,
-            index,
-            exit_code,
-            duration_ms,
-        } => EventBody::DevcontainerLifecycleCommandCompleted(
-            fabro_types::DevcontainerLifecycleCommandCompletedProps {
-                phase:       phase.clone(),
-                command:     command.clone(),
-                index:       *index,
-                exit_code:   *exit_code,
-                duration_ms: *duration_ms,
-            },
-        ),
-        Event::DevcontainerLifecycleCompleted { phase, duration_ms } => {
-            EventBody::DevcontainerLifecycleCompleted(
-                fabro_types::DevcontainerLifecycleCompletedProps {
-                    phase:       phase.clone(),
-                    duration_ms: *duration_ms,
-                },
-            )
-        }
-        Event::DevcontainerLifecycleFailed {
-            phase,
-            command,
-            index,
-            exit_code,
-            stderr,
-            exec_output_tail,
-        } => {
-            EventBody::DevcontainerLifecycleFailed(fabro_types::DevcontainerLifecycleFailedProps {
-                phase:            phase.clone(),
-                command:          command.clone(),
-                index:            *index,
-                exit_code:        *exit_code,
-                stderr:           stderr.clone(),
-                exec_output_tail: exec_output_tail.clone(),
-            })
-        }
     }
 }
 
@@ -1469,8 +1405,9 @@ mod tests {
     use std::collections::BTreeMap;
 
     use ::fabro_types::{
-        EventBody, FailureReason, ParallelBranchId, Principal, RunNoticeCode, RunNoticeLevel,
-        RunProvenance, StageId, SystemActorKind, fixtures, run_event as fabro_types,
+        AutomationRef, EventBody, FailureReason, ParallelBranchId, Principal, RunNoticeCode,
+        RunNoticeLevel, RunProvenance, StageId, SystemActorKind, fixtures,
+        run_event as fabro_types,
     };
     use chrono::Utc;
     use fabro_agent::{
@@ -2522,6 +2459,11 @@ mod tests {
             client:  None,
             subject: Some(user_principal("alice")),
         };
+        let automation = AutomationRef {
+            id:         "nightly".to_string(),
+            name:       Some("Nightly".to_string()),
+            trigger_id: Some("schedule_1".to_string()),
+        };
 
         let stored = to_run_event(&fixtures::RUN_1, &Event::RunCreated {
             run_id:           fixtures::RUN_1,
@@ -2534,6 +2476,7 @@ mod tests {
             run_dir:          "/tmp/run".to_string(),
             source_directory: Some("/tmp/run".to_string()),
             workflow_slug:    None,
+            automation:       Some(automation.clone()),
             db_prefix:        None,
             provenance:       Some(provenance),
             manifest_blob:    None,
@@ -2545,6 +2488,10 @@ mod tests {
         });
         let actor = stored.actor.as_ref().expect("actor set");
         assert_eq!(actor, &user_principal("alice"));
+        let EventBody::RunCreated(props) = stored.body else {
+            panic!("expected run.created body");
+        };
+        assert_eq!(props.automation, Some(automation));
     }
 
     #[test]

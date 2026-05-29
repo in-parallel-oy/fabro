@@ -53,7 +53,7 @@ async fn main() {
 
     // Capture the worker bearer token immediately and scrub it from the process
     // env before any subprocess can be spawned. Every descendant of the worker
-    // (hooks, sandbox commands, devcontainer setup, MCP stdio, etc.) therefore
+    // (hooks, sandbox commands, MCP stdio, etc.) therefore
     // inherits a process env that no longer contains this credential, so an
     // unscrubbed spawn site cannot leak it. The token flows to `runner::execute`
     // through explicit function arguments instead of the environment.
@@ -362,6 +362,9 @@ async fn main_inner(worker_token: Option<String>) -> (String, Result<()>) {
             }
             Commands::Secret(ns) => {
                 commands::secret::dispatch(ns, &base_ctx).await?;
+            }
+            Commands::Variable(ns) => {
+                commands::variable::dispatch(ns, &base_ctx).await?;
             }
             Commands::Settings(args) => {
                 Box::pin(commands::config::execute(&args, &base_ctx)).await?;

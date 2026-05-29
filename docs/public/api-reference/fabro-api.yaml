@@ -15,6 +15,8 @@ tags:
     description: Browser authentication
   - name: Runs
     description: Run management operations
+  - name: Automations
+    description: Server-managed automation definitions and automation-triggered runs
   - name: Sandboxes
     description: Provider-backed sandbox inventory
   - name: Sessions
@@ -2074,10 +2076,10 @@ paths:
       tags: [Runs]
       summary: Retry Run
       description: >
-        Creates a fresh run from the failed or dead source run's captured
+        Creates a fresh run from the terminal source run's captured
         durable definition, records `retried_from` on the new run, and schedules
-        it for execution. The source run is left unchanged. Active, succeeded,
-        and archived runs are not retryable.
+        it for execution. The source run is left unchanged. Active and archived
+        runs are not retryable.
       parameters:
         - $ref: "#/components/parameters/RunId"
       responses:
@@ -3940,6 +3942,288 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ── Automations ──────────────────────────────────────────────────────
+
+  /api/v1/automations:
+    get:
+      operationId: listAutomations
+      tags: [Automations]
+      summary: List automations
+      description: Returns all configured automation definitions.
+      responses:
+        "200":
+          description: Automation definitions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationListResponse"
+    post:
+      operationId: createAutomation
+      tags: [Automations]
+      summary: Create automation
+      description: Creates a new automation definition.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAutomationRequest"
+      responses:
+        "201":
+          description: Automation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Automation"
+        "400":
+          description: Malformed JSON request body
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Automation id already exists
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Automation failed domain validation
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/automations/{id}:
+    get:
+      operationId: retrieveAutomation
+      tags: [Automations]
+      summary: Retrieve automation
+      description: Returns one automation definition by id.
+      parameters:
+        - $ref: "#/components/parameters/AutomationId"
+      responses:
+        "200":
+          description: Automation definition
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Automation"
+        "404":
+          description: Automation not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: replaceAutomation
+      tags: [Automations]
+      summary: Replace automation
+      description: Replaces an automation definition when `If-Match` matches the current automation revision.
+      parameters:
+        - $ref: "#/components/parameters/AutomationId"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceAutomationRequest"
+      responses:
+        "200":
+          description: Automation replaced
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Automation"
+        "400":
+          description: Malformed JSON request body or invalid revision header
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Automation not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Automation revision mismatch
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Automation failed domain validation
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "428":
+          description: Missing required `If-Match` header
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteAutomation
+      tags: [Automations]
+      summary: Delete automation
+      description: Deletes an automation definition when `If-Match` matches the current automation revision.
+      parameters:
+        - $ref: "#/components/parameters/AutomationId"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "204":
+          description: Automation deleted
+        "400":
+          description: Invalid revision header
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Automation not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Automation revision mismatch
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "428":
+          description: Missing required `If-Match` header
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/automations/{id}/runs:
+    get:
+      operationId: listAutomationRuns
+      tags: [Automations]
+      summary: List automation runs
+      description: Returns durable runs created by one automation.
+      parameters:
+        - $ref: "#/components/parameters/AutomationId"
+        - $ref: "#/components/parameters/PageLimit"
+        - $ref: "#/components/parameters/PageOffset"
+      responses:
+        "200":
+          description: Paginated durable runs for the automation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedRunList"
+        "400":
+          description: Invalid pagination parameter
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Automation not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createAutomationRun
+      tags: [Automations]
+      summary: Create automation run
+      description: Creates a new run by firing the automation's enabled API trigger.
+      parameters:
+        - $ref: "#/components/parameters/AutomationId"
+      responses:
+        "201":
+          description: Run created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "404":
+          description: Automation not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Automation is disabled or has no enabled API trigger
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Automation target could not be materialized into a run
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ── Workflows ────────────────────────────────────────────────────────
 
   /api/v1/workflows:
@@ -4271,6 +4555,20 @@ paths:
               schema:
                 $ref: "#/components/schemas/SystemResourcesResponse"
 
+  /api/v1/system/integrations:
+    get:
+      operationId: getSystemIntegrations
+      tags: [System]
+      summary: Retrieve System Integrations
+      description: Returns runtime integration status computed from server configuration, vault credentials, and live connection state.
+      responses:
+        "200":
+          description: Runtime integration status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemIntegrationsResponse"
+
   /api/v1/system/df:
     get:
       operationId: getSystemDiskUsage
@@ -4411,6 +4709,176 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: Secret store write failed
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Variables ────────────────────────────────────────────────────────
+
+  /api/v1/variables:
+    get:
+      operationId: listVariables
+      tags: [Variables]
+      summary: List variables
+      description: Returns non-sensitive variables, including values.
+      responses:
+        "200":
+          description: Variable list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VariableListResponse"
+    post:
+      operationId: createVariable
+      tags: [Variables]
+      summary: Store or update a variable
+      description: Stores a non-sensitive variable for run config interpolation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVariableRequest"
+      responses:
+        "200":
+          description: Variable stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Variable"
+        "400":
+          description: Invalid variable name or request body
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Variable store write failed
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/variables/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[A-Za-z_][A-Za-z0-9_]*$"
+        description: Variable name.
+    get:
+      operationId: getVariable
+      tags: [Variables]
+      summary: Get a variable
+      responses:
+        "200":
+          description: Variable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Variable"
+        "400":
+          description: Invalid variable name
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Variable not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateVariable
+      tags: [Variables]
+      summary: Replace a variable value
+      description: Replaces a variable value and preserves the existing description when omitted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateVariableRequest"
+      responses:
+        "200":
+          description: Variable updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Variable"
+        "400":
+          description: Invalid variable name or request body
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Variable not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Variable store write failed
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteVariable
+      tags: [Variables]
+      summary: Delete a variable
+      responses:
+        "204":
+          description: Variable deleted
+        "400":
+          description: Invalid variable name
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Variable not found
+          headers:
+            x-request-id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Variable store write failed
           headers:
             x-request-id:
               $ref: "#/components/headers/XRequestId"
@@ -4625,6 +5093,25 @@ components:
       schema:
         type: string
       example: 01JNQVR7M0EJ5GKAT2SC4ERS1Z
+
+    AutomationId:
+      name: id
+      in: path
+      required: true
+      description: Unique automation identifier.
+      schema:
+        type: string
+        pattern: "^[a-z0-9][a-z0-9-]{0,62}$"
+      example: nightly-deps
+
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Current resource revision used for optimistic concurrency, as returned in the `ETag` response header.
+      schema:
+        type: string
+      example: '"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"'
 
     RunSelector:
       name: selector
@@ -4874,6 +5361,12 @@ components:
       schema:
         type: string
         format: uuid
+
+    ETag:
+      description: Current resource revision for optimistic concurrency. Supply this value via `If-Match` on subsequent mutating requests.
+      schema:
+        type: string
+      example: '"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"'
 
   schemas:
     AuthConfigResponse:
@@ -5336,6 +5829,209 @@ components:
             Dev token used to bootstrap login. Only included when the operator
             chose the personal access token flow; GitHub App installs rely on
             OAuth and do not receive a dev token.
+
+    # ── Automations ──────────────────────────────────────────────────────
+
+    Automation:
+      description: Public automation definition.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - revision
+        - name
+        - description
+        - enabled
+        - target
+        - triggers
+      properties:
+        id:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9-]{0,62}$"
+          example: nightly-deps
+        revision:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: Stable revision used with `If-Match` for optimistic concurrency.
+          example: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+        name:
+          type: string
+          example: Nightly dependency update
+        description:
+          type: ["string", "null"]
+          example: Keeps dependencies fresh.
+        enabled:
+          type: boolean
+          example: true
+        target:
+          $ref: "#/components/schemas/AutomationTarget"
+        triggers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutomationTrigger"
+
+    AutomationTarget:
+      description: Repository and workflow selected by an automation.
+      type: object
+      additionalProperties: false
+      required:
+        - repository
+        - ref
+        - workflow
+      properties:
+        repository:
+          type: string
+          description: GitHub repository slug in `owner/repo` form.
+          example: fabro-sh/fabro
+        ref:
+          type: string
+          description: Branch, tag, or SHA selector resolved when materializing a run.
+          example: main
+        workflow:
+          type: string
+          description: Workflow slug or path resolved in the target repository.
+          example: dependency-update
+
+    AutomationTrigger:
+      description: |
+        Automation trigger configuration. Unknown `type` discriminator values
+        are reported by handlers as domain validation errors with HTTP 422.
+      oneOf:
+        - $ref: "#/components/schemas/AutomationApiTrigger"
+        - $ref: "#/components/schemas/AutomationScheduleTrigger"
+      discriminator:
+        propertyName: type
+        mapping:
+          api: "#/components/schemas/AutomationApiTrigger"
+          schedule: "#/components/schemas/AutomationScheduleTrigger"
+
+    AutomationApiTrigger:
+      description: Trigger that allows callers to create runs through the automation API.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - type
+        - enabled
+      properties:
+        id:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9_-]{0,62}$"
+          example: manual
+        type:
+          type: string
+          enum: [api]
+        enabled:
+          type: boolean
+          example: true
+
+    AutomationScheduleTrigger:
+      description: Cron schedule trigger evaluated in UTC.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - type
+        - enabled
+        - expression
+      properties:
+        id:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9_-]{0,62}$"
+          example: nightly
+        type:
+          type: string
+          enum: [schedule]
+        enabled:
+          type: boolean
+          example: true
+        expression:
+          type: string
+          description: Five-field cron expression evaluated in UTC.
+          example: "0 3 * * *"
+
+    CreateAutomationRequest:
+      description: Request body for creating an automation.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - target
+        - triggers
+      properties:
+        id:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9-]{0,62}$"
+          example: nightly-deps
+        name:
+          type: string
+          example: Nightly dependency update
+        description:
+          type: ["string", "null"]
+          example: Keeps dependencies fresh.
+        enabled:
+          type: boolean
+          default: true
+        target:
+          $ref: "#/components/schemas/AutomationTarget"
+        triggers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutomationTrigger"
+
+    ReplaceAutomationRequest:
+      description: Request body for replacing an automation.
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - enabled
+        - target
+        - triggers
+      properties:
+        name:
+          type: string
+          example: Nightly dependency update
+        description:
+          type: ["string", "null"]
+          example: Keeps dependencies fresh.
+        enabled:
+          type: boolean
+        target:
+          $ref: "#/components/schemas/AutomationTarget"
+        triggers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutomationTrigger"
+
+    AutomationListResponse:
+      description: List envelope for automation definitions.
+      type: object
+      additionalProperties: false
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Automation"
+        meta:
+          $ref: "#/components/schemas/AutomationListMeta"
+
+    AutomationListMeta:
+      description: Metadata for automation list responses.
+      type: object
+      additionalProperties: false
+      required:
+        - total
+      properties:
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Total number of configured automation definitions.
 
     # ── Pagination ───────────────────────────────────────────────────────
 
@@ -9119,6 +9815,10 @@ components:
           type: ["string", "null"]
         workflow_slug:
           type: ["string", "null"]
+        automation:
+          oneOf:
+            - $ref: "#/components/schemas/AutomationRef"
+            - type: "null"
         source_directory:
           type: ["string", "null"]
         labels:
@@ -9545,6 +10245,8 @@ components:
         id:
           type: string
         name:
+          type: ["string", "null"]
+        trigger_id:
           type: ["string", "null"]
 
     RunOrigin:
@@ -10248,13 +10950,55 @@ components:
         - docker
         - daytona
 
-    RunSandbox:
-      description: Canonical sandbox environment record for a run.
+    RunSandboxKind:
+      description: Lifecycle state for a run sandbox request.
+      type: string
+      enum:
+        - planned
+        - initializing
+        - ready
+        - failed
+
+    RunSandboxPlan:
+      description: Requested sandbox provider and base image/snapshot from run settings.
       type: object
       required:
         - provider
-        - image
-        - snapshot
+      properties:
+        provider:
+          $ref: "#/components/schemas/SandboxProviderKind"
+        image:
+          type: ["string", "null"]
+        snapshot:
+          type: ["string", "null"]
+
+    RunSandbox:
+      description: Sandbox lifecycle record for a run. A run can have a requested sandbox plan before it has an initialized sandbox instance.
+      type: object
+      required:
+        - kind
+        - plan
+      properties:
+        kind:
+          $ref: "#/components/schemas/RunSandboxKind"
+        plan:
+          $ref: "#/components/schemas/RunSandboxPlan"
+        instance:
+          oneOf:
+            - $ref: "#/components/schemas/RunSandboxInstance"
+            - type: "null"
+          description: Present only when `kind` is `ready`.
+        failure:
+          oneOf:
+            - $ref: "#/components/schemas/RunSandboxFailure"
+            - type: "null"
+          description: Present only when `kind` is `failed`.
+
+    RunSandboxInstance:
+      description: Initialized sandbox provider and runtime metadata.
+      type: object
+      required:
+        - provider
         - runtime
       properties:
         provider:
@@ -10264,9 +11008,30 @@ components:
         snapshot:
           type: ["string", "null"]
         runtime:
-          oneOf:
-            - $ref: "#/components/schemas/RunSandboxRuntime"
-            - type: "null"
+          $ref: "#/components/schemas/RunSandboxRuntime"
+
+    RunSandboxFailure:
+      description: Sandbox initialization failure details.
+      type: object
+      required:
+        - provider
+        - error
+        - causes
+        - duration_ms
+      properties:
+        provider:
+          type: string
+          description: Provider reported by the sandbox initialization event.
+        error:
+          type: string
+        causes:
+          type: array
+          items:
+            type: string
+        duration_ms:
+          type: integer
+          format: uint64
+          minimum: 0
 
     RunSandboxRuntime:
       type: object
@@ -11136,7 +11901,7 @@ components:
         - timestamps
       properties:
         sandbox:
-          $ref: "#/components/schemas/RunSandbox"
+          $ref: "#/components/schemas/RunSandboxInstance"
         state:
           $ref: "#/components/schemas/SandboxState"
         native_state:
@@ -11515,7 +12280,6 @@ components:
         - api
         - web
         - auth
-        - ip_allowlist
         - sandbox
         - storage
         - artifacts
@@ -11532,8 +12296,6 @@ components:
           $ref: "#/components/schemas/ServerWebSettings"
         auth:
           $ref: "#/components/schemas/ServerAuthSettings"
-        ip_allowlist:
-          $ref: "#/components/schemas/ServerIpAllowlistSettings"
         sandbox:
           $ref: "#/components/schemas/ServerSandboxSettings"
         storage:
@@ -11613,44 +12375,6 @@ components:
           type: array
           items:
             type: string
-
-    ServerIpAllowlistSettings:
-      type: object
-      required: [entries, trusted_proxy_count]
-      properties:
-        entries:
-          type: array
-          items:
-            $ref: "#/components/schemas/IpAllowEntry"
-        trusted_proxy_count:
-          type: integer
-
-    ServerIpAllowlistOverrideSettings:
-      type: object
-      required: [entries, trusted_proxy_count]
-      properties:
-        entries:
-          type: ["array", "null"]
-          items:
-            $ref: "#/components/schemas/IpAllowEntry"
-        trusted_proxy_count:
-          type: ["integer", "null"]
-
-    IpAllowEntry:
-      oneOf:
-        - $ref: "#/components/schemas/LiteralIpAllowEntry"
-        - $ref: "#/components/schemas/GitHubMetaHooksEntry"
-
-    LiteralIpAllowEntry:
-      type: object
-      required: [Literal]
-      properties:
-        Literal:
-          type: string
-
-    GitHubMetaHooksEntry:
-      type: string
-      enum: [GitHubMetaHooks]
 
     ServerSandboxSettings:
       type: object
@@ -11806,15 +12530,11 @@ components:
 
     IntegrationWebhooksSettings:
       type: object
-      required: [strategy, ip_allowlist]
+      required: [strategy]
       properties:
         strategy:
           oneOf:
             - $ref: "#/components/schemas/WebhookStrategy"
-            - type: "null"
-        ip_allowlist:
-          oneOf:
-            - $ref: "#/components/schemas/ServerIpAllowlistOverrideSettings"
             - type: "null"
 
     WebhookStrategy:
@@ -12163,9 +12883,9 @@ components:
 
     EnvironmentImageSettings:
       type: object
-      required: [ref, dockerfile]
+      required: [docker, dockerfile]
       properties:
-        ref:
+        docker:
           type: ["string", "null"]
         dockerfile:
           oneOf:
@@ -12532,6 +13252,96 @@ components:
           type: integer
           format: int64
           description: Runs currently occupying scheduler concurrency slots.
+
+    SystemIntegrationsResponse:
+      description: Runtime status for server integrations.
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SystemIntegrationStatus"
+
+    SystemIntegrationStatus:
+      description: Runtime status for one server integration.
+      type: object
+      required:
+        - provider
+        - enabled
+        - configured
+        - status
+        - missing_credentials
+        - connection
+        - metadata
+      properties:
+        provider:
+          $ref: "#/components/schemas/IntegrationProvider"
+        enabled:
+          type: boolean
+          description: Whether configuration allows this integration to run.
+        configured:
+          type: boolean
+          description: Whether the integration has required non-secret settings and vault credentials.
+        status:
+          $ref: "#/components/schemas/IntegrationStatus"
+        missing_credentials:
+          type: array
+          description: Missing setting or vault key names required before the integration can run.
+          items:
+            type: string
+        connection:
+          oneOf:
+            - $ref: "#/components/schemas/IntegrationConnectionStatus"
+            - type: "null"
+        metadata:
+          type: object
+          description: Non-secret display hints for the integration.
+          additionalProperties:
+            type: string
+
+    IntegrationProvider:
+      description: Server integration provider.
+      type: string
+      enum: [github, slack]
+
+    IntegrationStatus:
+      description: Computed runtime integration status.
+      type: string
+      enum:
+        - disabled
+        - missing_credentials
+        - configured
+        - connecting
+        - connected
+        - error
+
+    IntegrationConnectionStatus:
+      description: Live connection status for integrations with persistent connections.
+      type: object
+      required: [kind, status, last_connected_at, last_error]
+      properties:
+        kind:
+          $ref: "#/components/schemas/IntegrationConnectionKind"
+        status:
+          $ref: "#/components/schemas/IntegrationConnectionState"
+        last_connected_at:
+          type: ["string", "null"]
+          format: date-time
+          description: Last time this integration established its live connection.
+        last_error:
+          type: ["string", "null"]
+          description: Sanitized last connection error, if any.
+
+    IntegrationConnectionKind:
+      description: Live connection mechanism.
+      type: string
+      enum: [socket_mode]
+
+    IntegrationConnectionState:
+      description: Live connection state.
+      type: string
+      enum: [connecting, connected, error]
 
     SystemResourcesResponse:
       description: Server-visible runtime resource usage for the active Fabro process environment.
@@ -12994,6 +13804,78 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SecretMetadata"
+
+    Variable:
+      description: Non-sensitive variable available for run config interpolation.
+      type: object
+      required:
+        - name
+        - value
+        - created_at
+        - updated_at
+      properties:
+        name:
+          type: string
+          pattern: "^[A-Za-z_][A-Za-z0-9_]*$"
+          description: Env-style variable name.
+          example: DEPLOY_ENV
+        value:
+          type: string
+          description: Variable value.
+          example: production
+        description:
+          type: string
+          description: Optional operator-facing description of the variable.
+        created_at:
+          type: string
+          format: date-time
+          description: When the variable was first stored.
+        updated_at:
+          type: string
+          format: date-time
+          description: When the variable was last updated.
+
+    VariableListResponse:
+      description: List of stored variables.
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Variable"
+
+    CreateVariableRequest:
+      description: Request to store or update a variable.
+      type: object
+      required:
+        - name
+        - value
+      properties:
+        name:
+          type: string
+          pattern: "^[A-Za-z_][A-Za-z0-9_]*$"
+          description: Env-style variable name.
+        value:
+          type: string
+          description: Variable value. Empty values are allowed.
+        description:
+          type: string
+          description: Optional operator-facing description of the variable.
+
+    UpdateVariableRequest:
+      description: Request to update a variable.
+      type: object
+      required:
+        - value
+      properties:
+        value:
+          type: string
+          description: Replacement value. Empty values are allowed.
+        description:
+          type: string
+          description: Optional operator-facing description. Omitted descriptions preserve the existing value.
 
     RepoCheckResponse:
       description: Repository access check result.

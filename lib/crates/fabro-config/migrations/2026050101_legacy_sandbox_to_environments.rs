@@ -1,29 +1,11 @@
-#![expect(
-    clippy::disallowed_methods,
-    clippy::disallowed_types,
-    reason = "temporary startup config migration uses synchronous file I/O before config is loaded"
-)]
-
 use std::fmt;
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use fabro_types::settings::run::EnvironmentProvider;
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, Value};
 
-use crate::{Error, Result, SettingsLayer};
-
-pub(crate) const REMOVAL_NOTE: &str =
-    "This temporary compatibility migration will be removed before v1.0.";
-
-#[derive(Debug)]
-pub(crate) struct LegacySandboxMigrationReport {
-    pub(crate) layer:   SettingsLayer,
-    pub(crate) warning: String,
-    #[cfg(test)]
-    backup_path:        PathBuf,
-}
+use crate::{Error, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MigrationFailure {
@@ -44,41 +26,7 @@ impl fmt::Display for MigrationFailure {
     }
 }
 
-pub(crate) fn migrate_settings_path(
-    path: &Path,
-    original_contents: &str,
-) -> Result<Option<LegacySandboxMigrationReport>> {
-    let Some(next_contents) = migrate_contents(original_contents, path)? else {
-        return Ok(None);
-    };
-
-    let layer = next_contents
-        .parse::<SettingsLayer>()
-        .map_err(|err| Error::parse_file("Migrated settings file is invalid", path, err))?;
-
-    let backup_path = write_next_backup(path, original_contents)?;
-    std::fs::write(path, &next_contents).map_err(|source| {
-        Error::other(format!(
-            "writing migrated settings file {}: {source}",
-            path.display()
-        ))
-    })?;
-
-    let warning = format!(
-        "Migrated legacy [run.sandbox] settings in {} to [run.environment] and [environments.default]. Backup written to {}. {REMOVAL_NOTE}",
-        path.display(),
-        backup_path.display()
-    );
-
-    Ok(Some(LegacySandboxMigrationReport {
-        layer,
-        warning,
-        #[cfg(test)]
-        backup_path,
-    }))
-}
-
-fn migrate_contents(original_contents: &str, path: &Path) -> Result<Option<String>> {
+pub(crate) fn migrate_contents(original_contents: &str, path: &Path) -> Result<Option<String>> {
     let Ok(mut doc) = original_contents.parse::<DocumentMut>() else {
         return Ok(None);
     };
@@ -88,7 +36,7 @@ fn migrate_contents(original_contents: &str, path: &Path) -> Result<Option<Strin
     }
     if has_new_environment_config(&doc) {
         return Err(Error::other(format!(
-            "Legacy [run.sandbox] settings in {} could not be auto-migrated because the file already contains [run.environment] or [environments.default]. Remove one config style and retry.",
+            "Legacy [run.sandbox] settings in {} could not be auto-migrated because the file already contains [run.environment] or [environments]. Remove one config style and retry.",
             path.display()
         )));
     }
@@ -117,12 +65,8 @@ fn has_new_environment_config(doc: &DocumentMut) -> bool {
         .and_then(Item::as_table)
         .and_then(|run| run.get("environment"))
         .is_some();
-    let has_default_environment = doc
-        .get("environments")
-        .and_then(Item::as_table)
-        .and_then(|envs| envs.get("default"))
-        .is_some();
-    has_run_environment || has_default_environment
+    let has_environment_catalog = doc.get("environments").and_then(Item::as_table).is_some();
+    has_run_environment || has_environment_catalog
 }
 
 fn migrate_document(doc: &mut DocumentMut) -> std::result::Result<(), MigrationFailure> {
@@ -185,10 +129,14 @@ fn migrate_document(doc: &mut DocumentMut) -> std::result::Result<(), MigrationF
         ensure_table(doc.as_table_mut(), &["run", "clone"])["enabled"] =
             Item::Value(Value::from(false));
     }
+    let environment_id = match active_provider {
+        Some(EnvironmentProvider::Daytona) => "daytona",
+        _ => "default",
+    };
     ensure_table(doc.as_table_mut(), &["run", "environment"])["id"] =
-        Item::Value(Value::from("default"));
+        Item::Value(Value::from(environment_id));
 
-    let env = ensure_table(doc.as_table_mut(), &["environments", "default"]);
+    let env = ensure_table(doc.as_table_mut(), &["environments", environment_id]);
     if let Some(p) = provider_str {
         env["provider"] = Item::Value(Value::from(p));
     }
@@ -271,7 +219,7 @@ fn migrate_daytona_snapshot(snapshot_item: &Item, env: &mut Table, unsupported: 
 
     for (key, item) in snapshot {
         match key {
-            "name" => ensure_table(env, &["image"])["ref"] = item.clone(),
+            "name" => {}
             "cpu" => ensure_table(env, &["resources"])["cpu"] = item.clone(),
             "memory" => ensure_table(env, &["resources"])["memory"] = item.clone(),
             "disk" => ensure_table(env, &["resources"])["disk"] = item.clone(),
@@ -301,7 +249,7 @@ fn migrate_docker(sandbox: &Table, env: &mut Table, unsupported: &mut Vec<String
                     unsupported.push("run.sandbox.docker.skip_clone".to_string());
                 }
             }
-            "image" => ensure_table(env, &["image"])["ref"] = item.clone(),
+            "image" => ensure_table(env, &["image"])["docker"] = item.clone(),
             "memory_limit" => ensure_table(env, &["resources"])["memory"] = item.clone(),
             "cpu_quota" => {
                 if let Some(cpu_quota) = item.as_integer() {
@@ -424,62 +372,11 @@ fn remove_run_sandbox(doc: &mut DocumentMut) {
 }
 
 #[cfg(test)]
-fn next_backup_path(path: &Path) -> PathBuf {
-    for index in 0u32.. {
-        let candidate = backup_path_for(path, index);
-        if !candidate.exists() {
-            return candidate;
-        }
-    }
-    unreachable!("unbounded backup suffix search should return")
-}
-
-fn write_next_backup(path: &Path, contents: &str) -> Result<PathBuf> {
-    for index in 0u32.. {
-        let backup_path = backup_path_for(path, index);
-        match std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&backup_path)
-        {
-            Ok(mut file) => {
-                file.write_all(contents.as_bytes()).map_err(|source| {
-                    Error::other(format!(
-                        "writing legacy sandbox migration backup {}: {source}",
-                        backup_path.display()
-                    ))
-                })?;
-                return Ok(backup_path);
-            }
-            Err(source) if source.kind() == std::io::ErrorKind::AlreadyExists => {}
-            Err(source) => {
-                return Err(Error::other(format!(
-                    "writing legacy sandbox migration backup {}: {source}",
-                    backup_path.display()
-                )));
-            }
-        }
-    }
-    unreachable!("unbounded backup suffix search should return")
-}
-
-fn backup_path_for(path: &Path, index: u32) -> PathBuf {
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("settings.toml");
-    if index == 0 {
-        path.with_file_name(format!("{file_name}.legacy-sandbox-migration.bak"))
-    } else {
-        path.with_file_name(format!("{file_name}.legacy-sandbox-migration.{index}.bak"))
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use fabro_types::settings::InterpString;
 
     use super::*;
+    use crate::SettingsLayer;
 
     fn migrate(source: &str) -> String {
         migrate_contents(source, Path::new("settings.toml"))
@@ -488,7 +385,7 @@ mod tests {
     }
 
     #[test]
-    fn provider_only_daytona_config_migrates_to_default_environment() {
+    fn provider_only_daytona_config_migrates_to_daytona_environment() {
         let migrated = migrate(
             r#"
 _version = 1
@@ -505,10 +402,10 @@ provider = "daytona"
             .expect("migrated settings should resolve")
             .run;
 
-        assert_eq!(resolved.environment.id, "default");
+        assert_eq!(resolved.environment.id, "daytona");
         assert_eq!(resolved.environment.provider, EnvironmentProvider::Daytona);
         assert!(migrated.contains("[run.environment]"));
-        assert!(migrated.contains("[environments.default]"));
+        assert!(migrated.contains("[environments.daytona]"));
         assert!(!migrated.contains("[run.sandbox]"));
     }
 
@@ -561,7 +458,9 @@ subpath = "agents"
             .run
             .environment;
 
-        assert_eq!(resolved.image.reference.as_deref(), Some("fabro-v11"));
+        assert_eq!(resolved.id, "daytona");
+        assert_eq!(resolved.image.docker.as_deref(), None);
+        assert!(resolved.image.dockerfile.is_some());
         assert_eq!(resolved.resources.cpu, Some(8));
         assert_eq!(
             resolved.resources.memory.map(|size| size.as_bytes()),
@@ -619,7 +518,7 @@ cpu_quota = 200000
 
         assert_eq!(resolved.provider, EnvironmentProvider::Docker);
         assert_eq!(
-            resolved.image.reference.as_deref(),
+            resolved.image.docker.as_deref(),
             Some("buildpack-deps:noble")
         );
         assert_eq!(resolved.resources.cpu, Some(2));
@@ -651,46 +550,6 @@ skip_clone = true
             .run;
 
         assert!(!resolved.clone.enabled);
-    }
-
-    #[test]
-    fn migrate_settings_path_writes_backup_and_rewrites_original() {
-        let dir = tempfile::tempdir().expect("temp dir");
-        let path = dir.path().join("settings.toml");
-        let original = r#"
-_version = 1
-
-[run.sandbox]
-provider = "daytona"
-"#;
-        std::fs::write(&path, original).expect("write fixture");
-
-        let report = migrate_settings_path(&path, original)
-            .expect("migration should succeed")
-            .expect("legacy config should migrate");
-
-        let rewritten = std::fs::read_to_string(&path).expect("read rewritten settings");
-        let backup = std::fs::read_to_string(&report.backup_path).expect("read backup");
-
-        assert_eq!(backup, original);
-        assert!(rewritten.contains("[run.environment]"));
-        assert!(rewritten.contains("[environments.default]"));
-        assert!(report.warning.contains("temporary compatibility migration"));
-    }
-
-    #[test]
-    fn existing_backup_uses_numbered_suffix() {
-        let dir = tempfile::tempdir().expect("temp dir");
-        let path = dir.path().join("settings.toml");
-        std::fs::write(
-            path.with_file_name("settings.toml.legacy-sandbox-migration.bak"),
-            "old",
-        )
-        .expect("write existing backup");
-
-        let next = next_backup_path(&path);
-
-        assert!(next.ends_with("settings.toml.legacy-sandbox-migration.1.bak"));
     }
 
     #[test]
