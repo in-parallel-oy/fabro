@@ -142,7 +142,7 @@ use ulid::Ulid;
 use crate::auth::{self, GithubEndpoints, auth_translation_middleware, demo_routing_middleware};
 use crate::automation_materializer::{
     AutomationRunMaterializeError, AutomationRunMaterializeInput, AutomationRunMaterialized,
-    AutomationRunMaterializer, ProductionAutomationRunMaterializer,
+    AutomationRunMaterializer, GitRepoCache, ProductionAutomationRunMaterializer,
 };
 use crate::canonical_origin::resolve_canonical_origin;
 use crate::error::ApiError;
@@ -1063,6 +1063,7 @@ pub struct AppState {
     session_runtimes: SessionRuntimeManager,
     artifact_store: ArtifactStore,
     automation_store: Arc<AutomationStore>,
+    automation_repo_cache: Arc<GitRepoCache>,
     #[cfg(any(test, feature = "test-support"))]
     automation_materializer_override: Option<Arc<dyn AutomationRunMaterializer>>,
     worker_tokens: WorkerTokenKeys,
@@ -1126,6 +1127,7 @@ impl AppState {
             credentials,
             self.github_api_base_url.clone(),
             self.http_client.clone(),
+            Arc::clone(&self.automation_repo_cache),
         )
         .materialize(input)
         .await
@@ -2354,6 +2356,15 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
     };
     let worker_tokens = worker_token_keys_from_server_secrets(&server_secrets)?;
     let github_api_base_url = github_api_base_url.unwrap_or_else(fabro_github::github_api_base_url);
+    let storage_root = PathBuf::from(
+        resolve_interp_string(&current_server_settings.server.storage.root)
+            .context("resolve server storage root")?,
+    );
+    let automation_repo_cache = Arc::new(GitRepoCache::new(
+        Storage::new(&storage_root)
+            .cache_dir()
+            .join("automation-repos"),
+    ));
     let worker_control_bus: Arc<dyn WorkerControlBus> = {
         #[cfg(test)]
         {
@@ -2381,6 +2392,7 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
         session_runtimes: SessionRuntimeManager::new(),
         artifact_store,
         automation_store,
+        automation_repo_cache,
         #[cfg(any(test, feature = "test-support"))]
         automation_materializer_override,
         worker_tokens,
