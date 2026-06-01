@@ -702,15 +702,6 @@ where
         &resolved_server_settings,
         &startup_vault,
     )?;
-    // Bridge server.env entries to process env so InterpString
-    // resolution (`{{ env.X }}` in run.sandbox.docker.env_vars, etc.)
-    // can resolve against operator-managed secrets stored in
-    // ~/.fabro/storage/server.env. Process-env entries already win.
-    // This runs single-threaded at startup, before any worker spawn.
-    // Note: upstream now migrates known optional secrets from server.env
-    // into the vault, so this only bridges arbitrary operator-set keys
-    // (e.g. license tokens) that the vault migration doesn't touch.
-    server_secrets.expose_file_entries_to_process_env();
     let webhook_secret_present = startup_vault.get(WEBHOOK_SECRET_ENV).is_some();
     let bind_request = resolve_bind_request_from_server_settings(
         &resolved_app_settings.server_settings,
