@@ -50,6 +50,10 @@ mock.module("../lib/queries", () => ({
     data:      currentRunSummary,
     isLoading: false,
   }),
+  useRunSettings: () => ({
+    data:      null,
+    isLoading: false,
+  }),
   useRunQuestions: () => ({
     data: currentQuestions,
   }),
@@ -184,13 +188,21 @@ type RunDetailActionResult = import("./run-detail/lifecycle-toasts").RunDetailAc
 
 const h = createElement;
 
-function makeRunSummary(
+function makeRunSummary({
   status = "succeeded",
-  diffSummary: any = null,
-  pullRequest: any = null,
+  diffSummary = null as any,
+  pullRequest = null as any,
   title = "Run 1",
-  askFabro: any = null,
-) {
+  askFabro = null as any,
+  automation = null as any,
+}: {
+  status?: string;
+  diffSummary?: any;
+  pullRequest?: any;
+  title?: string;
+  askFabro?: any;
+  automation?: any;
+} = {}) {
   const apiStatus =
     status === "succeeded"
       ? { kind: "succeeded", reason: "completed" }
@@ -207,7 +219,7 @@ function makeRunSummary(
     goal:             "Run 1",
     title,
     workflow:         { slug: "default", name: "Default", graph_name: null, node_count: 0, edge_count: 0 },
-    automation:       null,
+    automation,
     repository:       { name: "fabro", origin_url: null, provider: "unknown" },
     created_by:       null,
     origin:           { kind: "api" },
@@ -269,6 +281,7 @@ async function renderRunDetailHarness({
   pullRequest = null,
   title,
   askFabro = null,
+  automation = null,
 }: {
   initialEntry: string;
   status?: string;
@@ -277,8 +290,9 @@ async function renderRunDetailHarness({
   pullRequest?: any;
   title?: string;
   askFabro?: any;
+  automation?: any;
 }) {
-  currentRunSummary = makeRunSummary(status, diffSummary, pullRequest, title, askFabro);
+  currentRunSummary = makeRunSummary({ status, diffSummary, pullRequest, title, askFabro, automation });
   currentQuestions = questions;
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -302,6 +316,14 @@ async function renderRunDetailHarness({
             element: h("div", { "data-child-route": "files" }, "Files"),
           },
         ],
+      },
+      {
+        path:    "/automations/new",
+        element: h("div", { "data-route": "automations-new" }, "New automation"),
+      },
+      {
+        path:    "/automations/:automationId",
+        element: h("div", { "data-route": "automation-detail" }, "Automation detail"),
       },
     ],
     { initialEntries: [initialEntry] },
@@ -364,13 +386,20 @@ function textFromTestNode(node: TestRenderer.ReactTestInstance): string {
   }).join("");
 }
 
-function findButtonByText(
+function findButtonsByText(
   renderer: TestRenderer.ReactTestRenderer,
   text: string,
 ) {
   return renderer.root.findAll(
     (node) => node.type === "button" && textFromTestNode(node).includes(text),
-  )[0];
+  );
+}
+
+function findButtonByText(
+  renderer: TestRenderer.ReactTestRenderer,
+  text: string,
+) {
+  return findButtonsByText(renderer, text)[0];
 }
 
 function deferred<T>() {
@@ -474,7 +503,7 @@ describe("handleLifecycleToastResult", () => {
     const result: RunDetailActionResult = {
       intent: "cancel",
       ok: true,
-      run: makeRunSummary("failed"),
+      run: makeRunSummary({ status: "failed" }),
     };
     result.run.lifecycle.status = { kind: "failed", reason: "cancelled" };
 
@@ -495,7 +524,7 @@ describe("handleLifecycleToastResult", () => {
     const result: RunDetailActionResult = {
       intent: "cancel",
       ok: true,
-      run: makeRunSummary("running"),
+      run: makeRunSummary({ status: "running" }),
     };
 
     handleLifecycleToastResult("cancel", result, initialState, api);
@@ -508,7 +537,7 @@ describe("handleLifecycleToastResult", () => {
     const result: RunDetailActionResult = {
       intent: "archive",
       ok: true,
-      run: makeRunSummary("archived"),
+      run: makeRunSummary({ status: "archived" }),
     };
 
     const firstState = handleLifecycleToastResult("archive", result, initialState, api);
@@ -528,7 +557,7 @@ describe("handleLifecycleToastResult", () => {
     const result: RunDetailActionResult = {
       intent: "unarchive",
       ok: true,
-      run: makeRunSummary("succeeded"),
+      run: makeRunSummary({ status: "succeeded" }),
     };
     const stateWithActiveToast: LifecycleToastState = {
       activeArchiveToastId: "toast-9",
@@ -614,7 +643,7 @@ describe("RunDetail full-height child routes", () => {
       intent: "retry",
       ok:     true,
       run:    {
-        ...makeRunSummary("runnable"),
+        ...makeRunSummary({ status: "runnable" }),
         id:           "run_retry",
         retried_from: "run_1",
       },
@@ -780,6 +809,38 @@ describe("RunDetail full-height child routes", () => {
     });
 
     expect(tabCountBadges(renderer)).toHaveLength(0);
+  });
+
+  test("ordinary runs can navigate to create an automation from the run", async () => {
+    const { renderer, router } = await renderRunDetailHarness({
+      initialEntry: "/runs/run_1",
+    });
+
+    expect(findButtonsByText(renderer, "Create automation from run")).toHaveLength(1);
+    expect(findButtonsByText(renderer, "View automation")).toHaveLength(0);
+
+    await act(async () => {
+      findButtonByText(renderer, "Create automation from run")!.props.onClick();
+    });
+
+    expect(router.state.location.pathname).toBe("/automations/new");
+    expect(router.state.location.search).toBe("?from_run=run_1");
+  });
+
+  test("automation-created runs navigate to the existing automation instead of duplicate creation", async () => {
+    const { renderer, router } = await renderRunDetailHarness({
+      initialEntry: "/runs/run_1",
+      automation:   { id: "fix build", name: "Fix Build", trigger_id: "manual" },
+    });
+
+    expect(findButtonsByText(renderer, "View automation")).toHaveLength(1);
+    expect(findButtonsByText(renderer, "Create automation from run")).toHaveLength(0);
+
+    await act(async () => {
+      findButtonByText(renderer, "View automation")!.props.onClick();
+    });
+
+    expect(router.state.location.pathname).toBe("/automations/fix%20build");
   });
 
   test("confirms deleting an archived run and navigates back to runs", async () => {

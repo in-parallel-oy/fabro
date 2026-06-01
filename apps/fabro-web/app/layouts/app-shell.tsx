@@ -12,14 +12,14 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { Link, Outlet, useLocation, useMatches } from "react-router";
-import { Toaster } from "sonner";
+import { FabroToaster } from "../components/toast";
 import { ErrorState } from "../components/state";
 import { TooltipProvider } from "../components/ui";
 import { DemoModeProvider } from "../lib/demo-mode";
 import { useAuthMe } from "../lib/queries";
-import { allNavigation, getVisibleNavigation } from "./navigation";
+import { navigation } from "./navigation";
 
-function activeFor(item: (typeof allNavigation)[number], pathname: string): boolean {
+function activeFor(item: (typeof navigation)[number], pathname: string): boolean {
   return pathname.startsWith(item.href);
 }
 
@@ -48,13 +48,13 @@ export default function AppShell() {
   }
 
   const { user, provider, demoMode } = auth;
-  const navigation = getVisibleNavigation(demoMode);
   const currentNav = navigation.find((item) => activeFor(item, pathname));
   const title = currentNav?.name ?? "";
   const lastMatch = matches[matches.length - 1];
   const handle = lastMatch?.handle as { headerExtra?: React.ReactNode } | undefined;
   const headerExtra = handle?.headerExtra;
   const hideHeader = matches.some((m) => (m.handle as { hideHeader?: boolean } | undefined)?.hideHeader);
+  const hideTitle = matches.some((m) => (m.handle as { hideTitle?: boolean } | undefined)?.hideTitle);
   const wide = matches.some((m) => (m.handle as { wide?: boolean } | undefined)?.wide);
   const fullHeight = matches.some(
     (m) => (m.handle as { fullHeight?: boolean } | undefined)?.fullHeight,
@@ -236,9 +236,11 @@ export default function AppShell() {
         >
           <div className={`mx-auto ${maxWidth} px-4 py-4 sm:px-6 lg:px-8`}>
             <div className="flex items-center">
-              <h1 className="text-xl font-semibold tracking-tight text-fg">
-                {title}
-              </h1>
+              {!hideTitle && (
+                <h1 className="text-xl font-semibold tracking-tight text-fg">
+                  {title}
+                </h1>
+              )}
               {headerExtra && <div className="ml-auto">{headerExtra}</div>}
             </div>
           </div>
@@ -247,7 +249,7 @@ export default function AppShell() {
       <ShellMain fullHeight={fullHeight} maxWidth={maxWidth} />
     </div>
     {typeof document !== "undefined" && (
-      <Toaster richColors position="bottom-right" />
+      <FabroToaster />
     )}
     </TooltipProvider>
     </DemoModeProvider>

@@ -1,386 +1,401 @@
+import { useCallback, useMemo, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import { useSWRConfig } from "swr";
 import { ChevronRightIcon } from "@heroicons/react/20/solid";
+import {
+  ArrowPathIcon,
+  ClockIcon,
+  FolderIcon,
+  MagnifyingGlassIcon,
+  PlayIcon,
+  RectangleStackIcon,
+} from "@heroicons/react/24/outline";
 import type {
-  EnvironmentSettings,
-  WorkflowDetailResponse as ApiWorkflowDetail,
-  WorkflowSettings as WorkflowSettingsSnapshot,
+  Automation,
+  BoardColumn,
+  ListRunsSortEnum,
 } from "@qltysh/fabro-api-client";
-import { Link, Outlet, useLocation, useParams } from "react-router";
-import { useWorkflow } from "../lib/queries";
 
-export interface WorkflowEntry {
-  name: string;
-  slug: string;
-  description: string;
-  filename: string;
-  settings: WorkflowSettingsSnapshot;
-  graph: string;
-}
+import { toRunWithStatus } from "../data/runs";
+import { ApiError, apiData, automationsApi } from "../lib/api-client";
+import { findApiTrigger, findScheduleTrigger } from "../lib/automation";
+import { useAutomation, useAutomationRuns } from "../lib/queries";
+import { queryKeys } from "../lib/query-keys";
+import { useDataUpdatedAt } from "../hooks/use-data-updated-at";
+import { useTickingNow } from "../lib/time";
+import { formatRelativeTime } from "../lib/format";
+import { ColumnPickerButton } from "../components/runs-list/column-picker-button";
+import { FilterButton } from "../components/runs-list/filter-button";
+import {
+  STATUS_FILTER_OPTIONS,
+  createdCutoffMsFor,
+  createdFilterOptions,
+  hiddenColumnsFromSearchParams,
+  parseCreatedFilter,
+  parseDirection,
+  parsePage,
+  parsePageSize,
+  parseSort,
+  parseStatusFilter,
+} from "../components/runs-list/preferences";
+import { RunsListView } from "../components/runs-list/runs-list-view";
+import { StatusFilterButton } from "../components/runs-list/status-filter-button";
+import {
+  serializeHiddenColumns,
+  type ToggleableColumn,
+} from "../components/runs-list/toggleable-column";
+import { EmptyState, ErrorState } from "../components/state";
+import { useToast } from "../components/toast";
+import {
+  PRIMARY_BUTTON_CLASS,
+  SECONDARY_BUTTON_CLASS,
+} from "../components/ui";
 
-function sampleSettings({
-  name,
-  description,
-  goal,
-  inputs,
-  labels,
-  snapshot,
-  autoStopInterval,
-  cpu,
-  memoryGb,
-  diskGb,
-  prepareCommands = [],
-}: {
-  name: string;
-  description: string;
-  goal: string;
-  inputs: Record<string, unknown>;
-  labels: Record<string, string>;
-  snapshot: string;
-  autoStopInterval: number;
-  cpu: number;
-  memoryGb: number;
-  diskGb: number;
-  prepareCommands?: string[];
-}): WorkflowSettingsSnapshot {
-  const environmentId = labels.project ?? snapshot;
-  const environment = {
-    provider: "daytona",
-    image: { docker: null, dockerfile: null },
-    resources: {
-      cpu,
-      memory: `${memoryGb}GB`,
-      disk: `${diskGb}GB`,
-    },
-    network: { mode: "allow_all", allow: [] },
-    lifecycle: {
-      preserve: false,
-      stop_on_terminal: true,
-      auto_stop: `${autoStopInterval}m`,
-    },
-    labels,
-    volumes: [],
-    env: {},
-  } satisfies EnvironmentSettings;
-
-  return {
-    project: {
-      name: null,
-      description: null,
-      metadata: {},
-    },
-    workflow: {
-      name,
-      description,
-      graph: "",
-      metadata: {},
-    },
-    environments: {
-      [environmentId]: environment,
-    },
-    run: {
-      goal: { type: "inline", value: goal },
-      working_dir: null,
-      metadata: {},
-      inputs,
-      model: { provider: null, name: "claude-sonnet", fallbacks: [] },
-      git: { author: null },
-      prepare: { commands: prepareCommands, timeout_ms: 120_000 },
-      execution: { mode: "normal", approval: "prompt" },
-      checkpoint: { exclude_globs: [], skip_git_hooks: false },
-      clone: { enabled: true },
-      run_branch: { enabled: true, push: true },
-      meta_branch: { enabled: true, push: true },
-      environment: { id: environmentId, ...environment },
-      notifications: {},
-      interviews: { provider: null, slack: null },
-      agent: { permissions: null, mcps: {} },
-      hooks: [],
-      scm: { provider: null, owner: null, repository: null, github: null },
-      pull_request: null,
-      artifacts: { include: [] },
-      integrations: { github: { permissions: {} } },
-    },
-  };
-}
-
-export const workflowData: Record<string, WorkflowEntry> = {
-  fix_build: {
-    name: "Fix Build",
-    slug: "fix_build",
-    filename: "fix_build.fabro",
-    description: "Automatically diagnoses and fixes CI build failures by analyzing error logs, identifying root causes, and applying targeted code changes.",
-    settings: sampleSettings({
-      name: "Fix Build",
-      description: "Automatically diagnoses and fixes CI build failures by analyzing error logs, identifying root causes, and applying targeted code changes.",
-      goal: "Diagnose and fix CI build failures",
-      inputs: { repo_url: "https://github.com/org/service", branch: "main" },
-      labels: { project: "fix-build" },
-      snapshot: "fix-build-dev",
-      autoStopInterval: 60,
-      cpu: 4,
-      memoryGb: 8,
-      diskGb: 10,
-    }),
-    graph: `digraph fix_build {
-    graph [
-        goal="Diagnose and fix CI build failures",
-        label="Fix Build"
-    ]
-    rankdir=LR
-
-    start [shape=Mdiamond, label="Start"]
-    exit  [shape=Msquare, label="Exit"]
-
-    diagnose [label="Diagnose Failure", prompt="@prompts/fix_build/diagnose.md", reasoning_effort="high"]
-    fix      [label="Apply Fix",        prompt="@prompts/fix_build/fix.md"]
-    validate [label="Run Build",        prompt="@prompts/fix_build/validate.md", goal_gate=true]
-    gate     [shape=diamond,            label="Build passing?"]
-
-    start -> diagnose -> fix -> validate -> gate
-    gate -> exit     [label="Yes", condition="outcome=succeeded"]
-    gate -> diagnose [label="No",  condition="outcome!=succeeded", max_visits=3]
-}
-`,
-  },
-  implement: {
-    name: "Implement Feature",
-    slug: "implement",
-    filename: "implement.fabro",
-    description: "Generates production-ready code from a technical blueprint, including tests, documentation, and a pull request ready for review.",
-    settings: sampleSettings({
-      name: "Implement Feature",
-      description: "Generates production-ready code from a technical blueprint, including tests, documentation, and a pull request ready for review.",
-      goal: "Implement feature from technical blueprint",
-      inputs: { spec_path: "specs/feature.md", test_framework: "vitest" },
-      labels: { project: "implement", team: "engineering" },
-      snapshot: "implement-dev",
-      autoStopInterval: 120,
-      cpu: 4,
-      memoryGb: 8,
-      diskGb: 20,
-      prepareCommands: ["bun install", "bun run typecheck"],
-    }),
-    graph: `digraph implement {
-    graph [
-        goal="",
-        label="Implement"
-    ]
-    rankdir=LR
-
-    start [shape=Mdiamond, label="Start"]
-    exit  [shape=Msquare, label="Exit"]
-
-    strategy [shape=hexagon, label="Choose decomposition strategy:"]
-
-    subgraph cluster_impl {
-        label="Implementation Loop"
-        node [fidelity="full", thread_id="impl"]
-
-        plan      [label="Plan Implementation", prompt="@prompts/implement/plan.md", reasoning_effort="high"]
-        implement [label="Implement",            prompt="@prompts/implement/implement.md"]
-        review    [label="Review",               prompt="@prompts/implement/review.md"]
-        validate  [label="Validate",             prompt="@prompts/implement/validate.md", goal_gate=true]
-        fix       [label="Fix Failures",         prompt="@prompts/implement/fix.md", max_visits=3]
-    }
-
-    start -> strategy
-    strategy -> plan [label="[L] Layer-by-layer"]
-    strategy -> plan [label="[F] Feature slice"]
-    strategy -> plan [label="[P] Embarrassingly parallel"]
-    strategy -> plan [label="[S] Sequential / linear"]
-    plan -> implement -> review -> validate
-    validate -> exit [condition="outcome=succeeded"]
-    validate -> fix  [condition="outcome!=succeeded", label="Fix"]
-    fix -> validate
-}
-`,
-  },
-  sync_drift: {
-    name: "Sync Drift",
-    slug: "sync_drift",
-    filename: "sync_drift.fabro",
-    description: "Detects configuration and code drift between environments, then generates reconciliation patches to bring everything back in sync.",
-    settings: sampleSettings({
-      name: "Sync Drift",
-      description: "Detects configuration and code drift between environments, then generates reconciliation patches to bring everything back in sync.",
-      goal: "Detect and reconcile configuration drift across environments",
-      inputs: { source_env: "production", target_env: "staging", drift_threshold: "warn" },
-      labels: { project: "sync-drift", team: "platform" },
-      snapshot: "sync-drift-dev",
-      autoStopInterval: 120,
-      cpu: 2,
-      memoryGb: 4,
-      diskGb: 10,
-    }),
-    graph: `digraph sync {
-    graph [
-        goal="Detect and resolve drift between product docs, architecture docs, and code",
-        label="Sync"
-    ]
-    rankdir=LR
-
-    start [shape=Mdiamond, label="Start"]
-    exit  [shape=Msquare, label="Exit"]
-
-    detect  [label="Detect Drift",     prompt="@prompts/sync/detect.md", reasoning_effort="high"]
-    propose [label="Propose Changes",  prompt="@prompts/sync/propose.md"]
-    review  [shape=hexagon,            label="Review Changes"]
-    apply   [label="Apply Changes",    prompt="@prompts/sync/apply.md"]
-
-    start -> detect
-    detect -> exit    [condition="context.drift_found=false", label="No drift"]
-    detect -> propose [condition="context.drift_found=true", label="Drift found"]
-    propose -> review
-    review -> apply    [label="[A] Accept"]
-    review -> propose  [label="[R] Revise"]
-    apply -> exit
-}
-`,
-  },
-  expand: {
-    name: "Expand Product",
-    slug: "expand",
-    filename: "expand.fabro",
-    description: "Evolves the product by analyzing usage patterns and specifications to propose and implement incremental improvements.",
-    settings: sampleSettings({
-      name: "Expand Product",
-      description: "Evolves the product by analyzing usage patterns and specifications to propose and implement incremental improvements.",
-      goal: "Propose and implement incremental product improvements",
-      inputs: { analytics_window: "30d", min_confidence: "0.8" },
-      labels: { project: "expand", team: "product" },
-      snapshot: "expand-dev",
-      autoStopInterval: 180,
-      cpu: 2,
-      memoryGb: 4,
-      diskGb: 10,
-    }),
-    graph: `digraph expand {
-    graph [
-        goal="",
-        label="Expand"
-    ]
-    rankdir=LR
-
-    start [shape=Mdiamond, label="Start"]
-    exit  [shape=Msquare, label="Exit"]
-
-    propose [label="Propose Changes",  prompt="@prompts/expand/propose.md", reasoning_effort="high"]
-    approve [shape=hexagon,            label="Approve Changes"]
-    execute [label="Execute Changes",  prompt="@prompts/expand/execute.md"]
-
-    start -> propose -> approve
-    approve -> execute [label="[A] Accept"]
-    approve -> propose [label="[R] Revise"]
-    execute -> exit
-}
-`,
-  },
-};
-
-const tabs = [
-  { name: "Definition", path: "" },
-  { name: "Diagram", path: "/diagram" },
-  { name: "Runs", path: "/runs" },
-];
-
-export const handle = { hideHeader: true };
-
-function resolveWorkflow(name: string | undefined, apiWorkflow: ApiWorkflowDetail | null | undefined): WorkflowEntry {
-  const workflowName = name ?? "";
-  return apiWorkflow
-    ? {
-        name: apiWorkflow.name,
-        slug: apiWorkflow.slug,
-        description: apiWorkflow.description,
-        filename: apiWorkflow.filename,
-        settings: apiWorkflow.settings,
-        graph: apiWorkflow.graph,
-      }
-    : workflowData[workflowName] ?? {
-        name: workflowName,
-        slug: workflowName,
-        description: "",
-        filename: `${workflowName}.fabro`,
-        settings: sampleSettings({
-          name: workflowName,
-          description: "",
-          goal: "",
-          inputs: {},
-          labels: {},
-          snapshot: "default",
-          autoStopInterval: 120,
-          cpu: 2,
-          memoryGb: 4,
-          diskGb: 10,
-        }),
-        graph: "",
-      };
-}
+export const handle = { hideHeader: true, wide: true };
 
 export function meta({ data }: any) {
-  const title = data?.workflow?.name ?? "Automation";
+  const title = data?.automation?.name ?? "Automation";
   return [{ title: `${title} — Fabro` }];
 }
 
 export default function AutomationDetail() {
-  const { name } = useParams();
-  const workflowQuery = useWorkflow(name);
-  const { pathname } = useLocation();
-  const workflow = resolveWorkflow(name, workflowQuery.data);
-  const basePath = `/automation/${name}`;
+  const { id } = useParams<{ id: string }>();
+  const automationQuery = useAutomation(id);
+
+  if (automationQuery.error) {
+    return (
+      <div className="py-12">
+        <ErrorState
+          title="Couldn't load this automation"
+          description="It may have been deleted, or the server returned an error."
+        />
+      </div>
+    );
+  }
+
+  if (!automationQuery.data) {
+    return <div className="h-1" />;
+  }
 
   return (
     <div>
+      <AutomationHeader automation={automationQuery.data} />
+      <AutomationRunsList automationId={automationQuery.data.id} />
+    </div>
+  );
+}
+
+function AutomationHeader({ automation }: { automation: Automation }) {
+  const navigate = useNavigate();
+  const { mutate } = useSWRConfig();
+  const toast = useToast();
+  const [running, setRunning] = useState(false);
+
+  const scheduleTrigger = findScheduleTrigger(automation);
+  const apiTrigger = findApiTrigger(automation);
+  const canRun = apiTrigger?.enabled === true;
+
+  async function onRun() {
+    if (!canRun || running) return;
+    setRunning(true);
+    try {
+      const run = await apiData(() => automationsApi.createAutomationRun(automation.id));
+      await mutate(
+        (key) =>
+          Array.isArray(key) &&
+          key[0] === "automations" &&
+          key[1] === "runs" &&
+          key[2] === automation.id,
+      );
+      toast.push({ message: `Started run for “${automation.name}”.` });
+      navigate(`/runs/${run.id}`);
+    } catch (cause) {
+      toast.push({
+        tone: "error",
+        message:
+          cause instanceof ApiError && cause.message
+            ? cause.message
+            : "Couldn't start a run. Please try again.",
+      });
+      setRunning(false);
+    }
+  }
+
+  return (
+    <>
       <nav className="mb-4 flex items-center gap-1 text-sm text-fg-muted">
-        <Link to="/automations" className="text-fg-3 hover:text-fg">Automations</Link>
-        <ChevronRightIcon className="size-3" />
-        <span>{workflow.name}</span>
+        <Link to="/automations" className="text-fg-3 hover:text-fg">
+          Automations
+        </Link>
+        <ChevronRightIcon className="size-3" aria-hidden="true" />
+        <span>{automation.name}</span>
       </nav>
 
-      <div className="mb-6 flex items-center gap-4">
+      <div className="mb-6 flex flex-wrap items-start gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold text-fg">{workflow.name}</h2>
-            <span className="font-mono text-xs text-fg-muted">{workflow.filename}</span>
+            <h2 className="text-xl font-semibold text-fg">{automation.name}</h2>
+            <span className="font-mono text-xs text-fg-muted">{automation.id}</span>
           </div>
-          <p className="mt-2 max-w-prose text-sm leading-relaxed text-fg-3">{workflow.description}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+            <Chip icon={FolderIcon}>
+              {automation.target.repository}
+              <span className="text-fg-muted/70"> · {automation.target.ref}</span>
+            </Chip>
+            <Chip icon={RectangleStackIcon}>{automation.target.workflow}</Chip>
+            {scheduleTrigger ? (
+              <Chip icon={ClockIcon}>{scheduleTrigger.expression}</Chip>
+            ) : null}
+          </div>
+          {automation.description ? (
+            <p className="mt-3 max-w-prose text-sm leading-relaxed text-fg-3">
+              {automation.description}
+            </p>
+          ) : null}
         </div>
-        <button
-          type="button"
-          title="Run automation"
-          className="flex shrink-0 items-center gap-1.5 rounded-md border border-mint/20 px-3 py-1.5 text-sm font-medium text-mint transition-colors hover:border-mint/50 hover:bg-mint/10 hover:text-fg"
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" className="size-3.5" aria-hidden="true">
-            <path fillRule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z" clipRule="evenodd" />
-          </svg>
-          Run
-        </button>
+
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            to={`/automations/${automation.id}/edit`}
+            className={SECONDARY_BUTTON_CLASS}
+          >
+            Edit
+          </Link>
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={!canRun || running}
+            title={canRun ? undefined : "Enable the API trigger to run it"}
+            className={PRIMARY_BUTTON_CLASS}
+          >
+            <PlayIcon className="size-4" aria-hidden="true" />
+            {running ? "Starting…" : "Run"}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Chip({
+  icon: Icon,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className="flex items-center gap-1.5 font-mono text-xs text-fg-muted">
+      <Icon className="size-3.5" aria-hidden="true" />
+      {children}
+    </span>
+  );
+}
+
+function AutomationRunsList({ automationId }: { automationId: string }) {
+  const [urlSearchParams, setSearchParams] = useSearchParams();
+
+  const query = urlSearchParams.get("search") ?? "";
+  const sort = parseSort(urlSearchParams.get("sort"));
+  const direction = parseDirection(urlSearchParams.get("direction"));
+  const page = parsePage(urlSearchParams.get("page"));
+  const pageSize = parsePageSize(urlSearchParams.get("size"));
+  const repoFilter = urlSearchParams.get("repo") || "all";
+  const createdFilter = parseCreatedFilter(urlSearchParams.get("created"));
+  const rawStatus = urlSearchParams.get("status");
+  const statusFilter = useMemo(
+    () => (rawStatus == null ? new Set<BoardColumn>() : parseStatusFilter(rawStatus)),
+    [rawStatus],
+  );
+  const hiddenColumns = useMemo(
+    () => hiddenColumnsFromSearchParams(urlSearchParams),
+    [urlSearchParams],
+  );
+
+  const updateParams = useCallback(
+    (updater: (params: URLSearchParams) => void) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          updater(next);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const setQuery = (value: string) =>
+    updateParams((p) => {
+      if (value) p.set("search", value);
+      else p.delete("search");
+      p.delete("page");
+    });
+  const setPage = (next: number) =>
+    updateParams((p) => {
+      if (next > 1) p.set("page", String(next));
+      else p.delete("page");
+    });
+  const setPageSize = (next: number) =>
+    updateParams((p) => {
+      p.set("size", String(next));
+      p.delete("page");
+    });
+  const setHiddenColumns = (next: Set<ToggleableColumn>) =>
+    updateParams((p) => {
+      const serialized = serializeHiddenColumns(next);
+      if (serialized) p.set("hide", serialized);
+      else p.set("hide", "");
+    });
+  const setRepoFilter = (value: string) =>
+    updateParams((p) => {
+      if (value && value !== "all") p.set("repo", value);
+      else p.delete("repo");
+      p.delete("page");
+    });
+  const setCreatedFilter = (value: ReturnType<typeof parseCreatedFilter>) =>
+    updateParams((p) => {
+      if (value !== "all") p.set("created", value);
+      else p.delete("created");
+      p.delete("page");
+    });
+  const setStatusFilter = (next: Set<BoardColumn>) =>
+    updateParams((p) => {
+      const trivial = next.size === 0 || next.size === STATUS_FILTER_OPTIONS.length;
+      if (trivial) {
+        p.delete("status");
+      } else {
+        p.set("status", STATUS_FILTER_OPTIONS.filter((c) => next.has(c)).join(","));
+      }
+      p.delete("page");
+    });
+  const onSortClick = (key: ListRunsSortEnum) =>
+    updateParams((p) => {
+      if (sort === key) {
+        p.set("direction", direction === "asc" ? "desc" : "asc");
+      } else {
+        p.set("sort", key);
+        p.set("direction", "desc");
+      }
+      p.delete("page");
+    });
+
+  const runsQuery = useAutomationRuns(automationId, {
+    limit:  pageSize,
+    offset: (page - 1) * pageSize,
+  });
+
+  const allRepos = useMemo(() => {
+    const repos = new Set<string>();
+    for (const run of runsQuery.data?.data ?? []) {
+      repos.add(toRunWithStatus(run).repo);
+    }
+    return Array.from(repos).sort();
+  }, [runsQuery.data]);
+  const createdCutoffMs = createdCutoffMsFor(createdFilter);
+
+  const now = useTickingNow(true, 15_000);
+  const updatedAt = useDataUpdatedAt(runsQuery.data);
+
+  const handleRefresh = useCallback(() => {
+    void runsQuery.mutate();
+  }, [runsQuery]);
+
+  const apiError = runsQuery.error instanceof ApiError ? runsQuery.error : null;
+  if (apiError && !runsQuery.data) {
+    return (
+      <ErrorState
+        title="Couldn't load runs"
+        description={`Server returned ${apiError.status}.`}
+        onRetry={handleRefresh}
+      />
+    );
+  }
+
+  const lowerQuery = query.toLowerCase();
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-64">
+          <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fg-muted" />
+          <input
+            type="text"
+            name="search"
+            aria-label="Search runs"
+            placeholder="Search runs…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full rounded-md border border-line bg-panel/80 py-1.5 pl-9 pr-3 text-sm text-fg-2 placeholder-fg-muted outline-none transition-colors focus:border-focus focus:ring-0"
+          />
+        </div>
+
+        <StatusFilterButton value={statusFilter} onChange={setStatusFilter} />
+        <FilterButton
+          label="Time"
+          value={createdFilter}
+          allValue="all"
+          options={createdFilterOptions}
+          onChange={setCreatedFilter}
+        />
+        <FilterButton
+          label="Repo"
+          value={repoFilter}
+          allValue="all"
+          options={[
+            { value: "all", label: "All repos" },
+            ...allRepos.map((repo) => ({ value: repo, label: repo })),
+          ]}
+          onChange={setRepoFilter}
+        />
+
+        <div className="ml-auto flex items-center gap-3">
+          {updatedAt != null ? (
+            <span className="font-mono text-xs text-fg-muted">
+              Updated {formatRelativeTime(new Date(updatedAt).toISOString(), now)}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={runsQuery.isValidating}
+            aria-label={runsQuery.isValidating ? "Refreshing runs" : "Refresh runs"}
+            title="Refresh"
+            className="inline-flex size-9 items-center justify-center rounded-md border border-line bg-panel/80 text-fg-3 transition-colors hover:bg-panel hover:text-fg disabled:cursor-default disabled:opacity-60 disabled:hover:bg-panel/80 disabled:hover:text-fg-3"
+          >
+            <ArrowPathIcon
+              className={`size-4 ${runsQuery.isValidating ? "animate-spin [animation-duration:450ms]" : ""}`}
+              aria-hidden="true"
+            />
+          </button>
+          <ColumnPickerButton hidden={hiddenColumns} onChange={setHiddenColumns} />
+        </div>
       </div>
 
-      <div className="border-b border-line">
-        <nav className="-mb-px flex gap-6">
-          {tabs.map((tab) => {
-            const tabPath = `${basePath}${tab.path}`;
-            const isActive = pathname === tabPath;
-            return (
-              <Link
-                key={tab.name}
-                to={tabPath}
-                className={`border-b-2 pb-3 text-sm font-medium transition-colors ${
-                  isActive
-                    ? "border-teal-500 text-fg"
-                    : "border-transparent text-fg-muted hover:border-line-strong hover:text-fg-3"
-                }`}
-              >
-                {tab.name}
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
-
-      <div className="mt-6">
-        <Outlet context={{ workflow }} />
-      </div>
+      <RunsListView
+        data={runsQuery.data ?? undefined}
+        isLoading={runsQuery.data == null && runsQuery.isLoading}
+        emptyState={
+          <EmptyState
+            title="No runs yet"
+            description="When this automation runs, the runs will appear here."
+          />
+        }
+        sort={sort}
+        direction={direction}
+        page={page}
+        pageSize={pageSize}
+        hiddenColumns={hiddenColumns}
+        onSortClick={onSortClick}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+        query={lowerQuery}
+        repoFilter={repoFilter}
+        workflowFilter="all"
+        statusFilter={statusFilter}
+        createdCutoffMs={createdCutoffMs}
+      />
     </div>
   );
 }

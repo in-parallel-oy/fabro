@@ -1,5 +1,11 @@
+import {
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  InformationCircleIcon,
+  XCircleIcon,
+} from "@heroicons/react/16/solid";
 import type { ReactNode } from "react";
-import { toast as sonnerToast, useSonner } from "sonner";
+import { Toaster as SonnerToaster, toast as sonnerToast, useSonner } from "sonner";
 
 export type ToastTone = "info" | "error";
 
@@ -67,6 +73,47 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export function useToast(): ToastContextValue {
   return toastApi;
+}
+
+/**
+ * App-themed Sonner host. Renders toasts on the Fabro dark panel surface with
+ * accent-colored type icons (coral errors, mint success, teal info, amber
+ * warning) instead of Sonner's default green/red palette. The `group`/`toaster`
+ * + `group`/`toast` class pairing lets the `group-[.toaster]:` and
+ * `group-[.toast]:` utilities out-specify Sonner's own `[data-sonner-toast]`
+ * defaults without `!important`.
+ */
+export function FabroToaster() {
+  return (
+    <SonnerToaster
+      theme="dark"
+      position="bottom-right"
+      className="toaster group"
+      closeButton
+      icons={{
+        success: <CheckCircleIcon className="size-4 shrink-0 fill-mint" />,
+        error: <XCircleIcon className="size-4 shrink-0 fill-coral" />,
+        info: <InformationCircleIcon className="size-4 shrink-0 fill-teal-500" />,
+        warning: (
+          <ExclamationTriangleIcon className="size-4 shrink-0 fill-amber" />
+        ),
+      }}
+      toastOptions={{
+        classNames: {
+          toast:
+            "group toast font-sans text-sm group-[.toaster]:bg-panel group-[.toaster]:text-fg-2 group-[.toaster]:rounded-lg group-[.toaster]:border-line-strong group-[.toaster]:shadow-2xl group-[.toaster]:shadow-black/40",
+          title: "font-medium text-fg",
+          description: "group-[.toast]:text-fg-3",
+          closeButton:
+            "group-[.toast]:bg-panel group-[.toast]:border-line-strong group-[.toast]:text-fg-3 group-[.toast]:hover:bg-overlay group-[.toast]:hover:text-fg",
+          actionButton:
+            "group-[.toast]:rounded-md group-[.toast]:bg-teal-500 group-[.toast]:text-on-primary group-[.toast]:text-xs group-[.toast]:font-medium",
+          cancelButton:
+            "group-[.toast]:rounded-md group-[.toast]:bg-overlay group-[.toast]:text-fg-2 group-[.toast]:text-xs",
+        },
+      }}
+    />
+  );
 }
 
 function NonDomToastOutput() {

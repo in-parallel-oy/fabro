@@ -15,17 +15,15 @@
 
 // May contain unused imports in some cases
 // @ts-ignore
-import type { AutomationTarget } from './automation-target';
+import type { Environment } from './environment';
 // May contain unused imports in some cases
 // @ts-ignore
-import type { AutomationTrigger } from './automation-trigger';
+import type { EnvironmentListMeta } from './environment-list-meta';
 
 /**
- * Request body for replacing an automation.
+ * List envelope for environment definitions.
  */
-export interface ReplaceAutomationRequest {
-    'name': string;
-    'description'?: string | null;
-    'target': AutomationTarget;
-    'triggers': Array<AutomationTrigger>;
+export interface EnvironmentListResponse {
+    'data': Array<Environment>;
+    'meta': EnvironmentListMeta;
 }

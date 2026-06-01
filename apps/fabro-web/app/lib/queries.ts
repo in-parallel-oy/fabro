@@ -4,6 +4,8 @@ import type {
   AuthConfigResponse,
   AuthMeResponse,
   AuthSessionsResponse,
+  Automation,
+  AutomationListResponse,
   BoardColumn,
   CommandLogResponse,
   EventEnvelope,
@@ -42,6 +44,7 @@ import {
   apiNullableData,
   apiResponse,
   authApi,
+  automationsApi,
   fetchAllPages,
   fetchAllStageEvents,
   generatedAxios,
@@ -394,6 +397,33 @@ export function useRunStageLog(
   return useSWR<CommandLogResponse>(
     enabled && id && stageId ? queryKeys.runs.stageLog(id, stageId) : null,
     () => apiData(() => runInternalsApi.getRunStageCommandLog(id!, stageId!)),
+  );
+}
+
+export function useAutomations() {
+  return useSWR<AutomationListResponse>(
+    queryKeys.automations.list(),
+    () => apiData(() => automationsApi.listAutomations()),
+  );
+}
+
+export function useAutomation(id: string | undefined) {
+  return useSWR<Automation | null>(
+    id ? queryKeys.automations.detail(id) : null,
+    () => apiNullableData(() => automationsApi.retrieveAutomation(id!)),
+  );
+}
+
+export interface AutomationRunsPageOptions {
+  limit?:  number;
+  offset?: number;
+}
+
+export function useAutomationRuns(id: string | undefined, opts: AutomationRunsPageOptions = {}) {
+  return useSWR<PaginatedRunList | null>(
+    id ? queryKeys.automations.runs(id, opts) : null,
+    () => apiNullableData(() => automationsApi.listAutomationRuns(id!, opts.limit, opts.offset)),
+    { keepPreviousData: true },
   );
 }
 

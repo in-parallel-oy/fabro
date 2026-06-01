@@ -5,7 +5,7 @@ use dashmap::mapref::entry::Entry;
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
 #[derive(Debug)]
-pub(crate) struct KeyedMutex<K>
+pub struct KeyedMutex<K>
 where
     K: Eq + Hash + Clone,
 {
@@ -25,7 +25,7 @@ impl<K> KeyedMutex<K>
 where
     K: Eq + Hash + Clone,
 {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             mutexes: DashMap::new(),
         }
@@ -41,14 +41,14 @@ impl<K> KeyedMutex<K>
 where
     K: Eq + Hash + Clone,
 {
-    pub(crate) async fn lock(&self, key: K) -> Guard<'_, K> {
+    pub async fn lock(&self, key: K) -> KeyedMutexGuard<'_, K> {
         let mutex = self
             .mutexes
             .entry(key.clone())
             .or_insert_with(|| std::sync::Arc::new(Mutex::new(())))
             .clone();
 
-        Guard {
+        KeyedMutexGuard {
             keyed_mutex: self,
             key,
             held_lock: Some(mutex.lock_owned().await),
@@ -56,7 +56,7 @@ where
     }
 }
 
-pub(crate) struct Guard<'a, K>
+pub struct KeyedMutexGuard<'a, K>
 where
     K: Eq + Hash + Clone,
 {
@@ -65,7 +65,7 @@ where
     held_lock:   Option<OwnedMutexGuard<()>>,
 }
 
-impl<K> Drop for Guard<'_, K>
+impl<K> Drop for KeyedMutexGuard<'_, K>
 where
     K: Eq + Hash + Clone,
 {

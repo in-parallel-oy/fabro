@@ -1,5 +1,8 @@
 use std::collections::HashSet;
+use std::sync::LazyLock;
 
+use croner::Cron;
+use croner::errors::CronError;
 use croner::parser::{CronParser, Seconds, Year};
 use serde::{Deserialize, Serialize};
 
@@ -8,6 +11,23 @@ use crate::{
     AutomationValidationError,
 };
 
+/// Shared cron parser used to validate and evaluate automation schedule trigger
+/// expressions. Schedule triggers use the same five-field UTC cron grammar as
+/// validation, so both sites must share configuration.
+static SCHEDULE_CRON_PARSER: LazyLock<CronParser> = LazyLock::new(|| {
+    CronParser::builder()
+        .seconds(Seconds::Disallowed)
+        .year(Year::Disallowed)
+        .build()
+});
+
+/// Parse an automation schedule trigger expression with the canonical
+/// configuration (no seconds, no year). Returned `Cron` instances can be cached
+/// and used to find next occurrences.
+pub fn parse_schedule_expression(expression: &str) -> Result<Cron, CronError> {
+    SCHEDULE_CRON_PARSER.parse(expression)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Automation {
@@ -15,7 +35,6 @@ pub struct Automation {
     pub revision:    AutomationRevision,
     pub name:        String,
     pub description: Option<String>,
-    pub enabled:     bool,
     pub target:      AutomationTarget,
     pub triggers:    Vec<AutomationTrigger>,
 }
@@ -54,7 +73,6 @@ impl Automation {
         PersistedAutomation {
             name:        self.name.clone(),
             description: self.description.clone(),
-            enabled:     self.enabled,
             target:      self.target.clone(),
             triggers:    self.triggers.clone(),
         }
@@ -64,18 +82,24 @@ impl Automation {
         toml::to_string_pretty(&self.to_persisted()).map_err(AutomationStoreError::from)
     }
 
-    /// Returns the enabled API trigger if the automation itself is enabled and
-    /// has one. Returns `None` when the automation is disabled or has no
-    /// enabled API trigger.
+    /// Returns the enabled API trigger if the automation has one.
+    /// Returns `None` when the automation has no enabled API trigger.
     #[must_use]
     pub fn enabled_api_trigger(&self) -> Option<&ApiTrigger> {
-        if !self.enabled {
-            return None;
-        }
         self.triggers.iter().find_map(|trigger| match trigger {
             AutomationTrigger::Api(trigger) if trigger.enabled => Some(trigger),
             _ => None,
         })
+    }
+
+    /// Iterate the enabled schedule triggers.
+    pub fn enabled_schedule_triggers(&self) -> impl Iterator<Item = &ScheduleTrigger> {
+        self.triggers
+            .iter()
+            .filter_map(move |trigger| match trigger {
+                AutomationTrigger::Schedule(trigger) if trigger.enabled => Some(trigger),
+                _ => None,
+            })
     }
 
     fn from_persisted(
@@ -98,7 +122,6 @@ impl Automation {
             revision,
             name: replace.name,
             description: replace.description,
-            enabled: replace.enabled,
             target: replace.target,
             triggers: replace.triggers,
         }
@@ -161,8 +184,6 @@ pub struct AutomationDraft {
     pub name:        String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default = "default_true")]
-    pub enabled:     bool,
     pub target:      AutomationTarget,
     pub triggers:    Vec<AutomationTrigger>,
 }
@@ -172,7 +193,6 @@ impl From<AutomationDraft> for (AutomationId, AutomationReplace) {
         (value.id, AutomationReplace {
             name:        value.name,
             description: value.description,
-            enabled:     value.enabled,
             target:      value.target,
             triggers:    value.triggers,
         })
@@ -185,7 +205,6 @@ pub struct AutomationReplace {
     pub name:        String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    pub enabled:     bool,
     pub target:      AutomationTarget,
     pub triggers:    Vec<AutomationTrigger>,
 }
@@ -196,8 +215,6 @@ pub(crate) struct PersistedAutomation {
     name:        String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     description: Option<String>,
-    #[serde(default = "default_true")]
-    enabled:     bool,
     target:      AutomationTarget,
     #[serde(default)]
     triggers:    Vec<AutomationTrigger>,
@@ -208,7 +225,6 @@ impl From<AutomationReplace> for PersistedAutomation {
         Self {
             name:        value.name,
             description: value.description,
-            enabled:     value.enabled,
             target:      value.target,
             triggers:    value.triggers,
         }
@@ -220,7 +236,6 @@ impl From<PersistedAutomation> for AutomationReplace {
         Self {
             name:        value.name,
             description: value.description,
-            enabled:     value.enabled,
             target:      value.target,
             triggers:    value.triggers,
         }
@@ -352,10 +367,6 @@ fn has_lock_suffix(value: &str) -> bool {
 fn validate_triggers(triggers: &[AutomationTrigger]) -> Result<(), AutomationValidationError> {
     let mut seen = HashSet::new();
     let mut has_api_trigger = false;
-    let cron_parser = CronParser::builder()
-        .seconds(Seconds::Disallowed)
-        .year(Year::Disallowed)
-        .build();
 
     for trigger in triggers {
         let id = trigger.id().as_str();
@@ -376,7 +387,7 @@ fn validate_triggers(triggers: &[AutomationTrigger]) -> Result<(), AutomationVal
                         expression: trigger.expression.clone(),
                     });
                 }
-                cron_parser.parse(&trigger.expression).map_err(|source| {
+                parse_schedule_expression(&trigger.expression).map_err(|source| {
                     AutomationValidationError::InvalidCronExpression {
                         trigger_id: id.to_string(),
                         expression: trigger.expression.clone(),
@@ -388,10 +399,6 @@ fn validate_triggers(triggers: &[AutomationTrigger]) -> Result<(), AutomationVal
     }
 
     Ok(())
-}
-
-fn default_true() -> bool {
-    true
 }
 
 #[cfg(test)]
@@ -417,9 +424,13 @@ mod tests {
     }
 
     fn schedule_trigger(id: &str, cron: &str) -> AutomationTrigger {
+        schedule_trigger_with_enabled(id, cron, true)
+    }
+
+    fn schedule_trigger_with_enabled(id: &str, cron: &str, enabled: bool) -> AutomationTrigger {
         AutomationTrigger::Schedule(ScheduleTrigger {
-            id:         AutomationTriggerId::new(id).unwrap(),
-            enabled:    true,
+            id: AutomationTriggerId::new(id).unwrap(),
+            enabled,
             expression: cron.to_string(),
         })
     }
@@ -450,14 +461,58 @@ expression = "0 0 * * *"
             Automation::from_toml_bytes(AutomationId::new("nightly").unwrap(), bytes).unwrap();
 
         assert_eq!(automation.description, None);
-        assert!(automation.enabled);
         assert!(automation.triggers.iter().all(AutomationTrigger::enabled));
 
         let toml = automation.to_toml_string().unwrap();
         assert!(!top_level_lines(&toml).any(|line| line.starts_with("id = ")));
         assert!(!top_level_lines(&toml).any(|line| line.starts_with("revision = ")));
-        assert!(toml.contains("enabled = true"));
+        assert!(!top_level_lines(&toml).any(|line| line.starts_with("enabled = ")));
         assert!(toml.contains("type = \"api\""));
+    }
+
+    #[test]
+    fn persisted_toml_rejects_legacy_top_level_enabled() {
+        let bytes = br#"
+name = "Legacy"
+enabled = false
+
+[target]
+repository = "fabro-sh/fabro"
+ref = "main"
+workflow = "release"
+
+[[triggers]]
+type = "api"
+id = "manual"
+enabled = true
+"#;
+
+        let result = Automation::from_toml_bytes(AutomationId::new("legacy").unwrap(), bytes);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn enabled_schedule_triggers_returns_only_enabled_schedule_triggers() {
+        let (automation, _) =
+            Automation::from_replace(AutomationId::new("nightly").unwrap(), AutomationReplace {
+                name:        "Nightly".to_string(),
+                description: None,
+                target:      target(),
+                triggers:    vec![
+                    api_trigger("manual"),
+                    schedule_trigger_with_enabled("nightly", "0 0 * * *", true),
+                    schedule_trigger_with_enabled("disabled", "0 1 * * *", false),
+                ],
+            })
+            .unwrap();
+
+        let trigger_ids = automation
+            .enabled_schedule_triggers()
+            .map(|trigger| trigger.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(trigger_ids, vec!["nightly"]);
     }
 
     #[test]
@@ -466,14 +521,12 @@ expression = "0 0 * * *"
             AutomationReplace {
                 name:        " ".to_string(),
                 description: None,
-                enabled:     true,
                 target:      target(),
                 triggers:    vec![api_trigger("manual")],
             },
             AutomationReplace {
                 name:        "Bad repo".to_string(),
                 description: None,
-                enabled:     true,
                 target:      AutomationTarget {
                     repository:   "not/github/slug".to_string(),
                     ref_selector: "main".to_string(),
@@ -484,7 +537,6 @@ expression = "0 0 * * *"
             AutomationReplace {
                 name:        "Bad ref".to_string(),
                 description: None,
-                enabled:     true,
                 target:      AutomationTarget {
                     repository:   "fabro-sh/fabro".to_string(),
                     ref_selector: "main;rm".to_string(),
@@ -495,7 +547,6 @@ expression = "0 0 * * *"
             AutomationReplace {
                 name:        "Bad workflow".to_string(),
                 description: None,
-                enabled:     true,
                 target:      AutomationTarget {
                     repository:   "fabro-sh/fabro".to_string(),
                     ref_selector: "main".to_string(),
@@ -506,7 +557,6 @@ expression = "0 0 * * *"
             AutomationReplace {
                 name:        "Duplicate trigger".to_string(),
                 description: None,
-                enabled:     true,
                 target:      target(),
                 triggers:    vec![
                     api_trigger("manual"),
@@ -516,21 +566,18 @@ expression = "0 0 * * *"
             AutomationReplace {
                 name:        "Two API triggers".to_string(),
                 description: None,
-                enabled:     true,
                 target:      target(),
                 triggers:    vec![api_trigger("one"), api_trigger("two")],
             },
             AutomationReplace {
                 name:        "Six field cron".to_string(),
                 description: None,
-                enabled:     true,
                 target:      target(),
                 triggers:    vec![schedule_trigger("nightly", "0 0 0 * * *")],
             },
             AutomationReplace {
                 name:        "Bad cron".to_string(),
                 description: None,
-                enabled:     true,
                 target:      target(),
                 triggers:    vec![schedule_trigger("nightly", "99 0 * * *")],
             },

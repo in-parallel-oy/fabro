@@ -15,17 +15,12 @@
 
 // May contain unused imports in some cases
 // @ts-ignore
-import type { AutomationTarget } from './automation-target';
-// May contain unused imports in some cases
-// @ts-ignore
-import type { AutomationTrigger } from './automation-trigger';
+import type { EnvironmentApiDockerfileSourceInline } from './environment-api-dockerfile-source-inline';
 
 /**
- * Request body for replacing an automation.
+ * REST-safe environment image settings. Dockerfile sources are inline-only; local paths are rejected by the REST API.
  */
-export interface ReplaceAutomationRequest {
-    'name': string;
-    'description'?: string | null;
-    'target': AutomationTarget;
-    'triggers': Array<AutomationTrigger>;
+export interface EnvironmentApiImageSettings {
+    'docker': string | null;
+    'dockerfile': EnvironmentApiDockerfileSourceInline | null;
 }

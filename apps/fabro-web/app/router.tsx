@@ -12,10 +12,8 @@ import * as ChatsDetail from "./routes/chats-detail";
 import * as AskFabro from "./routes/ask-fabro";
 import * as Automations from "./routes/automations";
 import * as AutomationsNew from "./routes/automations-new";
+import * as AutomationsEdit from "./routes/automations-edit";
 import * as AutomationDetail from "./routes/automation-detail";
-import * as AutomationDefinition from "./routes/automation-definition";
-import * as AutomationDiagram from "./routes/automation-diagram";
-import * as AutomationRuns from "./routes/automation-runs";
 import * as Runs from "./routes/runs";
 import * as RunDetail from "./routes/run-detail";
 import * as RunOverview from "./routes/run-overview";
@@ -114,13 +112,10 @@ export const routes: RouteObject[] = [
           route("ask-fabro", AskFabro),
           route("automations", Automations),
           route("automations/new", AutomationsNew),
-          route("automation/:name", AutomationDetail, {
-            children: [
-              indexRoute(AutomationDefinition),
-              route("diagram", AutomationDiagram),
-              route("runs", AutomationRuns),
-            ],
-          }),
+          route("automations/:id/edit", AutomationsEdit),
+          route("automations/:id", AutomationDetail),
+          // Backwards-compatible singular automation route used by older links.
+          route("automation/:id", AutomationDetail),
           route("runs", Runs),
           route("runs/:id", RunDetail, {
             children: [

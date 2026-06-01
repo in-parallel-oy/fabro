@@ -1,17 +1,20 @@
 use std::sync::Arc;
 
 use axum::Router;
+use axum::http::{HeaderMap, HeaderValue, header};
 use axum::routing::{get, post};
+use serde::Serialize;
 
-use super::{ApiError, AppState, IntoResponse, Response, StatusCode, demo};
+use super::{ApiError, AppState, IntoResponse, Json, Response, StatusCode, demo};
 
 mod artifacts;
 mod automations;
 mod billing;
 mod completions;
+mod environments;
 pub(in crate::server) mod events;
 pub(in crate::server) mod graph;
-mod lifecycle;
+pub(in crate::server) mod lifecycle;
 mod models;
 mod pair;
 mod pull_requests;
@@ -29,6 +32,53 @@ pub(super) use system::{health, openapi_spec};
 
 async fn not_implemented() -> Response {
     ApiError::new(StatusCode::NOT_IMPLEMENTED, "Not implemented.").into_response()
+}
+
+fn parse_required_if_match<R>(
+    headers: &HeaderMap,
+    resource: &str,
+    id: &impl std::fmt::Display,
+) -> Result<R, ApiError>
+where
+    R: std::str::FromStr,
+    R::Err: std::fmt::Display,
+{
+    let Some(value) = headers.get(header::IF_MATCH) else {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_REQUIRED,
+            format!("If-Match header is required for {resource}: {id}"),
+        ));
+    };
+    let value = value
+        .to_str()
+        .map_err(|_| ApiError::bad_request("If-Match header must be visible ASCII"))?;
+    let value = unquote_etag(value.trim());
+    value.parse::<R>().map_err(|err| {
+        ApiError::bad_request(format!("invalid If-Match {resource} revision: {err}"))
+    })
+}
+
+fn unquote_etag(value: &str) -> &str {
+    value
+        .strip_prefix('"')
+        .and_then(|unquoted| unquoted.strip_suffix('"'))
+        .unwrap_or(value)
+}
+
+fn json_with_etag_response<T>(
+    status: StatusCode,
+    resource: &str,
+    revision: &impl std::fmt::Display,
+    body: T,
+) -> Response
+where
+    T: Serialize,
+{
+    let etag = HeaderValue::from_str(&format!("\"{revision}\""))
+        .unwrap_or_else(|_| panic!("{resource} revisions are valid ETag header values"));
+    let mut response = (status, Json(body)).into_response();
+    response.headers_mut().insert(header::ETAG, etag);
+    response
 }
 
 pub(super) fn demo_routes() -> Router<Arc<AppState>> {
@@ -158,6 +208,7 @@ pub(super) fn real_routes() -> Router<Arc<AppState>> {
         .merge(pull_requests::routes())
         .merge(artifacts::routes())
         .merge(automations::routes())
+        .merge(environments::routes())
         .merge(sandbox::routes())
         .merge(sandboxes::routes())
         .merge(lifecycle::routes())

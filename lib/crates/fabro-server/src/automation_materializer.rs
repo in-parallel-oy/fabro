@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context as _;
@@ -9,6 +10,7 @@ use fabro_api::types::RunManifest;
 use fabro_automation::{AutomationId, AutomationTarget};
 use fabro_config::{EnvironmentLayer, MergeMap};
 use fabro_manifest::ManifestBuildInput;
+use fabro_store::KeyedMutex;
 use fabro_types::{DirtyStatus, GitContext, PreRunPushOutcome, RunId};
 use fabro_util::error::collect_chain;
 use tokio::process::Command;
@@ -16,7 +18,8 @@ use tokio::{fs, task, time};
 
 const GIT_CLONE_TIMEOUT: Duration = Duration::from_mins(2);
 const GIT_FETCH_TIMEOUT: Duration = Duration::from_mins(1);
-const GIT_CHECKOUT_TIMEOUT: Duration = Duration::from_secs(30);
+const GIT_WORKTREE_ADD_TIMEOUT: Duration = Duration::from_secs(30);
+const GIT_WORKTREE_PRUNE_TIMEOUT: Duration = Duration::from_secs(10);
 const GIT_REV_PARSE_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,6 +63,7 @@ pub(crate) struct ProductionAutomationRunMaterializer {
     github_api_base_url:  String,
     http_client:          Option<fabro_http::HttpClient>,
     environment_defaults: MergeMap<EnvironmentLayer>,
+    repo_cache:           Arc<GitRepoCache>,
 }
 
 impl ProductionAutomationRunMaterializer {
@@ -68,13 +72,44 @@ impl ProductionAutomationRunMaterializer {
         github_api_base_url: String,
         http_client: Option<fabro_http::HttpClient>,
         environment_defaults: MergeMap<EnvironmentLayer>,
+        repo_cache: Arc<GitRepoCache>,
     ) -> Self {
         Self {
             github_credentials,
             github_api_base_url,
             http_client,
             environment_defaults,
+            repo_cache,
         }
+    }
+}
+
+/// Persistent on-disk cache of bare GitHub clones, one per `(owner, repo)`.
+///
+/// Materializing an automation run only needs to read the workflow + its
+/// supporting files out of the repo at a given ref. Cloning fresh on every
+/// click costs 5–15s on the request thread. With this cache, the first
+/// materialize for a repo pays the clone, and every subsequent one pays only
+/// the delta `git fetch` plus a cheap `git worktree add` into the per-call
+/// scratch dir.
+#[derive(Debug)]
+pub(crate) struct GitRepoCache {
+    cache_root: PathBuf,
+    locks:      KeyedMutex<(String, String)>,
+}
+
+impl GitRepoCache {
+    pub(crate) fn new(cache_root: PathBuf) -> Self {
+        Self {
+            cache_root,
+            locks: KeyedMutex::new(),
+        }
+    }
+
+    fn bare_dir(&self, repo: &GithubRepository) -> PathBuf {
+        self.cache_root
+            .join(&repo.owner)
+            .join(format!("{}.git", repo.name))
     }
 }
 
@@ -117,18 +152,16 @@ impl AutomationRunMaterializer for ProductionAutomationRunMaterializer {
             AutomationRunMaterializeError::CloneFailed(render_error_chain(err.as_ref()))
         })?;
 
-        run_git_plan(build_clone_plan(&clone_url, &checkout_dir, auth.as_ref())).await?;
-        run_git_plan(build_fetch_ref_plan(
-            &clone_url,
-            &checkout_dir,
-            &input.target.ref_selector,
-            auth.as_ref(),
-        ))
-        .await?;
-        run_git_plan(build_checkout_ref_plan(&checkout_dir)).await?;
-        let checked_out_sha = run_git_plan(build_rev_parse_head_plan(&checkout_dir))
-            .await
-            .map(|stdout| String::from_utf8_lossy(&stdout).trim().to_string())?;
+        let checked_out_sha = self
+            .repo_cache
+            .prepare_worktree(WorktreePrepareInput {
+                repo:         &repo,
+                clone_url:    &clone_url,
+                ref_selector: &input.target.ref_selector,
+                auth:         auth.as_ref(),
+                worktree_dir: &checkout_dir,
+            })
+            .await?;
 
         let manifest_input = ManifestFromCheckoutInput {
             input,
@@ -144,6 +177,100 @@ impl AutomationRunMaterializer for ProductionAutomationRunMaterializer {
                     "manifest build task failed: {err}"
                 ))
             })?
+    }
+}
+
+pub(crate) struct WorktreePrepareInput<'a> {
+    pub repo:         &'a GithubRepository,
+    pub clone_url:    &'a str,
+    pub ref_selector: &'a str,
+    pub auth:         Option<&'a GitAuthConfig>,
+    pub worktree_dir: &'a Path,
+}
+
+impl GitRepoCache {
+    /// Prepare a worktree containing the requested ref of `repo` at
+    /// `worktree_dir`. Returns the resolved commit SHA.
+    ///
+    /// First call for a repo: a `--bare --depth 1` clone is created at
+    /// `<cache>/<owner>/<repo>.git`. Subsequent calls reuse the bare clone
+    /// and only `git fetch --depth 1` the requested ref. In both cases a
+    /// short-lived worktree is added at `worktree_dir`; the caller owns its
+    /// lifetime (typically a `TempDir`). Stale worktree admin entries from
+    /// crashed prior calls are pruned at the start of each call so they do
+    /// not accumulate.
+    pub(crate) async fn prepare_worktree(
+        &self,
+        args: WorktreePrepareInput<'_>,
+    ) -> Result<String, AutomationRunMaterializeError> {
+        let _guard = self
+            .locks
+            .lock((args.repo.owner.clone(), args.repo.name.clone()))
+            .await;
+        let bare_dir = self.bare_dir(args.repo);
+
+        match self.try_prepare_worktree(&bare_dir, &args).await {
+            Ok(sha) => Ok(sha),
+            Err(first_err) if bare_clone_may_be_corrupt(&bare_dir).await => {
+                // Best-effort wipe and one retry. Corruption is rare; auth
+                // and network failures don't trip this branch because
+                // `bare_clone_may_be_corrupt` only returns true when the
+                // bare repo's `HEAD` file is missing or empty.
+                let _ = fs::remove_dir_all(&bare_dir).await;
+                self.try_prepare_worktree(&bare_dir, &args)
+                    .await
+                    .map_err(|_| first_err)
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    async fn try_prepare_worktree(
+        &self,
+        bare_dir: &Path,
+        args: &WorktreePrepareInput<'_>,
+    ) -> Result<String, AutomationRunMaterializeError> {
+        let bare_exists = fs::try_exists(&bare_dir.join("HEAD"))
+            .await
+            .unwrap_or(false);
+        if bare_exists {
+            // Drop any worktree admin entries whose working trees were
+            // deleted by previous `TempDir` cleanup. Cheap and idempotent.
+            let _ = run_git_plan(build_worktree_prune_plan(bare_dir)).await;
+        } else {
+            if let Some(parent) = bare_dir.parent() {
+                fs::create_dir_all(parent).await.map_err(|err| {
+                    AutomationRunMaterializeError::CloneFailed(format!(
+                        "failed to create cache dir {}: {err}",
+                        parent.display()
+                    ))
+                })?;
+            }
+            run_git_plan(build_bare_clone_plan(args.clone_url, bare_dir, args.auth)).await?;
+        }
+
+        run_git_plan(build_bare_fetch_plan(
+            bare_dir,
+            args.clone_url,
+            args.ref_selector,
+            args.auth,
+        ))
+        .await?;
+
+        let checked_out_sha = run_git_plan(build_rev_parse_fetch_head_plan(bare_dir))
+            .await
+            .map(|stdout| String::from_utf8_lossy(&stdout).trim().to_string())?;
+
+        run_git_plan(build_worktree_add_plan(bare_dir, args.worktree_dir)).await?;
+
+        Ok(checked_out_sha)
+    }
+}
+
+async fn bare_clone_may_be_corrupt(bare_dir: &Path) -> bool {
+    match fs::metadata(&bare_dir.join("HEAD")).await {
+        Ok(meta) => meta.len() == 0,
+        Err(_) => bare_dir.exists(),
     }
 }
 
@@ -320,28 +447,28 @@ impl GitCommandPlan {
     }
 }
 
-fn build_clone_plan(
+fn build_bare_clone_plan(
     clone_url: &str,
-    checkout_dir: &Path,
+    bare_dir: &Path,
     auth: Option<&GitAuthConfig>,
 ) -> GitCommandPlan {
     GitCommandPlan::new(
         [
             "clone".to_string(),
+            "--bare".to_string(),
             "--depth".to_string(),
             "1".to_string(),
-            "--no-checkout".to_string(),
             clone_url.to_string(),
-            checkout_dir.display().to_string(),
+            bare_dir.display().to_string(),
         ],
         GIT_CLONE_TIMEOUT,
     )
     .with_auth(clone_url, auth)
 }
 
-fn build_fetch_ref_plan(
+fn build_bare_fetch_plan(
+    bare_dir: &Path,
     clone_url: &str,
-    checkout_dir: &Path,
     ref_selector: &str,
     auth: Option<&GitAuthConfig>,
 ) -> GitCommandPlan {
@@ -356,20 +483,31 @@ fn build_fetch_ref_plan(
         ],
         GIT_FETCH_TIMEOUT,
     )
-    .current_dir(checkout_dir)
+    .current_dir(bare_dir)
     .with_auth(clone_url, auth)
 }
 
-fn build_checkout_ref_plan(checkout_dir: &Path) -> GitCommandPlan {
+fn build_worktree_add_plan(bare_dir: &Path, worktree_dir: &Path) -> GitCommandPlan {
     GitCommandPlan::new(
-        ["checkout", "--force", "--detach", "FETCH_HEAD"],
-        GIT_CHECKOUT_TIMEOUT,
+        [
+            "worktree".to_string(),
+            "add".to_string(),
+            "--detach".to_string(),
+            "--force".to_string(),
+            worktree_dir.display().to_string(),
+            "FETCH_HEAD".to_string(),
+        ],
+        GIT_WORKTREE_ADD_TIMEOUT,
     )
-    .current_dir(checkout_dir)
+    .current_dir(bare_dir)
 }
 
-fn build_rev_parse_head_plan(checkout_dir: &Path) -> GitCommandPlan {
-    GitCommandPlan::new(["rev-parse", "HEAD"], GIT_REV_PARSE_TIMEOUT).current_dir(checkout_dir)
+fn build_worktree_prune_plan(bare_dir: &Path) -> GitCommandPlan {
+    GitCommandPlan::new(["worktree", "prune"], GIT_WORKTREE_PRUNE_TIMEOUT).current_dir(bare_dir)
+}
+
+fn build_rev_parse_fetch_head_plan(bare_dir: &Path) -> GitCommandPlan {
+    GitCommandPlan::new(["rev-parse", "FETCH_HEAD"], GIT_REV_PARSE_TIMEOUT).current_dir(bare_dir)
 }
 
 async fn run_git_plan(plan: GitCommandPlan) -> Result<Vec<u8>, AutomationRunMaterializeError> {
@@ -639,26 +777,27 @@ mod tests {
     }
 
     #[test]
-    fn ref_checkout_command_plans_use_argv_prompt_disable_and_timeouts() {
+    fn bare_cache_command_plans_use_argv_prompt_disable_and_timeouts() {
         let repo = parse_github_repository_slug("fabro-sh/fabro").unwrap();
         let clone_url = github_clone_url(&repo);
         let temp = TempDir::new().unwrap();
-        let checkout_dir = temp.path().join("repo");
+        let bare_dir = temp.path().join("fabro-sh/fabro.git");
+        let worktree_dir = temp.path().join("worktree/repo");
 
-        let clone = build_clone_plan(&clone_url, &checkout_dir, None);
+        let clone = build_bare_clone_plan(&clone_url, &bare_dir, None);
         assert_eq!(clone.program, "git");
         assert_eq!(clone.args, vec![
             "clone",
+            "--bare",
             "--depth",
             "1",
-            "--no-checkout",
             "https://github.com/fabro-sh/fabro.git",
-            checkout_dir.to_str().unwrap(),
+            bare_dir.to_str().unwrap(),
         ]);
         assert_eq!(clone.timeout, Duration::from_mins(2));
         assert_eq!(clone.env_value("GIT_TERMINAL_PROMPT"), Some("0"));
 
-        let fetch = build_fetch_ref_plan(&clone_url, &checkout_dir, "feature/materialize", None);
+        let fetch = build_bare_fetch_plan(&bare_dir, &clone_url, "feature/materialize", None);
         assert_eq!(fetch.args, vec![
             "fetch",
             "--depth",
@@ -667,23 +806,32 @@ mod tests {
             "--",
             "feature/materialize",
         ]);
-        assert_eq!(fetch.current_dir.as_deref(), Some(checkout_dir.as_path()));
+        assert_eq!(fetch.current_dir.as_deref(), Some(bare_dir.as_path()));
         assert_eq!(fetch.timeout, Duration::from_mins(1));
         assert_eq!(fetch.env_value("GIT_TERMINAL_PROMPT"), Some("0"));
 
-        let checkout = build_checkout_ref_plan(&checkout_dir);
-        assert_eq!(checkout.args, vec![
-            "checkout",
-            "--force",
+        let worktree = build_worktree_add_plan(&bare_dir, &worktree_dir);
+        assert_eq!(worktree.args, vec![
+            "worktree",
+            "add",
             "--detach",
-            "FETCH_HEAD"
+            "--force",
+            worktree_dir.to_str().unwrap(),
+            "FETCH_HEAD",
         ]);
-        assert_eq!(
-            checkout.current_dir.as_deref(),
-            Some(checkout_dir.as_path())
-        );
-        assert_eq!(checkout.timeout, Duration::from_secs(30));
-        assert_eq!(checkout.env_value("GIT_TERMINAL_PROMPT"), Some("0"));
+        assert_eq!(worktree.current_dir.as_deref(), Some(bare_dir.as_path()));
+        assert_eq!(worktree.timeout, Duration::from_secs(30));
+        assert_eq!(worktree.env_value("GIT_TERMINAL_PROMPT"), Some("0"));
+
+        let prune = build_worktree_prune_plan(&bare_dir);
+        assert_eq!(prune.args, vec!["worktree", "prune"]);
+        assert_eq!(prune.current_dir.as_deref(), Some(bare_dir.as_path()));
+        assert_eq!(prune.timeout, Duration::from_secs(10));
+
+        let rev_parse = build_rev_parse_fetch_head_plan(&bare_dir);
+        assert_eq!(rev_parse.args, vec!["rev-parse", "FETCH_HEAD"]);
+        assert_eq!(rev_parse.current_dir.as_deref(), Some(bare_dir.as_path()));
+        assert_eq!(rev_parse.timeout, Duration::from_secs(10));
     }
 
     #[test]
@@ -720,7 +868,7 @@ mod tests {
             Some("x-access-token".to_string()),
             Some("ghu_secret".to_string()),
         );
-        let plan = build_clone_plan(&clone_url, Path::new("/tmp/fabro-checkout"), Some(&auth));
+        let plan = build_bare_clone_plan(&clone_url, Path::new("/tmp/fabro-checkout"), Some(&auth));
 
         assert!(
             plan.args
@@ -809,6 +957,182 @@ mod tests {
         assert_eq!(
             submitted_manifest,
             serde_json::to_value(&materialized.manifest).unwrap()
+        );
+    }
+
+    fn seed_upstream(upstream: &Path) -> String {
+        std::process::Command::new("git")
+            .args([
+                "init",
+                "--bare",
+                "--initial-branch=main",
+                upstream.to_str().unwrap(),
+            ])
+            .status()
+            .expect("git init --bare");
+        let work = upstream.parent().unwrap().join("seed");
+        fs::create_dir_all(&work).unwrap();
+        std::process::Command::new("git")
+            .args(["init", "--initial-branch=main", work.to_str().unwrap()])
+            .status()
+            .expect("git init seed");
+        let configure = |key: &str, value: &str| {
+            std::process::Command::new("git")
+                .args(["-C", work.to_str().unwrap(), "config", key, value])
+                .status()
+                .expect("git config seed");
+        };
+        configure("user.email", "test@fabro.sh");
+        configure("user.name", "Fabro Test");
+        configure("commit.gpgsign", "false");
+        fs::write(work.join("README.md"), "seed\n").unwrap();
+        std::process::Command::new("git")
+            .args(["-C", work.to_str().unwrap(), "add", "."])
+            .status()
+            .expect("git add seed");
+        std::process::Command::new("git")
+            .args(["-C", work.to_str().unwrap(), "commit", "-m", "seed"])
+            .status()
+            .expect("git commit seed");
+        std::process::Command::new("git")
+            .args([
+                "-C",
+                work.to_str().unwrap(),
+                "push",
+                upstream.to_str().unwrap(),
+                "main",
+            ])
+            .status()
+            .expect("git push seed");
+        let output = std::process::Command::new("git")
+            .args(["-C", work.to_str().unwrap(), "rev-parse", "HEAD"])
+            .output()
+            .expect("git rev-parse seed");
+        String::from_utf8(output.stdout).unwrap().trim().to_string()
+    }
+
+    fn objects_signature(dir: &Path) -> Vec<(String, u64)> {
+        let mut files = Vec::new();
+        let mut stack = vec![dir.join("objects")];
+        while let Some(path) = stack.pop() {
+            let Ok(iter) = fs::read_dir(&path) else {
+                continue;
+            };
+            for entry in iter.flatten() {
+                let entry_path = entry.path();
+                let Ok(meta) = entry.metadata() else { continue };
+                if meta.is_dir() {
+                    stack.push(entry_path);
+                } else if meta.is_file() {
+                    let rel = entry_path
+                        .strip_prefix(dir.join("objects"))
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned();
+                    files.push((rel, meta.len()));
+                }
+            }
+        }
+        files.sort();
+        files
+    }
+
+    #[tokio::test]
+    async fn bare_clone_reused_across_calls() {
+        let temp = TempDir::new().unwrap();
+        let upstream = temp.path().join("upstream.git");
+        let expected_sha = seed_upstream(&upstream);
+        let cache = GitRepoCache::new(temp.path().join("cache"));
+        let repo = GithubRepository {
+            owner: "fabro-sh".to_string(),
+            name:  "fabro".to_string(),
+        };
+        let upstream_url = upstream.to_str().unwrap().to_string();
+
+        let worktree_a = temp.path().join("wt-a");
+        let sha_a = cache
+            .prepare_worktree(WorktreePrepareInput {
+                repo:         &repo,
+                clone_url:    &upstream_url,
+                ref_selector: "main",
+                auth:         None,
+                worktree_dir: &worktree_a,
+            })
+            .await
+            .expect("first prepare_worktree");
+        assert_eq!(sha_a, expected_sha);
+        let bare_dir = cache.bare_dir(&repo);
+        assert!(bare_dir.join("HEAD").exists(), "bare clone should exist");
+        let signature_before = objects_signature(&bare_dir);
+        assert!(
+            !signature_before.is_empty(),
+            "expected object files after clone"
+        );
+
+        let worktree_b = temp.path().join("wt-b");
+        let sha_b = cache
+            .prepare_worktree(WorktreePrepareInput {
+                repo:         &repo,
+                clone_url:    &upstream_url,
+                ref_selector: "main",
+                auth:         None,
+                worktree_dir: &worktree_b,
+            })
+            .await
+            .expect("second prepare_worktree");
+        assert_eq!(sha_b, expected_sha);
+        let signature_after = objects_signature(&bare_dir);
+        assert_eq!(
+            signature_before, signature_after,
+            "second call should reuse the bare clone, not re-clone",
+        );
+    }
+
+    #[tokio::test]
+    async fn bare_clone_recovers_from_corruption() {
+        let temp = TempDir::new().unwrap();
+        let upstream = temp.path().join("upstream.git");
+        let expected_sha = seed_upstream(&upstream);
+        let cache = GitRepoCache::new(temp.path().join("cache"));
+        let repo = GithubRepository {
+            owner: "fabro-sh".to_string(),
+            name:  "fabro".to_string(),
+        };
+        let upstream_url = upstream.to_str().unwrap().to_string();
+
+        let worktree_a = temp.path().join("wt-a");
+        cache
+            .prepare_worktree(WorktreePrepareInput {
+                repo:         &repo,
+                clone_url:    &upstream_url,
+                ref_selector: "main",
+                auth:         None,
+                worktree_dir: &worktree_a,
+            })
+            .await
+            .expect("first prepare_worktree");
+
+        // Simulate corruption by truncating HEAD.
+        let bare_dir = cache.bare_dir(&repo);
+        fs::write(bare_dir.join("HEAD"), "").unwrap();
+
+        let worktree_b = temp.path().join("wt-b");
+        let sha = cache
+            .prepare_worktree(WorktreePrepareInput {
+                repo:         &repo,
+                clone_url:    &upstream_url,
+                ref_selector: "main",
+                auth:         None,
+                worktree_dir: &worktree_b,
+            })
+            .await
+            .expect("prepare_worktree should recover from corruption");
+        assert_eq!(sha, expected_sha);
+        assert!(bare_dir.join("HEAD").exists());
+        assert!(
+            !fs::read_to_string(bare_dir.join("HEAD"))
+                .unwrap()
+                .is_empty()
         );
     }
 }

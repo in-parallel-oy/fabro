@@ -90,6 +90,12 @@ export const queryKeys = {
     detail: (name: string) => ["workflows", "detail", name] as const,
     runs: (name: string) => ["workflows", "runs", name] as const,
   },
+  automations: {
+    list: () => ["automations", "list"] as const,
+    detail: (id: string) => ["automations", "detail", id] as const,
+    runs: (id: string, opts: { limit?: number; offset?: number } = {}) =>
+      ["automations", "runs", id, opts.limit ?? null, opts.offset ?? null] as const,
+  },
   insights: {
     queries: () => ["insights", "queries"] as const,
     history: () => ["insights", "history"] as const,

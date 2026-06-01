@@ -404,6 +404,11 @@ fn resolve_manifest_dockerfiles(
     config_path: &ManifestPath,
     files: &HashMap<ManifestPath, String>,
 ) -> Result<()> {
+    for environment in layer.environments.values_mut() {
+        if let Some(image) = environment.image.as_mut() {
+            resolve_manifest_dockerfile(image, config_path, files)?;
+        }
+    }
     if let Some(image) = layer
         .run
         .as_mut()
@@ -2596,6 +2601,49 @@ contents = "read"
             .expect("workflow + run blocks should parse");
             let run = layer.run.expect("run layer should be present");
             assert!(run.integrations.is_some());
+        }
+
+        #[test]
+        fn inlines_dockerfile_path_in_environments_catalog() {
+            use fabro_config::EnvironmentDockerfileLayer;
+
+            let source = r#"_version = 1
+
+[environments.fabro-dev]
+provider = "daytona"
+
+[environments.fabro-dev.image]
+dockerfile = { path = "Dockerfile" }
+"#;
+            let config_path =
+                ManifestPath::from_wire("project.toml").expect("config path should be valid");
+            let mut files = std::collections::HashMap::new();
+            files.insert(
+                ManifestPath::from_wire("Dockerfile").expect("dockerfile path should be valid"),
+                "FROM ubuntu:24.04\n".to_string(),
+            );
+
+            let layer = settings_layer_with_resolved_dockerfiles(
+                source,
+                &config_path,
+                &files,
+                SettingsSource::Project,
+            )
+            .expect("project config should parse");
+
+            let dockerfile = layer
+                .environments
+                .get("fabro-dev")
+                .expect("fabro-dev environment should be present")
+                .image
+                .as_ref()
+                .and_then(|image| image.dockerfile.as_ref())
+                .expect("dockerfile should be present");
+            assert_eq!(
+                *dockerfile,
+                EnvironmentDockerfileLayer::Inline("FROM ubuntu:24.04\n".to_string()),
+                "catalog dockerfile path should be inlined, got: {dockerfile:?}"
+            );
         }
     }
 }

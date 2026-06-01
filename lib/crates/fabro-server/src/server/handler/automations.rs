@@ -1,13 +1,11 @@
 use std::sync::Arc;
 
-use axum::http::{HeaderMap, HeaderValue, header};
+use axum::http::HeaderMap;
 use axum_extra::extract::Query as ExtraQuery;
 use chrono::Utc;
 use fabro_automation::{
-    Automation, AutomationDraft, AutomationId, AutomationReplace, AutomationRevision,
-    AutomationStoreError,
+    Automation, AutomationDraft, AutomationId, AutomationReplace, AutomationStoreError,
 };
-use fabro_config::Storage;
 use fabro_types::{AutomationRef, RunId};
 use serde::Serialize;
 
@@ -15,7 +13,7 @@ use super::super::{
     ApiError, AppState, IntoResponse, Json, PaginationParams, Path, RequiredUser, Response, Router,
     State, StatusCode, get, paginate_items,
 };
-use super::runs;
+use super::{json_with_etag_response, lifecycle, parse_required_if_match, runs};
 use crate::automation_materializer::AutomationRunMaterializeInput;
 use crate::principal_middleware::RequiredRunToolActor;
 
@@ -133,7 +131,7 @@ async fn create_automation_run(
     let Some(api_trigger) = automation.enabled_api_trigger() else {
         return ApiError::with_code(
             StatusCode::CONFLICT,
-            "automation is disabled or has no enabled API trigger",
+            "automation has no enabled API trigger",
             "automation_api_trigger_disabled",
         )
         .into_response();
@@ -141,16 +139,13 @@ async fn create_automation_run(
     let api_trigger_id = api_trigger.id.to_string();
 
     let run_id = RunId::new();
-    let temp_root = Storage::new(state.server_storage_dir())
-        .scratch_dir()
-        .join("automations");
     let materialized = match state
         .materialize_automation_run(AutomationRunMaterializeInput {
             automation_id: automation.id.clone(),
             target: automation.target.clone(),
             run_id,
             user_settings_path: state.active_config_path().to_path_buf(),
-            temp_root,
+            temp_root: state.automation_temp_root(),
         })
         .await
     {
@@ -167,19 +162,35 @@ async fn create_automation_run(
         trigger_id: Some(api_trigger_id),
     };
 
-    Box::pin(runs::create_run_from_manifest(
-        state,
+    let response = Box::pin(runs::create_run_from_manifest(
+        Arc::clone(&state),
         runs::CreateRunFromManifestRequest {
             manifest: materialized.manifest,
             submitted_manifest_bytes: materialized.submitted_manifest_bytes,
             explicit_run_id: Some(run_id),
             explicit_title_supplied,
-            actor,
+            actor: actor.clone(),
             headers,
             automation: Some(automation_ref),
         },
     ))
-    .await
+    .await;
+
+    // An automation's API trigger should both create and start the run; otherwise
+    // the run sits in `Submitted` forever because the scheduler only claims
+    // `Runnable`. Mirror what the UI does for a manual create-then-start flow.
+    if response.status().is_success() {
+        if let Err(err) = lifecycle::queue_run_start(state.as_ref(), run_id, false, actor).await {
+            tracing::warn!(
+                %run_id,
+                automation_id = %automation.id,
+                error = ?err,
+                "Created automation run but failed to start it",
+            );
+        }
+    }
+
+    response
 }
 
 async fn create_automation(
@@ -188,6 +199,7 @@ async fn create_automation(
     Json(draft): Json<AutomationDraft>,
 ) -> Result<Response, ApiError> {
     let automation = state.automation_store().create(draft).await?;
+    state.notify_automation_scheduler();
     Ok((StatusCode::CREATED, Json(automation)).into_response())
 }
 
@@ -211,11 +223,12 @@ async fn replace_automation(
     Json(replacement): Json<AutomationReplace>,
 ) -> Result<Response, ApiError> {
     let id = parse_path_id(id)?;
-    let expected = parse_required_if_match(&headers, &id)?;
+    let expected = parse_required_if_match(&headers, "automation", &id)?;
     let automation = state
         .automation_store()
         .replace(&id, &expected, replacement)
         .await?;
+    state.notify_automation_scheduler();
     Ok(automation_with_etag_response(StatusCode::OK, automation))
 }
 
@@ -226,8 +239,9 @@ async fn delete_automation(
     Path(id): Path<String>,
 ) -> Result<Response, ApiError> {
     let id = parse_path_id(id)?;
-    let expected = parse_required_if_match(&headers, &id)?;
+    let expected = parse_required_if_match(&headers, "automation", &id)?;
     state.automation_store().delete(&id, &expected).await?;
+    state.notify_automation_scheduler();
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
@@ -236,38 +250,9 @@ fn parse_path_id(id: String) -> Result<AutomationId, ApiError> {
         .map_err(|err| ApiError::bad_request(format!("invalid automation id: {err}")))
 }
 
-fn parse_required_if_match(
-    headers: &HeaderMap,
-    id: &AutomationId,
-) -> Result<AutomationRevision, ApiError> {
-    let Some(value) = headers.get(header::IF_MATCH) else {
-        return Err(ApiError::new(
-            StatusCode::PRECONDITION_REQUIRED,
-            format!("If-Match header is required for automation: {id}"),
-        ));
-    };
-    let value = value
-        .to_str()
-        .map_err(|_| ApiError::bad_request("If-Match header must be visible ASCII"))?;
-    let value = unquote_etag(value.trim());
-    value.parse::<AutomationRevision>().map_err(|err| {
-        ApiError::bad_request(format!("invalid If-Match automation revision: {err}"))
-    })
-}
-
-fn unquote_etag(value: &str) -> &str {
-    value
-        .strip_prefix('"')
-        .and_then(|unquoted| unquoted.strip_suffix('"'))
-        .unwrap_or(value)
-}
-
 fn automation_with_etag_response(status: StatusCode, automation: Automation) -> Response {
-    let etag = HeaderValue::from_str(&format!("\"{}\"", automation.revision))
-        .expect("automation revisions are valid ETag header values");
-    let mut response = (status, Json(automation)).into_response();
-    response.headers_mut().insert(header::ETAG, etag);
-    response
+    let revision = automation.revision.clone();
+    json_with_etag_response(status, "automation", &revision, automation)
 }
 
 impl From<AutomationStoreError> for ApiError {

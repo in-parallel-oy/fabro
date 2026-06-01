@@ -6,6 +6,7 @@ import axios, {
 } from "axios";
 import {
   AuthApi,
+  AutomationsApi,
   Configuration,
   HumanInTheLoopApi,
   InsightsApi,
@@ -71,6 +72,11 @@ export const generatedApiConfiguration = new Configuration({
 });
 
 export const authApi = new AuthApi(
+  generatedApiConfiguration,
+  "",
+  generatedAxios,
+);
+export const automationsApi = new AutomationsApi(
   generatedApiConfiguration,
   "",
   generatedAxios,

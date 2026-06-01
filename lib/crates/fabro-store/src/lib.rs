@@ -19,7 +19,7 @@ pub use error::{Error, Result};
 pub use fabro_types::{
     EventEnvelope, PendingInterviewRecord, Run, RunBlobId, RunProjection, StageId, StageProjection,
 };
-pub(crate) use keyed_mutex::KeyedMutex;
+pub use keyed_mutex::{KeyedMutex, KeyedMutexGuard};
 pub use run_sessions::{
     ProjectedRunSession, project_run_session, project_run_session_with_context,
     project_run_sessions,
