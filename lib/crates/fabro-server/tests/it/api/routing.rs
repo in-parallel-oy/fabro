@@ -350,15 +350,15 @@ async fn security_headers_are_applied_to_all_responses() {
     // external module scripts.
     let csp = spa_response
         .headers()
-        .get("content-security-policy")
-        .expect("CSP header should be emitted")
+        .get("content-security-policy-report-only")
+        .expect("CSP report-only header should be emitted")
         .to_str()
         .expect("CSP should be ASCII");
     assert!(
         !spa_response
             .headers()
-            .contains_key("content-security-policy-report-only"),
-        "CSP should be enforced, not report-only"
+            .contains_key("content-security-policy"),
+        "CSP should be report-only while tuning, not enforced"
     );
     assert!(csp.contains("default-src 'self'"), "got: {csp}");
     assert!(csp.contains("script-src 'self'"), "got: {csp}");

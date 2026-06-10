@@ -34,20 +34,24 @@ fn spa_fixture_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/spa")
 }
 
-fn assert_sandbox_provider_policy_enabled(settings: &str) {
+fn assert_sandbox_provider_policy(
+    settings: &str,
+    local_enabled: bool,
+    docker_enabled: bool,
+    daytona_enabled: bool,
+) {
     assert!(settings.contains("[server.sandbox.providers.local]"));
     assert!(settings.contains("[server.sandbox.providers.docker]"));
     assert!(settings.contains("[server.sandbox.providers.daytona]"));
-    assert!(settings.contains("enabled = true"));
 
     let resolved = ServerSettingsBuilder::from_toml(settings)
         .expect("settings should resolve")
         .server
         .sandbox
         .providers;
-    assert!(resolved.local.enabled);
-    assert!(resolved.docker.enabled);
-    assert!(resolved.daytona.enabled);
+    assert_eq!(resolved.local.enabled, local_enabled);
+    assert_eq!(resolved.docker.enabled, docker_enabled);
+    assert_eq!(resolved.daytona.enabled, daytona_enabled);
 }
 
 async fn mock_daytona_auth_probe(server: &MockServer) -> httpmock::Mock<'_> {
@@ -934,7 +938,7 @@ async fn token_install_finish_persists_settings_env_and_vault() {
         settings.contains("provider = \"docker\""),
         "settings.toml should record explicit docker sandbox provider"
     );
-    assert_sandbox_provider_policy_enabled(&settings);
+    assert_sandbox_provider_policy(&settings, true, true, false);
     let resolved = ServerSettingsBuilder::from_toml(&settings)
         .expect("settings should resolve")
         .server;
@@ -2694,7 +2698,7 @@ async fn daytona_install_finish_writes_settings_and_vault_secret() {
         settings.contains("provider = \"daytona\""),
         "settings.toml should record daytona sandbox provider"
     );
-    assert_sandbox_provider_policy_enabled(&settings);
+    assert_sandbox_provider_policy(&settings, true, false, true);
 
     let vault = Vault::load(Storage::new(temp_dir.path()).secrets_path()).unwrap();
     assert_eq!(vault.get("DAYTONA_API_KEY"), Some(api_key));

@@ -1931,6 +1931,18 @@ fn slack_app_state_with_secret_sources(
     vault_entries: &[(&str, &str, SecretType)],
     server_secret_env: HashMap<String, String>,
 ) -> Arc<AppState> {
+    slack_app_state_with_settings_and_secret_sources(
+        default_test_server_settings(),
+        vault_entries,
+        server_secret_env,
+    )
+}
+
+fn slack_app_state_with_settings_and_secret_sources(
+    settings: ServerSettings,
+    vault_entries: &[(&str, &str, SecretType)],
+    server_secret_env: HashMap<String, String>,
+) -> Arc<AppState> {
     let (store, artifact_store) = test_store_bundle();
     let vault_path = test_secret_store_path();
     let server_env_path = vault_path.with_file_name("server.env");
@@ -1940,7 +1952,7 @@ fn slack_app_state_with_secret_sources(
     }
     build_app_state(AppStateConfig {
         resolved_settings: resolved_runtime_settings_for_tests(
-            default_test_server_settings(),
+            settings,
             RunLayer::default(),
             LlmCatalogSettings::default(),
         ),
@@ -1966,8 +1978,40 @@ fn slack_app_state_with_secret_sources(
 }
 
 #[test]
-fn slack_service_is_enabled_by_vault_tokens() {
+fn slack_service_ignores_vault_tokens_when_config_is_absent() {
     let state = slack_app_state_with_secret_sources(
+        &[
+            (
+                EnvVars::FABRO_SLACK_BOT_TOKEN,
+                "xoxb-test",
+                SecretType::Token,
+            ),
+            (
+                EnvVars::FABRO_SLACK_APP_TOKEN,
+                "xapp-test",
+                SecretType::Token,
+            ),
+        ],
+        HashMap::new(),
+    );
+
+    assert!(state.slack_service.is_none());
+}
+
+#[test]
+fn slack_service_is_enabled_by_config_and_vault_tokens() {
+    let state = slack_app_state_with_settings_and_secret_sources(
+        server_settings_from_toml(
+            r#"
+_version = 1
+
+[server.auth]
+methods = ["dev-token"]
+
+[server.integrations.slack]
+enabled = true
+"#,
+        ),
         &[
             (
                 EnvVars::FABRO_SLACK_BOT_TOKEN,
@@ -1986,7 +2030,7 @@ fn slack_service_is_enabled_by_vault_tokens() {
     let service = state
         .slack_service
         .as_ref()
-        .expect("slack service should be enabled by vault tokens");
+        .expect("slack service should be enabled by config and vault tokens");
     let connection = service.connection_status();
     assert_eq!(connection.kind, IntegrationConnectionKind::SocketMode);
     assert_eq!(connection.status, IntegrationConnectionState::Connecting);

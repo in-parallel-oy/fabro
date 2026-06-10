@@ -146,6 +146,41 @@ async fn get_system_info_returns_runtime_fields() {
 }
 
 #[tokio::test]
+async fn get_system_integrations_reports_slack_disabled_when_config_is_absent() {
+    let settings = settings_from_toml(
+        r"
+_version = 1
+",
+    );
+    let app = fabro_server::test_support::build_test_router(
+        fabro_server::test_support::TestAppStateBuilder::new()
+            .runtime_settings(settings.server_settings, settings.manifest_run_defaults)
+            .build(),
+    );
+
+    let request = Request::builder()
+        .method("GET")
+        .uri(api("/system/integrations"))
+        .body(Body::empty())
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+
+    let body = response_json(response, StatusCode::OK, "GET /api/v1/system/integrations").await;
+    let slack = body["data"]
+        .as_array()
+        .expect("integration response should include data")
+        .iter()
+        .find(|integration| integration["provider"] == "slack")
+        .expect("slack integration should be present");
+
+    assert_eq!(slack["enabled"], false);
+    assert_eq!(slack["configured"], false);
+    assert_eq!(slack["status"], "disabled");
+    assert_eq!(slack["missing_credentials"], serde_json::json!([]));
+    assert!(slack["connection"].is_null());
+}
+
+#[tokio::test]
 async fn get_system_integrations_reports_slack_missing_credentials_when_allowed() {
     let settings = settings_from_toml(
         r"

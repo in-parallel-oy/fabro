@@ -20,9 +20,14 @@ pub async fn layer(req: Request, next: Next) -> Response {
 }
 
 fn apply_csp(headers: &mut HeaderMap) {
+    // Report-only while we tune the policy: browsers evaluate violations and log
+    // them to the console without blocking any resources. Switch back to the
+    // enforcing `content-security-policy` header once the policy is clean.
     if let Ok(value) = HeaderValue::from_str(csp::policy()) {
         headers
-            .entry(HeaderName::from_static("content-security-policy"))
+            .entry(HeaderName::from_static(
+                "content-security-policy-report-only",
+            ))
             .or_insert(value);
     }
 }
@@ -187,11 +192,11 @@ mod tests {
     }
 
     #[test]
-    fn csp_is_enforced_not_report_only() {
+    fn csp_is_report_only_not_enforced() {
         let mut headers = HeaderMap::new();
         apply_csp(&mut headers);
-        assert!(headers.contains_key("content-security-policy"));
-        assert!(!headers.contains_key("content-security-policy-report-only"));
+        assert!(headers.contains_key("content-security-policy-report-only"));
+        assert!(!headers.contains_key("content-security-policy"));
     }
 
     #[test]

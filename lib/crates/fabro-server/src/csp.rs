@@ -2,8 +2,7 @@
 //!
 //! The policy is built once at server startup from the embedded SPA
 //! `index.html` so any inline `<script>` hashes don't drift from the
-//! template. Third-party sources are enumerated explicitly — the only
-//! outside origins the UI depends on today are Google Fonts.
+//! template. Third-party sources are enumerated explicitly.
 
 use std::sync::OnceLock;
 
@@ -91,7 +90,12 @@ fn build_policy_with_hashes(script_hashes: &[String]) -> String {
     // interactions. The meaningful XSS protection still comes from the
     // script-src restrictions above. `ws:`/`wss:` keep the same-origin
     // terminal WebSocket working across browsers that do not treat `'self'`
-    // as matching WebSocket schemes for connect-src.
+    // as matching WebSocket schemes for connect-src. `frame-src https:`
+    // allows signed sandbox VNC preview iframes from dynamic Daytona preview
+    // hosts. `https://github.com` in form-action allows the install-mode
+    // GitHub App manifest POST handoff. Loopback resume targets keep CLI
+    // OAuth working when the browser-visible origin and canonical origin use
+    // different loopback hostnames on a dynamically chosen port.
     format!(
         "default-src 'self'; \
          script-src 'self'{inline_script_sources} 'wasm-unsafe-eval'; \
@@ -100,10 +104,11 @@ fn build_policy_with_hashes(script_hashes: &[String]) -> String {
          img-src 'self' data: blob: https://avatars.githubusercontent.com; \
          connect-src 'self' ws: wss:; \
          worker-src 'self' blob:; \
+         frame-src 'self' https:; \
          manifest-src 'self'; \
          frame-ancestors 'none'; \
          base-uri 'self'; \
-         form-action 'self'; \
+         form-action 'self' https://github.com http://127.0.0.1:*/auth/cli/resume http://localhost:*/auth/cli/resume; \
          object-src 'none'"
     )
 }
@@ -155,6 +160,15 @@ mod tests {
     }
 
     #[test]
+    fn policy_allows_cli_loopback_resume_form_posts() {
+        let policy = build_policy_with_hashes(&[]);
+        assert!(
+            policy.contains("form-action 'self' https://github.com http://127.0.0.1:*/auth/cli/resume http://localhost:*/auth/cli/resume"),
+            "CLI auth can submit the resume form to the canonical loopback origin on a dynamic port: {policy}"
+        );
+    }
+
+    #[test]
     fn policy_is_constructed_with_expected_directives() {
         let policy = build_policy_with_hashes(&["sha256-abc".to_string()]);
         assert!(policy.contains("default-src 'self'"));
@@ -165,6 +179,14 @@ mod tests {
         assert!(policy.contains("font-src 'self' https://fonts.gstatic.com"));
         assert!(policy.contains("style-src 'self' https://fonts.googleapis.com 'unsafe-inline'"));
         assert!(policy.contains("connect-src 'self' ws: wss:"));
+        assert!(
+            policy.contains("frame-src 'self' https:"),
+            "signed sandbox VNC previews are embedded from dynamic HTTPS origins"
+        );
+        assert!(
+            policy.contains("form-action 'self' https://github.com"),
+            "GitHub App manifest creation posts directly to github.com"
+        );
         assert!(policy.contains("frame-ancestors 'none'"));
         assert!(policy.contains("object-src 'none'"));
     }

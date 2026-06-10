@@ -59,13 +59,12 @@ export const navSections: NavSection[] = [
         description: "Where workflow stages execute.",
         match: (p) => p.startsWith("/settings/sandboxes"),
       },
-      {
-        name: "Security",
-        href: "/settings/security",
-        icon: ShieldCheckIcon,
-        description: "Authentication methods and access.",
-        match: (p) => p.startsWith("/settings/security"),
-      },
+    ],
+  },
+  {
+    key: "workflows",
+    label: "Workflows",
+    items: [
       {
         name: "Variables",
         href: "/settings/variables",
@@ -92,6 +91,13 @@ export const navSections: NavSection[] = [
         icon: Cog6ToothIcon,
         description: "URLs, listen address, scheduler.",
         match: (p) => p.startsWith("/settings/server"),
+      },
+      {
+        name: "Security",
+        href: "/settings/security",
+        icon: ShieldCheckIcon,
+        description: "Authentication methods and access.",
+        match: (p) => p.startsWith("/settings/security"),
       },
       {
         name: "Storage",
