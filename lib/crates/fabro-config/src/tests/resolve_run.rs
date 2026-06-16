@@ -647,15 +647,13 @@ name = "sonnet"
         }
         other => panic!("expected file goal, got {other:?}"),
     }
+    // run.working_dir is demoted (D11): the env token stays literal text.
     assert_eq!(
-        settings.working_dir,
-        Some(InterpString::parse("{{ env.FABRO_WORKDIR }}"))
+        settings.working_dir.as_deref(),
+        Some("{{ env.FABRO_WORKDIR }}")
     );
-    assert_eq!(
-        settings.model.provider,
-        Some(InterpString::parse("anthropic"))
-    );
-    assert_eq!(settings.model.name, Some(InterpString::parse("sonnet")));
+    assert_eq!(settings.model.provider, Some("anthropic".to_string()));
+    assert_eq!(settings.model.name, Some("sonnet".to_string()));
 }
 
 mod run_integrations_github_permissions {

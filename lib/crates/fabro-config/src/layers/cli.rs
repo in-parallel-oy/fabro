@@ -1,6 +1,5 @@
 //! Sparse `[cli]` settings layer definitions.
 
-use fabro_types::settings::InterpString;
 use fabro_types::settings::cli::{CliAuthStrategy, OutputFormat, OutputVerbosity};
 use fabro_types::settings::run::AgentPermissions;
 use serde::{Deserialize, Serialize};
@@ -32,11 +31,11 @@ pub struct CliLayer {
 pub enum CliTargetLayer {
     Http {
         #[serde(default)]
-        url: Option<InterpString>,
+        url: Option<String>,
     },
     Unix {
         #[serde(default)]
-        path: Option<InterpString>,
+        path: Option<String>,
     },
 }
 
@@ -87,11 +86,11 @@ pub struct CliExecModelLayer {
     /// LLM provider for `fabro exec`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[option(value_type = "string")]
-    pub provider: Option<InterpString>,
+    pub provider: Option<String>,
     /// Model name for `fabro exec`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[option(value_type = "string")]
-    pub name:     Option<InterpString>,
+    pub name:     Option<String>,
 }
 
 #[derive(

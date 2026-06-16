@@ -16,7 +16,6 @@ use fabro_llm::types::{
 };
 use fabro_mcp::config::McpServerSettings;
 use fabro_model::ProviderId;
-use fabro_types::settings::InterpString;
 use fabro_types::settings::cli::OutputFormat as SettingsOutputFormat;
 use fabro_util::exit::{self, ErrorExt, ExitClass};
 use futures::stream;
@@ -282,11 +281,6 @@ impl ProviderAdapter for AuthenticatedFabroServerAdapter {
     }
 }
 
-#[expect(
-    clippy::disallowed_methods,
-    reason = "raw source is today's behavior; cli.exec.model.* is slated for demotion to plain String in the \
-              interpolation unification (D2)"
-)]
 pub(crate) async fn execute(mut args: ExecArgs, ctx: &CommandContext) -> AnyResult<()> {
     use fabro_agent::cli::PermissionLevel as AgentPermissionLevel;
     use fabro_types::settings::run::AgentPermissions;
@@ -294,13 +288,8 @@ pub(crate) async fn execute(mut args: ExecArgs, ctx: &CommandContext) -> AnyResu
     let cli = &ctx.user_settings().cli;
     #[cfg(feature = "sleep_inhibitor")]
     let _sleep_guard = sleep_inhibitor::guard(cli.exec.prevent_idle_sleep);
-    let provider_str = cli
-        .exec
-        .model
-        .provider
-        .as_ref()
-        .map(InterpString::as_source);
-    let model_str = cli.exec.model.name.as_ref().map(InterpString::as_source);
+    let provider_str = cli.exec.model.provider.as_deref();
+    let model_str = cli.exec.model.name.as_deref();
     let permissions = cli.exec.agent.permissions.map(|p| match p {
         AgentPermissions::ReadOnly => AgentPermissionLevel::ReadOnly,
         AgentPermissions::ReadWrite => AgentPermissionLevel::ReadWrite,
@@ -310,12 +299,8 @@ pub(crate) async fn execute(mut args: ExecArgs, ctx: &CommandContext) -> AnyResu
         SettingsOutputFormat::Text => OutputFormat::Text,
         SettingsOutputFormat::Json => OutputFormat::Json,
     });
-    args.agent.apply_cli_defaults(
-        provider_str.as_deref(),
-        model_str.as_deref(),
-        permissions,
-        output_format,
-    );
+    args.agent
+        .apply_cli_defaults(provider_str, model_str, permissions, output_format);
     let server_target = user_config::exec_server_target(&args.server)?;
     // v2 MCPs live under `cli.exec.agent.mcps` (owner-specific) or
     // `run.agent.mcps`. For `fabro exec` we use the cli.exec path, falling
