@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use fabro_auth::{CredentialSource, EnvCredentialSource, VaultCredentialSource};
 use fabro_interview::{AutoApproveInterviewer, Interviewer};
 use fabro_llm::client::Client as LlmClient;
-use fabro_mcp::config::{McpServerSettings, McpTransport};
+use fabro_mcp::config::McpServerSettings;
 use fabro_model::{Catalog, FallbackTarget, ProviderId};
 use fabro_sandbox::daytona::DaytonaConfig;
 use fabro_sandbox::from_environment::{
@@ -18,9 +18,8 @@ use fabro_static::EnvVars;
 use fabro_types::settings::run::{
     ApprovalMode, HookDefinition as ResolvedHookDefinition, HookEvent as ResolvedHookEvent,
     HookType as ResolvedHookType, McpServerSettings as ResolvedMcpServerSettings,
-    McpTransport as ResolvedMcpTransport, PullRequestSettings, RunMode,
-    RunModelSettings as ResolvedRunModelSettings, RunNamespace as ResolvedRunSettings,
-    TlsMode as ResolvedTlsMode,
+    PullRequestSettings, RunMode, RunModelSettings as ResolvedRunModelSettings,
+    RunNamespace as ResolvedRunSettings, TlsMode as ResolvedTlsMode,
 };
 use fabro_types::settings::{ModelRegistry, ResolvedModelRef};
 use fabro_types::{ManifestPath, RunId, RunRunnableSource, SandboxProviderKind};
@@ -379,8 +378,8 @@ impl RunSession {
             .agent
             .mcps
             .values()
-            .map(runtime_mcp_server)
-            .collect();
+            .map(|settings| runtime_mcp_server(settings, process_env_var))
+            .collect::<Result<Vec<_>, _>>()?;
 
         let sandbox = match sandbox_provider {
             SandboxProviderKind::Local => {
@@ -667,40 +666,28 @@ impl ModelRegistry for CatalogModelRegistry<'_> {
     }
 }
 
-fn runtime_mcp_server(settings: &ResolvedMcpServerSettings) -> McpServerSettings {
-    McpServerSettings {
-        name:                 settings.name.clone(),
-        transport:            match &settings.transport {
-            ResolvedMcpTransport::Stdio { command, env } => McpTransport::Stdio {
-                command: command.clone(),
-                env:     env.clone(),
-            },
-            ResolvedMcpTransport::Http {
-                protocol,
-                url,
-                headers,
-            } => McpTransport::Http {
-                protocol: *protocol,
-                url:      url.clone(),
-                headers:  headers.clone(),
-            },
-            ResolvedMcpTransport::Sandbox {
-                protocol,
-                command,
-                port,
-                env,
-            } => McpTransport::Sandbox {
-                protocol: *protocol,
-                command:  command.clone(),
-                port:     *port,
-                env:      env.clone(),
-            },
-        },
-        current_dir:          None,
-        clear_env:            false,
-        startup_timeout_secs: settings.startup_timeout_secs,
-        tool_timeout_secs:    settings.tool_timeout_secs,
-    }
+/// Build the launch-time MCP config from resolved settings, resolving any
+/// `{{ env.* }}` tokens in the transport (`command`/`url`/`env`/`headers`)
+/// against the worker process environment — the run boundary where the MCP is
+/// actually launched.
+///
+/// The resolution itself lives on the type
+/// ([`McpServerSettings::resolve_transport_env`]) so `fabro run` (here) and
+/// `fabro exec` share one resolver; this wrapper just adds the server name to
+/// the error. MCP transport strings are carried in source form out of the
+/// config resolve layer so `fabro validate` stays portable (it never requires
+/// env to be set), and a referenced env var that is unset is a hard error —
+/// no fallback to the unresolved source.
+fn runtime_mcp_server(
+    settings: &ResolvedMcpServerSettings,
+    env_lookup: impl FnMut(&str) -> Option<String>,
+) -> Result<McpServerSettings, Error> {
+    settings.resolve_transport_env(env_lookup).map_err(|err| {
+        Error::engine_with_source(
+            format!("failed to resolve MCP server {:?}", settings.name),
+            err,
+        )
+    })
 }
 
 fn runtime_hook_definition(definition: &ResolvedHookDefinition) -> fabro_hooks::HookDefinition {
@@ -1129,7 +1116,7 @@ mod tests {
         RunEnvironmentLayer, RunExecutionLayer, RunLayer, StickyMap, WorkflowSettingsBuilder,
     };
     use fabro_store::Database;
-    use fabro_types::settings::run::RunMode;
+    use fabro_types::settings::run::{McpTransport as ResolvedMcpTransport, RunMode};
     use fabro_types::settings::{InterpString, ModelRef};
     use fabro_types::{
         BilledModelUsage, ManifestPath, StageTiming, WorkflowSettings, fixtures, test_support,
@@ -1320,6 +1307,31 @@ reasoning = false
 
         assert!(resolve_docker_config(&settings.run).skip_clone);
         assert!(resolve_daytona_config(&settings.run).skip_clone);
+    }
+
+    #[test]
+    fn runtime_mcp_server_wraps_resolve_error_source() {
+        let settings = ResolvedMcpServerSettings {
+            name: "gemini".to_string(),
+            transport: ResolvedMcpTransport::Stdio {
+                command: vec!["python".to_string()],
+                env:     HashMap::from([(
+                    "GEMINI_API_KEY".to_string(),
+                    "{{ env.GEMINI_API_KEY }}".to_string(),
+                )]),
+            },
+            ..ResolvedMcpServerSettings::default()
+        };
+
+        let err = runtime_mcp_server(&settings, |_| None).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "Engine error: failed to resolve MCP server \"gemini\""
+        );
+        let causes = err.causes();
+        assert_eq!(causes.len(), 1);
+        assert!(causes[0].contains("GEMINI_API_KEY"));
     }
 
     #[test]
