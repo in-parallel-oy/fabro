@@ -10,8 +10,8 @@ use fabro_model::{Catalog, ProviderId};
 use fabro_redact::redact_string;
 use fabro_sandbox::daytona;
 use fabro_static::EnvVars;
+use fabro_types::settings::ServerAuthMethod;
 use fabro_types::settings::server::GithubIntegrationStrategy;
-use fabro_types::settings::{InterpString, ServerAuthMethod};
 use fabro_util::check_report::{CheckDetail, CheckResult, CheckSection, CheckStatus};
 use fabro_util::dev_token::validate_dev_token_format;
 use fabro_util::session_secret;
@@ -441,20 +441,8 @@ async fn check_github_app(state: &AppState) -> CheckResult {
         };
     }
 
-    let app_id = settings
-        .server
-        .integrations
-        .github
-        .app_id
-        .as_ref()
-        .map(InterpString::as_source);
-    let slug = settings
-        .server
-        .integrations
-        .github
-        .slug
-        .as_ref()
-        .map(InterpString::as_source);
+    let app_id = settings.server.integrations.github.app_id.clone();
+    let slug = settings.server.integrations.github.slug.clone();
     let private_key_raw = state.vault_secret(EnvVars::GITHUB_APP_PRIVATE_KEY);
     let client_id = settings.server.integrations.github.client_id.is_some();
     let client_secret = state

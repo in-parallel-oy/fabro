@@ -118,7 +118,6 @@ fn principal_round_trips_every_variant_through_api_type() {
         Principal::System {
             system_kind: SystemActorKind::Watchdog,
         },
-        Principal::Anonymous,
     ];
 
     for principal in variants {
@@ -140,9 +139,9 @@ fn run_provenance_subject_round_trips_as_principal() {
             name:       Some("fabro-cli".to_string()),
             version:    Some("0.1.0".to_string()),
         }),
-        subject: Some(Principal::Worker {
+        subject: Principal::Worker {
             run_id: fixtures::RUN_1,
-        }),
+        },
     };
     let json = serde_json::to_value(&provenance).unwrap();
 

@@ -12,7 +12,7 @@ use crate::event::{self, Event};
 pub struct RetryRunInput {
     pub source_run_id: RunId,
     pub new_run_id:    RunId,
-    pub provenance:    Option<RunProvenance>,
+    pub provenance:    RunProvenance,
     pub web_url:       Option<String>,
 }
 
@@ -122,7 +122,7 @@ mod tests {
     use fabro_types::{
         AuthMethod, DirtyStatus, FailureReason, ForkSourceRef, GitContext, Graph, IdpIdentity,
         PreRunPushOutcome, Principal, PullRequestLink, RunBlobId, RunRunnableSource,
-        RunServerProvenance, RunTiming, UserPrincipal, WorkflowSettings, fixtures,
+        RunServerProvenance, RunTiming, WorkflowSettings, fixtures,
     };
     use object_store::memory::InMemory;
 
@@ -138,12 +138,11 @@ mod tests {
     }
 
     fn actor(login: &str) -> Principal {
-        Principal::User(UserPrincipal {
-            identity:    IdpIdentity::new("github", format!("user:{login}")).unwrap(),
-            login:       login.to_string(),
-            auth_method: AuthMethod::DevToken,
-            avatar_url:  None,
-        })
+        Principal::user(
+            IdpIdentity::new("github", format!("user:{login}")).unwrap(),
+            login.to_string(),
+            AuthMethod::DevToken,
+        )
     }
 
     fn provenance(login: &str) -> RunProvenance {
@@ -152,7 +151,7 @@ mod tests {
                 version: "test".to_string(),
             }),
             client:  None,
-            subject: Some(actor(login)),
+            subject: actor(login),
         }
     }
 
@@ -191,7 +190,7 @@ mod tests {
             workflow_slug: Some("retry-source".to_string()),
             automation: None,
             db_prefix: None,
-            provenance: Some(provenance("source-user")),
+            provenance: provenance("source-user"),
             manifest_blob,
             git: Some(git_context()),
             fork_source_ref,
@@ -368,7 +367,7 @@ mod tests {
         let outcome = retry_run(&store, &RetryRunInput {
             source_run_id,
             new_run_id: RunId::new(),
-            provenance: Some(provenance("retry-user")),
+            provenance: provenance("retry-user"),
             web_url: Some("http://localhost:3000/runs/retry".to_string()),
         })
         .await
@@ -402,14 +401,7 @@ mod tests {
         assert_eq!(retry_state.spec.manifest_blob, manifest_blob);
         assert_eq!(retry_state.spec.definition_blob, definition_blob);
         assert_eq!(retry_state.spec.fork_source_ref, Some(fork_source_ref));
-        assert_eq!(
-            retry_state
-                .spec
-                .provenance
-                .as_ref()
-                .and_then(|provenance| provenance.subject.as_ref()),
-            Some(&actor("retry-user"))
-        );
+        assert_eq!(retry_state.spec.provenance.subject, actor("retry-user"));
         assert_eq!(
             retry_state.web_url.as_deref(),
             Some("http://localhost:3000/runs/retry")
@@ -463,7 +455,7 @@ mod tests {
         let outcome = retry_run(&store, &RetryRunInput {
             source_run_id,
             new_run_id: RunId::new(),
-            provenance: Some(provenance("retry-user")),
+            provenance: provenance("retry-user"),
             web_url: None,
         })
         .await
@@ -517,7 +509,7 @@ mod tests {
             let err = retry_run(&store, &RetryRunInput {
                 source_run_id: run_id,
                 new_run_id:    RunId::new(),
-                provenance:    None,
+                provenance:    provenance("retry-user"),
                 web_url:       None,
             })
             .await
@@ -535,7 +527,7 @@ mod tests {
         let err = retry_run(&store, &RetryRunInput {
             source_run_id: fixtures::RUN_1,
             new_run_id:    RunId::new(),
-            provenance:    None,
+            provenance:    provenance("retry-user"),
             web_url:       None,
         })
         .await

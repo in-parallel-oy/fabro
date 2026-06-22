@@ -282,7 +282,6 @@ memory = "8GB"
 | `lifecycle.stop_on_terminal` | Stop the sandbox when the run reaches a terminal state. |
 | `lifecycle.auto_stop` | Daytona auto-stop duration, such as `"30m"`. |
 | `labels` | Provider labels. Merge by key across layers. |
-| `volumes` | Provider volume hints. Lists replace wholesale across layers. |
 | `env` | Environment variables passed to command and agent execution. Merge by key across layers. |
 
 When `provider = "local"`, Fabro runs directly in the resolved working
@@ -377,17 +376,16 @@ repo_url = "https://github.com/fabro-sh/fabro"
 language = "rust"
 ```
 
-Inputs can be used in final string attributes with `{{ inputs.name }}` syntax:
+Inputs can be used in graph `goal` and node `prompt` attributes with `{{ inputs.name }}` syntax:
 
 ```dot title="c-i.fabro"
 digraph CI {
     graph [goal="Run tests for {{ inputs.repo_name }}"]
-    clone [shape=parallelogram, script="git clone {{ inputs.repo_url }} repo"]
-    test  [label="Test", prompt="Run the {{ inputs.language }} test suite."]
+    test [label="Test", prompt="Clone {{ inputs.repo_url }} and run the {{ inputs.language }} test suite."]
 }
 ```
 
-Inputs cannot parameterize workflow structure or file references such as node IDs, edges, `import` paths, `@file` paths, or child workflow paths.
+Inputs cannot parameterize workflow structure, file references such as node IDs, edges, `import` paths, `@file` paths, or child workflow paths, or any attribute besides `prompt` and `goal` — other attributes such as `script` and `label` are literal text.
 
 If a workflow template references an undefined input like `{{ inputs.langauge }}`, `fabro validate` reports a warning. Run-style commands promote that diagnostic to an error before creating or starting a run.
 
@@ -560,7 +558,7 @@ provider = "daytona"
 dockerfile = { path = "Dockerfile" }
 ```
 
-Project defaults and workflow config values merge per the normative merge matrix: most fields merge by field (higher-precedence wins per key), TOML `run.inputs` tables replace wholesale, CLI input flags merge per key at highest precedence, environment `env` and `labels` merge by key, environment `volumes` replace as a whole list, and `run.prepare.steps` replaces whole-list.
+Project defaults and workflow config values merge per the normative merge matrix: most fields merge by field (higher-precedence wins per key), TOML `run.inputs` tables replace wholesale, CLI input flags merge per key at highest precedence, environment `env` and `labels` merge by key, and `run.prepare.steps` replaces whole-list.
 
 ### Machine defaults
 

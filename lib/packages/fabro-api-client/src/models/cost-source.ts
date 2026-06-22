@@ -14,8 +14,13 @@
 
 
 
-export interface EnvironmentVolumeSettings {
-    'id': string;
-    'mount_path': string;
-    'subpath': string | null;
-}
+/**
+ * Whether `cost_usd` came from provider billing data (authoritative) or catalog price estimation (estimated).
+ */
+
+export const CostSource = {
+    AUTHORITATIVE: 'authoritative',
+    ESTIMATED: 'estimated'
+} as const;
+
+export type CostSource = typeof CostSource[keyof typeof CostSource];

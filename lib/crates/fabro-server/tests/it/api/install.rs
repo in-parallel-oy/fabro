@@ -931,14 +931,21 @@ async fn token_install_finish_persists_settings_env_and_vault() {
         "settings.toml should contain [run.environment]"
     );
     assert!(
-        settings.contains("[environments.default]"),
-        "settings.toml should contain [environments.default]"
-    );
-    assert!(
-        settings.contains("provider = \"docker\""),
-        "settings.toml should record explicit docker sandbox provider"
+        !settings.contains("[environments"),
+        "settings.toml should not contain environment catalog entries"
     );
     assert_sandbox_provider_policy(&settings, true, true, false);
+    let environment_dir = temp_dir.path().join("environments");
+    let mut environment_files = std::fs::read_dir(&environment_dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    environment_files.sort();
+    assert_eq!(environment_files, vec!["default.toml"]);
+    let default_environment =
+        std::fs::read_to_string(environment_dir.join("default.toml")).unwrap();
+    assert!(default_environment.contains("provider = \"docker\""));
+    assert!(default_environment.contains("docker = \"buildpack-deps:noble\""));
     let resolved = ServerSettingsBuilder::from_toml(&settings)
         .expect("settings should resolve")
         .server;
@@ -2577,7 +2584,13 @@ async fn sandbox_switching_from_daytona_to_docker_drops_saved_key() {
     .await;
 
     let settings = std::fs::read_to_string(&config_path).unwrap();
-    assert!(settings.contains("provider = \"docker\""));
+    assert!(
+        settings.contains("[run.environment]"),
+        "settings.toml should select the default environment"
+    );
+    let default_environment =
+        std::fs::read_to_string(temp_dir.path().join("environments/default.toml")).unwrap();
+    assert!(default_environment.contains("provider = \"docker\""));
     let vault = Vault::load(Storage::new(temp_dir.path()).secrets_path()).unwrap();
     assert_eq!(vault.get("DAYTONA_API_KEY"), None);
 }
@@ -2691,14 +2704,21 @@ async fn daytona_install_finish_writes_settings_and_vault_secret() {
         "settings.toml should contain [run.environment]"
     );
     assert!(
-        settings.contains("[environments.default]"),
-        "settings.toml should contain [environments.default]"
-    );
-    assert!(
-        settings.contains("provider = \"daytona\""),
-        "settings.toml should record daytona sandbox provider"
+        !settings.contains("[environments"),
+        "settings.toml should not contain environment catalog entries"
     );
     assert_sandbox_provider_policy(&settings, true, false, true);
+    let environment_dir = temp_dir.path().join("environments");
+    let mut environment_files = std::fs::read_dir(&environment_dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    environment_files.sort();
+    assert_eq!(environment_files, vec!["default.toml"]);
+    let default_environment =
+        std::fs::read_to_string(environment_dir.join("default.toml")).unwrap();
+    assert!(default_environment.contains("provider = \"daytona\""));
+    assert!(default_environment.contains("buildpack-deps:noble"));
 
     let vault = Vault::load(Storage::new(temp_dir.path()).secrets_path()).unwrap();
     assert_eq!(vault.get("DAYTONA_API_KEY"), Some(api_key));

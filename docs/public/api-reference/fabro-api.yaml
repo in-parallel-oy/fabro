@@ -6358,7 +6358,6 @@ components:
         - network
         - lifecycle
         - labels
-        - volumes
         - env
       properties:
         id:
@@ -6372,6 +6371,10 @@ components:
           example: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
         provider:
           $ref: "#/components/schemas/EnvironmentProvider"
+        cwd:
+          type: ["string", "null"]
+          description: Local-provider command working directory for this environment. Docker and Daytona ignore this value.
+          example: /srv/fabro/workspaces/team-a
         image:
           $ref: "#/components/schemas/EnvironmentApiImageSettings"
         resources:
@@ -6382,10 +6385,6 @@ components:
           $ref: "#/components/schemas/EnvironmentLifecycleSettings"
         labels:
           $ref: "#/components/schemas/StringMap"
-        volumes:
-          type: array
-          items:
-            $ref: "#/components/schemas/EnvironmentVolumeSettings"
         env:
           type: object
           additionalProperties:
@@ -6403,7 +6402,6 @@ components:
         - network
         - lifecycle
         - labels
-        - volumes
         - env
       properties:
         id:
@@ -6412,6 +6410,10 @@ components:
           example: docker
         provider:
           $ref: "#/components/schemas/EnvironmentProvider"
+        cwd:
+          type: ["string", "null"]
+          description: Local-provider command working directory for this environment. Docker and Daytona ignore this value.
+          example: /srv/fabro/workspaces/team-a
         image:
           $ref: "#/components/schemas/EnvironmentApiImageSettings"
         resources:
@@ -6422,10 +6424,6 @@ components:
           $ref: "#/components/schemas/EnvironmentLifecycleSettings"
         labels:
           $ref: "#/components/schemas/StringMap"
-        volumes:
-          type: array
-          items:
-            $ref: "#/components/schemas/EnvironmentVolumeSettings"
         env:
           type: object
           additionalProperties:
@@ -6442,11 +6440,14 @@ components:
         - network
         - lifecycle
         - labels
-        - volumes
         - env
       properties:
         provider:
           $ref: "#/components/schemas/EnvironmentProvider"
+        cwd:
+          type: ["string", "null"]
+          description: Local-provider command working directory for this environment. Docker and Daytona ignore this value.
+          example: /srv/fabro/workspaces/team-a
         image:
           $ref: "#/components/schemas/EnvironmentApiImageSettings"
         resources:
@@ -6457,10 +6458,6 @@ components:
           $ref: "#/components/schemas/EnvironmentLifecycleSettings"
         labels:
           $ref: "#/components/schemas/StringMap"
-        volumes:
-          type: array
-          items:
-            $ref: "#/components/schemas/EnvironmentVolumeSettings"
         env:
           type: object
           additionalProperties:
@@ -7590,10 +7587,15 @@ components:
           example: 128000
 
     ReasoningEffortFeature:
-      description: Whether the model endpoint supports a native reasoning-effort parameter.
+      description: >-
+        Whether the model endpoint supports a native reasoning-effort
+        parameter. `levels` accepts discrete effort levels; `always_adaptive`
+        accepts effort levels with natively always-on adaptive thinking;
+        `none` has no native effort parameter.
       type: string
       enum:
         - levels
+        - always_adaptive
         - none
 
     ReasoningEffort:
@@ -7615,6 +7617,7 @@ components:
         - reasoning
         - reasoning_effort
         - prompt_cache
+        - sampling_params
       properties:
         tools:
           type: boolean
@@ -7630,6 +7633,9 @@ components:
         prompt_cache:
           type: boolean
           description: Whether the model endpoint supports prompt caching.
+        sampling_params:
+          type: boolean
+          description: Whether the model accepts classic sampling parameters (temperature, top_p).
 
     ModelCosts:
       description: Pricing per million tokens in USD.
@@ -7895,6 +7901,21 @@ components:
           $ref: "#/components/schemas/CompletionUsage"
         output:
           description: Parsed structured output when schema was provided.
+        cost_usd:
+          type: number
+          format: double
+          description: >
+            USD cost of the completion when known: estimated from catalog
+            prices unless the provider returned authoritative billing data.
+        cost_source:
+          $ref: "#/components/schemas/CostSource"
+
+    CostSource:
+      type: string
+      description: >
+        Whether `cost_usd` came from provider billing data (authoritative)
+        or catalog price estimation (estimated).
+      enum: [authoritative, estimated]
 
     # ── Playground ────────────────────────────────────────────────────────
 
@@ -9060,6 +9081,8 @@ components:
 
     RunProvenance:
       type: object
+      required:
+        - subject
       properties:
         server:
           oneOf:
@@ -9070,9 +9093,7 @@ components:
             - $ref: "#/components/schemas/RunClientProvenance"
             - type: "null"
         subject:
-          oneOf:
-            - $ref: "#/components/schemas/Principal"
-            - type: "null"
+          $ref: "#/components/schemas/Principal"
 
     Principal:
       oneOf:
@@ -9082,7 +9103,6 @@ components:
         - $ref: "#/components/schemas/PrincipalSlack"
         - $ref: "#/components/schemas/PrincipalAgent"
         - $ref: "#/components/schemas/PrincipalSystem"
-        - $ref: "#/components/schemas/PrincipalAnonymous"
       discriminator:
         propertyName: kind
         mapping:
@@ -9092,7 +9112,6 @@ components:
           slack: "#/components/schemas/PrincipalSlack"
           agent: "#/components/schemas/PrincipalAgent"
           system: "#/components/schemas/PrincipalSystem"
-          anonymous: "#/components/schemas/PrincipalAnonymous"
 
     PrincipalUser:
       type: object
@@ -9181,15 +9200,6 @@ components:
           enum: [system]
         system_kind:
           $ref: "#/components/schemas/SystemActorKind"
-
-    PrincipalAnonymous:
-      type: object
-      required:
-        - kind
-      properties:
-        kind:
-          type: string
-          enum: [anonymous]
 
     RunEvent:
       description: >
@@ -10318,6 +10328,7 @@ components:
         - run_id
         - settings
         - graph
+        - provenance
       properties:
         run_id:
           type: string
@@ -10341,9 +10352,7 @@ components:
           additionalProperties:
             type: string
         provenance:
-          oneOf:
-            - $ref: "#/components/schemas/RunProvenance"
-            - type: "null"
+          $ref: "#/components/schemas/RunProvenance"
         manifest_blob:
           type: ["string", "null"]
         definition_blob:
@@ -10655,9 +10664,7 @@ components:
             - $ref: "#/components/schemas/RepositoryRef"
             - type: "null"
         created_by:
-          oneOf:
-            - $ref: "#/components/schemas/Principal"
-            - type: "null"
+          $ref: "#/components/schemas/Principal"
         origin:
           $ref: "#/components/schemas/RunOrigin"
         labels:
@@ -13341,12 +13348,16 @@ components:
 
     RunEnvironmentSettings:
       type: object
-      required: [id, provider, image, resources, network, lifecycle, labels, volumes, env]
+      required: [id, provider, image, resources, network, lifecycle, labels, env]
       properties:
         id:
           type: string
         provider:
           $ref: "#/components/schemas/EnvironmentProvider"
+        cwd:
+          type: ["string", "null"]
+          description: Local-provider command working directory for this environment. Docker and Daytona ignore this value.
+          example: /srv/fabro/workspaces/team-a
         image:
           $ref: "#/components/schemas/EnvironmentImageSettings"
         resources:
@@ -13357,10 +13368,6 @@ components:
           $ref: "#/components/schemas/EnvironmentLifecycleSettings"
         labels:
           $ref: "#/components/schemas/StringMap"
-        volumes:
-          type: array
-          items:
-            $ref: "#/components/schemas/EnvironmentVolumeSettings"
         env:
           type: object
           additionalProperties:
@@ -13368,10 +13375,14 @@ components:
 
     EnvironmentSettings:
       type: object
-      required: [provider, image, resources, network, lifecycle, labels, volumes, env]
+      required: [provider, image, resources, network, lifecycle, labels, env]
       properties:
         provider:
           $ref: "#/components/schemas/EnvironmentProvider"
+        cwd:
+          type: ["string", "null"]
+          description: Local-provider command working directory for this environment. Docker and Daytona ignore this value.
+          example: /srv/fabro/workspaces/team-a
         image:
           $ref: "#/components/schemas/EnvironmentImageSettings"
         resources:
@@ -13382,10 +13393,6 @@ components:
           $ref: "#/components/schemas/EnvironmentLifecycleSettings"
         labels:
           $ref: "#/components/schemas/StringMap"
-        volumes:
-          type: array
-          items:
-            $ref: "#/components/schemas/EnvironmentVolumeSettings"
         env:
           type: object
           additionalProperties:
@@ -13443,17 +13450,6 @@ components:
         stop_on_terminal:
           type: boolean
         auto_stop:
-          type: ["string", "null"]
-
-    EnvironmentVolumeSettings:
-      type: object
-      required: [id, mount_path, subpath]
-      properties:
-        id:
-          type: string
-        mount_path:
-          type: string
-        subpath:
           type: ["string", "null"]
 
     DockerfileSource:

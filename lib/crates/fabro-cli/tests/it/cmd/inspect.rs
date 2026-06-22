@@ -183,7 +183,6 @@ fn inspect_resolves_selector_via_server_endpoint() {
                   "auto_stop": null
                 },
                 "labels": {},
-                "volumes": [],
                 "env": {}
               },
               "notifications": {},
@@ -221,7 +220,18 @@ fn inspect_resolves_selector_via_server_endpoint() {
             "attrs": {}
           },
           "workflow_slug": "remote-workflow",
-          "source_directory": "/srv/repo"
+          "source_directory": "/srv/repo",
+          "provenance": {
+            "subject": {
+              "kind": "user",
+              "identity": {
+                "issuer": "fabro:test",
+                "subject": "test-user"
+              },
+              "login": "test",
+              "auth_method": "dev_token"
+            }
+          }
         },
         "start_record": null,
         "conclusion": null,

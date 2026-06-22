@@ -16,8 +16,7 @@ use fabro_static::EnvVars;
 use fabro_types::ServerSettings;
 use fabro_types::settings::server::{GithubIntegrationStrategy, LogDestination, WebhookStrategy};
 use fabro_types::settings::{
-    GithubIntegrationSettings, InterpString, ObjectStoreSettings, ServerListenSettings,
-    ServerNamespace,
+    GithubIntegrationSettings, ObjectStoreSettings, ServerListenSettings, ServerNamespace,
 };
 use fabro_util::terminal::Styles;
 use object_store::aws::{AmazonS3Builder, AmazonS3ConfigKey};
@@ -33,6 +32,7 @@ use tracing::{error, info, warn};
 
 use crate::canonical_origin::resolve_canonical_origin;
 use crate::github_webhooks::{TailscaleFunnelManager, WEBHOOK_ROUTE, WEBHOOK_SECRET_ENV};
+use crate::interp::process_env_var;
 use crate::server::{
     AppState, AppStateConfig, ResolvedAppStateSettings, RouterOptions, build_app_state,
     build_router_with_options, reconcile_incomplete_runs_on_startup, shutdown_active_workers,
@@ -222,7 +222,6 @@ pub struct ServeArgs {
 }
 
 fn serve_overrides(args: &ServeArgs) -> (Option<RunLayer>, Option<ServerLayer>) {
-    use fabro_types::settings::interp::InterpString;
     let mut run = RunLayer::default();
     let mut server = ServerLayer::default();
     if args.web || args.no_web {
@@ -231,11 +230,11 @@ fn serve_overrides(args: &ServeArgs) -> (Option<RunLayer>, Option<ServerLayer>) 
     }
     if let Some(ref model) = args.model {
         let model_layer = run.model.get_or_insert_with(RunModelLayer::default);
-        model_layer.name = Some(InterpString::parse(model));
+        model_layer.name = Some(model.clone());
     }
     if let Some(ref provider) = args.provider {
         let model_layer = run.model.get_or_insert_with(RunModelLayer::default);
-        model_layer.provider = Some(InterpString::parse(provider));
+        model_layer.provider = Some(provider.clone());
     }
     if let Some(environment) = args.environment.as_ref() {
         let environment_layer = run
@@ -261,28 +260,22 @@ fn resolve_webhook_preconditions(
     github: &GithubIntegrationSettings,
     state: &Arc<AppState>,
     webhook_secret_present: bool,
-) -> anyhow::Result<WebhookPreconditions> {
+) -> WebhookPreconditions {
     if github.strategy != GithubIntegrationStrategy::App {
-        return Ok(WebhookPreconditions::Skip(
-            "GitHub integration auth is not set to app".to_string(),
-        ));
+        return WebhookPreconditions::Skip("GitHub integration auth is not set to app".to_string());
     }
     if !webhook_secret_present {
-        return Ok(WebhookPreconditions::Skip(format!(
-            "{WEBHOOK_SECRET_ENV} is not set"
-        )));
+        return WebhookPreconditions::Skip(format!("{WEBHOOK_SECRET_ENV} is not set"));
     }
-    let Some(app_id) = github.app_id.as_ref().map(resolve_interp).transpose()? else {
-        return Ok(WebhookPreconditions::Skip(
+    let Some(app_id) = github.app_id.clone() else {
+        return WebhookPreconditions::Skip(
             "server.integrations.github.app_id is not set".to_string(),
-        ));
+        );
     };
     let github_app = match state.github_credentials(github) {
         Ok(creds) => creds,
         Err(err) => {
-            return Ok(WebhookPreconditions::Skip(format!(
-                "GitHub credentials are invalid: {err}"
-            )));
+            return WebhookPreconditions::Skip(format!("GitHub credentials are invalid: {err}"));
         }
     };
     let github_app = match github_app {
@@ -291,20 +284,20 @@ fn resolve_webhook_preconditions(
             fabro_github::GitHubCredentials::Pat(_)
             | fabro_github::GitHubCredentials::Installation(_),
         ) => {
-            return Ok(WebhookPreconditions::Skip(
+            return WebhookPreconditions::Skip(
                 "GitHub webhooks require GitHub App credentials".to_string(),
-            ));
+            );
         }
         None => {
-            return Ok(WebhookPreconditions::Skip(
+            return WebhookPreconditions::Skip(
                 "GITHUB_APP_PRIVATE_KEY is not available".to_string(),
-            ));
+            );
         }
     };
-    Ok(WebhookPreconditions::Ready {
+    WebhookPreconditions::Ready {
         app_id,
         private_key_pem: github_app.private_key_pem,
-    })
+    }
 }
 
 async fn start_webhook_strategy(
@@ -319,7 +312,7 @@ async fn start_webhook_strategy(
     };
 
     let (app_id, private_key_pem) =
-        match resolve_webhook_preconditions(github, state, webhook_secret_present)? {
+        match resolve_webhook_preconditions(github, state, webhook_secret_present) {
             WebhookPreconditions::Ready {
                 app_id,
                 private_key_pem,
@@ -356,9 +349,7 @@ async fn start_webhook_strategy(
             let server_api_url = resolved_server_settings
                 .api
                 .url
-                .as_ref()
-                .map(resolve_interp)
-                .transpose()?
+                .clone()
                 .ok_or_else(|| {
                     anyhow::anyhow!(
                         "server.api.url must be set when webhook strategy = \"server_url\" (resolver invariant)"
@@ -496,7 +487,7 @@ where
     let build_options = build_options.cloned().unwrap_or_default();
     match settings {
         ObjectStoreSettings::Local { root } => {
-            build_local_object_store_with_preference(&resolve_interp_path(root)?, false)
+            build_local_object_store_with_preference(&PathBuf::from(root), false)
         }
         ObjectStoreSettings::S3 {
             bucket,
@@ -506,11 +497,11 @@ where
         } => {
             let mut builder = AmazonS3Builder::new()
                 .with_http_connector(NoProxyReqwestConnector)
-                .with_bucket_name(resolve_interp(bucket)?)
-                .with_region(resolve_interp(region)?)
+                .with_bucket_name(bucket.clone())
+                .with_region(region.clone())
                 .with_virtual_hosted_style_request(!*path_style);
             if let Some(endpoint) = endpoint.as_ref() {
-                builder = builder.with_endpoint(resolve_interp(endpoint)?);
+                builder = builder.with_endpoint(endpoint.clone());
             }
             builder = configure_s3_builder_from_env_lookup(builder, env_lookup, &build_options)?;
             Ok(Arc::new(builder.build()?))
@@ -544,36 +535,15 @@ pub fn resolve_bind_request_from_server_settings(
 ) -> anyhow::Result<BindRequest> {
     match explicit_bind.map(bind::parse_bind).transpose()? {
         Some(bind) => Ok(bind),
-        None => resolved_bind_request(&settings.server),
+        None => Ok(resolved_bind_request(&settings.server)),
     }
 }
 
-fn resolved_bind_request(
-    resolved_server_settings: &ServerNamespace,
-) -> anyhow::Result<BindRequest> {
+fn resolved_bind_request(resolved_server_settings: &ServerNamespace) -> BindRequest {
     match &resolved_server_settings.listen {
-        ServerListenSettings::Unix { path } => Ok(BindRequest::Unix(resolve_interp_path(path)?)),
-        ServerListenSettings::Tcp { address, .. } => Ok(BindRequest::Tcp(*address)),
+        ServerListenSettings::Unix { path } => BindRequest::Unix(PathBuf::from(path)),
+        ServerListenSettings::Tcp { address, .. } => BindRequest::Tcp(*address),
     }
-}
-
-fn resolve_interp(value: &InterpString) -> anyhow::Result<String> {
-    value
-        .resolve(process_env_var)
-        .map(|resolved| resolved.value)
-        .with_context(|| format!("failed to resolve {}", value.as_source()))
-}
-
-#[expect(
-    clippy::disallowed_methods,
-    reason = "Server settings interpolation owns a process-env lookup facade for {{ env.* }} values."
-)]
-fn process_env_var(name: &str) -> Option<String> {
-    std::env::var(name).ok()
-}
-
-fn resolve_interp_path(value: &InterpString) -> anyhow::Result<PathBuf> {
-    Ok(PathBuf::from(resolve_interp(value)?))
 }
 
 fn absolute_path(path: PathBuf) -> anyhow::Result<PathBuf> {
@@ -587,7 +557,7 @@ fn absolute_path(path: PathBuf) -> anyhow::Result<PathBuf> {
 }
 
 fn load_server_secrets_for_settings(settings: &ServerNamespace) -> anyhow::Result<ServerSecrets> {
-    let storage_root = resolve_interp_path(&settings.storage.root)?;
+    let storage_root = PathBuf::from(&settings.storage.root);
     let server_env_path = Storage::new(&storage_root).runtime_directory().env_path();
     ServerSecrets::load(server_env_path, process_env_snapshot()).map_err(anyhow::Error::from)
 }
@@ -596,7 +566,7 @@ pub(crate) fn build_artifact_object_store_with_server_secrets(
     settings: &ServerNamespace,
     server_secrets: &ServerSecrets,
 ) -> anyhow::Result<(Arc<dyn ObjectStore>, String)> {
-    let prefix = resolve_interp(&settings.artifacts.prefix)?;
+    let prefix = settings.artifacts.prefix.clone();
     let object_store = build_object_store_from_settings_with_lookup(
         &settings.artifacts.store,
         &|name| server_secrets.get(name),
@@ -616,7 +586,7 @@ fn build_slatedb_store_with_server_secrets(
     settings: &ServerNamespace,
     server_secrets: &ServerSecrets,
 ) -> anyhow::Result<(Arc<dyn ObjectStore>, String, Duration, bool)> {
-    let prefix = resolve_interp(&settings.slatedb.prefix)?;
+    let prefix = settings.slatedb.prefix.clone();
     let object_store = build_object_store_from_settings_with_lookup(
         &settings.slatedb.store,
         &|name| server_secrets.get(name),
@@ -674,7 +644,7 @@ where
     let disk_server_settings = runtime_settings.server_settings.server.clone();
     let data_dir = match storage_dir_override {
         Some(path) => path,
-        None => resolve_interp_path(&disk_server_settings.storage.root)?,
+        None => PathBuf::from(&disk_server_settings.storage.root),
     };
     let storage = Storage::new(&data_dir);
     let vault_path = storage.secrets_path();
@@ -1179,7 +1149,6 @@ mod tests {
     use fabro_config::ServerSettingsBuilder;
     use fabro_config::bind::{Bind, BindRequest};
     use fabro_types::ServerSettings;
-    use fabro_types::settings::interp::InterpString;
     use fabro_types::settings::server::{LogDestination, ObjectStoreSettings};
     use fabro_util::Home;
     use tokio::time::sleep;
@@ -1189,9 +1158,8 @@ mod tests {
         SHUTDOWN_GRACE_PERIOD, ServeArgs, ServerTitlePhase, apply_effective_log_destination,
         bind_tcp_host_with_fallback, build_local_object_store_with_preference,
         build_object_store_from_settings_with_lookup, build_slatedb_store,
-        force_exit_after_shutdown, resolve_bind_request_from_server_settings, resolve_interp,
-        serve_overrides, serve_until_shutdown, server_bind_title, server_title,
-        spawn_shutdown_orchestrator_inner,
+        force_exit_after_shutdown, resolve_bind_request_from_server_settings, serve_overrides,
+        serve_until_shutdown, server_bind_title, server_title, spawn_shutdown_orchestrator_inner,
     };
     use crate::server::ResolvedAppStateSettings;
 
@@ -1224,16 +1192,6 @@ mod tests {
             &toml::to_string(&document).expect("fixture should serialize"),
         )
         .expect("settings should resolve")
-    }
-
-    #[test]
-    fn server_settings_interpolation_rejects_variables() {
-        let err = resolve_interp(&InterpString::parse("{{ vars.STORAGE_ROOT }}")).unwrap_err();
-
-        let rendered = format!("{err:#}");
-        assert!(rendered.contains("failed to resolve {{ vars.STORAGE_ROOT }}"));
-        assert!(rendered.contains("variable \"STORAGE_ROOT\""));
-        assert!(rendered.contains("not supported in this interpolation context"));
     }
 
     fn resolved_runtime_settings(source: &str) -> ResolvedAppStateSettings {
@@ -1367,7 +1325,7 @@ mod tests {
             .with_storage_override(&PathBuf::from("/srv/fabro-storage"));
 
         assert_eq!(
-            resolved.server_settings.server.storage.root.as_source(),
+            resolved.server_settings.server.storage.root,
             "/srv/fabro-storage"
         );
         let fabro_types::settings::ObjectStoreSettings::Local { root } =
@@ -1375,13 +1333,13 @@ mod tests {
         else {
             panic!("artifacts store should stay local");
         };
-        assert_eq!(root.as_source(), "/srv/fabro-storage/objects/artifacts");
+        assert_eq!(root, "/srv/fabro-storage/objects/artifacts");
         let fabro_types::settings::ObjectStoreSettings::Local { root } =
             &resolved.server_settings.server.slatedb.store
         else {
             panic!("slatedb store should stay local");
         };
-        assert_eq!(root.as_source(), "/srv/fabro-storage/objects/slatedb");
+        assert_eq!(root, "/srv/fabro-storage/objects/slatedb");
     }
 
     #[test]
@@ -1399,7 +1357,7 @@ root = "/srv/from-disk"
             .with_storage_override(&PathBuf::from("/srv/from-runtime"));
 
         assert_eq!(
-            resolved.server_settings.server.storage.root.as_source(),
+            resolved.server_settings.server.storage.root,
             "/srv/from-runtime"
         );
         assert_eq!(
@@ -1639,8 +1597,8 @@ disk_cache = true
     #[test]
     fn build_object_store_from_settings_uses_injected_static_credentials() {
         let settings = ObjectStoreSettings::S3 {
-            bucket:     InterpString::parse("fabro-data"),
-            region:     InterpString::parse("us-east-1"),
+            bucket:     "fabro-data".to_string(),
+            region:     "us-east-1".to_string(),
             endpoint:   None,
             path_style: false,
         };
@@ -1661,8 +1619,8 @@ disk_cache = true
     #[test]
     fn build_object_store_from_settings_rejects_partial_static_credentials() {
         let settings = ObjectStoreSettings::S3 {
-            bucket:     InterpString::parse("fabro-data"),
-            region:     InterpString::parse("us-east-1"),
+            bucket:     "fabro-data".to_string(),
+            region:     "us-east-1".to_string(),
             endpoint:   None,
             path_style: false,
         };
@@ -1686,8 +1644,8 @@ disk_cache = true
     #[test]
     fn build_object_store_from_settings_ignores_endpoint_override_env_vars() {
         let settings = ObjectStoreSettings::S3 {
-            bucket:     InterpString::parse("fabro-data"),
-            region:     InterpString::parse("us-east-1"),
+            bucket:     "fabro-data".to_string(),
+            region:     "us-east-1".to_string(),
             endpoint:   None,
             path_style: false,
         };

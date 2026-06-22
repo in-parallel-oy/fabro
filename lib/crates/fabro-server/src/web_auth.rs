@@ -323,12 +323,8 @@ fn session_provider(auth_method: AuthMethod) -> &'static str {
 
 fn session_cookie_secure(state: &AppState) -> bool {
     state
-        .server_settings()
-        .server
-        .web
-        .url
-        .resolve(process_env_var)
-        .is_ok_and(|resolved| resolved.value.starts_with("https://"))
+        .canonical_origin()
+        .is_ok_and(|web_url| web_url.starts_with("https://"))
 }
 
 fn redacted_url_for_log(url: &str) -> String {
@@ -343,14 +339,6 @@ fn session_timestamp(timestamp: i64) -> Result<DateTime<Utc>, ApiError> {
             "Authenticated session timestamp is out of range.",
         )
     })
-}
-
-#[expect(
-    clippy::disallowed_methods,
-    reason = "Web auth resolves configured {{ env.* }} URLs through this process-env facade."
-)]
-fn process_env_var(name: &str) -> Option<String> {
-    std::env::var(name).ok()
 }
 
 async fn login_dev_token(
@@ -450,16 +438,7 @@ async fn login_github(
             json!({"error": "GitHub App client_id is not configured"}),
         );
     };
-    let client_id = match state.resolve_interp(client_id) {
-        Ok(client_id) => client_id,
-        Err(err) => {
-            warn!(error = %err, "OAuth login failed: client_id could not be resolved");
-            return json_response(
-                StatusCode::CONFLICT,
-                json!({"error": format!("GitHub App client_id could not be resolved: {err}")}),
-            );
-        }
-    };
+    let client_id = client_id.clone();
     let web_url = match state.canonical_origin() {
         Ok(web_url) => web_url,
         Err(err) => {
@@ -597,16 +576,7 @@ async fn callback_github(
             json!({"error": "GitHub App client_id is not configured"}),
         );
     };
-    let client_id = match state.resolve_interp(client_id) {
-        Ok(client_id) => client_id,
-        Err(err) => {
-            error!(error = %err, "OAuth callback failed: client_id could not be resolved");
-            return json_response(
-                StatusCode::CONFLICT,
-                json!({"error": format!("GitHub App client_id could not be resolved: {err}")}),
-            );
-        }
-    };
+    let client_id = client_id.clone();
     let Some(client_secret) = state.vault_secret(EnvVars::GITHUB_APP_CLIENT_SECRET) else {
         error!("OAuth callback failed: GITHUB_APP_CLIENT_SECRET not configured");
         return json_response(
@@ -1365,7 +1335,7 @@ client_id = "github-client-id"
 
         let contexts = captured.lock().expect("captured auth contexts").clone();
         assert_eq!(contexts[0].auth_status, AuthStatus::Authenticated);
-        assert!(matches!(contexts[0].principal, Principal::User(_)));
+        assert!(matches!(contexts[0].principal, Some(Principal::User(_))));
         assert_eq!(contexts[1].auth_status, AuthStatus::Invalid);
         assert_eq!(
             contexts[1].auth_error_code,

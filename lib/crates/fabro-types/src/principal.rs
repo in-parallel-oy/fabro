@@ -12,8 +12,9 @@ pub struct UserPrincipal {
     pub avatar_url:  Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, IntoStaticStr)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum Principal {
     User(UserPrincipal),
     Worker {
@@ -39,7 +40,6 @@ pub enum Principal {
     System {
         system_kind: SystemActorKind,
     },
-    Anonymous,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, IntoStaticStr)]
@@ -90,15 +90,7 @@ impl Principal {
 
     #[must_use]
     pub fn kind(&self) -> &'static str {
-        match self {
-            Self::User(_) => "user",
-            Self::Worker { .. } => "worker",
-            Self::Webhook { .. } => "webhook",
-            Self::Slack { .. } => "slack",
-            Self::Agent { .. } => "agent",
-            Self::System { .. } => "system",
-            Self::Anonymous => "anonymous",
-        }
+        self.into()
     }
 
     #[must_use]
@@ -123,7 +115,6 @@ impl Principal {
             } => session_id.clone(),
             Self::Agent { .. } => "agent".to_string(),
             Self::System { system_kind } => format!("system:{system_kind}"),
-            Self::Anonymous => "anonymous".to_string(),
         }
     }
 }
@@ -289,11 +280,6 @@ mod tests {
         assert_round_trip(&Principal::System {
             system_kind: SystemActorKind::Engine,
         });
-    }
-
-    #[test]
-    fn round_trips_anonymous_variant() {
-        assert_round_trip(&Principal::Anonymous);
     }
 
     #[test]

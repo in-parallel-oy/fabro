@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use fabro_model::{AgentProfileKind, BillingPolicy, ProviderAuthConfig};
+use fabro_model::{AgentProfileKind, BillingPolicy, CodecKind, ProviderAuthConfig};
 use fabro_types::settings::cli::{CliAuthStrategy, OutputFormat, OutputVerbosity};
 use fabro_types::settings::run::{
     AgentPermissions, ApprovalMode, EnvironmentNetworkMode, EnvironmentProvider, MergeStrategy,
@@ -14,7 +14,7 @@ use fabro_types::settings::{Duration, InterpString, Size};
 
 use super::LogFilter;
 use super::cli::{CliAuthLayer, CliLoggingLayer, CliTargetLayer};
-use super::environment::{EnvironmentDockerfileLayer, EnvironmentVolumeLayer};
+use super::environment::EnvironmentDockerfileLayer;
 use super::llm::{CostRates, CredentialRef, HeaderValueRef, ReasoningEffortFeature};
 use super::run::{
     HookAgentMarker, HookEntry, HookTlsMode, InterviewProviderLayer, ModelRefOrSplice,
@@ -42,12 +42,6 @@ impl<T: Combine> Combine for Option<T> {
             (Some(this), Some(fallback)) => Some(this.combine(fallback)),
             (this, fallback) => this.or(fallback),
         }
-    }
-}
-
-impl Combine for Option<Vec<EnvironmentVolumeLayer>> {
-    fn combine(self, other: Self) -> Self {
-        self.or(other)
     }
 }
 
@@ -93,6 +87,7 @@ impl_combine_or_option!(
     LogFilter,
     AgentProfileKind,
     BillingPolicy,
+    CodecKind,
     ProviderAuthConfig,
     ReasoningEffortFeature,
 );

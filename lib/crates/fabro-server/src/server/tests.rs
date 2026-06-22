@@ -23,13 +23,14 @@ use fabro_llm::types::{Message as LlmMessage, Request as LlmRequest, TokenCounts
 use fabro_model::catalog::LlmCatalogSettings;
 use fabro_model::{Catalog, ModelRef, ProviderId, ReasoningEffort, Speed};
 use fabro_types::settings::ServerAuthMethod;
+use fabro_types::settings::run::EnvironmentProvider;
 use fabro_types::{
     AgentBackend, AttrValue, AuthMethod, CommandTermination, FailureCategory, FailureDetail, Graph,
     InterviewQuestionRecord, Node, Outcome, QuestionType, RunBlobId, RunId, RunSpec,
     SandboxProviderKind, StageContextWindowBreakdownItem, StageContextWindowCategory,
     StageContextWindowCountMethod, StageContextWindowProjection, StageContextWindowStaleness,
     StageContextWindowWarning, StageModelUsage, StageTiming, SuccessReason, SystemActorKind,
-    WorkflowSettings, fixtures,
+    WorkflowSettings, fixtures, test_support,
 };
 use fabro_util::check_report::CheckStatus;
 use fabro_workflow::records::CheckpointExt;
@@ -1056,18 +1057,18 @@ fn replace_settings_rejects_invalid_canonical_origin_and_keeps_previous_settings
         "ftp://fabro.example.com",
         "http://0.0.0.0:32276",
     ] {
+        // No FABRO_WEB_URL override: web.url is plain config now, so the
+        // invalid value is rejected from the settings literal and the kept
+        // previous settings stay valid.
         let state = test_app_state_with_env_lookup(
             canonical_origin_settings("http://valid.example.com"),
             RunLayer::default(),
             5,
-            {
-                let invalid = invalid.to_string();
-                move |name| (name == "FABRO_WEB_URL").then(|| invalid.clone())
-            },
+            |_| None,
         );
 
         let err = state
-            .replace_runtime_settings(resolved_runtime_settings_from_toml(
+            .replace_runtime_settings(resolved_runtime_settings_from_toml(&format!(
                 r#"
 _version = 1
 
@@ -1075,9 +1076,9 @@ _version = 1
 methods = ["dev-token"]
 
 [server.web]
-url = "{{ env.FABRO_WEB_URL }}"
+url = "{invalid}"
 "#,
-            ))
+            )))
             .expect_err("invalid canonical origin should be rejected");
         assert!(
             err.to_string()
@@ -1089,6 +1090,36 @@ url = "{{ env.FABRO_WEB_URL }}"
             "http://valid.example.com".to_string()
         );
     }
+}
+
+#[test]
+fn canonical_origin_prefers_fabro_web_url_env_override() {
+    // FABRO_WEB_URL is the native control-plane override; it wins over the
+    // plain `server.web.url` settings literal.
+    let state = test_app_state_with_env_lookup(
+        canonical_origin_settings("http://settings.example.com"),
+        RunLayer::default(),
+        5,
+        |name| (name == "FABRO_WEB_URL").then(|| "http://env.example.com".to_string()),
+    );
+
+    assert_eq!(state.canonical_origin().unwrap(), "http://env.example.com");
+}
+
+#[test]
+fn canonical_origin_uses_settings_literal_without_env_override() {
+    // Without FABRO_WEB_URL set, the plain `server.web.url` literal is used.
+    let state = test_app_state_with_env_lookup(
+        canonical_origin_settings("http://settings.example.com"),
+        RunLayer::default(),
+        5,
+        |_| None,
+    );
+
+    assert_eq!(
+        state.canonical_origin().unwrap(),
+        "http://settings.example.com"
+    );
 }
 
 #[test]
@@ -1146,10 +1177,7 @@ root = "/srv/new"
         .expect("valid settings should replace current state");
 
     assert_eq!(state.canonical_origin().unwrap(), "http://new.example.com");
-    assert_eq!(
-        state.server_settings().server.storage.root.as_source(),
-        "/srv/new"
-    );
+    assert_eq!(state.server_settings().server.storage.root, "/srv/new");
     assert_eq!(
         state
             .manifest_run_settings()
@@ -1223,13 +1251,16 @@ id = "missing"
 #[test]
 fn system_sandbox_provider_uses_manifest_defaults() {
     let temp = tempfile::tempdir().unwrap();
-    let environment_store = EnvironmentStore::load_or_seed(temp.path().join("environments"))
-        .expect("environment store should seed");
+    let environment_dir = temp.path().join("environments");
+    fabro_environment::seed_default_environment(&environment_dir, EnvironmentProvider::Daytona)
+        .expect("seed built-in environments");
+    let environment_store =
+        EnvironmentStore::load(&environment_dir, true).expect("environment store should load");
     let source = r#"
 _version = 1
 
 [run.environment]
-id = "daytona"
+id = "default"
 "#;
     let manifest_run_settings = resolve_manifest_run_settings_with_catalog(
         &run_manifest::manifest_run_defaults(Some(&manifest_run_defaults_from_toml(source))),
@@ -1242,8 +1273,8 @@ id = "daytona"
 #[test]
 fn system_sandbox_provider_defaults_when_manifest_run_settings_do_not_resolve() {
     let temp = tempfile::tempdir().unwrap();
-    let environment_store = EnvironmentStore::load_or_seed(temp.path().join("environments"))
-        .expect("environment store should seed");
+    let environment_store = EnvironmentStore::load(temp.path().join("environments"), true)
+        .expect("environment store should load");
     let source = r#"
 _version = 1
 
@@ -4023,7 +4054,7 @@ async fn append_default_run_created(run_store: &fabro_store::RunDatabase, run_id
         workflow_slug: None,
         automation: None,
         db_prefix: None,
-        provenance: None,
+        provenance: test_support::test_run_provenance(),
         manifest_blob: None,
         git: None,
         fork_source_ref: None,
@@ -4077,7 +4108,7 @@ async fn create_slack_notification_run(
         workflow_slug: workflow_slug.map(str::to_string),
         automation: None,
         db_prefix: None,
-        provenance: None,
+        provenance: test_support::test_run_provenance(),
         manifest_blob: None,
         git: None,
         fork_source_ref: None,
@@ -5084,7 +5115,7 @@ async fn list_run_stages_distinguishes_visits() {
             workflow_slug: Some("test".to_string()),
             automation: None,
             db_prefix: None,
-            provenance: None,
+            provenance: test_support::test_run_provenance(),
             manifest_blob: None,
             git: None,
             fork_source_ref: None,
@@ -5928,6 +5959,12 @@ fn create_github_token_app_state_with_env_lookup_and_llm_catalog_settings(
     let (store, artifact_store) = test_store_bundle();
     let vault_path = test_secret_store_path();
     let server_env_path = vault_path.with_file_name("server.env");
+    let active_config_path = vault_path.with_file_name("settings.toml");
+    let environment_dir = active_config_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join("environments");
+    fabro_environment::seed_environments(&environment_dir).expect("test environments should seed");
     let config = AppStateConfig {
         resolved_settings: resolved_runtime_settings_for_tests(
             github_token_settings(),
@@ -5944,7 +5981,7 @@ fn create_github_token_app_state_with_env_lookup_and_llm_catalog_settings(
         server_secrets: load_test_server_secrets(server_env_path, HashMap::new()),
         env_lookup: Arc::new(env_lookup),
         github_api_base_url,
-        active_config_path: tempfile::tempdir().unwrap().path().join("settings.toml"),
+        active_config_path,
         http_client: Some(fabro_http::test_http_client().expect("test HTTP client should build")),
         sandbox_provider_registry: None,
         shutdown: tokio_util::sync::CancellationToken::new(),
@@ -6141,7 +6178,7 @@ async fn create_completed_run_ready_for_pull_request(
         source_directory: Some("/tmp/project".to_string()),
         git: git.clone(),
         labels: HashMap::new(),
-        provenance: None,
+        provenance: test_support::test_run_provenance(),
         manifest_blob: None,
         definition_blob: None,
         fork_source_ref: None,
@@ -9944,15 +9981,10 @@ async fn run_tool_worker_token_can_use_client_backend_routes_across_runs() {
         .unwrap()
         .expect("created run should be cached");
     assert_eq!(
-        cached
-            .projection
-            .spec
-            .provenance
-            .as_ref()
-            .and_then(|provenance| provenance.subject.as_ref()),
-        Some(&Principal::Worker {
+        cached.projection.spec.provenance.subject,
+        Principal::Worker {
             run_id: parent_run_id,
-        }),
+        },
     );
 
     let response = app
@@ -12311,7 +12343,7 @@ async fn create_preserved_local_sandbox_run(state: &Arc<AppState>, run_id: RunId
             workflow_slug: Some("test".to_string()),
             automation: None,
             db_prefix: None,
-            provenance: None,
+            provenance: test_support::test_run_provenance(),
             manifest_blob: None,
             git: None,
             fork_source_ref: None,
@@ -13063,7 +13095,7 @@ async fn delete_run_retry_after_missing_provider_resource_removes_metadata() {
             workflow_slug: Some("test".to_string()),
             automation: None,
             db_prefix: None,
-            provenance: None,
+            provenance: test_support::test_run_provenance(),
             manifest_blob: None,
             git: None,
             fork_source_ref: None,
@@ -13434,6 +13466,10 @@ async fn post_runs_returns_submitted_status() {
     assert_eq!(run_json_status(&body)["kind"], "submitted");
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "test asserts the raw template source"
+)]
 #[tokio::test]
 async fn start_run_persists_full_settings_snapshot() {
     let source = r#"
@@ -13527,12 +13563,7 @@ level = "debug"
         "run execution mode should inherit from server settings"
     );
     assert_eq!(
-        resolved_run
-            .model
-            .name
-            .as_ref()
-            .map(fabro_types::settings::InterpString::as_source)
-            .as_deref(),
+        resolved_run.model.name.as_deref(),
         Some("claude-sonnet-4-5"),
     );
 

@@ -770,12 +770,10 @@ fn github_auth_not_configured() -> Response {
     )
 }
 
-fn resolved_web_url(state: &AppState) -> Option<String> {
-    state.canonical_origin().ok()
-}
-
 fn session_cookie_secure(state: &AppState) -> bool {
-    resolved_web_url(state).is_some_and(|web_url| web_url.starts_with("https://"))
+    state
+        .canonical_origin()
+        .is_ok_and(|web_url| web_url.starts_with("https://"))
 }
 
 fn eligible_session(session: Option<&SessionCookie>) -> Option<&SessionCookie> {
@@ -810,7 +808,7 @@ fn confirm_resume_origin_is_valid(headers: &HeaderMap, state: &AppState) -> bool
     let Ok(origin) = origin.to_str() else {
         return false;
     };
-    let Some(web_url) = resolved_web_url(state) else {
+    let Ok(web_url) = state.canonical_origin() else {
         return false;
     };
     let Ok(origin_url) = Url::parse(origin) else {
@@ -1671,11 +1669,11 @@ client_id = "github-client-id"
         let [first, second, third] = <[RequestAuthContext; 3]>::try_from(contexts)
             .expect("expected three captured auth contexts");
         assert_eq!(first.auth_status, AuthStatus::Authenticated);
-        assert_eq!(first.principal.display(), "octocat");
+        assert_eq!(first.principal.expect("principal").display(), "octocat");
         assert_eq!(second.auth_status, AuthStatus::Authenticated);
-        assert_eq!(second.principal.display(), "octocat");
+        assert_eq!(second.principal.expect("principal").display(), "octocat");
         assert_eq!(third.auth_status, AuthStatus::Authenticated);
-        assert_eq!(third.principal.display(), "octocat");
+        assert_eq!(third.principal.expect("principal").display(), "octocat");
     }
 
     #[tokio::test]
@@ -2080,7 +2078,10 @@ client_id = "github-client-id"
 
         let contexts = captured.lock().expect("captured auth contexts").clone();
         assert_eq!(contexts[0].auth_status, AuthStatus::Authenticated);
-        assert_eq!(contexts[0].principal.display(), "octocat");
+        assert_eq!(
+            contexts[0].principal.as_ref().expect("principal").display(),
+            "octocat"
+        );
         assert_eq!(contexts[1].auth_status, AuthStatus::Invalid);
         assert_eq!(
             contexts[1].auth_error_code,
@@ -2273,8 +2274,11 @@ client_id = "github-client-id"
 
         let contexts = captured.lock().expect("captured auth contexts").clone();
         assert_eq!(contexts[0].auth_status, AuthStatus::Authenticated);
-        assert_eq!(contexts[0].principal.display(), "octocat");
-        let Principal::User(user) = &contexts[0].principal else {
+        assert_eq!(
+            contexts[0].principal.as_ref().expect("principal").display(),
+            "octocat"
+        );
+        let Some(Principal::User(user)) = &contexts[0].principal else {
             panic!("expected user principal");
         };
         assert_eq!(

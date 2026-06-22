@@ -258,7 +258,7 @@ On a same-machine setup, `settings.toml` is the shared machine-default layer und
 
 On a remote setup, the client bundles workflow, project, and user config into the run manifest. The server then layers those bundled client configs over its own local defaults for run-shaped fields. Server-owned values like `[server.storage]`, `[server.api]`, `[server.web]`, and `[server.scheduler]` always come from the server machine's own `settings.toml` or `fabro server start` flags.
 
-Merge rules follow the normative matrix: TOML `[run.inputs]` tables replace wholesale, CLI `-I` / `--input` values replayed from run manifests merge per key at highest precedence, environment `env` and `labels` merge by key, environment `volumes` replace as a whole list, `[run.prepare.steps]` replaces whole-list, and `[[run.hooks]]` merge by optional `id`. Most other fields use "higher-precedence wins" field-wise merging.
+Merge rules follow the normative matrix: TOML `[run.inputs]` tables replace wholesale, CLI `-I` / `--input` values replayed from run manifests merge per key at highest precedence, environment `env` and `labels` merge by key, `[run.prepare.steps]` replaces whole-list, and `[[run.hooks]]` merge by optional `id`. Most other fields use "higher-precedence wins" field-wise merging.
 
 ### `[server.logging]` section
 

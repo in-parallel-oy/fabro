@@ -94,6 +94,10 @@ fn resolves_run_defaults_from_empty_settings() {
     assert!(settings.pull_request.is_none());
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "test asserts the raw template source"
+)]
 #[test]
 fn resolves_named_daytona_environment_from_injected_catalog() {
     let settings = workflow_settings_from_toml_with_catalog(
@@ -126,11 +130,6 @@ auto_stop = "30m"
 
 [environments.fabro-dev.labels]
 repo = "fabro-sh/fabro"
-
-[[environments.fabro-dev.volumes]]
-id = "vol_auth"
-mount_path = "/home/daytona/.config"
-subpath = "agents"
 
 [environments.fabro-dev.env]
 NODE_ENV = "development"
@@ -170,10 +169,6 @@ NODE_ENV = "development"
         environment.labels.get("repo").map(String::as_str),
         Some("fabro-sh/fabro")
     );
-    assert_eq!(environment.volumes.len(), 1);
-    assert_eq!(environment.volumes[0].id, "vol_auth");
-    assert_eq!(environment.volumes[0].mount_path, "/home/daytona/.config");
-    assert_eq!(environment.volumes[0].subpath.as_deref(), Some("agents"));
     assert_eq!(
         environment
             .env
@@ -185,12 +180,8 @@ NODE_ENV = "development"
 }
 
 #[test]
-fn resolves_docker_environment_volume_read_only() {
-    // Mirrors narayan's per-run docker isolation: named-volume caches (rw)
-    // plus read-only seed volumes. `read_only` defaults to false when
-    // omitted. The Docker bridge turns these into bollard binds. The
-    // environment is now server-managed, so it arrives via the injected
-    // catalog while the workflow TOML only selects it by id.
+fn resolves_environment_binds_from_injected_catalog() {
+    // Fork-only `binds` field (replaces upstream's removed `volumes`).
     let settings = workflow_settings_from_toml_with_catalog(
         r#"
 _version = 1
@@ -201,31 +192,88 @@ id = "narayan"
         r#"
 [environments.narayan]
 provider = "docker"
-
-[[environments.narayan.volumes]]
-id = "narayan-fabro-hex"
-mount_path = "/home/dev/.hex"
-
-[[environments.narayan.volumes]]
-id = "narayan-seed-build"
-mount_path = "/seed/_build"
-read_only = true
+binds = [
+  "narayan-fabro-hex:/home/dev/.hex:rw",
+  "narayan-seed-build:/seed/_build:ro",
+]
 "#,
     )
-    .expect("docker environment with volumes should resolve");
+    .expect("environment with binds should resolve");
 
-    let environment = settings.run.environment;
+    assert_eq!(settings.run.environment.binds, vec![
+        "narayan-fabro-hex:/home/dev/.hex:rw".to_string(),
+        "narayan-seed-build:/seed/_build:ro".to_string(),
+    ]);
+}
 
-    assert_eq!(environment.provider, EnvironmentProvider::Docker);
-    assert_eq!(environment.volumes.len(), 2);
-    assert_eq!(environment.volumes[0].id, "narayan-fabro-hex");
-    assert_eq!(environment.volumes[0].mount_path, "/home/dev/.hex");
-    assert!(
-        !environment.volumes[0].read_only,
-        "read_only should default to false when omitted"
+#[test]
+fn resolves_environment_cwd_from_injected_server_catalog() {
+    let settings = workflow_settings_from_toml_with_catalog(
+        r#"
+_version = 1
+
+[run.environment]
+id = "host"
+"#,
+        r#"
+[environments.host]
+provider = "local"
+cwd = "/srv/fabro/workspaces/team-a"
+"#,
+    )
+    .expect("server-managed environment cwd should resolve");
+
+    assert_eq!(
+        settings.run.environment.cwd.as_deref(),
+        Some("/srv/fabro/workspaces/team-a")
     );
-    assert_eq!(environment.volumes[1].id, "narayan-seed-build");
-    assert!(environment.volumes[1].read_only);
+}
+
+#[test]
+fn rejects_environment_cwd_in_client_workflow_catalog() {
+    let err = workflow_settings_from_toml(
+        r#"
+_version = 1
+
+[run.environment]
+id = "host"
+
+[environments.host]
+provider = "local"
+cwd = "/srv/fabro/workspaces/team-a"
+"#,
+    )
+    .expect_err("client-owned workflow environments must not set cwd");
+
+    let message = err.to_string();
+    assert!(
+        message.contains("environments.host.cwd") && message.contains("server-managed"),
+        "unexpected error: {message}"
+    );
+}
+
+#[test]
+fn rejects_relative_environment_cwd_from_server_catalog() {
+    let err = workflow_settings_from_toml_with_catalog(
+        r#"
+_version = 1
+
+[run.environment]
+id = "host"
+"#,
+        r#"
+[environments.host]
+provider = "local"
+cwd = "relative/workspace"
+"#,
+    )
+    .expect_err("relative environment cwd should not resolve");
+
+    let message = err.to_string();
+    assert!(
+        message.contains("environment.cwd") && message.contains("absolute path"),
+        "unexpected error: {message}"
+    );
 }
 
 #[test]
@@ -626,15 +674,13 @@ name = "sonnet"
         }
         other => panic!("expected file goal, got {other:?}"),
     }
+    // run.working_dir is demoted (D11): the env token stays literal text.
     assert_eq!(
-        settings.working_dir,
-        Some(InterpString::parse("{{ env.FABRO_WORKDIR }}"))
+        settings.working_dir.as_deref(),
+        Some("{{ env.FABRO_WORKDIR }}")
     );
-    assert_eq!(
-        settings.model.provider,
-        Some(InterpString::parse("anthropic"))
-    );
-    assert_eq!(settings.model.name, Some(InterpString::parse("sonnet")));
+    assert_eq!(settings.model.provider, Some("anthropic".to_string()));
+    assert_eq!(settings.model.name, Some("sonnet".to_string()));
 }
 
 mod run_integrations_github_permissions {
@@ -792,6 +838,10 @@ issues = "read"
         );
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "test asserts the raw template source"
+    )]
     #[test]
     fn resolver_preserves_interp_string_in_permissions() {
         let resolved = super::workflow_settings_from_toml(

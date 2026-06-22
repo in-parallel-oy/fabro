@@ -4,6 +4,7 @@
     reason = "temporary startup config migration uses synchronous file I/O before config is loaded"
 )]
 
+use std::fmt::Write as _;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -43,16 +44,15 @@ pub(crate) fn migrate_settings_path(
 
     let settings_dir = path.parent().unwrap_or_else(|| Path::new("."));
     let environment_dir = settings_dir.join("environments");
-    let existing = extracted
-        .iter()
-        .map(|environment| environment_dir.join(format!("{}.toml", environment.id)))
-        .find(|target| target.exists());
-    if let Some(target) = existing {
-        return Err(Error::other(format!(
-            "Settings environments in {} could not be auto-migrated because target environment file {} already exists. Move or merge the file and retry.",
-            path.display(),
-            target.display()
-        )));
+    let mut to_write = Vec::new();
+    let mut preserved_existing = Vec::new();
+    for environment in extracted {
+        let target = environment_dir.join(format!("{}.toml", environment.id));
+        if target.exists() {
+            preserved_existing.push(environment);
+        } else {
+            to_write.push(environment);
+        }
     }
 
     let backup_path = write_next_backup(path, original_contents)?;
@@ -62,7 +62,7 @@ pub(crate) fn migrate_settings_path(
             environment_dir.display()
         ))
     })?;
-    for environment in &extracted {
+    for environment in &to_write {
         let target = environment_dir.join(format!("{}.toml", environment.id));
         write_new_file(&target, &environment.contents)?;
     }
@@ -73,17 +73,30 @@ pub(crate) fn migrate_settings_path(
         ))
     })?;
 
-    let ids = extracted
+    let ids = to_write
         .iter()
+        .chain(preserved_existing.iter())
         .map(|environment| environment.id.as_str())
         .collect::<Vec<_>>()
         .join(", ");
-    let warning = format!(
+    let mut warning = format!(
         "Migrated [environments] settings in {} to server environment files under {} ({ids}). Backup written to {}. {REMOVAL_NOTE}",
         path.display(),
         environment_dir.display(),
         backup_path.display()
     );
+    if !preserved_existing.is_empty() {
+        let preserved_ids = preserved_existing
+            .iter()
+            .map(|environment| environment.id.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        write!(
+            warning,
+            " preserved existing environment files: {preserved_ids}."
+        )
+        .expect("writing to String should not fail");
+    }
 
     Ok(Some(SettingsEnvironmentsMigrationReport {
         contents: next_contents,
@@ -280,7 +293,7 @@ docker = "ubuntu:24.04"
     }
 
     #[test]
-    fn target_conflict_fails_without_changing_settings_or_files() {
+    fn target_conflict_preserves_existing_environment_and_removes_catalog() {
         let dir = tempfile::tempdir().expect("temp dir");
         let path = dir.path().join("settings.toml");
         let environment_dir = dir.path().join("environments");
@@ -295,10 +308,18 @@ provider = "docker"
 "#;
         std::fs::write(&path, source).expect("write settings");
 
-        let err = migrate_settings_path(&path, source).expect_err("conflict should fail");
+        let report = migrate_settings_path(&path, source)
+            .expect("conflict should warn and continue")
+            .expect("catalog should migrate out of settings");
 
-        assert!(err.to_string().contains("already exists"));
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), source);
+        let rewritten = std::fs::read_to_string(&path).unwrap();
+        assert!(report.backup_path.exists());
+        assert!(
+            report
+                .warning
+                .contains("preserved existing environment files: cloud")
+        );
+        assert!(!rewritten.contains("[environments"));
         assert_eq!(
             std::fs::read_to_string(environment_dir.join("cloud.toml")).unwrap(),
             "provider = \"local\"\n"

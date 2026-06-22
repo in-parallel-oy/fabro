@@ -6,6 +6,7 @@ use fabro_types::run_event::run::{RunCreatedProps, RunParentLinkedProps, RunPare
 use fabro_types::run_event::{RunSessionTurnFailedCode, RunSessionTurnFailedProps};
 use fabro_types::settings::InterpString;
 use fabro_types::settings::run::RunGoal;
+use fabro_types::test_support::test_run_provenance;
 use fabro_types::{AutomationRef, EventBody, TurnId, WorkflowSettings, fixtures};
 
 fn templated_settings() -> WorkflowSettings {
@@ -32,7 +33,7 @@ fn run_created_props_round_trip_templated_settings() {
             trigger_id: Some("schedule_1".to_string()),
         }),
         db_prefix:        Some("run_".to_string()),
-        provenance:       None,
+        provenance:       test_run_provenance(),
         manifest_blob:    None,
         git:              Some(GitContext {
             origin_url:   "https://github.com/fabro-sh/fabro.git".to_string(),
@@ -97,7 +98,7 @@ fn run_created_props_omits_web_url_when_absent() {
         workflow_slug:    None,
         automation:       None,
         db_prefix:        None,
-        provenance:       None,
+        provenance:       test_run_provenance(),
         manifest_blob:    None,
         git:              None,
         fork_source_ref:  None,
@@ -134,7 +135,8 @@ fn run_created_props_defaults_additive_fields_for_legacy_events() {
         "settings": WorkflowSettings::default(),
         "graph": Graph::new("ship"),
         "labels": {},
-        "run_dir": "/tmp/run"
+        "run_dir": "/tmp/run",
+        "provenance": test_run_provenance()
     });
 
     let props: RunCreatedProps =

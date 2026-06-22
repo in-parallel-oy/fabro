@@ -39,6 +39,7 @@ use fabro_model::{Catalog, CredentialRef, ProviderId};
 use fabro_server::serve;
 use fabro_store::ArtifactStore;
 use fabro_types::ServerSettings;
+use fabro_types::settings::run::EnvironmentProvider;
 use fabro_types::settings::server::ServerAuthMethod;
 use fabro_types::settings::validate_public_url_with_label;
 use fabro_util::printer::Printer;
@@ -101,7 +102,7 @@ fn provider_env_var_label(provider: &ProviderId, catalog: &Catalog) -> String {
                 .iter()
                 .filter_map(|credential| match credential {
                     CredentialRef::Env(name) => Some(name.as_str()),
-                    CredentialRef::Vault(_) => None,
+                    CredentialRef::Vault(_) | CredentialRef::AwsSigv4 => None,
                 })
                 .collect::<Vec<_>>()
                 .join(" / ")
@@ -2012,6 +2013,24 @@ async fn run_install_inner(args: &InstallArgs, ctx: &CommandContext) -> Result<(
         dev_token_for_auth_store.as_deref(),
     )
     .await?;
+
+    // Seed the default environment next to the settings file. The server never
+    // seeds on startup, so install is the only place the default is written;
+    // existing files are preserved, so re-running install never clobbers edits.
+    let environment_dir = config_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("environments");
+    if let Err(err) =
+        fabro_environment::seed_default_environment(&environment_dir, EnvironmentProvider::Docker)
+    {
+        fabro_util::printerr!(
+            printer,
+            "  {} Failed to seed default environment: {err}",
+            s.yellow.apply_to("Warning:")
+        );
+    }
+
     if let Some(token) = dev_token_for_auth_store {
         let user_settings = UserSettingsBuilder::from_toml(&settings_toml)?;
         let target = match user_config::resolve_nondefault_server_target(

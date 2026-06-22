@@ -91,6 +91,7 @@ mod tests {
     use super::*;
     use crate::file_resolver::FilesystemFileResolver;
     use crate::pipeline::parse::parse;
+    use crate::pipeline::types::GOAL_SELF_REFERENCE_RULE;
 
     fn write_file(path: &Path, contents: &str) {
         if let Some(parent) = path.parent() {
@@ -235,6 +236,43 @@ mod tests {
         assert_eq!(
             lint.attrs.get("model"),
             Some(&AttrValue::String("claude-sonnet-4-6".into()))
+        );
+    }
+
+    #[test]
+    fn transform_reports_goal_self_reference_once_across_passes() {
+        // FileInlining renders the goal for prompt context, but TemplateTransform
+        // is the only pass that should emit the self-reference diagnostic.
+        let dir = tempfile::tempdir().unwrap();
+        let parsed = parse(
+            r#"digraph Test {
+                graph [goal="Improve on {{ goal }}"]
+                start [shape=Mdiamond]
+                work [prompt="Do the work"]
+                exit [shape=Msquare]
+                start -> work -> exit
+            }"#,
+        )
+        .unwrap();
+        let transformed = transform(parsed, &TransformOptions {
+            current_dir:       Some(dir.path().to_path_buf()),
+            file_resolver:     Some(Arc::new(FilesystemFileResolver::new(None))),
+            inputs:            HashMap::new(),
+            source_name:       None,
+            render_mode:       crate::operations::RenderMode::Structural,
+            custom_transforms: vec![],
+            catalog:           test_catalog(),
+        })
+        .unwrap();
+
+        let self_ref = transformed
+            .diagnostics
+            .iter()
+            .filter(|d| d.rule == GOAL_SELF_REFERENCE_RULE)
+            .count();
+        assert_eq!(
+            self_ref, 1,
+            "goal self-reference should be reported exactly once across transform passes"
         );
     }
 }

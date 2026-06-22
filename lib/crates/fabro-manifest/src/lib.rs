@@ -74,8 +74,8 @@ pub fn build_run_overrides(input: RunOverrideInput<'_>) -> RunLayer {
         .goal
         .map(|goal| RunGoalLayer::Inline(InterpString::parse(goal)));
     let model = (input.model.is_some() || input.provider.is_some()).then(|| RunModelLayer {
-        provider:  input.provider.map(InterpString::parse),
-        name:      input.model.map(InterpString::parse),
+        provider:  input.provider.map(String::from),
+        name:      input.model.map(String::from),
         fallbacks: Vec::new(),
         controls:  None,
     });
@@ -778,8 +778,8 @@ fn configured_repo_origin_url(settings: &WorkflowSettings) -> Option<String> {
     {
         return None;
     }
-    let owner = scm.owner.as_ref()?.as_source();
-    let repository = scm.repository.as_ref()?.as_source();
+    let owner = scm.owner.as_deref()?;
+    let repository = scm.repository.as_deref()?;
     if owner.trim().is_empty() || repository.trim().is_empty() {
         return None;
     }
@@ -923,7 +923,7 @@ mod tests {
                 .name
                 .as_ref()
                 .unwrap()
-                .as_source(),
+                .as_str(),
             "gpt-5.4-mini"
         );
         assert_eq!(
@@ -934,7 +934,7 @@ mod tests {
                 .provider
                 .as_ref()
                 .unwrap()
-                .as_source(),
+                .as_str(),
             "openai"
         );
         assert_eq!(

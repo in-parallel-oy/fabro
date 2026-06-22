@@ -94,6 +94,7 @@ models/completion-tool-choice.ts
 models/completion-tool-definition.ts
 models/completion-usage.ts
 models/conclusion.ts
+models/cost-source.ts
 models/create-automation-request.ts
 models/create-completion-request.ts
 models/create-environment-request.ts
@@ -133,7 +134,6 @@ models/environment-network-settings.ts
 models/environment-provider.ts
 models/environment-resources-settings.ts
 models/environment-settings.ts
-models/environment-volume-settings.ts
 models/environment.ts
 models/error-response-entry.ts
 models/error-response.ts
@@ -273,7 +273,6 @@ models/preflight-workflow-summary.ts
 models/preview-url-request.ts
 models/preview-url-response.ts
 models/principal-agent.ts
-models/principal-anonymous.ts
 models/principal-slack.ts
 models/principal-system.ts
 models/principal-user.ts

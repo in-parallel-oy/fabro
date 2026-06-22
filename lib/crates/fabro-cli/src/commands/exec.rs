@@ -12,11 +12,10 @@ use fabro_llm::error::{
 use fabro_llm::provider::{ProviderAdapter, StreamEventStream};
 use fabro_llm::providers::common::{LineReader, parse_retry_after};
 use fabro_llm::types::{
-    FinishReason, Message, Request, Response as LlmResponse, StreamEvent, TokenCounts,
+    CostSource, FinishReason, Message, Request, Response as LlmResponse, StreamEvent, TokenCounts,
 };
 use fabro_mcp::config::McpServerSettings;
 use fabro_model::ProviderId;
-use fabro_types::settings::InterpString;
 use fabro_types::settings::cli::OutputFormat as SettingsOutputFormat;
 use fabro_util::exit::{self, ErrorExt, ExitClass};
 use futures::stream;
@@ -52,6 +51,8 @@ struct ServerCompletionResponse {
     message:     Message,
     stop_reason: String,
     usage:       ServerUsage,
+    cost_usd:    Option<f64>,
+    cost_source: Option<CostSource>,
 }
 
 #[derive(Deserialize)]
@@ -227,6 +228,10 @@ impl ProviderAdapter for AuthenticatedFabroServerAdapter {
             raw:           None,
             warnings:      vec![],
             rate_limit:    None,
+            // Carry the server's cost through; the local client's stamping
+            // never overwrites an already-set cost.
+            cost_usd:      server_response.cost_usd,
+            cost_source:   server_response.cost_source,
         })
     }
 
@@ -276,6 +281,14 @@ impl ProviderAdapter for AuthenticatedFabroServerAdapter {
     }
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "exec-boundary MCP transport InterpString resolution facade for {{ env.* }} values."
+)]
+fn process_env_var(name: &str) -> Option<String> {
+    std::env::var(name).ok()
+}
+
 pub(crate) async fn execute(mut args: ExecArgs, ctx: &CommandContext) -> AnyResult<()> {
     use fabro_agent::cli::PermissionLevel as AgentPermissionLevel;
     use fabro_types::settings::run::AgentPermissions;
@@ -283,13 +296,8 @@ pub(crate) async fn execute(mut args: ExecArgs, ctx: &CommandContext) -> AnyResu
     let cli = &ctx.user_settings().cli;
     #[cfg(feature = "sleep_inhibitor")]
     let _sleep_guard = sleep_inhibitor::guard(cli.exec.prevent_idle_sleep);
-    let provider_str = cli
-        .exec
-        .model
-        .provider
-        .as_ref()
-        .map(InterpString::as_source);
-    let model_str = cli.exec.model.name.as_ref().map(InterpString::as_source);
+    let provider_str = cli.exec.model.provider.as_deref();
+    let model_str = cli.exec.model.name.as_deref();
     let permissions = cli.exec.agent.permissions.map(|p| match p {
         AgentPermissions::ReadOnly => AgentPermissionLevel::ReadOnly,
         AgentPermissions::ReadWrite => AgentPermissionLevel::ReadWrite,
@@ -299,12 +307,8 @@ pub(crate) async fn execute(mut args: ExecArgs, ctx: &CommandContext) -> AnyResu
         SettingsOutputFormat::Text => OutputFormat::Text,
         SettingsOutputFormat::Json => OutputFormat::Json,
     });
-    args.agent.apply_cli_defaults(
-        provider_str.as_deref(),
-        model_str.as_deref(),
-        permissions,
-        output_format,
-    );
+    args.agent
+        .apply_cli_defaults(provider_str, model_str, permissions, output_format);
     let server_target = user_config::exec_server_target(&args.server)?;
     // v2 MCPs live under `cli.exec.agent.mcps` (owner-specific) or
     // `run.agent.mcps`. For `fabro exec` we use the cli.exec path, falling
@@ -316,6 +320,20 @@ pub(crate) async fn execute(mut args: ExecArgs, ctx: &CommandContext) -> AnyResu
     } else {
         cli.exec.agent.mcps.values().cloned().collect()
     };
+    // Resolve `{{ env.* }}` in MCP transport config at the exec boundary,
+    // against the CLI process env — the mirror of the `fabro run` worker
+    // boundary in `fabro_workflow::operations::start::runtime_mcp_server`.
+    // Both consumers read the same source-form settings; missing env is a hard
+    // error (D3) and reserved secrets/inputs tokens surface loudly rather than
+    // leaking.
+    let mcp_servers = mcp_servers
+        .into_iter()
+        .map(|settings| {
+            settings
+                .resolve_transport_env(process_env_var)
+                .with_context(|| format!("failed to resolve MCP server {:?}", settings.name))
+        })
+        .collect::<AnyResult<Vec<_>>>()?;
     if let Some(target) = server_target {
         tracing::info!(transport = "server", "Agent session starting");
         let provider_name = args

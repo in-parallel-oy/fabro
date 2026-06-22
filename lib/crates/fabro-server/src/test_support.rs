@@ -30,12 +30,13 @@ use ulid::Ulid;
 use crate::auth;
 use crate::automation_materializer::AutomationRunMaterializer;
 pub use crate::automation_materializer::TestAutomationRunMaterializer;
+use crate::interp::process_env_var;
 use crate::jwt_auth::{AuthMode, ConfiguredAuth};
 #[cfg(test)]
 use crate::principal_middleware::{AuthContextSlot, RequestAuthContext};
 use crate::server::{
     self, AppState, AppStateConfig, EnvLookup, RegistryFactoryOverride, ResolvedAppStateSettings,
-    RouterOptions, build_app_state, process_env_var,
+    RouterOptions, build_app_state,
 };
 use crate::server_secrets::ServerSecrets;
 #[cfg(test)]
@@ -237,6 +238,15 @@ impl TestAppStateBuilder {
         let active_config_path = self
             .active_config_path
             .unwrap_or_else(|| vault_path.with_file_name("settings.toml"));
+        // Production seeds environments at install time, not on startup. Tests
+        // exercise an installed instance, so seed the built-ins next to the
+        // settings file before `build_app_state` loads them.
+        let environment_dir = active_config_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("environments");
+        fabro_environment::seed_environments(&environment_dir)
+            .expect("test environments should seed");
         build_app_state(AppStateConfig {
             resolved_settings: resolved_runtime_settings_for_tests(
                 self.server_settings,

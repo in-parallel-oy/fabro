@@ -49,6 +49,8 @@ pub fn resolve_run(
         });
     }
 
+    super::warn_if_demoted_template("run.working_dir", layer.working_dir.as_deref());
+
     RunNamespace {
         goal: resolve_goal(layer.goal.as_ref()),
         working_dir: layer.working_dir.clone(),
@@ -108,6 +110,9 @@ fn resolve_model(model: Option<&RunModelLayer>) -> RunModelSettings {
         return RunModelSettings::default();
     };
 
+    super::warn_if_demoted_template("run.model.provider", model.provider.as_deref());
+    super::warn_if_demoted_template("run.model.name", model.name.as_deref());
+
     RunModelSettings {
         provider:  model.provider.clone(),
         name:      model.name.clone(),
@@ -131,16 +136,24 @@ fn resolve_model(model: Option<&RunModelLayer>) -> RunModelSettings {
 }
 
 fn resolve_git(git: Option<&RunGitLayer>) -> RunGitSettings {
+    let author = git.and_then(|git| git.author.as_ref());
+    if let Some(author) = author {
+        super::warn_if_demoted_template("run.git.author.name", author.name.as_deref());
+        super::warn_if_demoted_template("run.git.author.email", author.email.as_deref());
+    }
     RunGitSettings {
-        author: git.and_then(|git| {
-            git.author.as_ref().map(|author| GitAuthorSettings {
-                name:  author.name.clone(),
-                email: author.email.clone(),
-            })
+        author: author.map(|author| GitAuthorSettings {
+            name:  author.name.clone(),
+            email: author.email.clone(),
         }),
     }
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "known leak: prepare step templates collapse to raw source unresolved; strict \
+              resolution scheduled in the interpolation unification (Phase 2)"
+)]
 fn resolve_prepare(
     prepare: Option<&RunPrepareLayer>,
     errors: &mut Vec<ResolveError>,
@@ -281,6 +294,12 @@ fn resolve_agent(agent: Option<&RunAgentLayer>) -> RunAgentSettings {
     }
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "intentional source preservation: MCP transport strings are carried in source form \
+              so `fabro validate` stays portable; their {{ env.* }} tokens resolve at the run \
+              boundary in fabro_workflow::operations::start::runtime_mcp_server"
+)]
 pub(crate) fn resolve_mcp_entry(name: &str, entry: &McpEntryLayer) -> McpServerSettings {
     let transport = match entry {
         McpEntryLayer::Stdio {
@@ -357,6 +376,12 @@ pub(crate) fn resolve_mcp_entry(name: &str, entry: &McpEntryLayer) -> McpServerS
     }
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "intentional source preservation: MCP transport strings are carried in source form \
+              so `fabro validate` stays portable; their {{ env.* }} tokens resolve at the run \
+              boundary in fabro_workflow::operations::start::runtime_mcp_server"
+)]
 fn resolve_mcp_command(
     script: Option<&InterpString>,
     command: Option<&Vec<InterpString>>,
@@ -369,6 +394,11 @@ fn resolve_mcp_command(
         .unwrap_or_default()
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "intentional source preservation: the hook executor re-resolves {{ env.* }} \
+              tokens at hook fire time"
+)]
 fn resolve_hook(hook: &HookEntry, index: usize, errors: &mut Vec<ResolveError>) -> HookDefinition {
     let variants = [
         hook.script.is_some() || hook.command.is_some(),
@@ -414,6 +444,11 @@ fn resolve_hook(hook: &HookEntry, index: usize, errors: &mut Vec<ResolveError>) 
     }
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "intentional source preservation: the hook executor re-resolves {{ env.* }} \
+              tokens at hook fire time"
+)]
 fn resolve_hook_type(hook: &HookEntry) -> Option<HookType> {
     if hook.script.is_some() || hook.command.is_some() {
         return None;
@@ -466,6 +501,9 @@ fn resolve_scm(scm: Option<&RunScmLayer>) -> RunScmSettings {
     let Some(scm) = scm else {
         return RunScmSettings::default();
     };
+
+    super::warn_if_demoted_template("run.scm.owner", scm.owner.as_deref());
+    super::warn_if_demoted_template("run.scm.repository", scm.repository.as_deref());
 
     RunScmSettings {
         provider:   scm.provider.clone(),

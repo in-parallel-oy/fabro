@@ -9,6 +9,7 @@ import {
   KeyIcon,
   PuzzlePieceIcon,
   ShieldCheckIcon,
+  Square3Stack3DIcon,
 } from "@heroicons/react/24/outline";
 import { Fragment } from "react";
 import { Link, Outlet, useLocation, useMatches } from "react-router";
@@ -65,6 +66,13 @@ export const navSections: NavSection[] = [
     key: "workflows",
     label: "Workflows",
     items: [
+      {
+        name: "Environments",
+        href: "/settings/environments",
+        icon: Square3Stack3DIcon,
+        description: "Server-managed runtime definitions for runs.",
+        match: (p) => p.startsWith("/settings/environments"),
+      },
       {
         name: "Variables",
         href: "/settings/variables",

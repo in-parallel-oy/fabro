@@ -117,4 +117,8 @@ export const queryKeys = {
     list: () => ["variables", "list"] as const,
     detail: (name: string) => ["variables", "detail", name] as const,
   },
+  environments: {
+    list: () => ["environments", "list"] as const,
+    detail: (id: string) => ["environments", "detail", id] as const,
+  },
 };

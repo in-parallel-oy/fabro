@@ -955,8 +955,7 @@ fn attach_json_errors_without_prompting_for_human_input() {
                   "cpu": null,
                   "disk": null,
                   "memory": null
-                },
-                "volumes": []
+                }
               },
               "execution": {
                 "approval": "prompt",

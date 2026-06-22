@@ -491,21 +491,11 @@ pub fn write_sandbox_settings(
     selection: InstallSandboxSelection,
     allow_local: bool,
 ) -> Result<()> {
-    let provider = match selection {
-        InstallSandboxSelection::Docker => "docker",
-        InstallSandboxSelection::Daytona => "daytona",
-    };
     let root = root_table_mut(doc)?;
     let run = ensure_table(root, "run")?;
     let environment = ensure_table(run, "environment")?;
     environment.insert("id".to_string(), toml::Value::String("default".to_string()));
 
-    let environments = ensure_table(root, "environments")?;
-    let default = ensure_table(environments, "default")?;
-    default.insert(
-        "provider".to_string(),
-        toml::Value::String(provider.to_string()),
-    );
     let server = ensure_table(root, "server")?;
     write_sandbox_provider_policy(server, selection, allow_local)?;
     Ok(())
@@ -1431,7 +1421,7 @@ stale = "remove-me"
     }
 
     #[test]
-    fn write_sandbox_settings_records_docker_provider() {
+    fn write_sandbox_settings_records_run_default_without_environment_catalog() {
         let mut doc = toml::Value::Table(toml::Table::default());
         write_sandbox_settings(&mut doc, InstallSandboxSelection::Docker, true)
             .expect("docker sandbox selection should succeed");
@@ -1445,22 +1435,14 @@ stale = "remove-me"
                 .and_then(toml::Value::as_str),
             Some("default")
         );
-        assert_eq!(
-            doc.get("environments")
-                .and_then(toml::Value::as_table)
-                .and_then(|envs| envs.get("default"))
-                .and_then(toml::Value::as_table)
-                .and_then(|env| env.get("provider"))
-                .and_then(toml::Value::as_str),
-            Some("docker")
-        );
+        assert!(doc.get("environments").is_none());
         assert_eq!(sandbox_provider_enabled(&doc, "local"), Some(true));
         assert_eq!(sandbox_provider_enabled(&doc, "docker"), Some(true));
         assert_eq!(sandbox_provider_enabled(&doc, "daytona"), Some(false));
     }
 
     #[test]
-    fn write_sandbox_settings_records_daytona_provider() {
+    fn write_sandbox_settings_records_daytona_policy_without_environment_catalog() {
         let mut doc = toml::Value::Table(toml::Table::default());
         write_sandbox_settings(&mut doc, InstallSandboxSelection::Daytona, true)
             .expect("daytona sandbox selection should succeed");
@@ -1474,15 +1456,7 @@ stale = "remove-me"
                 .and_then(toml::Value::as_str),
             Some("default")
         );
-        assert_eq!(
-            doc.get("environments")
-                .and_then(toml::Value::as_table)
-                .and_then(|envs| envs.get("default"))
-                .and_then(toml::Value::as_table)
-                .and_then(|env| env.get("provider"))
-                .and_then(toml::Value::as_str),
-            Some("daytona")
-        );
+        assert!(doc.get("environments").is_none());
         assert_eq!(sandbox_provider_enabled(&doc, "local"), Some(true));
         assert_eq!(sandbox_provider_enabled(&doc, "docker"), Some(false));
         assert_eq!(sandbox_provider_enabled(&doc, "daytona"), Some(true));

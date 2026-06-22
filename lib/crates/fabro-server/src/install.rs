@@ -31,7 +31,7 @@ use fabro_sandbox::daytona;
 use fabro_static::EnvVars;
 use fabro_store::ArtifactStore;
 use fabro_types::ServerSettings;
-use fabro_types::settings::interp::InterpString;
+use fabro_types::settings::run::EnvironmentProvider;
 use fabro_types::settings::server::ObjectStoreSettings;
 use fabro_types::settings::{is_wildcard_host, validate_public_url_with_label};
 use fabro_util::version::FABRO_VERSION;
@@ -464,6 +464,13 @@ impl InstallSandboxState {
             InstallSandboxProviderState::Daytona { .. } => InstallSandboxSelection::Daytona,
         }
     }
+
+    fn to_environment_provider(&self) -> EnvironmentProvider {
+        match &self.provider {
+            InstallSandboxProviderState::Docker => EnvironmentProvider::Docker,
+            InstallSandboxProviderState::Daytona { .. } => EnvironmentProvider::Daytona,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -740,6 +747,15 @@ fn install_listen_config(bind: &Bind) -> InstallListenConfig {
         Bind::Tcp(address) => InstallListenConfig::Tcp(address.to_string()),
         Bind::Unix(path) => InstallListenConfig::Unix(path.clone()),
     }
+}
+
+/// The environments directory sits next to the active settings file, matching
+/// the server's own `environment_dir_for_active_config` derivation.
+fn install_environment_dir(config_path: &Path) -> PathBuf {
+    config_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("environments")
 }
 
 async fn health() -> Response {
@@ -1171,8 +1187,8 @@ fn object_store_validation_settings(
     match selection {
         InstallObjectStoreState::Local { .. } => None,
         InstallObjectStoreState::S3 { bucket, region, .. } => Some(ObjectStoreSettings::S3 {
-            bucket:     InterpString::parse(bucket),
-            region:     InterpString::parse(region),
+            bucket:     bucket.clone(),
+            region:     region.clone(),
             endpoint:   None,
             path_style: false,
         }),
@@ -1735,6 +1751,17 @@ async fn post_install_finish(
             .into_response();
     }
 
+    // Seed the default environment next to the settings file. The server does
+    // not seed on startup, so install is the only place the default is written;
+    // existing files are preserved, so re-running install never clobbers edits.
+    let environment_dir = install_environment_dir(state.config_path.as_ref());
+    if let Err(err) = fabro_environment::seed_default_environment(
+        &environment_dir,
+        sandbox.to_environment_provider(),
+    ) {
+        warn!(error = %err, "failed to seed default environment after install");
+    }
+
     if let Ok(settings) = fabro_config::ServerSettingsBuilder::from_toml(&settings_toml) {
         if let Err(err) = write_artifact_store_metadata(&settings, state.storage_dir.as_ref()).await
         {
@@ -2249,10 +2276,8 @@ async fn write_artifact_store_metadata(
     settings: &ServerSettings,
     storage_dir: &Path,
 ) -> anyhow::Result<()> {
-    use fabro_types::settings::interp::InterpString;
-
     let mut settings = settings.clone();
-    settings.server.storage.root = InterpString::parse(&storage_dir.display().to_string());
+    settings.server.storage.root = storage_dir.display().to_string();
     let (object_store, prefix) = serve::build_artifact_object_store(&settings.server)?;
     let artifact_store = ArtifactStore::new(object_store, prefix);
     artifact_store.write_metadata(FABRO_VERSION).await?;
@@ -2553,8 +2578,7 @@ methods = ["dev-token"]
             .unwrap();
 
         let mut overridden = settings.clone();
-        overridden.server.storage.root =
-            fabro_types::settings::interp::InterpString::parse(&dir.path().display().to_string());
+        overridden.server.storage.root = dir.path().display().to_string();
         let (object_store, prefix) =
             crate::serve::build_artifact_object_store(&overridden.server).unwrap();
         let marker = if prefix.is_empty() {

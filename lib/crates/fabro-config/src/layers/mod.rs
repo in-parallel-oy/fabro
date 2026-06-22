@@ -18,8 +18,7 @@ pub use cli::{
 pub(crate) use combine::Combine;
 pub use environment::{
     EnvironmentDockerfileLayer, EnvironmentImageLayer, EnvironmentLayer, EnvironmentLifecycleLayer,
-    EnvironmentNetworkLayer, EnvironmentResourcesLayer, EnvironmentVolumeLayer,
-    RunEnvironmentLayer,
+    EnvironmentNetworkLayer, EnvironmentResourcesLayer, RunEnvironmentLayer,
 };
 pub use llm::{
     CostRates, CredentialRef, CredentialRefParseError, HeaderValueRef, LlmLayer, ModelControls,

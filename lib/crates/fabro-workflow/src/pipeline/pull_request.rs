@@ -680,7 +680,7 @@ mod tests {
     use fabro_store::Database;
     use fabro_types::{
         BilledTokenCounts, RunProjection, RunSpec, SuccessReason, WorkflowSettings,
-        first_event_seq, fixtures,
+        first_event_seq, fixtures, test_support,
     };
     use fabro_vault::{SecretType, Vault};
     use futures::stream;
@@ -732,6 +732,8 @@ mod tests {
                 raw:           None,
                 warnings:      vec![],
                 rate_limit:    None,
+                cost_usd:      None,
+                cost_source:   None,
             })
         }
 
@@ -760,6 +762,8 @@ mod tests {
                         raw:           None,
                         warnings:      vec![],
                         rate_limit:    None,
+                        cost_usd:      None,
+                        cost_source:   None,
                     },
                 )),
             ];
@@ -823,7 +827,7 @@ mod tests {
                 automation:       None,
                 source_directory: None,
                 labels:           HashMap::new(),
-                provenance:       None,
+                provenance:       test_support::test_run_provenance(),
                 manifest_blob:    None,
                 definition_blob:  None,
                 git:              None,
@@ -1148,7 +1152,7 @@ mod tests {
                 push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
             }),
             labels:           HashMap::new(),
-            provenance:       None,
+            provenance:       test_support::test_run_provenance(),
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
@@ -1219,7 +1223,7 @@ mod tests {
                 push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
             }),
             labels:           HashMap::new(),
-            provenance:       None,
+            provenance:       test_support::test_run_provenance(),
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
@@ -1575,7 +1579,7 @@ mod tests {
             source_directory: Some(tmp.path().display().to_string()),
             git:              None,
             labels:           std::collections::HashMap::new(),
-            provenance:       None,
+            provenance:       test_support::test_run_provenance(),
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
@@ -1704,7 +1708,7 @@ mod tests {
             source_directory: Some("/tmp/project".to_string()),
             git:              None,
             labels:           HashMap::new(),
-            provenance:       None,
+            provenance:       test_support::test_run_provenance(),
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
@@ -1722,7 +1726,7 @@ mod tests {
             workflow_slug:    run_spec.workflow_slug.clone(),
             automation:       None,
             db_prefix:        None,
-            provenance:       None,
+            provenance:       test_support::test_run_provenance(),
             manifest_blob:    None,
             git:              None,
             fork_source_ref:  None,
@@ -1875,7 +1879,7 @@ mod tests {
             source_directory: None,
             git:              None,
             labels:           HashMap::new(),
-            provenance:       None,
+            provenance:       test_support::test_run_provenance(),
             manifest_blob:    None,
             definition_blob:  None,
             fork_source_ref:  None,
@@ -1893,7 +1897,7 @@ mod tests {
             workflow_slug:    None,
             automation:       None,
             db_prefix:        None,
-            provenance:       None,
+            provenance:       test_support::test_run_provenance(),
             manifest_blob:    None,
             git:              None,
             fork_source_ref:  None,

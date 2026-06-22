@@ -1739,7 +1739,7 @@ mod tests {
                 201,
                 r#"{"token": "ghs_xxx", "expires_at": "2026-01-01T12:00:00Z"}"#,
             )
-            .with_req_body(r#"{"permissions":{"contents":"write"},"repositories":["repo"]}"#);
+            .with_req_body(r#"{"permissions":{"contents":"write"}}"#);
 
         let creds = GitHubAppCredentials {
             app_id:          "test".to_string(),
@@ -1785,7 +1785,7 @@ mod tests {
                 r#"{"token": "ghs_xxx", "expires_at": "2099-01-01T00:00:00Z"}"#,
             )
             .with_req_header("Authorization", "Bearer test-jwt")
-            .with_req_body(r#"{"permissions":{"contents":"write"},"repositories":["repo"]}"#);
+            .with_req_body(r#"{"permissions":{"contents":"write"}}"#);
 
         let token = create_installation_access_token(&mock, "test-jwt", "owner", "repo", "")
             .await
@@ -1907,9 +1907,7 @@ mod tests {
                 r#"{"token": "ghs_pr_token", "expires_at": "2099-01-01T00:00:00Z"}"#,
             )
             .with_req_header("Authorization", "Bearer test-jwt")
-            .with_req_body(
-                r#"{"permissions":{"contents":"write","pull_requests":"write"},"repositories":["repo"]}"#,
-            );
+            .with_req_body(r#"{"permissions":{"contents":"write","pull_requests":"write"}}"#);
 
         let token = create_installation_access_token_for_pr(&mock, "test-jwt", "owner", "repo", "")
             .await

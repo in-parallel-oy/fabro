@@ -8,6 +8,7 @@ import {
   AuthApi,
   AutomationsApi,
   Configuration,
+  EnvironmentsApi,
   HumanInTheLoopApi,
   InsightsApi,
   InstallApi,
@@ -77,6 +78,11 @@ export const authApi = new AuthApi(
   generatedAxios,
 );
 export const automationsApi = new AutomationsApi(
+  generatedApiConfiguration,
+  "",
+  generatedAxios,
+);
+export const environmentsApi = new EnvironmentsApi(
   generatedApiConfiguration,
   "",
   generatedAxios,

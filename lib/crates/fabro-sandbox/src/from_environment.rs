@@ -3,14 +3,15 @@
 //! These mappings are consumed by both the workflow run-start path and the
 //! server preflight path, so they live here next to their destination types.
 
+use std::path::{Path, PathBuf};
+
 #[cfg(feature = "daytona")]
 use fabro_types::settings::run::DockerfileSource as ResolvedDockerfileSource;
 use fabro_types::settings::run::{EnvironmentNetworkMode, RunEnvironmentSettings};
 
 #[cfg(feature = "daytona")]
 use crate::config::{
-    DaytonaNetwork, DaytonaSnapshotSettings, DaytonaVolumeMount,
-    DockerfileSource as SandboxDockerfileSource,
+    DaytonaNetwork, DaytonaSnapshotSettings, DockerfileSource as SandboxDockerfileSource,
 };
 #[cfg(feature = "daytona")]
 use crate::daytona::DaytonaConfig;
@@ -29,15 +30,6 @@ pub fn daytona_config_from_environment(
             .auto_stop
             .map(|duration| duration_to_minutes_i32(duration.as_std())),
         labels: (!settings.labels.is_empty()).then(|| settings.labels.clone()),
-        volumes: settings
-            .volumes
-            .iter()
-            .map(|volume| DaytonaVolumeMount {
-                volume_id:  volume.id.clone(),
-                mount_path: volume.mount_path.clone(),
-                subpath:    volume.subpath.clone(),
-            })
-            .collect(),
         snapshot: settings
             .image
             .dockerfile
@@ -86,18 +78,11 @@ pub fn docker_config_from_environment(
     env_vars.sort();
     let default_options = DockerSandboxOptions::default();
 
-    // Named-volume mounts become bollard bind specs (`id:mount_path:mode`).
-    // Docker auto-creates the volume on first mount. `subpath` is a
-    // Daytona-only concept (the legacy `HostConfig.binds` string form can't
-    // express it) and is ignored here.
-    let binds = settings
-        .volumes
-        .iter()
-        .map(|volume| {
-            let mode = if volume.read_only { "ro" } else { "rw" };
-            format!("{}:{}:{mode}", volume.id, volume.mount_path)
-        })
-        .collect::<Vec<_>>();
+    // Fork-only: bind specs (`id:mount_path:ro|rw`) pass straight through to
+    // bollard `HostConfig.binds`. Named-volume binds are auto-created by
+    // Docker on first mount. Upstream dropped the `volumes` model; narayan
+    // declares these under `[environments.*].binds`.
+    let binds = settings.binds.clone();
 
     DockerSandboxOptions {
         image: settings
@@ -126,6 +111,30 @@ pub fn docker_config_from_environment(
     }
 }
 
+pub fn local_working_directory_from_environment(
+    settings: &RunEnvironmentSettings,
+    source_directory: Option<&Path>,
+) -> crate::Result<PathBuf> {
+    if let Some(cwd) = settings.cwd.as_deref() {
+        return Ok(PathBuf::from(cwd));
+    }
+
+    let Some(source_directory) = source_directory else {
+        return Err(crate::Error::message(
+            "local environment requires a server-side working directory; configure `environment.cwd = \"/absolute/path\"` on the selected local environment",
+        ));
+    };
+
+    if source_directory.is_dir() {
+        return Ok(source_directory.to_path_buf());
+    }
+
+    Err(crate::Error::message(format!(
+        "local environment source_directory does not exist or is not a directory on this server: {}. Configure `environment.cwd = \"/absolute/path\"` on the selected local environment for remote client/server deployments.",
+        source_directory.display()
+    )))
+}
+
 #[cfg(feature = "docker")]
 #[expect(
     clippy::disallowed_methods,
@@ -147,51 +156,85 @@ fn size_to_gb_i32(bytes: u64) -> i32 {
     i32::try_from(gb).unwrap_or(i32::MAX)
 }
 
-#[cfg(all(test, feature = "docker"))]
+#[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::path::{Path, PathBuf};
+
     use fabro_types::settings::run::{
-        EnvironmentSettings, EnvironmentVolumeSettings, RunEnvironmentSettings,
+        EnvironmentImageSettings, EnvironmentLifecycleSettings, EnvironmentNetworkSettings,
+        EnvironmentProvider, EnvironmentResourcesSettings,
     };
 
-    use super::docker_config_from_environment;
+    use super::*;
 
-    fn volume(id: &str, mount_path: &str, read_only: bool) -> EnvironmentVolumeSettings {
-        EnvironmentVolumeSettings {
-            id: id.to_string(),
-            mount_path: mount_path.to_string(),
-            subpath: None,
-            read_only,
+    fn run_environment(provider: EnvironmentProvider) -> RunEnvironmentSettings {
+        RunEnvironmentSettings {
+            id: "host".to_string(),
+            provider,
+            cwd: None,
+            image: EnvironmentImageSettings::default(),
+            resources: EnvironmentResourcesSettings::default(),
+            network: EnvironmentNetworkSettings::default(),
+            lifecycle: EnvironmentLifecycleSettings::default(),
+            labels: HashMap::new(),
+            env: HashMap::new(),
+            binds: Vec::new(),
         }
     }
 
+    #[cfg(feature = "docker")]
     #[test]
-    fn docker_volumes_become_binds_with_rw_ro_mode() {
-        let environment = EnvironmentSettings {
-            volumes: vec![
-                volume("narayan-fabro-hex", "/home/dev/.hex", false),
-                volume("narayan-seed-build", "/seed/_build", true),
-            ],
-            ..EnvironmentSettings::default()
-        };
-        let settings = RunEnvironmentSettings::from_environment("narayan".to_string(), environment);
+    fn docker_binds_pass_through_to_host_config() {
+        let mut settings = run_environment(EnvironmentProvider::Docker);
+        settings.binds = vec![
+            "narayan-fabro-hex:/home/dev/.hex:rw".to_string(),
+            "narayan-seed-build:/seed/_build:ro".to_string(),
+        ];
 
         let options = docker_config_from_environment(&settings, false);
 
-        assert_eq!(options.binds, vec![
-            "narayan-fabro-hex:/home/dev/.hex:rw".to_string(),
-            "narayan-seed-build:/seed/_build:ro".to_string(),
-        ]);
+        assert_eq!(options.binds, settings.binds);
     }
 
     #[test]
-    fn docker_without_volumes_has_no_binds() {
-        let settings = RunEnvironmentSettings::from_environment(
-            "narayan".to_string(),
-            EnvironmentSettings::default(),
+    fn local_working_directory_prefers_environment_cwd() {
+        let mut settings = run_environment(EnvironmentProvider::Local);
+        settings.cwd = Some("/srv/fabro/workspaces/team-a".to_string());
+        let missing_source = Path::new("/path/that/should/not/exist");
+
+        let resolved = local_working_directory_from_environment(&settings, Some(missing_source))
+            .expect("configured cwd should be accepted");
+
+        assert_eq!(resolved, PathBuf::from("/srv/fabro/workspaces/team-a"));
+        assert!(!missing_source.exists());
+    }
+
+    #[test]
+    fn local_working_directory_uses_existing_source_directory_without_cwd() {
+        let settings = run_environment(EnvironmentProvider::Local);
+        let dir = tempfile::tempdir().unwrap();
+
+        let resolved = local_working_directory_from_environment(&settings, Some(dir.path()))
+            .expect("existing source directory should be accepted");
+
+        assert_eq!(resolved, dir.path());
+    }
+
+    #[test]
+    fn local_working_directory_rejects_missing_source_directory_without_cwd() {
+        let settings = run_environment(EnvironmentProvider::Local);
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("client-only");
+
+        let err = local_working_directory_from_environment(&settings, Some(&missing))
+            .expect_err("missing source directory without cwd should fail");
+
+        let message = err.to_string();
+        assert!(
+            message.contains("environment.cwd") && message.contains("does not exist"),
+            "unexpected error: {message}"
         );
-
-        let options = docker_config_from_environment(&settings, false);
-
-        assert!(options.binds.is_empty());
+        assert!(!missing.exists());
     }
 }

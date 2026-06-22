@@ -45,7 +45,7 @@ pub struct CreateRunInput {
     pub git: Option<GitContext>,
     pub fork_source_ref: Option<ForkSourceRef>,
     pub parent_id: Option<RunId>,
-    pub provenance: Option<RunProvenance>,
+    pub provenance: RunProvenance,
     pub configured_providers: Vec<ProviderId>,
     /// Public URL where this run can be viewed in the web UI, when the server
     /// has the web UI enabled. Recorded on the `run.created` event so attach
@@ -72,7 +72,7 @@ struct PersistCreateOptions {
     automation:           Option<AutomationRef>,
     git:                  Option<GitContext>,
     fork_source_ref:      Option<ForkSourceRef>,
-    provenance:           Option<RunProvenance>,
+    provenance:           RunProvenance,
     configured_providers: Vec<ProviderId>,
     catalog:              Arc<Catalog>,
 }
@@ -422,7 +422,7 @@ mod tests {
     use fabro_store::Database;
     use fabro_types::settings::InterpString;
     use fabro_types::settings::run::RunMode;
-    use fabro_types::{WorkflowSettings, fixtures};
+    use fabro_types::{WorkflowSettings, fixtures, test_support};
     use fabro_util::error::collect_chain;
     use fabro_validate::Severity;
     use object_store::local::LocalFileSystem;
@@ -430,7 +430,7 @@ mod tests {
 
     use super::*;
     use crate::operations::{ValidateInput, validate};
-    use crate::pipeline::types::TEMPLATE_UNDEFINED_VARIABLE_RULE;
+    use crate::pipeline::types::{GOAL_SELF_REFERENCE_RULE, TEMPLATE_UNDEFINED_VARIABLE_RULE};
     use crate::workflow_bundle::BundledWorkflow;
     fn memory_store() -> Arc<Database> {
         Arc::new(Database::new(
@@ -495,6 +495,36 @@ mod tests {
         assert_eq!(validated.graph().name, "Test");
         assert!(validated.graph().find_start_node().is_some());
         assert!(validated.graph().find_exit_node().is_some());
+    }
+
+    #[test]
+    fn validate_rejects_goal_self_reference() {
+        // A goal can't reference itself; a prompt can reference the goal.
+        let dot = r#"digraph Test {
+            graph [goal="Refine {{ goal }}"]
+            start [shape=Mdiamond]
+            work [prompt="Work on {{ goal }}"]
+            exit [shape=Msquare]
+            start -> work -> exit
+        }"#;
+        let validated = validate_dot(dot, WorkflowSettings::default());
+
+        assert!(
+            validated.has_errors(),
+            "goal self-reference should fail validation"
+        );
+        let self_ref: Vec<_> = validated
+            .diagnostics()
+            .iter()
+            .filter(|d| d.rule == GOAL_SELF_REFERENCE_RULE)
+            .collect();
+        assert_eq!(
+            self_ref.len(),
+            1,
+            "expected one goal self-reference diagnostic, got: {:?}",
+            validated.diagnostics()
+        );
+        assert_eq!(self_ref[0].severity, Severity::Error);
     }
 
     #[test]
@@ -1115,7 +1145,7 @@ mod tests {
                 git: None,
                 fork_source_ref: None,
                 parent_id: None,
-                provenance: None,
+                provenance: test_support::test_run_provenance(),
                 configured_providers: Vec::new(),
                 web_url: None,
             },
@@ -1133,6 +1163,10 @@ mod tests {
         }
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "test asserts the raw template source"
+    )]
     #[tokio::test]
     async fn create_persists_normalized_config_and_initial_state() {
         let dir = tempfile::tempdir().unwrap();
@@ -1152,7 +1186,7 @@ mod tests {
                         goal: Some(RunGoalLayer::Inline(InterpString::parse("override goal"))),
                         metadata: ReplaceMap::from(metadata),
                         model: Some(RunModelLayer {
-                            name: Some(InterpString::parse("sonnet")),
+                            name: Some("sonnet".to_string()),
                             ..RunModelLayer::default()
                         }),
                         pull_request: Some(RunPullRequestLayer {
@@ -1183,7 +1217,7 @@ mod tests {
                 }),
                 fork_source_ref: None,
                 parent_id: None,
-                provenance: None,
+                provenance: test_support::test_run_provenance(),
                 configured_providers: Vec::new(),
                 web_url: None,
             },
@@ -1203,8 +1237,6 @@ mod tests {
                 .run
                 .model
                 .name
-                .as_ref()
-                .map(fabro_types::settings::InterpString::as_source)
                 .as_deref(),
             Some("claude-sonnet-4-6")
         );
@@ -1216,8 +1248,6 @@ mod tests {
                 .run
                 .model
                 .provider
-                .as_ref()
-                .map(fabro_types::settings::InterpString::as_source)
                 .as_deref(),
             Some("anthropic")
         );
@@ -1276,7 +1306,7 @@ mod tests {
                 },
                 settings: settings_from_run_layer({
                     RunLayer {
-                        working_dir: Some(InterpString::parse("workspace")),
+                        working_dir: Some("workspace".to_string()),
                         execution: Some(RunExecutionLayer {
                             mode: Some(RunMode::DryRun),
                             ..RunExecutionLayer::default()
@@ -1295,7 +1325,7 @@ mod tests {
                 git: None,
                 fork_source_ref: None,
                 parent_id: None,
-                provenance: None,
+                provenance: test_support::test_run_provenance(),
                 configured_providers: Vec::new(),
                 web_url: None,
             },
@@ -1341,7 +1371,7 @@ mod tests {
                 }),
                 fork_source_ref: None,
                 parent_id: None,
-                provenance: None,
+                provenance: test_support::test_run_provenance(),
                 configured_providers: Vec::new(),
                 web_url: None,
             },
@@ -1414,7 +1444,7 @@ mod tests {
                 git: None,
                 fork_source_ref: None,
                 parent_id: None,
-                provenance: None,
+                provenance: test_support::test_run_provenance(),
                 configured_providers: Vec::new(),
                 web_url: None,
             },
@@ -1467,7 +1497,7 @@ mod tests {
                 git: None,
                 fork_source_ref: None,
                 parent_id: None,
-                provenance: Some(fabro_types::RunProvenance {
+                provenance: fabro_types::RunProvenance {
                     server:  Some(fabro_types::RunServerProvenance {
                         version: "0.9.0".to_string(),
                     }),
@@ -1476,12 +1506,12 @@ mod tests {
                         name:       Some("fabro-cli".to_string()),
                         version:    Some("0.9.0".to_string()),
                     }),
-                    subject: Some(fabro_types::Principal::user(
+                    subject: fabro_types::Principal::user(
                         fabro_types::IdpIdentity::new("https://github.com", "12345").unwrap(),
                         "octocat".to_string(),
                         fabro_types::AuthMethod::Github,
-                    )),
-                }),
+                    ),
+                },
                 configured_providers: Vec::new(),
                 web_url: None,
             },
@@ -1494,7 +1524,7 @@ mod tests {
         let run_store = store.open_run_reader(&created.run_id).await.unwrap();
         let state = run_store.state().await.unwrap();
         let run = state.spec;
-        let provenance = run.provenance.expect("provenance should be projected");
+        let provenance = run.provenance;
 
         assert_eq!(provenance.server.unwrap().version, "0.9.0");
         assert_eq!(
@@ -1502,7 +1532,7 @@ mod tests {
             Some("fabro-cli")
         );
         assert_eq!(
-            provenance.subject.unwrap(),
+            provenance.subject,
             fabro_types::Principal::user(
                 fabro_types::IdpIdentity::new("https://github.com", "12345").unwrap(),
                 "octocat".to_string(),

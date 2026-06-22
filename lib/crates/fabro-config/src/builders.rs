@@ -330,6 +330,7 @@ fn provider_settings_to_catalog(
     model_catalog::ProviderCatalogSettings {
         display_name:   settings.display_name,
         adapter:        settings.adapter,
+        codec:          settings.codec,
         agent_profile:  settings.agent_profile,
         auth:           settings.auth,
         billing_policy: settings.billing_policy,
@@ -346,6 +347,8 @@ fn model_settings_to_catalog(settings: ModelSettings) -> model_catalog::ModelCat
     let ModelSettings {
         provider,
         api_id,
+        codec,
+        billing_policy,
         agent_profile,
         display_name,
         family,
@@ -365,6 +368,8 @@ fn model_settings_to_catalog(settings: ModelSettings) -> model_catalog::ModelCat
     model_catalog::ModelCatalogSettings {
         provider,
         api_id,
+        codec,
+        billing_policy,
         agent_profile,
         display_name,
         family,
@@ -397,6 +402,7 @@ fn model_features_to_catalog(features: &LlmModelFeatures) -> model_catalog::Sett
         reasoning:        features.reasoning,
         reasoning_effort: features.reasoning_effort,
         prompt_cache:     features.prompt_cache,
+        sampling_params:  features.sampling_params,
     }
 }
 
@@ -650,7 +656,6 @@ fn finish_dense_result<T>(
 mod tests {
     use std::collections::HashMap;
 
-    use fabro_types::settings::InterpString;
     use fabro_types::settings::cli::OutputVerbosity;
     use fabro_types::settings::run::{ApprovalMode, EnvironmentProvider, RunMode};
 
@@ -700,8 +705,8 @@ command = ["demo-mcp"]
             .run_overrides(RunLayer {
                 metadata: ReplaceMap::from(HashMap::from([("env".to_string(), "cli".to_string())])),
                 model: Some(RunModelLayer {
-                    provider:  Some(InterpString::parse("openai")),
-                    name:      Some(InterpString::parse("gpt-5")),
+                    provider:  Some("openai".to_string()),
+                    name:      Some("gpt-5".to_string()),
                     fallbacks: Vec::new(),
                     controls:  None,
                 }),
@@ -725,24 +730,8 @@ command = ["demo-mcp"]
             settings.run.metadata.get("env").map(String::as_str),
             Some("cli")
         );
-        assert_eq!(
-            settings
-                .run
-                .model
-                .provider
-                .as_ref()
-                .map(InterpString::as_source),
-            Some("openai".to_string())
-        );
-        assert_eq!(
-            settings
-                .run
-                .model
-                .name
-                .as_ref()
-                .map(InterpString::as_source),
-            Some("gpt-5".to_string())
-        );
+        assert_eq!(settings.run.model.provider.as_deref(), Some("openai"));
+        assert_eq!(settings.run.model.name.as_deref(), Some("gpt-5"));
         assert_eq!(settings.run.execution.mode, RunMode::DryRun);
         assert_eq!(settings.run.execution.approval, ApprovalMode::Auto);
     }

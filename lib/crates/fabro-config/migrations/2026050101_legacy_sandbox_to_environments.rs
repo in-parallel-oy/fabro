@@ -3,7 +3,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use fabro_types::settings::run::EnvironmentProvider;
-use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, Value};
+use toml_edit::{DocumentMut, Item, Table, Value};
 
 use crate::{Error, Result};
 
@@ -205,7 +205,6 @@ fn migrate_daytona(sandbox: &Table, env: &mut Table, unsupported: &mut Vec<Strin
                 }
             }
             "snapshot" => migrate_daytona_snapshot(item, env, unsupported),
-            "volumes" => copy_array_of_tables_with_volume_id(item, env, unsupported),
             _ => item_path_keys(&format!("run.sandbox.daytona.{key}"), item, unsupported),
         }
     }
@@ -291,50 +290,6 @@ fn copy_table(source: &Item, target: &mut Table) {
     }
 }
 
-fn copy_array_of_tables_with_volume_id(
-    source: &Item,
-    target: &mut Table,
-    unsupported: &mut Vec<String>,
-) {
-    let Some(volumes) = source.as_array_of_tables() else {
-        unsupported.push("run.sandbox.daytona.volumes".to_string());
-        return;
-    };
-
-    let mut migrated = ArrayOfTables::new();
-    for volume in volumes {
-        let mut migrated_volume = Table::new();
-        let mut has_id = false;
-        let mut has_mount_path = false;
-        for (key, item) in volume {
-            match key {
-                "volume_id" => {
-                    has_id = true;
-                    migrated_volume["id"] = item.clone();
-                }
-                "mount_path" => {
-                    has_mount_path = true;
-                    migrated_volume["mount_path"] = item.clone();
-                }
-                "subpath" => migrated_volume["subpath"] = item.clone(),
-                _ => item_path_keys(
-                    &format!("run.sandbox.daytona.volumes.{key}"),
-                    item,
-                    unsupported,
-                ),
-            }
-        }
-        if !has_id {
-            unsupported.push("run.sandbox.daytona.volumes.volume_id".to_string());
-        }
-        if !has_mount_path {
-            unsupported.push("run.sandbox.daytona.volumes.mount_path".to_string());
-        }
-        migrated.push(migrated_volume);
-    }
-    target["volumes"] = Item::ArrayOfTables(migrated);
-}
-
 fn item_path_keys(prefix: &str, item: &Item, out: &mut Vec<String>) {
     if let Some(table) = item.as_table() {
         if table.is_empty() {
@@ -417,8 +372,12 @@ provider = "daytona"
         assert!(migrated.is_none());
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "test asserts the raw template source"
+    )]
     #[test]
-    fn daytona_snapshot_labels_lifecycle_and_volumes_migrate() {
+    fn daytona_snapshot_labels_and_lifecycle_migrate() {
         let migrated = migrate(
             r#"
 _version = 1
@@ -442,11 +401,6 @@ cpu = 8
 memory = "16GB"
 disk = "20GB"
 dockerfile = { path = "Dockerfile" }
-
-[[run.sandbox.daytona.volumes]]
-volume_id = "vol_auth"
-mount_path = "/home/daytona/.config"
-subpath = "agents"
 "#,
         );
 
@@ -486,10 +440,30 @@ subpath = "agents"
             resolved.env.get("NODE_ENV").map(InterpString::as_source),
             Some("development".to_string())
         );
-        assert_eq!(resolved.volumes.len(), 1);
-        assert_eq!(resolved.volumes[0].id, "vol_auth");
-        assert_eq!(resolved.volumes[0].mount_path, "/home/daytona/.config");
-        assert_eq!(resolved.volumes[0].subpath.as_deref(), Some("agents"));
+    }
+
+    #[test]
+    fn daytona_volumes_are_reported_unsupported() {
+        let err = migrate_contents(
+            r#"
+_version = 1
+
+[run.sandbox]
+provider = "daytona"
+
+[[run.sandbox.daytona.volumes]]
+volume_id = "vol_auth"
+mount_path = "/home/daytona/.config"
+"#,
+            Path::new("settings.toml"),
+        )
+        .expect_err("daytona volumes can no longer be migrated");
+
+        let message = err.to_string();
+        assert!(
+            message.contains("run.sandbox.daytona.volumes"),
+            "message was: {message}"
+        );
     }
 
     #[test]

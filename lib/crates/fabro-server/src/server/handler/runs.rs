@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::io::ErrorKind;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
@@ -19,7 +18,7 @@ use fabro_api::types::{
 use fabro_config::Storage;
 use fabro_interview::AnswerSubmission;
 use fabro_llm::client::Client as LlmClient;
-use fabro_types::settings::ResolveEnvError;
+use fabro_types::settings::ResolveError;
 use fabro_types::{
     AutomationRef, Principal, RunClientProvenance, RunId, RunProvenance, RunServerProvenance,
     StageContextWindow, StageContextWindowStaleness, StageContextWindowUnavailableReason,
@@ -37,8 +36,7 @@ use super::super::{
     AppState, DeleteRunOutcome, ListResponse, PaginationParams, RunExecutionMode,
     answer_from_request, api_question_from_pending_interview, default_page_limit,
     delete_run_internal, load_pending_interview, managed_run, paginate_items, parse_run_id_path,
-    parse_stage_id_path, reject_if_archived, resolve_interp_string,
-    submit_pending_interview_answer, workflow_event,
+    parse_stage_id_path, reject_if_archived, submit_pending_interview_answer, workflow_event,
 };
 use crate::error::ApiError;
 use crate::principal_middleware::{
@@ -687,26 +685,18 @@ pub(crate) async fn create_run_from_manifest(
         .as_ref()
         .map(LlmClientResult::provider_ids)
         .unwrap_or_default();
+    let provenance = run_provenance(&headers, &actor);
     let mut create_input = run_manifest::create_run_input(
         prepared.clone(),
         ready_provider_ids.clone(),
+        provenance,
         web_url.clone(),
     );
     create_input.run_id = Some(run_id);
-    create_input.provenance = Some(run_provenance(&headers, &actor));
     create_input.submitted_manifest_bytes = Some(submitted_manifest_bytes);
     create_input.automation = automation;
 
-    let storage_root = match resolve_interp_string(&state.server_settings().server.storage.root) {
-        Ok(path) => PathBuf::from(path),
-        Err(err) => {
-            return ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to resolve server storage root: {err}"),
-            )
-            .into_response();
-        }
-    };
+    let storage_root = state.server_storage_dir();
     let created = match Box::pin(operations::create(
         state.store.as_ref(),
         create_input,
@@ -864,7 +854,7 @@ pub(super) fn run_provenance(headers: &HeaderMap, subject: &Principal) -> RunPro
             version: FABRO_VERSION.to_string(),
         }),
         client:  run_client_provenance(headers),
-        subject: Some(subject.clone()),
+        subject: subject.clone(),
     }
 }
 
@@ -969,7 +959,7 @@ async fn validate_run_manifest(
 async fn substitute_run_variables(
     state: &AppState,
     settings: &mut WorkflowSettings,
-) -> Result<(), ResolveEnvError> {
+) -> Result<(), ResolveError> {
     let variables = state.variables.read().await;
     settings
         .run

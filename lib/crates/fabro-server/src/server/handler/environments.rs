@@ -7,7 +7,7 @@ use fabro_types::settings::InterpString;
 use fabro_types::settings::run::{
     DockerfileSource, EnvironmentImageSettings, EnvironmentLifecycleSettings,
     EnvironmentNetworkSettings, EnvironmentProvider, EnvironmentResourcesSettings,
-    EnvironmentSettings, EnvironmentVolumeSettings,
+    EnvironmentSettings,
 };
 use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
@@ -34,12 +34,12 @@ struct EnvironmentListMeta {
 struct CreateEnvironmentRequest {
     id:        EnvironmentId,
     provider:  EnvironmentProvider,
+    cwd:       Option<String>,
     image:     ApiEnvironmentImageSettings,
     resources: EnvironmentResourcesSettings,
     network:   EnvironmentNetworkSettings,
     lifecycle: EnvironmentLifecycleSettings,
     labels:    HashMap<String, String>,
-    volumes:   Vec<EnvironmentVolumeSettings>,
     env:       HashMap<String, InterpString>,
 }
 
@@ -47,12 +47,12 @@ struct CreateEnvironmentRequest {
 #[serde(deny_unknown_fields)]
 struct ReplaceEnvironmentRequest {
     provider:  EnvironmentProvider,
+    cwd:       Option<String>,
     image:     ApiEnvironmentImageSettings,
     resources: EnvironmentResourcesSettings,
     network:   EnvironmentNetworkSettings,
     lifecycle: EnvironmentLifecycleSettings,
     labels:    HashMap<String, String>,
-    volumes:   Vec<EnvironmentVolumeSettings>,
     env:       HashMap<String, InterpString>,
 }
 
@@ -83,13 +83,16 @@ impl CreateEnvironmentRequest {
             id:       self.id,
             settings: EnvironmentSettings {
                 provider:  self.provider,
+                cwd:       self.cwd,
                 image:     self.image.into_settings()?,
                 resources: self.resources,
                 network:   self.network,
                 lifecycle: self.lifecycle,
                 labels:    self.labels,
-                volumes:   self.volumes,
                 env:       self.env,
+                // ponytail: binds are inline-config only; the REST/server-store
+                // environment surface deliberately doesn't expose them.
+                binds:     Vec::new(),
             },
         })
     }
@@ -99,13 +102,14 @@ impl ReplaceEnvironmentRequest {
     fn into_settings(self) -> Result<EnvironmentSettings, ApiError> {
         Ok(EnvironmentSettings {
             provider:  self.provider,
+            cwd:       self.cwd,
             image:     self.image.into_settings()?,
             resources: self.resources,
             network:   self.network,
             lifecycle: self.lifecycle,
             labels:    self.labels,
-            volumes:   self.volumes,
             env:       self.env,
+            binds:     Vec::new(),
         })
     }
 }
@@ -240,9 +244,9 @@ impl From<EnvironmentStoreError> for ApiError {
                 StatusCode::CONFLICT,
                 format!("environment revision is stale: {id}"),
             ),
-            EnvironmentStoreError::Protected { id } => Self::new(
+            EnvironmentStoreError::Reserved { id } => Self::new(
                 StatusCode::CONFLICT,
-                format!("environment is protected and cannot be deleted: {id}"),
+                format!("environment is reserved and cannot be modified: {id}"),
             ),
             EnvironmentStoreError::Validation { source } => {
                 Self::new(StatusCode::UNPROCESSABLE_ENTITY, source.to_string())

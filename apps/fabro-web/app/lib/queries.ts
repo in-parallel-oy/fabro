@@ -8,6 +8,8 @@ import type {
   AutomationListResponse,
   BoardColumn,
   CommandLogResponse,
+  Environment,
+  EnvironmentListResponse,
   EventEnvelope,
   ListRunsDirectionEnum,
   ListRunsSortEnum,
@@ -45,6 +47,7 @@ import {
   apiResponse,
   authApi,
   automationsApi,
+  environmentsApi,
   fetchAllPages,
   fetchAllStageEvents,
   generatedAxios,
@@ -424,6 +427,20 @@ export function useAutomationRuns(id: string | undefined, opts: AutomationRunsPa
     id ? queryKeys.automations.runs(id, opts) : null,
     () => apiNullableData(() => automationsApi.listAutomationRuns(id!, opts.limit, opts.offset)),
     { keepPreviousData: true },
+  );
+}
+
+export function useEnvironments() {
+  return useSWR<EnvironmentListResponse>(
+    queryKeys.environments.list(),
+    () => apiData(() => environmentsApi.listEnvironments()),
+  );
+}
+
+export function useEnvironment(id: string | undefined) {
+  return useSWR<Environment | null>(
+    id ? queryKeys.environments.detail(id) : null,
+    id ? () => apiNullableData(() => environmentsApi.retrieveEnvironment(id)) : null,
   );
 }
 

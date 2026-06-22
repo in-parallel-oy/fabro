@@ -7,8 +7,10 @@ use std::sync::Arc;
 
 use fabro_llm::error::ProviderErrorKind;
 use fabro_llm::provider::ProviderAdapter;
-use fabro_llm::providers::{AnthropicAdapter, GeminiAdapter, OpenAiAdapter};
-use fabro_llm::types::{FinishReason, Message, Request};
+use fabro_llm::providers::{
+    AnthropicAdapter, BedrockAdapter, GeminiAdapter, OpenAiAdapter, OpenAiCompatibleAdapter,
+};
+use fabro_llm::types::{CostSource, FinishReason, Message, Request};
 use fabro_model::Catalog;
 use fabro_static::EnvVars;
 
@@ -172,6 +174,92 @@ async fn gemini_complete() {
     assert!(response.usage.input_tokens > 0);
     assert!(response.usage.output_tokens > 0);
     assert_eq!(response.provider, "gemini");
+}
+
+#[fabro_macros::e2e_test(live("AWS_BEARER_TOKEN_BEDROCK"))]
+async fn bedrock_complete_with_api_key() {
+    let token = std::env::var(EnvVars::AWS_BEARER_TOKEN_BEDROCK)
+        .expect("AWS_BEARER_TOKEN_BEDROCK must be set");
+    let adapter =
+        BedrockAdapter::new_api_key(token, "https://bedrock-runtime.us-east-1.amazonaws.com")
+            .unwrap()
+            .with_name("bedrock");
+    // Amazon Nova: first-party, no Anthropic-approval gate and no third-party
+    // marketplace subscription, so this runs on any Bedrock-enabled account.
+    let request = make_request("us.amazon.nova-2-lite-v1:0");
+    let response = adapter.complete(&request).await.unwrap();
+
+    assert!(
+        !response.text().is_empty(),
+        "response text should not be empty"
+    );
+    assert!(response.usage.input_tokens > 0);
+    assert!(response.usage.output_tokens > 0);
+    assert_eq!(response.provider, "bedrock");
+}
+
+#[fabro_macros::e2e_test(live("AWS_ACCESS_KEY_ID"))]
+async fn bedrock_complete_with_sigv4() {
+    let adapter = BedrockAdapter::new_sigv4("https://bedrock-runtime.us-east-1.amazonaws.com")
+        .unwrap()
+        .with_name("bedrock");
+    // First-party Nova — see bedrock_complete_with_api_key for why.
+    let request = make_request("us.amazon.nova-2-lite-v1:0");
+    let response = adapter.complete(&request).await.unwrap();
+
+    assert!(
+        !response.text().is_empty(),
+        "response text should not be empty"
+    );
+    assert!(response.usage.input_tokens > 0);
+    assert_eq!(response.provider, "bedrock");
+}
+
+#[fabro_macros::e2e_test(live("AWS_BEARER_TOKEN_BEDROCK"))]
+async fn bedrock_openai_frontier_complete() {
+    let token = std::env::var(EnvVars::AWS_BEARER_TOKEN_BEDROCK)
+        .expect("AWS_BEARER_TOKEN_BEDROCK must be set");
+    // GPT-5.x on Bedrock is the bedrock-mantle Responses surface: the plain
+    // openai adapter pointed at the mantle endpoint with the Bedrock key as
+    // the bearer token.
+    let adapter = OpenAiAdapter::new(token)
+        .with_base_url("https://bedrock-mantle.us-east-1.api.aws/openai/v1")
+        .with_name("bedrock-openai");
+    let request = Request {
+        temperature: None,
+        ..make_request("openai.gpt-5.5")
+    };
+    let response = adapter.complete(&request).await.unwrap();
+
+    assert!(
+        !response.text().is_empty(),
+        "response text should not be empty"
+    );
+    assert!(response.usage.input_tokens > 0);
+    assert_eq!(response.provider, "bedrock-openai");
+}
+
+#[fabro_macros::e2e_test(live("OPENROUTER_API_KEY"))]
+async fn openrouter_complete() {
+    let api_key =
+        std::env::var(EnvVars::OPENROUTER_API_KEY).expect("OPENROUTER_API_KEY must be set");
+    let adapter = OpenAiCompatibleAdapter::new(api_key, "https://openrouter.ai/api/v1")
+        .with_name("openrouter");
+    let request = make_request("deepseek/deepseek-v4-flash");
+    let response = adapter.complete(&request).await.unwrap();
+
+    assert!(
+        !response.text().is_empty(),
+        "response text should not be empty"
+    );
+    assert!(response.usage.input_tokens > 0);
+    assert!(response.usage.output_tokens > 0);
+    assert_eq!(response.provider, "openrouter");
+    assert!(
+        response.cost_usd.is_some(),
+        "OpenRouter responses should carry an authoritative usage.cost",
+    );
+    assert_eq!(response.cost_source, Some(CostSource::Authoritative));
 }
 
 async fn run_multi_turn_cache_test(

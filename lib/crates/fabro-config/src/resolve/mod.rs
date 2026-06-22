@@ -21,14 +21,36 @@ pub(crate) fn require_interp(
     path: &str,
     errors: &mut Vec<ResolveError>,
 ) -> InterpString {
+    require_value(value, path, errors, || InterpString::parse(""))
+}
+
+pub(crate) fn require_string(
+    value: Option<&String>,
+    path: &str,
+    errors: &mut Vec<ResolveError>,
+) -> String {
+    require_value(value, path, errors, String::new)
+}
+
+fn require_value<T: Clone>(
+    value: Option<&T>,
+    path: &str,
+    errors: &mut Vec<ResolveError>,
+    missing: impl FnOnce() -> T,
+) -> T {
     value.cloned().unwrap_or_else(|| {
         errors.push(ResolveError::Missing {
             path: path.to_string(),
         });
-        InterpString::parse("")
+        missing()
     })
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "parsed_value special case: the TCP listen address parses the literal source \
+              (templates intentionally unsupported)"
+)]
 pub(crate) fn parse_socket_addr(
     value: &InterpString,
     path: &str,
@@ -47,8 +69,32 @@ pub(crate) fn parse_socket_addr(
     }
 }
 
-pub(crate) fn default_interp(path: impl AsRef<std::path::Path>) -> InterpString {
-    InterpString::parse(&path.as_ref().to_string_lossy())
+pub(crate) fn default_string(path: impl AsRef<std::path::Path>) -> String {
+    path.as_ref().to_string_lossy().into_owned()
+}
+
+/// Warn when a field demoted out of the interpolation set (D2) still contains
+/// claimed template tokens. These fields are plain `String` now — `{{ vars.*
+/// }}` (which previously substituted via the run-scoped String pass, a
+/// now-removed accident) and `{{ env.* }}` are both treated as literal text.
+/// Other plain-`String` fields still substitute `{{ vars.* }}` until the
+/// String pass itself is retired in a later slice. Unclaimed `{{ ... }}` text
+/// (jq programs, Go templates) never interpolated and does not warn.
+pub(crate) fn warn_if_demoted_template(field: &str, value: Option<&str>) {
+    let Some(value) = value else {
+        return;
+    };
+    if !tracing::enabled!(tracing::Level::WARN) || !value.contains("{{") {
+        return;
+    }
+    if InterpString::parse(value).is_literal() {
+        return;
+    }
+    tracing::warn!(
+        field = %field,
+        "this field no longer interpolates template tokens and uses the value literally; it \
+         was demoted to a plain string in the interpolation unification"
+    );
 }
 
 #[cfg(test)]

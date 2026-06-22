@@ -87,11 +87,11 @@ use fabro_store::{
 };
 #[cfg(test)]
 use fabro_types::BlockedReason;
+use fabro_types::settings::RunNamespace;
 use fabro_types::settings::run::{NotificationRouteSettings, RunMode};
 use fabro_types::settings::server::{
     GithubIntegrationSettings, GithubIntegrationStrategy, LogDestination,
 };
-use fabro_types::settings::{InterpString, RunNamespace};
 use fabro_types::{
     AgentBackend, AskFabro, AskFabroUnavailableReason, EventBody, InterviewQuestionRecord, PairId,
     PairMessageId, PairTarget, PendingReason, Principal, PullRequestLink, QuestionType, RunBlobId,
@@ -141,11 +141,12 @@ use crate::automation_materializer::{
     AutomationRunMaterializeError, AutomationRunMaterializeInput, AutomationRunMaterialized,
     AutomationRunMaterializer, GitRepoCache, ProductionAutomationRunMaterializer,
 };
-use crate::canonical_origin::resolve_canonical_origin;
+use crate::canonical_origin::{canonical_origin_from_effective_web_url, effective_web_url};
 use crate::error::ApiError;
 use crate::github_webhooks::{
     WEBHOOK_ROUTE, WEBHOOK_SECRET_ENV, parse_event_metadata, verify_signature,
 };
+use crate::interp::process_env_var;
 use crate::jwt_auth::{self, AuthMode};
 use crate::principal_middleware::{
     AuthContextSlot, RequestAuth, RequestAuthContext, RequireRunBlob, RequireRunManagementTarget,
@@ -1089,6 +1090,7 @@ pub struct AppState {
     manifest_run_defaults: RwLock<Arc<RunLayer>>,
     manifest_run_settings: RwLock<std::result::Result<RunNamespace, SharedError>>,
     pub(crate) server_settings: RwLock<Arc<ServerSettings>>,
+    effective_web_url: RwLock<String>,
     catalog: RwLock<Arc<Catalog>>,
     pub(crate) env_lookup: EnvLookup,
     pub(crate) github_api_base_url: String,
@@ -1348,10 +1350,7 @@ impl AppState {
     }
 
     pub(crate) fn server_storage_dir(&self) -> PathBuf {
-        PathBuf::from(
-            resolve_interp_string(&self.server_settings().server.storage.root)
-                .expect("server storage root should be resolved at startup"),
-        )
+        PathBuf::from(&self.server_settings().server.storage.root)
     }
 
     /// Scratch directory used by the automation materializer when staging
@@ -1486,15 +1485,15 @@ impl AppState {
         daemon.bind.to_target().parse()
     }
 
-    pub(crate) fn resolve_interp(&self, value: &InterpString) -> anyhow::Result<String> {
-        value
-            .resolve(|name| (self.env_lookup)(name))
-            .map(|resolved| resolved.value)
-            .map_err(anyhow::Error::from)
+    pub(crate) fn effective_web_url(&self) -> String {
+        self.effective_web_url
+            .read()
+            .expect("effective web url lock poisoned")
+            .clone()
     }
 
     pub(crate) fn canonical_origin(&self) -> Result<String, String> {
-        resolve_canonical_origin(&self.server_settings().server, &self.env_lookup)
+        canonical_origin_from_effective_web_url(&self.effective_web_url())
     }
 
     pub(crate) fn session_key(&self) -> Option<Key> {
@@ -1508,7 +1507,7 @@ impl AppState {
     ) -> Result<Option<fabro_github::GitHubCredentials>, String> {
         match settings.strategy {
             GithubIntegrationStrategy::App => {
-                let Some(app_id) = settings.app_id.as_ref().map(InterpString::as_source) else {
+                let Some(app_id) = settings.app_id.clone() else {
                     return Ok(None);
                 };
                 let raw = self.vault_secret(EnvVars::GITHUB_APP_PRIVATE_KEY);
@@ -1520,7 +1519,7 @@ impl AppState {
                     fabro_github::GitHubAppCredentials {
                         app_id,
                         private_key_pem,
-                        slug: settings.slug.as_ref().map(InterpString::as_source),
+                        slug: settings.slug.clone(),
                     },
                 )))
             }
@@ -1571,6 +1570,8 @@ impl AppState {
         } = resolved_settings;
         let server_settings = Arc::new(server_settings);
         let manifest_run_defaults = Arc::new(manifest_run_defaults);
+        let effective_web_url =
+            effective_web_url(&server_settings.server, |name| (self.env_lookup)(name));
         let manifest_run_settings = resolve_manifest_run_settings_with_catalog(
             manifest_run_defaults.as_ref(),
             &self.environment_store,
@@ -1579,8 +1580,7 @@ impl AppState {
             Catalog::from_builtin_with_overrides(&llm_catalog_settings)
                 .context("building LLM model catalog")?,
         );
-        resolve_canonical_origin(&server_settings.server, &self.env_lookup)
-            .map_err(anyhow::Error::msg)?;
+        canonical_origin_from_effective_web_url(&effective_web_url).map_err(anyhow::Error::msg)?;
 
         *self
             .manifest_run_defaults
@@ -1594,6 +1594,10 @@ impl AppState {
             .server_settings
             .write()
             .expect("server settings lock poisoned") = server_settings;
+        *self
+            .effective_web_url
+            .write()
+            .expect("effective web url lock poisoned") = effective_web_url;
         *self.catalog.write().expect("catalog lock poisoned") = catalog;
         Ok(())
     }
@@ -1625,21 +1629,6 @@ fn decode_secret_pem(name: &str, raw: &str) -> Result<String, String> {
         .map_err(|err| format!("{name} is not valid PEM or base64: {err}"))?;
     String::from_utf8(pem_bytes)
         .map_err(|err| format!("{name} base64 decoded to invalid UTF-8: {err}"))
-}
-
-fn resolve_interp_string(value: &InterpString) -> anyhow::Result<String> {
-    value
-        .resolve(process_env_var)
-        .map(|resolved| resolved.value)
-        .map_err(anyhow::Error::from)
-}
-
-#[expect(
-    clippy::disallowed_methods,
-    reason = "Server state owns process-env lookup facades for interpolation and non-secret configuration."
-)]
-pub(crate) fn process_env_var(name: &str) -> Option<String> {
-    std::env::var(name).ok()
 }
 
 fn start_optional_slack_service(state: &Arc<AppState>) {
@@ -1874,7 +1863,10 @@ async fn http_log_middleware(mut req: axum_extract::Request, next: Next) -> Resp
     let status = response.status().as_u16();
     let latency_ms = start.elapsed().as_millis();
     let auth_context = auth_slot.log_snapshot();
-    let principal_kind = auth_context.principal.kind();
+    let principal_kind = auth_context
+        .principal
+        .as_ref()
+        .map_or("none", Principal::kind);
     let auth_status = auth_context.auth_status.as_str();
 
     macro_rules! emit_http_log {
@@ -1912,27 +1904,27 @@ async fn http_log_middleware(mut req: axum_extract::Request, next: Next) -> Resp
     macro_rules! emit_principal_http_log {
         ($level:ident) => {{
             match &auth_context.principal {
-                Principal::User(user) => emit_http_log!(
+                Some(Principal::User(user)) => emit_http_log!(
                     $level,
                     user_auth_method = user.auth_method.as_str(),
                     idp_issuer = user.identity.issuer(),
                     idp_subject = user.identity.subject(),
                     login = user.login.as_str(),
                 ),
-                Principal::Worker { run_id } => {
+                Some(Principal::Worker { run_id }) => {
                     emit_http_log!($level, run_id = run_id.to_string().as_str(),)
                 }
-                Principal::Webhook { delivery_id } => {
+                Some(Principal::Webhook { delivery_id }) => {
                     emit_http_log!($level, delivery_id = delivery_id.as_str(),)
                 }
-                Principal::Slack {
+                Some(Principal::Slack {
                     team_id, user_id, ..
-                } => emit_http_log!(
+                }) => emit_http_log!(
                     $level,
                     team_id = team_id.as_str(),
                     user_id = user_id.as_str(),
                 ),
-                Principal::Agent { .. } | Principal::System { .. } | Principal::Anonymous => {
+                None | Some(Principal::Agent { .. } | Principal::System { .. }) => {
                     emit_http_log!($level)
                 }
             }
@@ -2317,8 +2309,15 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
             .context("load automations")?,
     );
     let environment_dir = environment_dir_for_active_config(&active_config_path);
+    let local_provider_enabled = resolved_settings
+        .server_settings
+        .server
+        .sandbox
+        .providers
+        .local
+        .enabled;
     let environment_store = Arc::new(
-        EnvironmentStore::load_or_seed(environment_dir)
+        EnvironmentStore::load(environment_dir, local_provider_enabled)
             .map_err(anyhow::Error::new)
             .context("load environments")?,
     );
@@ -2336,6 +2335,8 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
         Arc::new(VaultCredentialSource::vault_only(Arc::clone(&vault)));
     let (global_event_tx, _) = broadcast::channel(4096);
     let current_server_settings = Arc::new(resolved_settings.server_settings);
+    let current_effective_web_url =
+        effective_web_url(&current_server_settings.server, |name| env_lookup(name));
     let current_manifest_run_defaults = Arc::new(resolved_settings.manifest_run_defaults);
     let current_manifest_run_settings = resolve_manifest_run_settings_with_catalog(
         current_manifest_run_defaults.as_ref(),
@@ -2398,10 +2399,7 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
     };
     let worker_tokens = worker_token_keys_from_server_secrets(&server_secrets)?;
     let github_api_base_url = github_api_base_url.unwrap_or_else(fabro_github::github_api_base_url);
-    let storage_root = PathBuf::from(
-        resolve_interp_string(&current_server_settings.server.storage.root)
-            .context("resolve server storage root")?,
-    );
+    let storage_root = PathBuf::from(&current_server_settings.server.storage.root);
     let automation_repo_cache = Arc::new(GitRepoCache::new(
         Storage::new(&storage_root)
             .cache_dir()
@@ -2457,6 +2455,7 @@ pub(crate) fn build_app_state(config: AppStateConfig) -> anyhow::Result<Arc<AppS
         manifest_run_defaults: RwLock::new(current_manifest_run_defaults),
         manifest_run_settings: RwLock::new(current_manifest_run_settings),
         server_settings: RwLock::new(current_server_settings),
+        effective_web_url: RwLock::new(current_effective_web_url),
         catalog: RwLock::new(current_catalog),
         env_lookup: Arc::clone(&env_lookup),
         github_api_base_url,

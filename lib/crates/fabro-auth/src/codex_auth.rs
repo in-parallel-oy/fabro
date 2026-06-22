@@ -41,10 +41,10 @@ pub struct CodexAuthMaterial {
 ///   next run.
 /// - Otherwise refresh once and hand the refreshed credential back so the
 ///   caller can persist it to the vault (the single, write-back-aware rotation
-///   path). Note the `id_token` is short-lived (≈1h) even when the access
-///   token lives far longer, so a fresh access token alone is not enough — a
-///   lapsed `id_token` is rejected by codex at `auth.json` load, so we refresh
-///   on its expiry too rather than writing a dead one.
+///   path). Note the `id_token` is short-lived (≈1h) even when the access token
+///   lives far longer, so a fresh access token alone is not enough — a lapsed
+///   `id_token` is rejected by codex at `auth.json` load, so we refresh on its
+///   expiry too rather than writing a dead one.
 ///
 /// The written file deliberately carries **no usable refresh token**: with a
 /// fresh access token codex won't try to refresh, and without a refresh token

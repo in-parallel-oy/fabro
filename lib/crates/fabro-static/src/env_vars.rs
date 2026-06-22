@@ -40,7 +40,9 @@ impl EnvVars {
 
     // LLM providers and tool integrations
     pub const ANTHROPIC_API_KEY: &'static str = "ANTHROPIC_API_KEY";
+    pub const AWS_BEARER_TOKEN_BEDROCK: &'static str = "AWS_BEARER_TOKEN_BEDROCK";
     pub const ANTHROPIC_BASE_URL: &'static str = "ANTHROPIC_BASE_URL";
+    pub const BEDROCK_API_KEY: &'static str = "BEDROCK_API_KEY";
     pub const BRAVE_SEARCH_API_KEY: &'static str = "BRAVE_SEARCH_API_KEY";
     pub const CHATGPT_ACCOUNT_ID: &'static str = "CHATGPT_ACCOUNT_ID";
     pub const GEMINI_API_KEY: &'static str = "GEMINI_API_KEY";
@@ -56,6 +58,7 @@ impl EnvVars {
     pub const OPENAI_PROJECT: &'static str = "OPENAI_PROJECT";
     pub const OPENAI_ORG_ID: &'static str = "OPENAI_ORG_ID";
     pub const OPENAI_PROJECT_ID: &'static str = "OPENAI_PROJECT_ID";
+    pub const OPENROUTER_API_KEY: &'static str = "OPENROUTER_API_KEY";
     pub const ZAI_API_KEY: &'static str = "ZAI_API_KEY";
 
     // GitHub, OAuth, and Slack
@@ -80,11 +83,14 @@ impl EnvVars {
         "AWS_CONTAINER_CREDENTIALS_FULL_URI";
     pub const AWS_CONTAINER_CREDENTIALS_RELATIVE_URI: &'static str =
         "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI";
+    pub const AWS_DEFAULT_REGION: &'static str = "AWS_DEFAULT_REGION";
     pub const AWS_ENDPOINT: &'static str = "AWS_ENDPOINT";
     pub const AWS_ENDPOINT_URL_S3: &'static str = "AWS_ENDPOINT_URL_S3";
     pub const AWS_ENDPOINT_URL_STS: &'static str = "AWS_ENDPOINT_URL_STS";
     pub const AWS_IMDSV1_FALLBACK: &'static str = "AWS_IMDSV1_FALLBACK";
     pub const AWS_METADATA_ENDPOINT: &'static str = "AWS_METADATA_ENDPOINT";
+    pub const AWS_PROFILE: &'static str = "AWS_PROFILE";
+    pub const AWS_REGION: &'static str = "AWS_REGION";
     pub const AWS_ROLE_ARN: &'static str = "AWS_ROLE_ARN";
     pub const AWS_ROLE_SESSION_NAME: &'static str = "AWS_ROLE_SESSION_NAME";
     pub const AWS_SECRET_ACCESS_KEY: &'static str = "AWS_SECRET_ACCESS_KEY";
@@ -178,6 +184,8 @@ mod tests {
             EnvVars::FABRO_WORKER_TOKEN,
             EnvVars::ANTHROPIC_API_KEY,
             EnvVars::ANTHROPIC_BASE_URL,
+            EnvVars::AWS_BEARER_TOKEN_BEDROCK,
+            EnvVars::BEDROCK_API_KEY,
             EnvVars::BRAVE_SEARCH_API_KEY,
             EnvVars::CHATGPT_ACCOUNT_ID,
             EnvVars::GEMINI_API_KEY,
@@ -193,6 +201,7 @@ mod tests {
             EnvVars::OPENAI_PROJECT,
             EnvVars::OPENAI_ORG_ID,
             EnvVars::OPENAI_PROJECT_ID,
+            EnvVars::OPENROUTER_API_KEY,
             EnvVars::ZAI_API_KEY,
             EnvVars::GH_TOKEN,
             EnvVars::GITHUB_APP_CLIENT_SECRET,
@@ -210,11 +219,14 @@ mod tests {
             EnvVars::AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE,
             EnvVars::AWS_CONTAINER_CREDENTIALS_FULL_URI,
             EnvVars::AWS_CONTAINER_CREDENTIALS_RELATIVE_URI,
+            EnvVars::AWS_DEFAULT_REGION,
             EnvVars::AWS_ENDPOINT,
             EnvVars::AWS_ENDPOINT_URL_S3,
             EnvVars::AWS_ENDPOINT_URL_STS,
             EnvVars::AWS_IMDSV1_FALLBACK,
             EnvVars::AWS_METADATA_ENDPOINT,
+            EnvVars::AWS_PROFILE,
+            EnvVars::AWS_REGION,
             EnvVars::AWS_ROLE_ARN,
             EnvVars::AWS_ROLE_SESSION_NAME,
             EnvVars::AWS_SECRET_ACCESS_KEY,

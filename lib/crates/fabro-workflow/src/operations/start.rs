@@ -1,27 +1,27 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use fabro_auth::{CredentialSource, EnvCredentialSource, VaultCredentialSource};
 use fabro_interview::{AutoApproveInterviewer, Interviewer};
 use fabro_llm::client::Client as LlmClient;
-use fabro_mcp::config::{McpServerSettings, McpTransport};
+use fabro_mcp::config::McpServerSettings;
 use fabro_model::{Catalog, FallbackTarget, ProviderId};
 use fabro_sandbox::daytona::DaytonaConfig;
 use fabro_sandbox::from_environment::{
     daytona_config_from_environment, docker_config_from_environment,
+    local_working_directory_from_environment,
 };
 use fabro_sandbox::{DockerSandboxOptions, SandboxSpec};
 use fabro_static::EnvVars;
 use fabro_types::settings::run::{
     ApprovalMode, HookDefinition as ResolvedHookDefinition, HookEvent as ResolvedHookEvent,
     HookType as ResolvedHookType, McpServerSettings as ResolvedMcpServerSettings,
-    McpTransport as ResolvedMcpTransport, PullRequestSettings, RunMode,
-    RunModelSettings as ResolvedRunModelSettings, RunNamespace as ResolvedRunSettings,
-    TlsMode as ResolvedTlsMode,
+    PullRequestSettings, RunMode, RunModelSettings as ResolvedRunModelSettings,
+    RunNamespace as ResolvedRunSettings, TlsMode as ResolvedTlsMode,
 };
-use fabro_types::settings::{InterpString, ModelRegistry, ResolvedModelRef};
+use fabro_types::settings::{ModelRegistry, ResolvedModelRef};
 use fabro_types::{ManifestPath, RunId, RunRunnableSource, SandboxProviderKind};
 use fabro_vault::Vault;
 use tokio::runtime::Handle;
@@ -348,10 +348,6 @@ impl RunSession {
     async fn new(persisted: &Persisted, services: StartServices) -> Result<Self, Error> {
         let record = persisted.run_spec();
         let settings = &record.settings;
-        let working_directory = record
-            .source_directory
-            .as_deref()
-            .map_or_else(|| PathBuf::from("."), PathBuf::from);
         let state = services
             .run_store
             .state()
@@ -372,7 +368,6 @@ impl RunSession {
             accepted_definition.map(|definition| Arc::new(definition.workflow_bundle()));
 
         let resolved = &settings.run;
-
         let sandbox_provider =
             resolve_sandbox_provider(resolved).effective_for(resolved.execution.mode);
         let catalog = Arc::clone(&services.catalog);
@@ -383,13 +378,23 @@ impl RunSession {
             .agent
             .mcps
             .values()
-            .map(runtime_mcp_server)
-            .collect();
+            .map(|settings| runtime_mcp_server(settings, process_env_var))
+            .collect::<Result<Vec<_>, _>>()?;
 
         let sandbox = match sandbox_provider {
-            SandboxProviderKind::Local => SandboxSpec::Local {
-                working_directory: working_directory.clone(),
-            },
+            SandboxProviderKind::Local => {
+                let working_directory = local_working_directory_from_environment(
+                    &resolved.environment,
+                    record.source_directory.as_deref().map(Path::new),
+                )
+                .map_err(|err| {
+                    Error::engine_with_source(
+                        "Failed to resolve local environment working directory",
+                        err,
+                    )
+                })?;
+                SandboxSpec::Local { working_directory }
+            }
             SandboxProviderKind::Docker => SandboxSpec::Docker {
                 config:           resolve_docker_config(resolved),
                 github_app:       services.github_app.clone(),
@@ -565,27 +570,23 @@ fn resolve_start_llm(
     configured: &[ProviderId],
     settings: &ResolvedRunSettings,
 ) -> Result<ResolvedStartLlm, Error> {
-    let model = settings.model.name.as_ref().map_or_else(
-        || catalog.default_for_configured_ids(configured).id.clone(),
-        InterpString::as_source,
-    );
+    let model = settings
+        .model
+        .name
+        .clone()
+        .unwrap_or_else(|| catalog.default_for_configured_ids(configured).id.clone());
     let provider = settings
         .model
         .provider
-        .as_ref()
-        .map(InterpString::as_source)
+        .as_deref()
         .filter(|value| !value.is_empty());
 
     let default_provider_id = catalog
         .default_for_configured_ids(configured)
         .provider
         .clone();
-    let provider_context = routing::resolve_provider_context(
-        catalog,
-        &default_provider_id,
-        &model,
-        provider.as_deref(),
-    )?;
+    let provider_context =
+        routing::resolve_provider_context(catalog, &default_provider_id, &model, provider)?;
     let provider_id = provider_context.provider_id;
     let fallback_chain = resolve_fallback_chain(catalog, &provider_id, &model, &settings.model);
 
@@ -665,40 +666,28 @@ impl ModelRegistry for CatalogModelRegistry<'_> {
     }
 }
 
-fn runtime_mcp_server(settings: &ResolvedMcpServerSettings) -> McpServerSettings {
-    McpServerSettings {
-        name:                 settings.name.clone(),
-        transport:            match &settings.transport {
-            ResolvedMcpTransport::Stdio { command, env } => McpTransport::Stdio {
-                command: command.clone(),
-                env:     env.clone(),
-            },
-            ResolvedMcpTransport::Http {
-                protocol,
-                url,
-                headers,
-            } => McpTransport::Http {
-                protocol: *protocol,
-                url:      url.clone(),
-                headers:  headers.clone(),
-            },
-            ResolvedMcpTransport::Sandbox {
-                protocol,
-                command,
-                port,
-                env,
-            } => McpTransport::Sandbox {
-                protocol: *protocol,
-                command:  command.clone(),
-                port:     *port,
-                env:      env.clone(),
-            },
-        },
-        current_dir:          None,
-        clear_env:            false,
-        startup_timeout_secs: settings.startup_timeout_secs,
-        tool_timeout_secs:    settings.tool_timeout_secs,
-    }
+/// Build the launch-time MCP config from resolved settings, resolving any
+/// `{{ env.* }}` tokens in the transport (`command`/`url`/`env`/`headers`)
+/// against the worker process environment — the run boundary where the MCP is
+/// actually launched.
+///
+/// The resolution itself lives on the type
+/// ([`McpServerSettings::resolve_transport_env`]) so `fabro run` (here) and
+/// `fabro exec` share one resolver; this wrapper just adds the server name to
+/// the error. MCP transport strings are carried in source form out of the
+/// config resolve layer so `fabro validate` stays portable (it never requires
+/// env to be set), and a referenced env var that is unset is a hard error —
+/// no fallback to the unresolved source.
+fn runtime_mcp_server(
+    settings: &ResolvedMcpServerSettings,
+    env_lookup: impl FnMut(&str) -> Option<String>,
+) -> Result<McpServerSettings, Error> {
+    settings.resolve_transport_env(env_lookup).map_err(|err| {
+        Error::engine_with_source(
+            format!("failed to resolve MCP server {:?}", settings.name),
+            err,
+        )
+    })
 }
 
 fn runtime_hook_definition(definition: &ResolvedHookDefinition) -> fabro_hooks::HookDefinition {
@@ -1116,20 +1105,22 @@ async fn persist_detached_failure(
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
     use chrono::Utc;
     use fabro_config::{
-        EnvironmentImageLayer, EnvironmentNetworkLayer, EnvironmentResourcesLayer,
-        EnvironmentVolumeLayer, RunCloneLayer, RunEnvironmentLayer, RunExecutionLayer, RunLayer,
-        StickyMap, WorkflowSettingsBuilder,
+        EnvironmentImageLayer, EnvironmentNetworkLayer, EnvironmentResourcesLayer, RunCloneLayer,
+        RunEnvironmentLayer, RunExecutionLayer, RunLayer, StickyMap, WorkflowSettingsBuilder,
     };
     use fabro_store::Database;
-    use fabro_types::settings::run::RunMode;
+    use fabro_types::settings::run::{McpTransport as ResolvedMcpTransport, RunMode};
     use fabro_types::settings::{InterpString, ModelRef};
-    use fabro_types::{BilledModelUsage, ManifestPath, StageTiming, WorkflowSettings, fixtures};
+    use fabro_types::{
+        BilledModelUsage, ManifestPath, StageTiming, WorkflowSettings, fixtures, test_support,
+    };
     use object_store::memory::InMemory;
 
     use super::*;
@@ -1297,7 +1288,7 @@ reasoning = false
         .unwrap();
         let catalog = Catalog::from_builtin_with_overrides(&overrides).unwrap();
         let mut settings = ResolvedRunSettings::default();
-        settings.model.name = Some(InterpString::parse("ac"));
+        settings.model.name = Some("ac".to_string());
 
         let resolved = resolve_start_llm(&catalog, &[], &settings).unwrap();
 
@@ -1316,6 +1307,31 @@ reasoning = false
 
         assert!(resolve_docker_config(&settings.run).skip_clone);
         assert!(resolve_daytona_config(&settings.run).skip_clone);
+    }
+
+    #[test]
+    fn runtime_mcp_server_wraps_resolve_error_source() {
+        let settings = ResolvedMcpServerSettings {
+            name: "gemini".to_string(),
+            transport: ResolvedMcpTransport::Stdio {
+                command: vec!["python".to_string()],
+                env:     HashMap::from([(
+                    "GEMINI_API_KEY".to_string(),
+                    "{{ env.GEMINI_API_KEY }}".to_string(),
+                )]),
+            },
+            ..ResolvedMcpServerSettings::default()
+        };
+
+        let err = runtime_mcp_server(&settings, |_| None).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "Engine error: failed to resolve MCP server \"gemini\""
+        );
+        let causes = err.causes();
+        assert_eq!(causes.len(), 1);
+        assert!(causes[0].contains("GEMINI_API_KEY"));
     }
 
     #[test]
@@ -1351,29 +1367,6 @@ reasoning = false
         assert_eq!(config.memory_limit, Some(2_000_000_000));
         assert_eq!(config.network_mode.as_deref(), Some("none"));
         assert_eq!(config.env_vars, vec!["NODE_ENV=test"]);
-    }
-
-    #[test]
-    fn runtime_daytona_config_preserves_volume_mounts() {
-        let settings = settings_from_run_layer(RunLayer {
-            environment: Some(RunEnvironmentLayer {
-                volumes: Some(vec![EnvironmentVolumeLayer {
-                    id:         "vol_auth".to_string(),
-                    mount_path: "/home/daytona/.config".to_string(),
-                    subpath:    Some("agents".to_string()),
-                    read_only:  false,
-                }]),
-                ..RunEnvironmentLayer::default()
-            }),
-            ..RunLayer::default()
-        });
-
-        let config = resolve_daytona_config(&settings.run);
-
-        assert_eq!(config.volumes.len(), 1);
-        assert_eq!(config.volumes[0].volume_id, "vol_auth");
-        assert_eq!(config.volumes[0].mount_path, "/home/daytona/.config");
-        assert_eq!(config.volumes[0].subpath.as_deref(), Some("agents"));
     }
 
     #[test]
@@ -1439,7 +1432,7 @@ reasoning = false
                 git: None,
                 fork_source_ref: None,
                 parent_id: None,
-                provenance: None,
+                provenance: test_support::test_run_provenance(),
                 configured_providers: Vec::new(),
                 web_url: None,
             },
@@ -1861,7 +1854,7 @@ reasoning = false
                 git: None,
                 fork_source_ref: None,
                 parent_id: None,
-                provenance: None,
+                provenance: test_support::test_run_provenance(),
                 configured_providers: Vec::new(),
                 web_url: None,
             },

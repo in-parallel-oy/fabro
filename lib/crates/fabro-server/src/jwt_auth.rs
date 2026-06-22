@@ -14,7 +14,9 @@ use tracing::info;
 #[cfg(test)]
 use crate::auth::REFRESH_TOKEN_PREFIX;
 use crate::auth::{self, AuthErrorCode, JwtError, JwtSigningKey, KeyDeriveError};
+use crate::canonical_origin::effective_web_url;
 use crate::error::ApiError;
+use crate::interp::process_env_var;
 
 type HmacSha256 = Hmac<Sha256>;
 const DEV_TOKEN_COMPARE_KEY: &[u8] = b"fabro-dev-token-compare-key";
@@ -56,14 +58,6 @@ pub enum AuthMode {
 
 pub fn resolve_auth_mode(settings: &ServerNamespace) -> Result<AuthMode> {
     resolve_auth_mode_with_lookup(settings, process_env_var)
-}
-
-#[expect(
-    clippy::disallowed_methods,
-    reason = "Server auth startup validation intentionally reads process env for server secrets."
-)]
-fn process_env_var(name: &str) -> Option<String> {
-    std::env::var(name).ok()
 }
 
 pub fn resolve_auth_mode_with_lookup<F>(settings: &ServerNamespace, lookup: F) -> Result<AuthMode>
@@ -145,22 +139,16 @@ fn resolve_jwt_issuer<F>(settings: &ServerNamespace, lookup: &F) -> String
 where
     F: Fn(&str) -> Option<String>,
 {
+    let web_url = effective_web_url(settings, lookup);
+    if !web_url.is_empty() {
+        return web_url;
+    }
+
     settings
-        .web
+        .api
         .url
-        .resolve(|name| lookup(name))
-        .ok()
-        .map(|resolved| resolved.value)
+        .clone()
         .filter(|value| !value.is_empty())
-        .or_else(|| {
-            settings
-                .api
-                .url
-                .as_ref()
-                .and_then(|url| url.resolve(|name| lookup(name)).ok())
-                .map(|resolved| resolved.value)
-                .filter(|value| !value.is_empty())
-        })
         .unwrap_or_else(|| "fabro-server".to_string())
 }
 

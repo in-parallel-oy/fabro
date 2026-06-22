@@ -12,7 +12,7 @@
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
-use fabro_types::settings::{InterpString, RunNamespace};
+use fabro_types::settings::RunNamespace;
 use serde::Serialize;
 
 use crate::{Error, Result, WorkflowSettingsBuilder, run};
@@ -145,7 +145,7 @@ fn sibling_workflow_toml_for(graph: &Path) -> Option<PathBuf> {
 }
 
 pub fn resolve_working_directory_from_run(run: &RunNamespace, caller_cwd: &Path) -> PathBuf {
-    let Some(work_dir) = run.working_dir.as_ref().map(InterpString::as_source) else {
+    let Some(work_dir) = run.working_dir.as_deref() else {
         return caller_cwd.to_path_buf();
     };
     let path = PathBuf::from(work_dir);
@@ -551,7 +551,7 @@ directory = "../custom"
         let cwd = Path::new("/tmp/workspace");
         let resolved = resolve_working_directory_from_run(
             &RunNamespace {
-                working_dir: Some(InterpString::parse("repo")),
+                working_dir: Some("repo".to_string()),
                 ..RunNamespace::default()
             },
             cwd,

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::disallowed_methods,
+    reason = "tests assert the raw template source"
+)]
+
 use fabro_types::settings::InterpString;
 use fabro_types::settings::cli::{OutputFormat, OutputVerbosity};
 use fabro_types::settings::server::LogDestination;
@@ -310,9 +315,6 @@ bucket = "higher-bucket"
 
     let merged = higher.combine(lower);
     let s3 = merged.server.unwrap().artifacts.unwrap().s3.unwrap();
-    assert_eq!(
-        s3.bucket.map(|bucket| bucket.as_source()),
-        Some("higher-bucket".to_string())
-    );
+    assert_eq!(s3.bucket, Some("higher-bucket".to_string()));
     assert_eq!(s3.region, None);
 }

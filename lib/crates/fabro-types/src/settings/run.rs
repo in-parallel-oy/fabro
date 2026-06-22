@@ -14,7 +14,7 @@ use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 
 use super::duration::Duration;
-use super::interp::{InterpString, ResolveEnvError};
+use super::interp::{InterpString, Namespace, ResolveError};
 use super::model_ref::ModelRef;
 use super::size::Size;
 
@@ -22,7 +22,7 @@ use super::size::Size;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunNamespace {
     pub goal:          Option<RunGoal>,
-    pub working_dir:   Option<InterpString>,
+    pub working_dir:   Option<String>,
     pub metadata:      HashMap<String, String>,
     pub inputs:        HashMap<String, toml::Value>,
     pub model:         RunModelSettings,
@@ -77,21 +77,17 @@ impl Default for RunNamespace {
 }
 
 impl RunNamespace {
-    pub fn substitute_variables<F>(&mut self, mut lookup: F) -> Result<(), ResolveEnvError>
+    pub fn substitute_variables<F>(&mut self, mut lookup: F) -> Result<(), ResolveError>
     where
         F: FnMut(&str) -> Option<String>,
     {
         substitute_goal(&mut self.goal, &mut lookup)?;
-        substitute_option(&mut self.working_dir, &mut lookup)?;
         substitute_string_map(&mut self.metadata, &mut lookup)?;
-        substitute_option(&mut self.model.provider, &mut lookup)?;
-        substitute_option(&mut self.model.name, &mut lookup)?;
+        // run.working_dir, run.model.provider/name, and run.git.author.* were
+        // demoted to plain `String` and removed from this pass (D2/D11):
+        // values stay literal.
         substitute_option_string(&mut self.model.controls.reasoning_effort, &mut lookup)?;
         substitute_option_string(&mut self.model.controls.speed, &mut lookup)?;
-        if let Some(author) = &mut self.git.author {
-            substitute_option(&mut author.name, &mut lookup)?;
-            substitute_option(&mut author.email, &mut lookup)?;
-        }
         substitute_string_vec(&mut self.checkpoint.exclude_globs, &mut lookup)?;
         substitute_environment(&mut self.environment, &mut lookup)?;
         substitute_map(&mut self.environment.env, &mut lookup)?;
@@ -107,8 +103,8 @@ impl RunNamespace {
             substitute_option(&mut slack.channel, &mut lookup)?;
         }
         substitute_map(&mut self.integrations.github.permissions, &mut lookup)?;
-        substitute_option(&mut self.scm.owner, &mut lookup)?;
-        substitute_option(&mut self.scm.repository, &mut lookup)?;
+        // run.scm.owner/repository were demoted and removed from this pass
+        // (D2): values stay literal.
         substitute_string_vec(&mut self.prepare.commands, &mut lookup)?;
         for mcp in self.agent.mcps.values_mut() {
             substitute_string(&mut mcp.name, &mut lookup)?;
@@ -128,7 +124,7 @@ impl RunNamespace {
     }
 }
 
-fn substitute_goal<F>(goal: &mut Option<RunGoal>, lookup: &mut F) -> Result<(), ResolveEnvError>
+fn substitute_goal<F>(goal: &mut Option<RunGoal>, lookup: &mut F) -> Result<(), ResolveError>
 where
     F: FnMut(&str) -> Option<String>,
 {
@@ -141,7 +137,7 @@ where
 fn substitute_option<F>(
     value: &mut Option<InterpString>,
     lookup: &mut F,
-) -> Result<(), ResolveEnvError>
+) -> Result<(), ResolveError>
 where
     F: FnMut(&str) -> Option<String>,
 {
@@ -154,7 +150,7 @@ where
 fn substitute_map<F>(
     values: &mut HashMap<String, InterpString>,
     lookup: &mut F,
-) -> Result<(), ResolveEnvError>
+) -> Result<(), ResolveError>
 where
     F: FnMut(&str) -> Option<String>,
 {
@@ -164,27 +160,28 @@ where
     Ok(())
 }
 
-fn substitute<F>(value: &mut InterpString, lookup: &mut F) -> Result<(), ResolveEnvError>
+fn substitute<F>(value: &mut InterpString, lookup: &mut F) -> Result<(), ResolveError>
 where
     F: FnMut(&str) -> Option<String>,
 {
-    if !value.references_vars() {
+    if !value.references(Namespace::Vars) {
         return Ok(());
     }
     *value = value.substitute_variables(lookup)?;
     Ok(())
 }
 
-fn substitute_string<F>(value: &mut String, lookup: &mut F) -> Result<(), ResolveEnvError>
+fn substitute_string<F>(value: &mut String, lookup: &mut F) -> Result<(), ResolveError>
 where
     F: FnMut(&str) -> Option<String>,
 {
     if !may_reference_variable(value) {
         return Ok(());
     }
-    let parsed = InterpString::parse(value);
-    if parsed.references_vars() {
-        *value = parsed.substitute_variables(lookup)?.as_source();
+    if let std::borrow::Cow::Owned(substituted) =
+        InterpString::substitute_variables_in_str_cow(value, lookup)?
+    {
+        *value = substituted;
     }
     Ok(())
 }
@@ -196,7 +193,7 @@ fn may_reference_variable(value: &str) -> bool {
 fn substitute_option_string<F>(
     value: &mut Option<String>,
     lookup: &mut F,
-) -> Result<(), ResolveEnvError>
+) -> Result<(), ResolveError>
 where
     F: FnMut(&str) -> Option<String>,
 {
@@ -206,7 +203,7 @@ where
     }
 }
 
-fn substitute_string_vec<F>(values: &mut [String], lookup: &mut F) -> Result<(), ResolveEnvError>
+fn substitute_string_vec<F>(values: &mut [String], lookup: &mut F) -> Result<(), ResolveError>
 where
     F: FnMut(&str) -> Option<String>,
 {
@@ -219,7 +216,7 @@ where
 fn substitute_string_map<F>(
     values: &mut HashMap<String, String>,
     lookup: &mut F,
-) -> Result<(), ResolveEnvError>
+) -> Result<(), ResolveError>
 where
     F: FnMut(&str) -> Option<String>,
 {
@@ -232,26 +229,61 @@ where
 fn substitute_mcp_transport<F>(
     transport: &mut McpTransport,
     lookup: &mut F,
-) -> Result<(), ResolveEnvError>
+) -> Result<(), ResolveError>
 where
     F: FnMut(&str) -> Option<String>,
 {
+    visit_mcp_transport_strings(transport, &mut |value| {
+        substitute_string(value, &mut *lookup)
+    })
+}
+
+fn visit_mcp_transport_strings<F>(
+    transport: &mut McpTransport,
+    visitor: &mut F,
+) -> Result<(), ResolveError>
+where
+    F: FnMut(&mut String) -> Result<(), ResolveError>,
+{
     match transport {
         McpTransport::Stdio { command, env } | McpTransport::Sandbox { command, env, .. } => {
-            substitute_string_vec(command, lookup)?;
-            substitute_string_map(env, lookup)
+            visit_string_vec(command, visitor)?;
+            visit_string_map(env, visitor)
         }
         McpTransport::Http { url, headers, .. } => {
-            substitute_string(url, lookup)?;
-            substitute_string_map(headers, lookup)
+            visitor(url)?;
+            visit_string_map(headers, visitor)
         }
     }
+}
+
+fn visit_string_vec<F>(values: &mut [String], visitor: &mut F) -> Result<(), ResolveError>
+where
+    F: FnMut(&mut String) -> Result<(), ResolveError>,
+{
+    for value in values {
+        visitor(value)?;
+    }
+    Ok(())
+}
+
+fn visit_string_map<F>(
+    values: &mut HashMap<String, String>,
+    visitor: &mut F,
+) -> Result<(), ResolveError>
+where
+    F: FnMut(&mut String) -> Result<(), ResolveError>,
+{
+    for value in values.values_mut() {
+        visitor(value)?;
+    }
+    Ok(())
 }
 
 fn substitute_environment<F>(
     environment: &mut RunEnvironmentSettings,
     lookup: &mut F,
-) -> Result<(), ResolveEnvError>
+) -> Result<(), ResolveError>
 where
     F: FnMut(&str) -> Option<String>,
 {
@@ -260,18 +292,13 @@ where
     substitute_dockerfile_source(&mut environment.image.dockerfile, lookup)?;
     substitute_string_vec(&mut environment.network.allow, lookup)?;
     substitute_string_map(&mut environment.labels, lookup)?;
-    for volume in &mut environment.volumes {
-        substitute_string(&mut volume.id, lookup)?;
-        substitute_string(&mut volume.mount_path, lookup)?;
-        substitute_option_string(&mut volume.subpath, lookup)?;
-    }
     Ok(())
 }
 
 fn substitute_dockerfile_source<F>(
     source: &mut Option<DockerfileSource>,
     lookup: &mut F,
-) -> Result<(), ResolveEnvError>
+) -> Result<(), ResolveError>
 where
     F: FnMut(&str) -> Option<String>,
 {
@@ -283,7 +310,7 @@ where
     }
 }
 
-fn substitute_hook_type<F>(hook_type: &mut HookType, lookup: &mut F) -> Result<(), ResolveEnvError>
+fn substitute_hook_type<F>(hook_type: &mut HookType, lookup: &mut F) -> Result<(), ResolveError>
 where
     F: FnMut(&str) -> Option<String>,
 {
@@ -309,18 +336,21 @@ mod run_namespace_variable_substitution_tests {
 
     use super::{
         ArtifactsSettings, DockerfileSource, EnvironmentImageSettings, EnvironmentNetworkMode,
-        EnvironmentNetworkSettings, EnvironmentVolumeSettings, HookDefinition, HookEvent, HookType,
-        InterpString, McpHttpProtocol, McpServerSettings, McpTransport, RunCheckpointSettings,
+        EnvironmentNetworkSettings, HookDefinition, HookEvent, HookType, InterpString,
+        McpHttpProtocol, McpServerSettings, McpTransport, RunCheckpointSettings,
         RunEnvironmentSettings, RunGoal, RunNamespace, RunPrepareSettings,
     };
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "test asserts the raw template source"
+    )]
     #[test]
     fn substitutes_variables_in_interp_and_late_bound_run_strings() {
         let mut run = RunNamespace {
             goal: Some(RunGoal::Inline(InterpString::parse(
                 "deploy {{ vars.ENV }} in {{ env.REGION }}",
             ))),
-            working_dir: Some(InterpString::parse("/workspace/{{ vars.ENV }}")),
             prepare: RunPrepareSettings {
                 commands:   vec!["echo {{ vars.ENV }} {{ env.REGION }}".to_string()],
                 timeout_ms: 1_000,
@@ -379,10 +409,6 @@ mod run_namespace_variable_substitution_tests {
             goal_source,
             Some("deploy prod in {{ env.REGION }}".to_string())
         );
-        assert_eq!(
-            run.working_dir.as_ref().map(InterpString::as_source),
-            Some("/workspace/prod".to_string())
-        );
         assert_eq!(run.prepare.commands, vec![
             "echo prod {{ env.REGION }}".to_string()
         ]);
@@ -410,6 +436,50 @@ mod run_namespace_variable_substitution_tests {
     }
 
     #[test]
+    fn demoted_fields_do_not_interpolate() {
+        // Demoted fields (run.working_dir, run.model.*, run.git.author.*,
+        // run.scm.owner/repository) were removed from the vars pass (D2/D11):
+        // `{{ vars.* }}` and `{{ env.* }}` stay literal even when a value is
+        // available.
+        let mut run = RunNamespace {
+            working_dir: Some("/workspace/{{ vars.ENV }}".to_string()),
+            model: super::RunModelSettings {
+                provider: Some("{{ vars.PROVIDER }}".to_string()),
+                name: Some("{{ vars.MODEL }}".to_string()),
+                ..super::RunModelSettings::default()
+            },
+            git: super::RunGitSettings {
+                author: Some(super::GitAuthorSettings {
+                    name:  Some("{{ vars.AUTHOR }}".to_string()),
+                    email: Some("{{ env.EMAIL }}".to_string()),
+                }),
+            },
+            scm: super::RunScmSettings {
+                owner: Some("{{ vars.OWNER }}".to_string()),
+                repository: Some("{{ env.REPO }}".to_string()),
+                ..super::RunScmSettings::default()
+            },
+            ..RunNamespace::default()
+        };
+
+        // Even with every variable available, demoted fields stay literal.
+        run.substitute_variables(|_| Some("SUBSTITUTED".to_string()))
+            .unwrap();
+
+        assert_eq!(
+            run.working_dir.as_deref(),
+            Some("/workspace/{{ vars.ENV }}")
+        );
+        assert_eq!(run.model.provider.as_deref(), Some("{{ vars.PROVIDER }}"));
+        assert_eq!(run.model.name.as_deref(), Some("{{ vars.MODEL }}"));
+        let author = run.git.author.as_ref().unwrap();
+        assert_eq!(author.name.as_deref(), Some("{{ vars.AUTHOR }}"));
+        assert_eq!(author.email.as_deref(), Some("{{ env.EMAIL }}"));
+        assert_eq!(run.scm.owner.as_deref(), Some("{{ vars.OWNER }}"));
+        assert_eq!(run.scm.repository.as_deref(), Some("{{ env.REPO }}"));
+    }
+
+    #[test]
     fn substitutes_variables_in_string_backed_settings_families() {
         let mut run = RunNamespace {
             checkpoint: RunCheckpointSettings {
@@ -428,11 +498,6 @@ mod run_namespace_variable_substitution_tests {
                     allow: vec!["{{ vars.CIDR }}".to_string()],
                 },
                 labels: HashMap::from([("deploy-env".to_string(), "{{ vars.ENV }}".to_string())]),
-                volumes: vec![EnvironmentVolumeSettings {
-                    id:         "vol_{{ vars.ENV }}".to_string(),
-                    mount_path: "/mnt/{{ vars.ENV }}".to_string(),
-                    subpath:    Some("cache/{{ vars.ENV }}".to_string()),
-                }],
                 ..RunEnvironmentSettings::default()
             },
             artifacts: ArtifactsSettings {
@@ -464,12 +529,6 @@ mod run_namespace_variable_substitution_tests {
             run.environment.labels.get("deploy-env").map(String::as_str),
             Some("prod")
         );
-        assert_eq!(run.environment.volumes[0].id, "vol_prod");
-        assert_eq!(run.environment.volumes[0].mount_path, "/mnt/prod");
-        assert_eq!(
-            run.environment.volumes[0].subpath.as_deref(),
-            Some("cache/prod")
-        );
         assert_eq!(run.artifacts.include, vec!["reports/prod/**"]);
     }
 }
@@ -500,9 +559,9 @@ impl RunIntegrationsGithubSettings {
     }
 
     /// Resolve every `permissions` value's `{{ env.* }}` tokens via
-    /// `lookup`, falling back to `InterpString::as_source()` when
-    /// resolution fails so callers see a recognizable diagnostic instead
-    /// of a silently dropped key. The `lookup` seam keeps tests free of
+    /// `lookup`, falling back to the raw template source when resolution
+    /// fails so callers see a recognizable diagnostic instead of a
+    /// silently dropped key. The `lookup` seam keeps tests free of
     /// process-env coupling; production callers pass a thin wrapper over
     /// `std::env::var`.
     pub fn resolve_permissions<F>(&self, mut lookup: F) -> HashMap<String, String>
@@ -511,12 +570,7 @@ impl RunIntegrationsGithubSettings {
     {
         self.permissions
             .iter()
-            .map(|(name, value)| {
-                let resolved = value
-                    .resolve(&mut lookup)
-                    .map_or_else(|_| value.as_source(), |resolved| resolved.value);
-                (name.clone(), resolved)
-            })
+            .map(|(name, value)| (name.clone(), value.resolve_or_source(&mut lookup)))
             .collect()
     }
 }
@@ -578,8 +632,8 @@ pub enum RunGoal {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RunModelSettings {
-    pub provider:  Option<InterpString>,
-    pub name:      Option<InterpString>,
+    pub provider:  Option<String>,
+    pub name:      Option<String>,
     pub fallbacks: Vec<ModelRef>,
     /// Run-level default values for typed model controls
     /// (`reasoning_effort`, `speed`). Node and style attributes still win
@@ -601,8 +655,8 @@ pub struct RunGitSettings {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct GitAuthorSettings {
-    pub name:  Option<InterpString>,
-    pub email: Option<InterpString>,
+    pub name:  Option<String>,
+    pub email: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -803,41 +857,37 @@ impl Default for EnvironmentLifecycleSettings {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct EnvironmentVolumeSettings {
-    pub id:         String,
-    pub mount_path: String,
-    pub subpath:    Option<String>,
-    /// Mount the volume read-only. Honored by the Docker provider (emits a
-    /// `:ro` bind); Daytona currently mounts all volumes read-write and
-    /// ignores this flag.
-    #[serde(default)]
-    pub read_only:  bool,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EnvironmentSettings {
     pub provider:  EnvironmentProvider,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd:       Option<String>,
     pub image:     EnvironmentImageSettings,
     pub resources: EnvironmentResourcesSettings,
     pub network:   EnvironmentNetworkSettings,
     pub lifecycle: EnvironmentLifecycleSettings,
     pub labels:    HashMap<String, String>,
-    pub volumes:   Vec<EnvironmentVolumeSettings>,
     pub env:       HashMap<String, InterpString>,
+    // ponytail: fork-only. Upstream removed `volumes`; this is the minimal
+    // replacement narayan needs — bollard bind specs (`id:mount_path:ro|rw`)
+    // mapped straight to Docker `HostConfig.binds`. Plain strings, no
+    // interpolation; add InterpString if a host-path bind ever needs it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub binds:     Vec<String>,
 }
 
 impl Default for EnvironmentSettings {
     fn default() -> Self {
         Self {
             provider:  EnvironmentProvider::Local,
+            cwd:       None,
             image:     EnvironmentImageSettings::default(),
             resources: EnvironmentResourcesSettings::default(),
             network:   EnvironmentNetworkSettings::default(),
             lifecycle: EnvironmentLifecycleSettings::default(),
             labels:    HashMap::new(),
-            volumes:   Vec::new(),
             env:       HashMap::new(),
+            binds:     Vec::new(),
         }
     }
 }
@@ -846,13 +896,17 @@ impl Default for EnvironmentSettings {
 pub struct RunEnvironmentSettings {
     pub id:        String,
     pub provider:  EnvironmentProvider,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd:       Option<String>,
     pub image:     EnvironmentImageSettings,
     pub resources: EnvironmentResourcesSettings,
     pub network:   EnvironmentNetworkSettings,
     pub lifecycle: EnvironmentLifecycleSettings,
     pub labels:    HashMap<String, String>,
-    pub volumes:   Vec<EnvironmentVolumeSettings>,
     pub env:       HashMap<String, InterpString>,
+    // ponytail: fork-only Docker bind specs — see EnvironmentSettings::binds.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub binds:     Vec<String>,
 }
 
 impl RunEnvironmentSettings {
@@ -861,13 +915,14 @@ impl RunEnvironmentSettings {
         Self {
             id,
             provider: environment.provider,
+            cwd: environment.cwd,
             image: environment.image,
             resources: environment.resources,
             network: environment.network,
             lifecycle: environment.lifecycle,
             labels: environment.labels,
-            volumes: environment.volumes,
             env: environment.env,
+            binds: environment.binds,
         }
     }
 
@@ -880,12 +935,7 @@ impl RunEnvironmentSettings {
     {
         self.env
             .iter()
-            .map(|(name, value)| {
-                let resolved = value
-                    .resolve(&mut lookup)
-                    .map_or_else(|_| value.as_source(), |resolved| resolved.value);
-                (name.clone(), resolved)
-            })
+            .map(|(name, value)| (name.clone(), value.resolve_or_source(&mut lookup)))
             .collect()
     }
 }
@@ -1071,6 +1121,192 @@ impl McpServerSettings {
     pub fn tool_timeout(&self) -> StdDuration {
         StdDuration::from_secs(self.tool_timeout_secs)
     }
+
+    /// Resolve `{{ env.* }}` tokens in this server's transport strings
+    /// (`command`/`args`/`url`/`env`/`headers`) against `env_lookup`,
+    /// returning a copy with the tokens replaced and every other field
+    /// preserved.
+    ///
+    /// This is the late, use-time half of MCP interpolation, the counterpart
+    /// to [`substitute_mcp_transport`]: `{{ vars.* }}` are substituted
+    /// earlier, server-side, while `{{ env.* }}` resolve here — in whichever
+    /// process actually launches the server (the run worker for `fabro run`,
+    /// the CLI process for `fabro exec`). Carrying the source form out of the
+    /// config resolve layer keeps `fabro validate` portable (it never requires
+    /// env to be set).
+    ///
+    /// A referenced env var that is unset is a hard error — no fallback to the
+    /// unresolved source. Reserved `secrets`/`inputs` tokens have no lookup
+    /// here and surface as a loud [`ResolveErrorKind::Unavailable`] error
+    /// rather than passing through as literal text.
+    pub fn resolve_transport_env(
+        &self,
+        mut env_lookup: impl FnMut(&str) -> Option<String>,
+    ) -> Result<Self, ResolveError> {
+        let mut resolved = self.clone();
+        visit_mcp_transport_strings(&mut resolved.transport, &mut |value| {
+            resolve_env_string(value, &mut env_lookup)
+        })?;
+        Ok(resolved)
+    }
+}
+
+/// Resolve `{{ env.* }}` tokens in one MCP transport string. A literal value
+/// (no tokens) round-trips unchanged.
+fn resolve_env_string(
+    value: &mut String,
+    env_lookup: &mut impl FnMut(&str) -> Option<String>,
+) -> Result<(), ResolveError> {
+    if !value.contains("{{") {
+        return Ok(());
+    }
+    *value = InterpString::parse(value).resolve(&mut *env_lookup)?.value;
+    Ok(())
+}
+
+#[cfg(test)]
+mod resolve_transport_env_tests {
+    use std::collections::HashMap;
+
+    use super::super::interp::ResolveErrorKind;
+    use super::{McpHttpProtocol, McpServerSettings, McpTransport, Namespace};
+
+    fn env_lookup(
+        pairs: &'static [(&'static str, &'static str)],
+    ) -> impl Fn(&str) -> Option<String> + Copy {
+        move |name| {
+            pairs
+                .iter()
+                .find_map(|(key, value)| (*key == name).then(|| (*value).to_string()))
+        }
+    }
+
+    #[test]
+    fn literal_transport_passes_through() {
+        let settings = McpServerSettings {
+            name: "baseline".to_string(),
+            transport: McpTransport::Stdio {
+                command: vec!["python".to_string(), "server.py".to_string()],
+                env:     HashMap::from([("TOKEN".to_string(), "literal-value".to_string())]),
+            },
+            ..McpServerSettings::default()
+        };
+
+        let resolved = settings.resolve_transport_env(env_lookup(&[])).unwrap();
+
+        let McpTransport::Stdio { command, env } = resolved.transport else {
+            panic!("expected stdio transport");
+        };
+        assert_eq!(command, vec!["python".to_string(), "server.py".to_string()]);
+        assert_eq!(env.get("TOKEN").map(String::as_str), Some("literal-value"));
+    }
+
+    #[test]
+    fn stdio_command_and_env_resolve() {
+        let settings = McpServerSettings {
+            name: "gemini".to_string(),
+            transport: McpTransport::Stdio {
+                command: vec!["python".to_string(), "{{ env.SERVER_PATH }}".to_string()],
+                env:     HashMap::from([(
+                    "GEMINI_API_KEY".to_string(),
+                    "{{ env.GEMINI_API_KEY }}".to_string(),
+                )]),
+            },
+            ..McpServerSettings::default()
+        };
+
+        let resolved = settings
+            .resolve_transport_env(env_lookup(&[
+                ("SERVER_PATH", "/srv/mcp.py"),
+                ("GEMINI_API_KEY", "real-key"),
+            ]))
+            .unwrap();
+
+        let McpTransport::Stdio { command, env } = resolved.transport else {
+            panic!("expected stdio transport");
+        };
+        assert_eq!(command, vec![
+            "python".to_string(),
+            "/srv/mcp.py".to_string()
+        ]);
+        assert_eq!(
+            env.get("GEMINI_API_KEY").map(String::as_str),
+            Some("real-key")
+        );
+    }
+
+    #[test]
+    fn http_url_and_headers_resolve() {
+        let settings = McpServerSettings {
+            name: "remote".to_string(),
+            transport: McpTransport::Http {
+                protocol: McpHttpProtocol::default(),
+                url:      "https://{{ env.MCP_HOST }}/mcp".to_string(),
+                headers:  HashMap::from([(
+                    "Authorization".to_string(),
+                    "Bearer {{ env.MCP_TOKEN }}".to_string(),
+                )]),
+            },
+            ..McpServerSettings::default()
+        };
+
+        let resolved = settings
+            .resolve_transport_env(env_lookup(&[
+                ("MCP_HOST", "mcp.example"),
+                ("MCP_TOKEN", "abc123"),
+            ]))
+            .unwrap();
+
+        let McpTransport::Http { url, headers, .. } = resolved.transport else {
+            panic!("expected http transport");
+        };
+        assert_eq!(url, "https://mcp.example/mcp");
+        assert_eq!(
+            headers.get("Authorization").map(String::as_str),
+            Some("Bearer abc123")
+        );
+    }
+
+    #[test]
+    fn missing_env_is_hard_error() {
+        let settings = McpServerSettings {
+            name: "gemini".to_string(),
+            transport: McpTransport::Stdio {
+                command: vec!["python".to_string()],
+                env:     HashMap::from([(
+                    "GEMINI_API_KEY".to_string(),
+                    "{{ env.GEMINI_API_KEY }}".to_string(),
+                )]),
+            },
+            ..McpServerSettings::default()
+        };
+
+        let err = settings.resolve_transport_env(env_lookup(&[])).unwrap_err();
+
+        assert_eq!(err.namespace, Namespace::Env);
+        assert_eq!(err.name, "GEMINI_API_KEY");
+        assert_eq!(err.kind, ResolveErrorKind::Missing);
+    }
+
+    #[test]
+    fn reserved_secret_token_is_unavailable_not_leaked() {
+        let settings = McpServerSettings {
+            name: "vaulted".to_string(),
+            transport: McpTransport::Stdio {
+                command: vec!["python".to_string()],
+                env:     HashMap::from([(
+                    "API_KEY".to_string(),
+                    "{{ secrets.API_KEY }}".to_string(),
+                )]),
+            },
+            ..McpServerSettings::default()
+        };
+
+        let err = settings.resolve_transport_env(env_lookup(&[])).unwrap_err();
+
+        assert_eq!(err.namespace, Namespace::Secrets);
+        assert_eq!(err.kind, ResolveErrorKind::Unavailable);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1226,8 +1462,8 @@ impl HookDefinition {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RunScmSettings {
     pub provider:   Option<String>,
-    pub owner:      Option<InterpString>,
-    pub repository: Option<InterpString>,
+    pub owner:      Option<String>,
+    pub repository: Option<String>,
     pub github:     Option<ScmGitHubSettings>,
 }
 

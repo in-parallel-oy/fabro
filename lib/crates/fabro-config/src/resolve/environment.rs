@@ -1,15 +1,16 @@
+use std::path::Path;
+
 use fabro_types::settings::run::{
     DockerfileSource, EnvironmentImageSettings, EnvironmentLifecycleSettings,
     EnvironmentNetworkMode, EnvironmentNetworkSettings, EnvironmentProvider,
-    EnvironmentResourcesSettings, EnvironmentSettings, EnvironmentVolumeSettings,
-    RunEnvironmentSettings,
+    EnvironmentResourcesSettings, EnvironmentSettings, RunEnvironmentSettings,
 };
 
 use super::ResolveError;
 use crate::{
     Combine, EnvironmentDockerfileLayer, EnvironmentImageLayer, EnvironmentLayer,
-    EnvironmentLifecycleLayer, EnvironmentNetworkLayer, EnvironmentResourcesLayer,
-    EnvironmentVolumeLayer, MergeMap, RunEnvironmentLayer,
+    EnvironmentLifecycleLayer, EnvironmentNetworkLayer, EnvironmentResourcesLayer, MergeMap,
+    RunEnvironmentLayer,
 };
 
 pub(crate) fn resolve_run_environment(
@@ -72,16 +73,36 @@ fn resolve_environment_fields(
 
     let environment = EnvironmentSettings {
         provider,
+        cwd: resolve_cwd(layer.cwd.as_deref(), &format!("{path}.cwd"), errors),
         image: resolve_image(layer.image.as_ref()),
         resources: resolve_resources(layer.resources.as_ref()),
         network: resolve_network(layer.network.as_ref(), &format!("{path}.network"), errors),
         lifecycle: resolve_lifecycle(layer.lifecycle.as_ref()),
         labels: layer.labels.clone().into_inner(),
-        volumes: resolve_volumes(layer.volumes.as_deref()),
         env: layer.env.clone().into_inner(),
+        binds: layer.binds.clone().unwrap_or_default(),
     };
     validate_daytona_image_settings(&environment, path, errors);
     environment
+}
+
+fn resolve_cwd(raw: Option<&str>, path: &str, errors: &mut Vec<ResolveError>) -> Option<String> {
+    let raw = raw?;
+    if raw.trim().is_empty() {
+        errors.push(ResolveError::Invalid {
+            path:   path.to_string(),
+            reason: "cwd must not be empty".to_string(),
+        });
+        return None;
+    }
+    if !Path::new(raw).is_absolute() {
+        errors.push(ResolveError::Invalid {
+            path:   path.to_string(),
+            reason: "cwd must be an absolute path".to_string(),
+        });
+        return None;
+    }
+    Some(raw.to_string())
 }
 
 fn parse_provider(raw: &str, path: &str, errors: &mut Vec<ResolveError>) -> EnvironmentProvider {
@@ -172,19 +193,6 @@ fn resolve_lifecycle(layer: Option<&EnvironmentLifecycleLayer>) -> EnvironmentLi
         stop_on_terminal: layer.stop_on_terminal.unwrap_or(true),
         auto_stop:        layer.auto_stop,
     }
-}
-
-fn resolve_volumes(layers: Option<&[EnvironmentVolumeLayer]>) -> Vec<EnvironmentVolumeSettings> {
-    layers
-        .unwrap_or(&[])
-        .iter()
-        .map(|volume| EnvironmentVolumeSettings {
-            id:         volume.id.clone(),
-            mount_path: volume.mount_path.clone(),
-            subpath:    volume.subpath.clone(),
-            read_only:  volume.read_only,
-        })
-        .collect()
 }
 
 fn dockerfile_source(dockerfile: &EnvironmentDockerfileLayer) -> DockerfileSource {
