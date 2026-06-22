@@ -13768,7 +13768,10 @@ components:
           format: int64
           description: >-
             Resolved scheduler concurrency ceiling (the configured
-            `--max-concurrent-runs`). Additive and optional: clients built
+            `--max-concurrent-runs`). Free scheduler capacity is
+            `max_concurrent_runs - scheduler_slots_used`; do not subtract
+            `active`, which also counts pending/runnable runs that are not yet
+            holding a scheduler slot. Additive and optional: clients built
             against an earlier schema ignore it, and a host predating this
             field omits it entirely.
 
