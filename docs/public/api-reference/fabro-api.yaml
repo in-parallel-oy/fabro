@@ -13763,6 +13763,14 @@ components:
           type: integer
           format: int64
           description: Runs currently occupying scheduler concurrency slots.
+        max_concurrent_runs:
+          type: integer
+          format: int64
+          description: >-
+            Resolved scheduler concurrency ceiling (the configured
+            `--max-concurrent-runs`). Additive and optional: clients built
+            against an earlier schema ignore it, and a host predating this
+            field omits it entirely.
 
     SystemIntegrationsResponse:
       description: Runtime status for server integrations.

@@ -91,6 +91,7 @@ async fn get_system_info(_auth: RequiredUser, State(state): State<Arc<AppState>>
             total:                Some(to_i64(total_runs)),
             active:               Some(to_i64(active_runs)),
             scheduler_slots_used: Some(to_i64(scheduler_slots_used)),
+            max_concurrent_runs:  Some(to_i64(state.max_concurrent_runs)),
         }),
         sandbox_provider: Some(system_sandbox_provider(&manifest_run_settings)),
     };

@@ -30,4 +30,8 @@ export interface SystemRunCounts {
      * Runs currently occupying scheduler concurrency slots.
      */
     'scheduler_slots_used'?: number;
+    /**
+     * Resolved scheduler concurrency ceiling (the configured `--max-concurrent-runs`). Additive and optional: clients built against an earlier schema ignore it, and a host predating this field omits it entirely.
+     */
+    'max_concurrent_runs'?: number;
 }
