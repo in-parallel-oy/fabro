@@ -11,6 +11,10 @@ default = ["local"]
 local = []
 docker = ["dep:bollard", "dep:tar", "dep:fabro-github"]
 daytona = ["dep:daytona-sdk", "dep:daytona-api-client", "dep:git2", "dep:fabro-github", "dep:fabro-config", "dep:fabro-http", "dep:reqwest-middleware", "dep:rand", "dep:tokio-tungstenite", "dep:futures-util", "dep:rustls"]
+# Elastic GCE-per-run provider: one Fabro server fans out to ephemeral GCE VMs
+# reached over SSH. Self-contained (gcloud/ + provider/gcloud.rs); no
+# google-cloud crate — the Compute REST surface is hand-rolled over reqwest.
+gcloud = ["dep:openssh", "dep:ssh-key", "dep:reqwest", "dep:jsonwebtoken", "dep:fabro-github", "dep:rand", "dep:zeroize"]
 test-support = []
 
 [lib]
@@ -66,6 +70,13 @@ reqwest-middleware = { version = "0.5", features = ["json", "multipart", "form",
 tokio-tungstenite = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 rustls = { version = "0.23", default-features = false, features = ["std", "ring"], optional = true }
+
+# gcloud
+openssh = { workspace = true, optional = true }
+ssh-key = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+jsonwebtoken = { workspace = true, optional = true }
+zeroize = { version = "1", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }

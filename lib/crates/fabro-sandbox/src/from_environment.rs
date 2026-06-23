@@ -17,6 +17,8 @@ use crate::config::{
 use crate::daytona::DaytonaConfig;
 #[cfg(feature = "docker")]
 use crate::docker::DockerSandboxOptions;
+#[cfg(feature = "gcloud")]
+use crate::gcloud::{EgressPolicy, GcloudConfig, GcloudSettings};
 
 #[cfg(feature = "daytona")]
 #[must_use]
@@ -111,6 +113,31 @@ pub fn docker_config_from_environment(
     }
 }
 
+/// Resolve a per-run [`GcloudConfig`] from the run's environment settings plus
+/// the operator `FABRO_GCLOUD_*` env (via `lookup`). Returns the config and the
+/// SA key JSON (a secret carried only in the transient `SandboxSpec`, never
+/// persisted). Errors when a required substrate identifier is missing.
+///
+/// The egress policy is mapped from the environment network mode, mirroring the
+/// Daytona network model.
+#[cfg(feature = "gcloud")]
+pub fn gcloud_config_from_environment(
+    settings: &RunEnvironmentSettings,
+    lookup: impl Fn(&str) -> Option<String>,
+) -> crate::Result<(GcloudConfig, Option<String>)> {
+    let operator = GcloudSettings::from_lookup(&lookup);
+    let sa_key_json = operator.sa_key_json.clone();
+    let egress = match settings.network.mode {
+        EnvironmentNetworkMode::Block => EgressPolicy::Block,
+        EnvironmentNetworkMode::AllowAll => EgressPolicy::AllowAll,
+        EnvironmentNetworkMode::CidrAllowList => {
+            EgressPolicy::AllowList(settings.network.allow.clone())
+        }
+    };
+    let config = GcloudConfig::resolve(&operator, egress)?;
+    Ok((config, sa_key_json))
+}
+
 pub fn local_working_directory_from_environment(
     settings: &RunEnvironmentSettings,
     source_directory: Option<&Path>,
@@ -195,6 +222,46 @@ mod tests {
         let options = docker_config_from_environment(&settings, false);
 
         assert_eq!(options.binds, settings.binds);
+    }
+
+    #[cfg(feature = "gcloud")]
+    #[test]
+    fn gcloud_config_maps_cidr_allow_list_and_carries_sa_key() {
+        let mut settings = run_environment(EnvironmentProvider::Local);
+        settings.network.mode = fabro_types::settings::run::EnvironmentNetworkMode::CidrAllowList;
+        settings.network.allow = vec!["10.0.0.0/8".to_string()];
+
+        let env = HashMap::from([
+            ("FABRO_GCLOUD_PROJECT".to_string(), "proj".to_string()),
+            ("FABRO_GCLOUD_ZONE".to_string(), "us-central1-a".to_string()),
+            ("FABRO_GCLOUD_SUBNETWORK".to_string(), "default".to_string()),
+            (
+                "FABRO_GCLOUD_VM_IMAGE".to_string(),
+                "projects/proj/global/images/fabro".to_string(),
+            ),
+            (
+                "FABRO_GCLOUD_MACHINE_TYPE".to_string(),
+                "e2-standard-4".to_string(),
+            ),
+            ("FABRO_GCLOUD_SA_KEY_JSON".to_string(), "{\"k\":1}".to_string()),
+        ]);
+
+        let (config, sa_key_json) =
+            gcloud_config_from_environment(&settings, |key| env.get(key).cloned()).unwrap();
+
+        assert_eq!(
+            config.egress,
+            EgressPolicy::AllowList(vec!["10.0.0.0/8".to_string()])
+        );
+        assert_eq!(sa_key_json.as_deref(), Some("{\"k\":1}"));
+    }
+
+    #[cfg(feature = "gcloud")]
+    #[test]
+    fn gcloud_config_errors_on_missing_substrate() {
+        let settings = run_environment(EnvironmentProvider::Local);
+        let err = gcloud_config_from_environment(&settings, |_| None).unwrap_err();
+        assert!(err.to_string().contains("FABRO_GCLOUD_PROJECT"));
     }
 
     #[test]

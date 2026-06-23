@@ -41,6 +41,10 @@ pub(crate) struct WorkerLaunchSpec {
     pub(crate) fabro_log:              Option<String>,
     pub(crate) active_config_path:     PathBuf,
     pub(crate) github_app_private_key: Option<String>,
+    /// Per-run ACP credentials as a JSON `InjectedAcpCredentials`. Set on the
+    /// worker subprocess env (`FABRO_ACP_CREDENTIALS`); the worker reads it once
+    /// and `env_remove`s it so it never reaches the shared sandbox `base_env`.
+    pub(crate) acp_credentials_json:   Option<String>,
 }
 
 pub(crate) struct StartedWorker {
@@ -96,6 +100,10 @@ impl LocalWorkerRuntime {
         cmd.env(EnvVars::FABRO_WORKER_TOKEN, &spec.worker_token);
         if let Some(pem) = spec.github_app_private_key.as_deref() {
             cmd.env(EnvVars::GITHUB_APP_PRIVATE_KEY, pem);
+        }
+        cmd.env_remove(EnvVars::FABRO_ACP_CREDENTIALS);
+        if let Some(acp_credentials) = spec.acp_credentials_json.as_deref() {
+            cmd.env(EnvVars::FABRO_ACP_CREDENTIALS, acp_credentials);
         }
 
         #[cfg(unix)]

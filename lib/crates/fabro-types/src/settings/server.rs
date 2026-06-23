@@ -121,6 +121,8 @@ pub struct ServerSandboxProvidersSettings {
     pub local:   ServerSandboxProviderSettings,
     pub docker:  ServerSandboxProviderSettings,
     pub daytona: ServerSandboxProviderSettings,
+    #[serde(default)]
+    pub gcloud:  ServerSandboxProviderSettings,
 }
 
 impl ServerSandboxProvidersSettings {
@@ -134,6 +136,7 @@ impl ServerSandboxProvidersSettings {
             crate::SandboxProviderKind::Local => &self.local,
             crate::SandboxProviderKind::Docker => &self.docker,
             crate::SandboxProviderKind::Daytona => &self.daytona,
+            crate::SandboxProviderKind::Gcloud => &self.gcloud,
         }
     }
 }

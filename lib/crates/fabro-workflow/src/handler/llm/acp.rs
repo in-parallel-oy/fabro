@@ -17,6 +17,7 @@ use fabro_util::time::elapsed_ms;
 use tokio_util::sync::CancellationToken;
 
 use super::super::agent::{CodergenBackend, CodergenResult, CodergenRunRequest, OneShotRequest};
+use super::acp_env::AcpEnv;
 use super::activation_lease::{ActivationLease, ActivationLeaseOptions};
 use super::changed_files;
 use crate::error::Error;
@@ -28,6 +29,14 @@ pub struct AgentAcpBackend {
     tool_env:                     Option<Arc<dyn ToolEnvProvider>>,
     github_token_refresh_managed: bool,
     steering_hub:                 Option<Arc<SteeringHub>>,
+    /// Per-run ACP credential env (GOAL B). Merged into the ACP launch env only;
+    /// never into the shared sandbox `base_env`. See [`AcpEnv`].
+    acp_credentials:              AcpEnv,
+    /// Per-run Codex `auth.json` (GOAL B). When set, materialized into
+    /// `$CODEX_HOME/auth.json` inside the sandbox for the duration of the ACP
+    /// turn and removed before the turn returns, so it never reaches artifact
+    /// capture. Mutually exclusive with a Claude `acp_credentials` env.
+    codex_auth_json:              Option<String>,
 }
 
 impl AgentAcpBackend {
@@ -37,7 +46,39 @@ impl AgentAcpBackend {
             tool_env:                     None,
             github_token_refresh_managed: false,
             steering_hub:                 None,
+            acp_credentials:              AcpEnv::default(),
+            codex_auth_json:              None,
         }
+    }
+
+    /// Attach the per-run injected credentials (GOAL B), dispatching on engine:
+    /// Claude credentials become the ACP-only launch env channel; Codex
+    /// credentials become an `auth.json` materialized into the sandbox. `None`
+    /// leaves the backend unchanged.
+    #[must_use]
+    pub fn with_injected_credentials(
+        mut self,
+        credentials: super::acp_credentials::AcpCredentials,
+    ) -> Self {
+        match credentials {
+            super::acp_credentials::AcpCredentials::None => {}
+            super::acp_credentials::AcpCredentials::ClaudeEnv(env) => {
+                self.acp_credentials = env;
+            }
+            super::acp_credentials::AcpCredentials::CodexAuthJson(json) => {
+                self.codex_auth_json = Some(json);
+            }
+        }
+        self
+    }
+
+    /// Attach the per-run ACP-only credential env. These vars reach the ACP
+    /// child process exclusively, via [`Self::resolve_launch_env`]; they are
+    /// structurally prevented from entering `base_env` (see [`AcpEnv`]).
+    #[must_use]
+    pub fn with_acp_credentials(mut self, credentials: AcpEnv) -> Self {
+        self.acp_credentials = credentials;
+        self
     }
 
     #[must_use]
@@ -151,8 +192,18 @@ impl AgentAcpBackend {
         };
 
         let files_before = changed_files::detect_changed_files(sandbox).await;
+        // GOAL B: materialize the per-run Codex `auth.json` into the sandbox just
+        // before launch (codex-acp reads `$CODEX_HOME/auth.json`, not an env
+        // var). It is removed immediately after the turn — on every exit path —
+        // so it never survives into artifact capture.
+        let codex_auth_written = if let Some(auth_json) = self.codex_auth_json.as_deref() {
+            write_codex_auth(sandbox.as_ref(), auth_json).await?;
+            true
+        } else {
+            false
+        };
         let launch_start = std::time::Instant::now();
-        let result = match fabro_acp::run_acp_turn(AcpRunRequest {
+        let turn_outcome = fabro_acp::run_acp_turn(AcpRunRequest {
             command: process_spec,
             prompt,
             cwd: sandbox.working_directory().to_string(),
@@ -168,8 +219,11 @@ impl AgentAcpBackend {
                 on_session_update: Some(on_session_update),
             }),
         })
-        .await
-        {
+        .await;
+        if codex_auth_written {
+            remove_codex_auth(sandbox.as_ref()).await;
+        }
+        let result = match turn_outcome {
             Ok(result) => {
                 emitter.emit_scoped(
                     &Event::AgentAcpCompleted {
@@ -255,21 +309,28 @@ impl AgentAcpBackend {
         &self,
         emitter: &Arc<Emitter>,
     ) -> Result<HashMap<String, String>, Error> {
-        let Some(provider) = &self.tool_env else {
-            return Ok(HashMap::new());
+        let mut env = match &self.tool_env {
+            Some(provider) => {
+                if self.github_token_refresh_managed {
+                    emitter.notice(
+                        RunNoticeLevel::Info,
+                        RunNoticeCode::GithubTokenRefreshLimited,
+                        "ACP agent stages receive workflow env at process launch; stages running \
+                         beyond token expiry may need to be retried.",
+                    );
+                }
+                provider.resolve().await.map_err(|err| {
+                    Error::handler_with_anyhow("Failed to resolve ACP agent env", err)
+                })?
+            }
+            None => HashMap::new(),
         };
-        if self.github_token_refresh_managed {
-            emitter.notice(
-                RunNoticeLevel::Info,
-                RunNoticeCode::GithubTokenRefreshLimited,
-                "ACP agent stages receive workflow env at process launch; stages running beyond \
-                 token expiry may need to be retried.",
-            );
-        }
-        provider
-            .resolve()
-            .await
-            .map_err(|err| Error::handler_with_anyhow("Failed to resolve ACP agent env", err))
+        // ACP-only credential channel (GOAL B): merged into the launch env that
+        // reaches the ACP child process exclusively. This is the single
+        // sanctioned sink for `acp_credentials`; it is never `base_env`, so the
+        // injected OAuth token does not leak to exec descendants.
+        self.acp_credentials.apply_to(&mut env);
+        Ok(env)
     }
 
     fn activate_control_session(
@@ -302,6 +363,53 @@ impl AgentAcpBackend {
         )
         .map(Some)
     }
+}
+
+/// Absolute path of the per-run Codex `auth.json` inside the sandbox. Lives
+/// under the sandbox home, **outside** the repo working directory, so it is not
+/// matched by workspace-scoped artifact capture; the explicit removal after the
+/// turn is a belt-and-suspenders second line of defense.
+const CODEX_AUTH_PATH: &str = "/home/dev/.codex/auth.json";
+/// Temp upload target. `write_file` runs as root; the `cp` reassigns ownership
+/// to the non-root sandbox user that runs codex so it can read the file.
+const CODEX_AUTH_TMP_PATH: &str = "/tmp/.fabro-acp-codex-auth.json";
+
+/// Materialize the per-run Codex `auth.json` into the sandbox.
+async fn write_codex_auth(sandbox: &dyn Sandbox, auth_json: &str) -> Result<(), Error> {
+    sandbox
+        .write_file(CODEX_AUTH_TMP_PATH, auth_json)
+        .await
+        .map_err(|e| Error::handler(format!("Failed to stage Codex auth.json: {e}")))?;
+    let cmd = format!(
+        "set -e; mkdir -p /home/dev/.codex; cp {CODEX_AUTH_TMP_PATH} {CODEX_AUTH_PATH}; \
+         chmod 600 {CODEX_AUTH_PATH}; rm -f {CODEX_AUTH_TMP_PATH} 2>/dev/null || true"
+    );
+    let result = sandbox
+        .exec_command(&cmd, 30_000, None, None, None)
+        .await
+        .map_err(|e| Error::handler(format!("Failed to install Codex auth.json: {e}")))?;
+    if !result.is_success() {
+        return Err(Error::handler(format!(
+            "Codex auth.json install command failed (exit {})",
+            result.display_exit_code()
+        )));
+    }
+    Ok(())
+}
+
+/// Remove the per-run Codex `auth.json` before artifact capture. Best-effort:
+/// the file dies with the ephemeral sandbox regardless, so a failed removal is
+/// not fatal.
+async fn remove_codex_auth(sandbox: &dyn Sandbox) {
+    let _ = sandbox
+        .exec_command(
+            &format!("rm -f {CODEX_AUTH_PATH}"),
+            10_000,
+            None,
+            None,
+            None,
+        )
+        .await;
 }
 
 impl ActiveControlHandle for AcpControlHandle {
@@ -800,6 +908,175 @@ mod tests {
         assert!(!captured.contains_key("OPENAI_API_KEY"));
         assert!(!captured.contains_key("ANTHROPIC_API_KEY"));
         assert!(!captured.contains_key("GEMINI_API_KEY"));
+    }
+
+    #[tokio::test]
+    async fn injected_claude_credentials_reach_acp_child_not_exec_siblings() {
+        use std::collections::HashMap as StdHashMap;
+
+        use super::super::acp_credentials::{AcpCredentials, AcpEngine, InjectedAcpCredentials};
+
+        const TOKEN: &str = "sk-ant-oat01-INJECTED-SECRET-do-not-leak";
+
+        let mut sandbox = MockSandbox::linux();
+        // Stop right after the ACP child env is captured, before the handshake.
+        sandbox.stdio_process_error = Some("stop before ACP handshake".to_string());
+        let sandbox = Arc::new(sandbox);
+        let sandbox_dyn: Arc<dyn Sandbox> = sandbox.clone();
+
+        let mut node = Node::new("work");
+        node.attrs
+            .insert("backend".to_string(), AttrValue::String("acp".to_string()));
+        node.attrs.insert(
+            "acp.command".to_string(),
+            AttrValue::String("fake-acp-agent".to_string()),
+        );
+
+        // The shared base env (what exec_command descendants inherit) carries a
+        // non-secret var but NOT the injected token.
+        let base_env =
+            StdHashMap::from([("WORKFLOW_ENV".to_string(), "base-value".to_string())]);
+        let injected = InjectedAcpCredentials {
+            engine: AcpEngine::Claude,
+            env:    StdHashMap::from([(
+                "CLAUDE_CODE_OAUTH_TOKEN".to_string(),
+                TOKEN.to_string(),
+            )]),
+        };
+        let backend = AgentAcpBackend::new()
+            .with_env(base_env.clone())
+            .with_injected_credentials(AcpCredentials::try_from(injected).unwrap());
+
+        let emitter = Arc::new(Emitter::default());
+        let context = Context::new();
+        let result = backend
+            .run(CodergenRunRequest {
+                node:               &node,
+                prompt:             "write hello",
+                context:            &context,
+                thread_id:          None,
+                emitter:            &emitter,
+                sandbox:            &sandbox_dyn,
+                tool_hooks:         None,
+                cancel_token:       CancellationToken::new(),
+                agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
+            })
+            .await;
+        assert!(result.is_err());
+
+        // The ACP child's launch env carries both the base var and the injected
+        // token — proof the credential reached it via the dedicated channel.
+        let child_env = sandbox
+            .captured_env_vars
+            .lock()
+            .expect("captured env lock poisoned")
+            .clone()
+            .unwrap_or_default();
+        assert_eq!(
+            child_env.get("WORKFLOW_ENV").map(String::as_str),
+            Some("base-value")
+        );
+        assert_eq!(
+            child_env.get("CLAUDE_CODE_OAUTH_TOKEN").map(String::as_str),
+            Some(TOKEN)
+        );
+
+        // A sibling exec_command (what an API-backend shell tool / docker exec
+        // descendant runs) is given the shared base env — which must NOT carry
+        // the injected token. Running it overwrites the captured env so we can
+        // assert on exactly what the descendant inherits.
+        sandbox_dyn
+            .exec_command("sibling-tool", 1_000, None, Some(&base_env), None)
+            .await
+            .expect("mock exec_command succeeds");
+        let sibling_env = sandbox
+            .captured_env_vars
+            .lock()
+            .expect("captured env lock poisoned")
+            .clone()
+            .unwrap_or_default();
+        assert!(
+            !sibling_env.contains_key("CLAUDE_CODE_OAUTH_TOKEN"),
+            "injected token must not leak to exec_command descendants"
+        );
+    }
+
+    #[tokio::test]
+    async fn injected_codex_credentials_materialize_auth_json_and_clean_up() {
+        use std::collections::HashMap as StdHashMap;
+
+        use super::super::acp_credentials::{AcpCredentials, AcpEngine, InjectedAcpCredentials};
+
+        const ACCESS: &str = "codex-access-INJECTED-SECRET";
+        const ID_TOKEN: &str = "header.payload.signature";
+
+        let mut sandbox = MockSandbox::linux();
+        sandbox.stdio_process_error = Some("stop before ACP handshake".to_string());
+        let sandbox = Arc::new(sandbox);
+        let sandbox_dyn: Arc<dyn Sandbox> = sandbox.clone();
+
+        let mut node = Node::new("work");
+        node.attrs
+            .insert("backend".to_string(), AttrValue::String("acp".to_string()));
+        node.attrs.insert(
+            "acp.command".to_string(),
+            AttrValue::String("fake-acp-agent".to_string()),
+        );
+
+        let injected = InjectedAcpCredentials {
+            engine: AcpEngine::Codex,
+            env:    StdHashMap::from([
+                ("OPENAI_API_KEY".to_string(), ACCESS.to_string()),
+                ("CHATGPT_ACCOUNT_ID".to_string(), "acct_codex".to_string()),
+                ("CODEX_ID_TOKEN".to_string(), ID_TOKEN.to_string()),
+            ]),
+        };
+        let backend = AgentAcpBackend::new()
+            .with_injected_credentials(AcpCredentials::try_from(injected).unwrap());
+
+        let emitter = Arc::new(Emitter::default());
+        let context = Context::new();
+        let _ = backend
+            .run(CodergenRunRequest {
+                node:               &node,
+                prompt:             "write hello",
+                context:            &context,
+                thread_id:          None,
+                emitter:            &emitter,
+                sandbox:            &sandbox_dyn,
+                tool_hooks:         None,
+                cancel_token:       CancellationToken::new(),
+                agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
+            })
+            .await;
+
+        // The Codex access token is delivered via the materialized auth.json
+        // (write_file), never the ACP child's env.
+        let child_env = sandbox
+            .captured_env_vars
+            .lock()
+            .expect("captured env lock poisoned")
+            .clone()
+            .unwrap_or_default();
+        assert!(!child_env.contains_key("OPENAI_API_KEY"));
+
+        // The auth.json staging write must carry the access token, and the turn
+        // must end with an explicit removal of the credential file.
+        let commands = sandbox
+            .captured_commands
+            .lock()
+            .expect("captured commands lock poisoned")
+            .clone();
+        assert!(
+            commands.iter().any(|c| c.contains("auth.json")),
+            "expected an auth.json install command, got: {commands:?}"
+        );
+        assert!(
+            commands
+                .iter()
+                .any(|c| c.contains("rm -f") && c.contains("auth.json")),
+            "expected the auth.json to be removed before artifact capture, got: {commands:?}"
+        );
     }
 
     #[tokio::test]

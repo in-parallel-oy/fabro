@@ -59,9 +59,17 @@ impl LocalSandbox {
         EnvVars::NVM_DIR,
     ];
 
+    /// Exact-match sensitive keys that the suffix heuristics below would miss.
+    /// `CHATGPT_ACCOUNT_ID` pairs with the injected Codex OAuth access token and
+    /// must never leak to API-backend shell tools / docker-exec descendants.
+    const ENV_DENYLIST: &'static [&'static str] = &["CHATGPT_ACCOUNT_ID"];
+
     fn should_filter_env_var(key: &str) -> bool {
         if Self::ENV_SAFELIST.contains(&key) {
             return false;
+        }
+        if Self::ENV_DENYLIST.contains(&key) {
+            return true;
         }
         let lower = key.to_lowercase();
         lower.ends_with("_api_key")
@@ -1150,6 +1158,10 @@ mod tests {
         assert!(LocalSandbox::should_filter_env_var("MY_CREDENTIAL"));
         assert!(LocalSandbox::should_filter_env_var("FABRO_WORKER_TOKEN"));
         assert!(LocalSandbox::should_filter_env_var("SESSION_SECRET"));
+        // Exact-match denylist: pairs with the injected Codex OAuth token and
+        // must not reach exec descendants, despite the suffix heuristics
+        // missing it.
+        assert!(LocalSandbox::should_filter_env_var("CHATGPT_ACCOUNT_ID"));
         // Case insensitive
         assert!(LocalSandbox::should_filter_env_var("my_api_key"));
         assert!(LocalSandbox::should_filter_env_var("Some_Secret"));

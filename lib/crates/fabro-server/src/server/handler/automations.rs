@@ -172,6 +172,7 @@ async fn create_automation_run(
             actor: actor.clone(),
             headers,
             automation: Some(automation_ref),
+            injected_acp_credentials: None,
         },
     ))
     .await;

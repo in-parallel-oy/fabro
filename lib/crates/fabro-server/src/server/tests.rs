@@ -2644,7 +2644,7 @@ fn worker_command(
     run_dir: &Path,
     agent_fabro_tools_enabled: bool,
 ) -> anyhow::Result<Command> {
-    let spec = worker_launch_spec(state, run_id, mode, run_dir, agent_fabro_tools_enabled)?;
+    let spec = worker_launch_spec(state, run_id, mode, run_dir, agent_fabro_tools_enabled, None)?;
     Ok(LocalWorkerRuntime::command_for_spec(&spec))
 }
 
@@ -3441,6 +3441,7 @@ async fn create_run_from_manifest_helper_persists_without_automation_metadata() 
             },
             headers: HeaderMap::new(),
             automation: None,
+            injected_acp_credentials: None,
         },
     ))
     .await;
@@ -3455,6 +3456,135 @@ async fn create_run_from_manifest_helper_persists_without_automation_metadata() 
         .unwrap()
         .unwrap();
     assert!(summary.automation.is_none());
+}
+
+/// GOAL B persistence sweep: a per-run `acp_credentials` secret submitted to the
+/// create route must not survive in any persisted surface — manifest blob, run
+/// record, projection, events, or the HTTP state response.
+#[tokio::test]
+async fn create_run_does_not_persist_injected_acp_credentials() {
+    const SECRET: &str = "sk-ant-oat01-PERSISTENCE-SWEEP-SECRET-do-not-leak";
+
+    let (state, app) = jwt_auth_app();
+    let bearer = issue_test_user_jwt();
+
+    let mut manifest_value = minimal_manifest_json(MINIMAL_DOT);
+    manifest_value["acp_credentials"] = serde_json::json!({
+        "engine": "claude",
+        "env": { "CLAUDE_CODE_OAUTH_TOKEN": SECRET },
+    });
+    let body = Body::from(serde_json::to_vec(&manifest_value).unwrap());
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api("/runs"))
+                .header(header::AUTHORIZATION, format!("Bearer {bearer}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(body)
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let created = response_json!(response, StatusCode::CREATED).await;
+    assert!(
+        !serde_json::to_string(&created).unwrap().contains(SECRET),
+        "create response leaked the injected credential"
+    );
+    let run_id: RunId = created["id"].as_str().unwrap().parse().unwrap();
+
+    // Manifest blob, projection, and event log.
+    let run_store = state.store.open_run(&run_id).await.unwrap();
+    let projection = run_store.state().await.unwrap();
+    assert!(
+        !serde_json::to_string(&projection).unwrap().contains(SECRET),
+        "run projection leaked the injected credential"
+    );
+    let events = run_store.list_events().await.unwrap();
+    assert!(
+        !serde_json::to_string(&events).unwrap().contains(SECRET),
+        "event log leaked the injected credential"
+    );
+    for blob_id in run_store.list_blobs().await.unwrap() {
+        let bytes = run_store
+            .read_blob(&blob_id)
+            .await
+            .unwrap()
+            .unwrap_or_default();
+        assert!(
+            !String::from_utf8_lossy(&bytes).contains(SECRET),
+            "a persisted blob (submitted manifest) leaked the injected credential"
+        );
+    }
+
+    // Run record (summary).
+    let summary = state
+        .store
+        .get_cached_summary(&run_id, Utc::now())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !serde_json::to_string(&summary).unwrap().contains(SECRET),
+        "run summary leaked the injected credential"
+    );
+
+    // HTTP state surface (the projection clients/SSE observe).
+    let state_response = app
+        .oneshot(bearer_request(
+            Method::GET,
+            &format!("/runs/{run_id}/state"),
+            &bearer,
+            Body::empty(),
+        ))
+        .await
+        .unwrap();
+    let state_json = response_json!(state_response, StatusCode::OK).await;
+    assert!(
+        !serde_json::to_string(&state_json).unwrap().contains(SECRET),
+        "HTTP run state leaked the injected credential"
+    );
+}
+
+/// GOAL B fail-closed: a present-but-malformed `acp_credentials` block rejects
+/// the request (400) and persists nothing.
+#[tokio::test]
+async fn create_run_rejects_malformed_acp_credentials_without_persisting() {
+    let (_state, app) = jwt_auth_app();
+    let bearer = issue_test_user_jwt();
+
+    let mut manifest_value = minimal_manifest_json(MINIMAL_DOT);
+    manifest_value["acp_credentials"] = serde_json::json!({ "engine": "bogus", "env": {} });
+    let body = Body::from(serde_json::to_vec(&manifest_value).unwrap());
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(api("/runs"))
+                .header(header::AUTHORIZATION, format!("Bearer {bearer}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(body)
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // Nothing persisted: no runs exist.
+    let list_response = app
+        .oneshot(bearer_request(Method::GET, "/runs", &bearer, Body::empty()))
+        .await
+        .unwrap();
+    let list = response_json!(list_response, StatusCode::OK).await;
+    assert_eq!(
+        list["data"].as_array().map(Vec::len).unwrap_or_default(),
+        0,
+        "a malformed acp_credentials request must not persist a run"
+    );
 }
 
 #[tokio::test]
@@ -3481,6 +3611,7 @@ async fn create_run_from_manifest_helper_persists_automation_metadata() {
             },
             headers: HeaderMap::new(),
             automation: Some(automation.clone()),
+            injected_acp_credentials: None,
         },
     ))
     .await;

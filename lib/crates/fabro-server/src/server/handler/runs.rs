@@ -592,7 +592,17 @@ async fn create_run(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let req = match serde_json::from_slice::<RunManifest>(&body) {
+    // GOAL B: split the per-run `acp_credentials` sibling key off the request
+    // body *before* deserializing or persisting the manifest. The remainder —
+    // not the raw body — becomes `submitted_manifest_bytes`, so the secret never
+    // lands in the manifest blob. Fail-closed: a malformed credential block is a
+    // 400 with a static message that cannot echo the secret.
+    let (remainder, injected_acp_credentials) =
+        match fabro_workflow::split_acp_credentials(&body) {
+            Ok(split) => split,
+            Err(err) => return ApiError::bad_request(err.to_string()).into_response(),
+        };
+    let req = match serde_json::from_slice::<RunManifest>(&remainder) {
         Ok(req) => req,
         Err(err) => return ApiError::bad_request(err.to_string()).into_response(),
     };
@@ -601,12 +611,13 @@ async fn create_run(
         state,
         CreateRunFromManifestRequest {
             manifest: req,
-            submitted_manifest_bytes: body.to_vec(),
+            submitted_manifest_bytes: remainder,
             explicit_run_id: None,
             explicit_title_supplied,
             actor,
             headers,
             automation: None,
+            injected_acp_credentials,
         },
     ))
     .await
@@ -620,6 +631,10 @@ pub(crate) struct CreateRunFromManifestRequest {
     pub(crate) actor:                    Principal,
     pub(crate) headers:                  HeaderMap,
     pub(crate) automation:               Option<AutomationRef>,
+    /// Per-run ACP credentials (GOAL B), already split off the request body at
+    /// the transport edge. `None` for callers that never carry them
+    /// (automations, scheduled runs).
+    pub(crate) injected_acp_credentials: Option<fabro_workflow::InjectedAcpCredentials>,
 }
 
 pub(crate) async fn create_run_from_manifest(
@@ -634,6 +649,7 @@ pub(crate) async fn create_run_from_manifest(
         actor,
         headers,
         automation,
+        injected_acp_credentials,
     } = request;
     let manifest_run_defaults = state.manifest_run_defaults();
     let manifest_environment_defaults = state.environment_store().catalog_layer();
@@ -734,16 +750,18 @@ pub(crate) async fn create_run_from_manifest(
 
     {
         let mut runs = state.runs.lock().expect("runs lock poisoned");
-        runs.insert(
-            created.run_id,
-            managed_run(
-                created.persisted.source().to_string(),
-                RunStatus::Submitted,
-                created_at,
-                created.run_dir,
-                RunExecutionMode::Start,
-            ),
+        let mut managed = managed_run(
+            created.persisted.source().to_string(),
+            RunStatus::Submitted,
+            created_at,
+            created.run_dir,
+            RunExecutionMode::Start,
         );
+        // Hold the injected ACP credentials transiently on the managed run so
+        // `execute_run_subprocess` can seed the worker's credential channel.
+        // Never persisted; dropped with the ManagedRun.
+        managed.injected_acp_credentials = injected_acp_credentials;
+        runs.insert(created.run_id, managed);
     }
 
     if !explicit_title_supplied && !ready_provider_ids.is_empty() {

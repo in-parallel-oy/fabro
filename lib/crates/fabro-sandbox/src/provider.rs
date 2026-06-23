@@ -2,13 +2,15 @@
 pub mod daytona;
 #[cfg(feature = "docker")]
 pub mod docker;
+#[cfg(feature = "gcloud")]
+pub mod gcloud;
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 #[cfg(any(feature = "docker", feature = "daytona"))]
 use fabro_github::GitHubCredentials;
-#[cfg(any(feature = "docker", feature = "daytona"))]
+#[cfg(any(feature = "docker", feature = "daytona", feature = "gcloud"))]
 use fabro_types::RunId;
 use fabro_types::{
     SandboxInfo, SandboxListMeta, SandboxListResponse, SandboxProviderKind,
@@ -40,6 +42,13 @@ pub enum SandboxCreateSpec {
         clone_origin_url: Option<String>,
         clone_branch:     Option<String>,
         api_key:          Option<String>,
+    },
+    #[cfg(feature = "gcloud")]
+    Gcloud {
+        config:           Box<crate::gcloud::GcloudConfig>,
+        run_id:           Option<RunId>,
+        clone_origin_url: Option<String>,
+        clone_branch:     Option<String>,
     },
 }
 

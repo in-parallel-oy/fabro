@@ -17,6 +17,8 @@ use crate::clone_source;
 use crate::daytona::{self, DaytonaConfig, DaytonaSandbox};
 #[cfg(feature = "docker")]
 use crate::docker::{self, DockerSandbox, DockerSandboxOptions};
+#[cfg(feature = "gcloud")]
+use crate::gcloud::{GcloudConfig, GcloudSandbox};
 use crate::local::LocalSandbox;
 use crate::{Sandbox, SandboxEventCallback};
 
@@ -42,6 +44,16 @@ pub enum SandboxSpec {
         clone_branch:     Option<String>,
         api_key:          Option<String>,
     },
+    #[cfg(feature = "gcloud")]
+    Gcloud {
+        config:           Box<GcloudConfig>,
+        run_id:           Option<RunId>,
+        clone_origin_url: Option<String>,
+        clone_branch:     Option<String>,
+        /// SA key JSON for the JWT auth fallback; `None` selects metadata
+        /// workload identity. A secret, so it lives only in the transient spec.
+        sa_key_json:      Option<String>,
+    },
 }
 
 impl SandboxSpec {
@@ -52,6 +64,8 @@ impl SandboxSpec {
             Self::Docker { .. } => SandboxProviderKind::Docker,
             #[cfg(feature = "daytona")]
             Self::Daytona { .. } => SandboxProviderKind::Daytona,
+            #[cfg(feature = "gcloud")]
+            Self::Gcloud { .. } => SandboxProviderKind::Gcloud,
         }
     }
 
@@ -60,6 +74,7 @@ impl SandboxSpec {
             SandboxProviderKind::Local => "local",
             SandboxProviderKind::Docker => "docker",
             SandboxProviderKind::Daytona => "daytona",
+            SandboxProviderKind::Gcloud => "gcloud",
         }
     }
 
@@ -234,6 +249,28 @@ impl SandboxSpec {
                     api_key.clone(),
                 )
                 .await
+                .map_err(anyhow::Error::new)?;
+                if let Some(callback) = event_callback {
+                    sandbox.set_event_callback(callback);
+                }
+                Ok(Arc::new(sandbox))
+            }
+            #[cfg(feature = "gcloud")]
+            Self::Gcloud {
+                config,
+                run_id,
+                clone_origin_url,
+                clone_branch,
+                sa_key_json,
+            } => {
+                let mut sandbox = GcloudSandbox::new(
+                    config.as_ref().clone(),
+                    reqwest::Client::new(),
+                    sa_key_json.clone(),
+                    *run_id,
+                    clone_origin_url.clone(),
+                    clone_branch.clone(),
+                )
                 .map_err(anyhow::Error::new)?;
                 if let Some(callback) = event_callback {
                     sandbox.set_event_callback(callback);

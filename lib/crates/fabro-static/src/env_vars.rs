@@ -6,6 +6,11 @@ pub struct EnvVars;
 
 impl EnvVars {
     // Fabro core
+    /// Worker-only channel carrying the per-run ACP credential block as a JSON
+    /// `InjectedAcpCredentials`. The control plane sets it on the worker
+    /// subprocess; the worker reads it once and `env_remove`s it before building
+    /// the run, so the secret never reaches the shared sandbox `base_env`.
+    pub const FABRO_ACP_CREDENTIALS: &'static str = "FABRO_ACP_CREDENTIALS";
     pub const FABRO_AUTH_FILE: &'static str = "FABRO_AUTH_FILE";
     pub const FABRO_BUILD_DATE: &'static str = "FABRO_BUILD_DATE";
     pub const FABRO_BUILD_PROFILE: &'static str = "FABRO_BUILD_PROFILE";
@@ -152,6 +157,7 @@ mod tests {
     #[test]
     fn env_var_constants_are_non_empty_and_single_tokens() {
         let values = [
+            EnvVars::FABRO_ACP_CREDENTIALS,
             EnvVars::FABRO_AUTH_FILE,
             EnvVars::FABRO_BUILD_DATE,
             EnvVars::FABRO_BUILD_PROFILE,

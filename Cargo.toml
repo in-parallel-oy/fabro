@@ -88,6 +88,12 @@ twin-openai = { path = "test/twin/openai" }
 twin-github = { path = "test/twin/github" }
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
+# gcloud sandbox provider (feature = "gcloud" on fabro-sandbox). SSH transport
+# (openssh) was previously a workspace dep for the exe/ssh providers; it is
+# re-introduced here scoped to the gcloud feature. ssh-key generates the
+# per-run ephemeral ed25519 keypair (never written to disk).
+openssh = "0.11"
+ssh-key = { version = "0.6", default-features = false, features = ["ed25519", "rand_core", "alloc"] }
 daytona-sdk = { git = "https://github.com/brynary/daytona-sdk-rust", rev = "fc58e22f7f25183df6264276ee186bbc32635738", package = "daytona-sdk" }
 daytona-api-client = { git = "https://github.com/brynary/daytona-sdk-rust", rev = "fc58e22f7f25183df6264276ee186bbc32635738", package = "daytona-api-client" }
 sentry = { version = "0.35", default-features = false, features = ["backtrace", "contexts", "ureq", "rustls"] }

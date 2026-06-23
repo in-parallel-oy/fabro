@@ -441,6 +441,13 @@ async fn create_ssh_access(
             "Sandbox provider does not support access commands.",
         )
         .into_response(),
+        // gcloud VMs are single-run and ephemeral; there is no persistent
+        // sandbox to mint an SSH-access command against.
+        SandboxProviderKind::Gcloud => ApiError::new(
+            StatusCode::CONFLICT,
+            "Sandbox provider does not support access commands.",
+        )
+        .into_response(),
     }
 }
 

@@ -41,6 +41,12 @@ pub async fn sandbox_details(
             "Sandbox provider '{}' has no details implementation",
             record.provider
         )),
+        // gcloud details are derived from the live Compute API via the
+        // provider registry, not this run-record projection.
+        SandboxProviderKind::Gcloud => Err(anyhow::anyhow!(
+            "Sandbox provider '{}' has no run-record details projection",
+            record.provider
+        )),
     }
 }
 

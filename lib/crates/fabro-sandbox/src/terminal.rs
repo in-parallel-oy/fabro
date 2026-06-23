@@ -106,6 +106,9 @@ pub async fn open_terminal_for_run(
         SandboxProviderKind::Local => Err(crate::Error::message(
             "Local sandboxes do not support embedded terminals",
         )),
+        SandboxProviderKind::Gcloud => Err(crate::Error::message(
+            "gcloud sandboxes do not support embedded terminals",
+        )),
     }
 }
 

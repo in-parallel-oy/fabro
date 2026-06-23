@@ -271,6 +271,8 @@ pub struct InitOptions {
     pub checkpoint:        Option<Checkpoint>,
     pub seed_context:      Option<Context>,
     pub fabro_run_tools:   Option<FabroRunToolServices>,
+    /// Per-run ACP credential injection (GOAL B), threaded to the ACP backend.
+    pub acp_credentials:   crate::handler::llm::AcpCredentials,
 }
 
 /// Output of the INITIALIZE phase.

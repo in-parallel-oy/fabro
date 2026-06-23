@@ -61,12 +61,27 @@ fn escape_rust_string(s: &str) -> String {
     out
 }
 
+#[derive(Deserialize)]
+struct Supplement {
+    rules: Vec<Rule>,
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=data/gitleaks.toml");
+    println!("cargo:rerun-if-changed=data/gitleaks-fabro-supplement.toml");
 
     let toml_path = Path::new("data/gitleaks.toml");
     let toml_content = fs::read_to_string(toml_path).expect("failed to read gitleaks.toml");
-    let config: Config = toml::from_str(&toml_content).expect("failed to parse gitleaks.toml");
+    let mut config: Config = toml::from_str(&toml_content).expect("failed to parse gitleaks.toml");
+
+    // Merge Fabro's regen-safe custom rules. Kept in a separate, non-generated
+    // file so an upstream regeneration of `gitleaks.toml` cannot drop them.
+    let supplement_path = Path::new("data/gitleaks-fabro-supplement.toml");
+    let supplement_content =
+        fs::read_to_string(supplement_path).expect("failed to read gitleaks-fabro-supplement.toml");
+    let supplement: Supplement = toml::from_str(&supplement_content)
+        .expect("failed to parse gitleaks-fabro-supplement.toml");
+    config.rules.extend(supplement.rules);
 
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR should be set for build scripts");
     let out_path = Path::new(&out_dir).join("rules_generated.rs");

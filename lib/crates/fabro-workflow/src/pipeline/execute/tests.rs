@@ -289,6 +289,7 @@ async fn execute_test_run_with_options(
             checkpoint: None,
             seed_context: None,
             fabro_run_tools: None,
+            acp_credentials: crate::handler::llm::AcpCredentials::default(),
         },
     )
     .await
@@ -352,6 +353,7 @@ async fn execute_runs_start_to_exit_and_returns_final_context() {
             checkpoint: None,
             seed_context: None,
             fabro_run_tools: None,
+            acp_credentials: crate::handler::llm::AcpCredentials::default(),
         },
     )
     .await
@@ -423,6 +425,7 @@ async fn run_with_lifecycle(
             checkpoint: None,
             seed_context: None,
             fabro_run_tools: None,
+            acp_credentials: crate::handler::llm::AcpCredentials::default(),
         },
     )
     .await?;

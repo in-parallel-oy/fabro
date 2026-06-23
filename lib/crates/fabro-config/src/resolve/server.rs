@@ -79,6 +79,9 @@ fn resolve_sandbox(layer: Option<&ServerSandboxLayer>) -> ServerSandboxSettings 
             daytona: resolve_sandbox_provider(
                 providers.and_then(|providers| providers.daytona.as_ref()),
             ),
+            gcloud:  resolve_sandbox_provider(
+                providers.and_then(|providers| providers.gcloud.as_ref()),
+            ),
         },
     }
 }

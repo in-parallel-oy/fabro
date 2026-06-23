@@ -1,0 +1,39 @@
+# Fabro custom gitleaks rules — regeneration-SAFE supplement.
+#
+# These rules are NOT part of upstream gitleaks and must survive an upstream
+# regeneration of `data/gitleaks.toml`. The build script (`build.rs`) reads this
+# file in addition to `gitleaks.toml` and merges its `rules` into the generated
+# rule set, so re-running the gitleaks generator over `gitleaks.toml` cannot drop
+# them.
+#
+# Scope: the ACP per-run credential injection seam (GOAL B). These patterns
+# ensure an injected Claude/Codex OAuth token never survives in captured run
+# output, events, or blobs even if it reaches a redacted stream.
+
+[[rules]]
+id = "anthropic-oauth-token"
+description = "Anthropic Claude OAuth access token (sk-ant-oat01-…), injected per-run for ACP auth."
+regex = '''\b(sk-ant-oat01-[A-Za-z0-9_-]{32,})'''
+entropy = 3
+keywords = ["sk-ant-oat01"]
+
+[[rules]]
+id = "anthropic-api-key"
+description = "Anthropic API key (sk-ant-api…)."
+regex = '''\b(sk-ant-(?:api03|api01)-[A-Za-z0-9_-]{80,})'''
+entropy = 3
+keywords = ["sk-ant-api"]
+
+[[rules]]
+id = "openai-oauth-access-token"
+description = "OpenAI/Codex OAuth access token — a JWT minted by auth.openai.com, injected per-run for ACP auth."
+regex = '''\b(eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})'''
+entropy = 3
+keywords = ["eyj"]
+
+[[rules]]
+id = "jwt-catch-all"
+description = "Catch-all JSON Web Token (three base64url segments) — covers OAuth bearer tokens not matched by stricter rules."
+regex = '''\b(ey[A-Za-z0-9_-]{8,}\.ey[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})'''
+entropy = 3
+keywords = ["ey"]

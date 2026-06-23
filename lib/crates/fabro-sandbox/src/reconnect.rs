@@ -106,5 +106,10 @@ pub async fn reconnect_for_run_with_callback(
         }
         #[cfg(not(feature = "daytona"))]
         SandboxProviderKind::Daytona => bail!("Daytona sandbox support is not enabled"),
+        // gcloud VMs are single-run and ephemeral: a deleted VM cannot be
+        // reconnected, and a live one is held by its Conductor.
+        SandboxProviderKind::Gcloud => {
+            bail!("gcloud sandboxes are ephemeral and cannot be reconnected")
+        }
     }
 }

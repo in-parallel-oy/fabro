@@ -33,6 +33,9 @@ pub mod docker;
 #[cfg(feature = "daytona")]
 pub mod daytona;
 
+#[cfg(feature = "gcloud")]
+pub mod gcloud;
+
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 
@@ -46,6 +49,10 @@ pub use local::LocalSandbox;
 pub use provider::daytona::DaytonaSandboxProvider;
 #[cfg(feature = "docker")]
 pub use provider::docker::DockerSandboxProvider;
+#[cfg(feature = "gcloud")]
+pub use gcloud::{GcloudConfig, GcloudSandbox, GcloudSettings};
+#[cfg(feature = "gcloud")]
+pub use provider::gcloud::GcloudSandboxProvider;
 pub use provider::{
     LocalSandboxProvider, SandboxCreateSpec, SandboxLookupError, SandboxProvider,
     SandboxProviderRegistry,

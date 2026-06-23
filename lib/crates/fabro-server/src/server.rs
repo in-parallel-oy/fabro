@@ -69,8 +69,8 @@ use fabro_sandbox::daytona::{self, DaytonaSandbox};
 use fabro_sandbox::details::sandbox_details;
 use fabro_sandbox::reconnect::reconnect_for_run;
 use fabro_sandbox::{
-    DaytonaSandboxProvider, DockerSandboxProvider, LocalSandboxProvider, Sandbox, SandboxProvider,
-    SandboxProviderRegistry,
+    DaytonaSandboxProvider, DockerSandboxProvider, GcloudSandboxProvider, GcloudSettings,
+    LocalSandboxProvider, Sandbox, SandboxProvider, SandboxProviderRegistry,
 };
 use fabro_slack::client::{PostedMessage as SlackPostedMessage, SlackClient};
 use fabro_slack::config::{
@@ -259,6 +259,11 @@ struct ManagedRun {
     worker_ref: Option<WorkerRef>,
     run_dir: Option<std::path::PathBuf>,
     execution_mode: RunExecutionMode,
+    /// Per-run ACP credentials (GOAL B), held transiently for the life of the
+    /// run and consumed by `execute_run_subprocess` to seed the worker's ACP
+    /// credential channel. Never persisted; evicted automatically when the
+    /// `ManagedRun` is dropped.
+    injected_acp_credentials: Option<fabro_workflow::InjectedAcpCredentials>,
 }
 
 #[derive(Clone, Copy)]
@@ -2256,8 +2261,22 @@ fn build_sandbox_provider_registry(
             daytona_api_key,
             api_url,
             organization_id,
-            http_client,
+            http_client.clone(),
         )));
+    }
+
+    // gcloud (GCE-per-run): operator-configured purely via FABRO_GCLOUD_*
+    // environment. Only registered when enabled and the substrate identity is
+    // provisionable, so an unconfigured deployment never surfaces a broken
+    // provider in `list`/`get`.
+    if provider_settings.gcloud.enabled {
+        let settings = GcloudSettings::from_lookup(|key| env_lookup(key));
+        if settings.is_provisionable() {
+            // `fabro_http::HttpClient` is a type alias for `reqwest::Client`;
+            // reuse the shared client when present, else a fresh one.
+            let http = http_client.clone().unwrap_or_else(fabro_http::HttpClient::new);
+            providers.push(Arc::new(GcloudSandboxProvider::new(settings, http)));
+        }
     }
 
     SandboxProviderRegistry::new(providers)
@@ -3235,6 +3254,7 @@ fn managed_run(
         worker_ref: None,
         run_dir: Some(run_dir),
         execution_mode,
+        injected_acp_credentials: None,
     }
 }
 
@@ -3522,6 +3542,7 @@ fn worker_launch_spec(
     mode: RunExecutionMode,
     run_dir: &std::path::Path,
     agent_fabro_tools_enabled: bool,
+    acp_credentials_json: Option<String>,
 ) -> anyhow::Result<WorkerLaunchSpec> {
     let current_exe = std::env::current_exe().context("reading current executable path")?;
     let executable =
@@ -3560,6 +3581,7 @@ fn worker_launch_spec(
         fabro_log,
         active_config_path: state.active_config_path().to_path_buf(),
         github_app_private_key: state.vault_secret(EnvVars::GITHUB_APP_PRIVATE_KEY),
+        acp_credentials_json,
     })
 }
 
@@ -3986,6 +4008,9 @@ async fn execute_run_in_process(state: Arc<AppState>, run_id: RunId) {
         on_node: None,
         registry_override,
         fabro_run_tools: None,
+        // In-process execution is the test path (registry override owns the
+        // backend); the subprocess path carries injected ACP credentials.
+        acp_credentials: fabro_workflow::AcpCredentials::default(),
     };
 
     let execution = async {
@@ -4089,7 +4114,7 @@ async fn execute_run_in_process(state: Arc<AppState>, run_id: RunId) {
 }
 
 async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
-    let (run_dir, execution_mode) = {
+    let (run_dir, execution_mode, acp_credentials_json) = {
         let mut runs = state.runs.lock().expect("runs lock poisoned");
         if state.is_shutting_down() {
             return;
@@ -4102,7 +4127,14 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
             return;
         };
         managed_run.status = RunStatus::Starting;
-        (run_dir, managed_run.execution_mode)
+        // Consume the transient ACP credentials into the worker's dedicated env
+        // channel. Serialized here, at the edge of the secret's lifetime, so it
+        // never enters an inspect-ed Ash/serde error or any persisted state.
+        let acp_credentials_json = managed_run
+            .injected_acp_credentials
+            .take()
+            .and_then(|creds| serde_json::to_string(&creds).ok());
+        (run_dir, managed_run.execution_mode, acp_credentials_json)
     };
 
     let run_store = match state.store.open_run(&run_id).await {
@@ -4160,6 +4192,7 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
             execution_mode,
             &run_dir_for_build,
             agent_fabro_tools_enabled,
+            acp_credentials_json,
         )
     })
     .await

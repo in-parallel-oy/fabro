@@ -479,6 +479,9 @@ fn write_sandbox_provider_policy(
             SandboxProviderKind::Local => allow_local,
             SandboxProviderKind::Docker => selection == InstallSandboxSelection::Docker,
             SandboxProviderKind::Daytona => selection == InstallSandboxSelection::Daytona,
+            // gcloud is operator-configured via environment, not the install
+            // wizard's runtime selection.
+            SandboxProviderKind::Gcloud => false,
         };
         let entry = ensure_table(providers, &provider.to_string())?;
         entry.insert("enabled".to_string(), toml::Value::Boolean(enabled));

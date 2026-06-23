@@ -11,7 +11,7 @@ use fabro_model::{Catalog, FallbackTarget, ProviderId};
 use fabro_sandbox::daytona::DaytonaConfig;
 use fabro_sandbox::from_environment::{
     daytona_config_from_environment, docker_config_from_environment,
-    local_working_directory_from_environment,
+    gcloud_config_from_environment, local_working_directory_from_environment,
 };
 use fabro_sandbox::{DockerSandboxOptions, SandboxSpec};
 use fabro_static::EnvVars;
@@ -82,6 +82,7 @@ struct RunSession {
     vault:             Option<Arc<AsyncRwLock<Vault>>>,
     catalog:           Arc<Catalog>,
     fabro_run_tools:   Option<FabroRunToolServices>,
+    acp_credentials:   crate::handler::llm::AcpCredentials,
 }
 
 struct ResolvedStartLlm {
@@ -109,6 +110,9 @@ pub struct StartServices {
     pub on_node:            crate::OnNodeCallback,
     pub registry_override:  Option<Arc<HandlerRegistry>>,
     pub fabro_run_tools:    Option<FabroRunToolServices>,
+    /// Per-run ACP credential injection (GOAL B). Threaded to the ACP backend
+    /// only; never merged into the shared sandbox `base_env`.
+    pub acp_credentials:    crate::handler::llm::AcpCredentials,
 }
 
 pub struct Started {
@@ -420,6 +424,28 @@ impl RunSession {
                     api_key,
                 }
             }
+            // gcloud (GCE-per-run): resolve the operator FABRO_GCLOUD_* substrate
+            // + the run's egress policy into a per-run config, then provision a
+            // fresh VM via the SandboxSpec build path (Compute insert → host-key
+            // pin → SSH → clone). The SA key JSON (if any) is a secret carried
+            // only in this transient spec, never persisted.
+            SandboxProviderKind::Gcloud => {
+                let (config, sa_key_json) =
+                    gcloud_config_from_environment(&resolved.environment, process_env_var)
+                        .map_err(|err| {
+                            Error::engine_with_source(
+                                "Failed to resolve gcloud environment configuration",
+                                err,
+                            )
+                        })?;
+                SandboxSpec::Gcloud {
+                    config: Box::new(config),
+                    run_id: Some(record.run_id),
+                    clone_origin_url: record.repo_origin_url().map(str::to_string),
+                    clone_branch: record.base_branch().map(str::to_string),
+                    sa_key_json,
+                }
+            }
         };
 
         let toml_env = resolved.environment.resolve_env(process_env_var);
@@ -482,6 +508,7 @@ impl RunSession {
             vault: services.vault,
             catalog,
             fabro_run_tools: services.fabro_run_tools,
+            acp_credentials: services.acp_credentials,
         })
     }
 }
@@ -846,6 +873,7 @@ impl RunSession {
             checkpoint,
             seed_context: self.seed_context,
             fabro_run_tools: self.fabro_run_tools,
+            acp_credentials: self.acp_credentials,
         };
         let mut initialized = Box::pin(pipeline::initialize(persisted, init_options)).await?;
         initialized.on_node = on_node;
@@ -1476,6 +1504,7 @@ reasoning = false
             on_node: None,
             registry_override: Some(registry),
             fabro_run_tools: None,
+            acp_credentials: crate::handler::llm::AcpCredentials::default(),
         }
     }
 

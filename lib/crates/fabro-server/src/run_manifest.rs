@@ -20,7 +20,7 @@ use fabro_model::{Catalog, ProviderId};
 use fabro_sandbox::daytona::DaytonaConfig;
 use fabro_sandbox::from_environment::{
     daytona_config_from_environment, docker_config_from_environment,
-    local_working_directory_from_environment,
+    gcloud_config_from_environment, local_working_directory_from_environment,
 };
 use fabro_sandbox::redact::redact_auth_url;
 use fabro_sandbox::{DockerSandboxOptions, Sandbox, SandboxSpec};
@@ -642,7 +642,9 @@ struct GitRemoteRefCheck {
 
 fn clone_disabled_for_provider(provider: SandboxProviderKind, resolved_run: &RunNamespace) -> bool {
     match provider {
-        SandboxProviderKind::Docker | SandboxProviderKind::Daytona => !resolved_run.clone.enabled,
+        SandboxProviderKind::Docker
+        | SandboxProviderKind::Daytona
+        | SandboxProviderKind::Gcloud => !resolved_run.clone.enabled,
         SandboxProviderKind::Local => false,
     }
 }
@@ -893,6 +895,17 @@ fn preflight_sandbox_spec(
                 clone_origin_url,
                 clone_branch,
                 api_key: daytona_api_key,
+            }
+        }
+        SandboxProviderKind::Gcloud => {
+            let (config, sa_key_json) =
+                gcloud_config_from_environment(&resolved_run.environment, process_env_var)?;
+            SandboxSpec::Gcloud {
+                config: Box::new(config),
+                run_id: None,
+                clone_origin_url,
+                clone_branch,
+                sa_key_json,
             }
         }
     })

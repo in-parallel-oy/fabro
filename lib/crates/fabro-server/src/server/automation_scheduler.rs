@@ -260,6 +260,7 @@ async fn fire_scheduled_automation_run(
             actor: actor.clone(),
             headers: HeaderMap::new(),
             automation: Some(automation_ref),
+            injected_acp_credentials: None,
         },
     ))
     .await;

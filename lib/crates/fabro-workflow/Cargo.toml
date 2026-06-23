@@ -26,7 +26,7 @@ fabro-graphviz = { path = "../fabro-graphviz" }
 fabro-hooks = { path = "../fabro-hooks" }
 fabro-validate = { path = "../fabro-validate" }
 fabro-dump = { path = "../fabro-dump" }
-fabro-sandbox = { path = "../fabro-sandbox", features = ["daytona"] }
+fabro-sandbox = { path = "../fabro-sandbox", features = ["daytona", "gcloud"] }
 fabro-mcp = { path = "../fabro-mcp" }
 fabro-github = { path = "../fabro-github" }
 fabro-interview = { path = "../fabro-interview" }
@@ -76,7 +76,7 @@ base64.workspace = true
 fabro-acp = { path = "../fabro-acp", features = ["test-support"] }
 fabro-api = { path = "../fabro-api" }
 fabro-environment = { path = "../fabro-environment" }
-fabro-sandbox = { path = "../fabro-sandbox", features = ["daytona", "docker", "test-support"] }
+fabro-sandbox = { path = "../fabro-sandbox", features = ["daytona", "docker", "gcloud", "test-support"] }
 fabro-mcp = { path = "../fabro-mcp" }
 tokio = { workspace = true, features = ["test-util", "macros"] }
 object_store.workspace = true

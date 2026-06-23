@@ -302,7 +302,15 @@ pub async fn run_acp_turn(request: AcpRunRequest) -> Result<AcpRunResult, AcpErr
     }
 
     state.terminate().await?;
-    let stderr = state.stderr_tail().await;
+    // Redact the success-path stderr the same way the error paths do
+    // (`exec_output_tail` runs the gitleaks/secret redactor). Previously the
+    // happy path returned the raw stderr tail, which could surface an injected
+    // ACP OAuth token in persisted run output.
+    let stderr = state
+        .exec_output_tail()
+        .await
+        .and_then(|tail| tail.stderr)
+        .unwrap_or_default();
     Ok(AcpRunResult {
         text,
         stop_reason,

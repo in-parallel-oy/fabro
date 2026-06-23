@@ -320,6 +320,10 @@ pub use billing_rollup::{
 };
 pub use error::{Error, FailureCategory, FailureSignature, FailureSignatureExt, Result};
 pub use fabro_types::ManifestPath;
+pub use handler::llm::{
+    AcpCredentials, AcpEngine, InjectedAcpCredentials, MalformedAcpCredentials,
+    split_acp_credentials,
+};
 pub use steering_hub::{PairControlError, SteeringHub};
 pub mod run_materialization;
 pub(crate) mod run_metadata;

@@ -241,6 +241,7 @@ async fn build_registry(
     catalog: Arc<Catalog>,
     tool_secrets: ToolSecrets,
     fabro_run_tools: Option<FabroRunToolServices>,
+    acp_credentials: crate::handler::llm::AcpCredentials,
 ) -> Result<(Arc<HandlerRegistry>, bool), Error> {
     let no_backend_interviewer = Arc::clone(&interviewer);
     let build_no_backend = move || {
@@ -275,6 +276,7 @@ async fn build_registry(
         let steering_hub_for_api = Arc::clone(&steering_hub);
         let tool_env_provider_for_backend = Arc::clone(&tool_env_provider);
         let fabro_run_tools_for_api = fabro_run_tools.clone();
+        let acp_credentials_for_backend = acp_credentials.clone();
         Arc::new(default_registry(interviewer, move || {
             let tool_env_provider = Arc::clone(&tool_env_provider_for_backend);
             let mut api = AgentApiBackend::new_with_catalog(
@@ -294,7 +296,8 @@ async fn build_registry(
             }
             let acp = AgentAcpBackend::new()
                 .with_tool_env_provider(tool_env_provider.clone(), github_token_refresh_managed)
-                .with_steering_hub(Arc::clone(&steering_hub));
+                .with_steering_hub(Arc::clone(&steering_hub))
+                .with_injected_credentials(acp_credentials_for_backend.clone());
             Some(Box::new(BackendRouter::new(Box::new(api), acp)))
         }))
     };
@@ -583,6 +586,7 @@ pub async fn initialize(
             Arc::clone(&catalog),
             tool_secrets.clone(),
             options.fabro_run_tools.clone(),
+            options.acp_credentials.clone(),
         )
         .await?
     };
@@ -987,6 +991,7 @@ mod tests {
             checkpoint:        None,
             seed_context:      None,
             fabro_run_tools:   None,
+            acp_credentials:   crate::handler::llm::AcpCredentials::default(),
         })
         .await;
         let events = seen.lock().unwrap().clone();
@@ -1069,6 +1074,7 @@ mod tests {
             checkpoint:        None,
             seed_context:      None,
             fabro_run_tools:   None,
+            acp_credentials:   crate::handler::llm::AcpCredentials::default(),
         })
         .await
         .unwrap();
@@ -1153,6 +1159,7 @@ mod tests {
             test_catalog(),
             ToolSecrets::default(),
             None,
+            crate::handler::llm::AcpCredentials::default(),
         )
         .await
         .unwrap();
@@ -1267,6 +1274,7 @@ mod tests {
             checkpoint:        None,
             seed_context:      None,
             fabro_run_tools:   None,
+            acp_credentials:   crate::handler::llm::AcpCredentials::default(),
         })
         .await
         .unwrap();
@@ -1363,6 +1371,7 @@ mod tests {
             checkpoint:        None,
             seed_context:      None,
             fabro_run_tools:   None,
+            acp_credentials:   crate::handler::llm::AcpCredentials::default(),
         })
         .await
         .unwrap();
@@ -1477,6 +1486,7 @@ mod tests {
             checkpoint: None,
             seed_context: None,
             fabro_run_tools: None,
+            acp_credentials: crate::handler::llm::AcpCredentials::default(),
         })
         .await;
 

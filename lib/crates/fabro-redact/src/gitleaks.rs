@@ -288,6 +288,22 @@ mod tests {
     }
 
     #[test]
+    fn detects_anthropic_oauth_token() {
+        let input = "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij0123456789";
+        let regions = find_gitleaks_regions(input);
+        assert!(!regions.is_empty(), "expected sk-ant-oat01 token to be flagged");
+    }
+
+    #[test]
+    fn detects_codex_oauth_jwt_access_token() {
+        // A JWT-shaped OpenAI/Codex access token.
+        let input =
+            "OPENAI_API_KEY=eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.QWxhZGRpbjpvcGVuc2VzYW1l";
+        let regions = find_gitleaks_regions(input);
+        assert!(!regions.is_empty(), "expected JWT access token to be flagged");
+    }
+
+    #[test]
     fn global_allowlist_stopwords_respected() {
         // The global allowlist includes a UUID that should not be flagged
         let regions = find_gitleaks_regions("014df517-39d1-4453-b7b3-9930c563627c");

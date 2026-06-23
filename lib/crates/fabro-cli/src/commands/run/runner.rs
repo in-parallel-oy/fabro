@@ -84,6 +84,10 @@ pub(crate) async fn execute(
     let _ = fabro_proc::title_init();
     set_worker_title(&run_id, initial_worker_title_phase(mode));
 
+    // GOAL B: lift the injected ACP credentials out of the worker's env and
+    // scrub them immediately, before anything spawns the sandbox or ACP child.
+    let acp_credentials = take_injected_acp_credentials();
+
     let target = server.parse::<ServerTarget>()?;
     let client = server_client::connect_server_target_with_bearer(&target, worker_token).await?;
     let run_store = HttpRunStore::connect(run_id, client.clone_for_reuse()).await?;
@@ -176,6 +180,7 @@ pub(crate) async fn execute(
         on_node: None,
         registry_override: None,
         fabro_run_tools,
+        acp_credentials,
     };
 
     let execution = async {
@@ -1146,6 +1151,30 @@ fn maybe_build_github_credentials(
 )]
 fn process_env_var(name: &str) -> Option<String> {
     std::env::var(name).ok()
+}
+
+/// Read and scrub the per-run ACP credential channel (GOAL B) from the worker's
+/// own environment. Done once, at worker entry, **before** the sandbox or any
+/// ACP child is spawned, so no descendant inherits the secret and it never
+/// reaches the shared sandbox `base_env`. A malformed blob is treated as no
+/// credentials — the run proceeds to its own auth-failure rather than leaking
+/// the parse error.
+fn take_injected_acp_credentials() -> fabro_workflow::AcpCredentials {
+    let Some(raw) = process_env_var(fabro_static::EnvVars::FABRO_ACP_CREDENTIALS) else {
+        return fabro_workflow::AcpCredentials::default();
+    };
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "Scrub the injected ACP credential from this process's env before any \
+                  child process is spawned, so no descendant can inherit it."
+    )]
+    {
+        std::env::remove_var(fabro_static::EnvVars::FABRO_ACP_CREDENTIALS);
+    }
+    serde_json::from_str::<fabro_workflow::InjectedAcpCredentials>(&raw)
+        .ok()
+        .and_then(|injected| fabro_workflow::AcpCredentials::try_from(injected).ok())
+        .unwrap_or_default()
 }
 
 /// Hard-gate for the CLI worker path: a run-level token is requested, or
