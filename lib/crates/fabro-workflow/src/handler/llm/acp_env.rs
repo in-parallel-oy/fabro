@@ -22,8 +22,23 @@
 use std::collections::HashMap;
 
 /// ACP-only credential environment. Distinct from `base_env` by construction.
-#[derive(Debug, Clone, Default)]
+///
+/// `Debug` is **hand-rolled to redact values**: this wraps live credential
+/// material (`CLAUDE_CODE_OAUTH_TOKEN`, etc.), and the whole point of the type
+/// is that the secret never reaches a log/inspect line. A derived `Debug` would
+/// print every token verbatim, so it is replaced with a key-only rendering.
+#[derive(Clone, Default)]
 pub struct AcpEnv(HashMap<String, String>);
+
+impl std::fmt::Debug for AcpEnv {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Expose which credential keys are present (useful for debugging) but
+        // never their values.
+        f.debug_struct("AcpEnv")
+            .field("keys", &self.0.keys().collect::<Vec<_>>())
+            .finish()
+    }
+}
 
 impl AcpEnv {
     /// Wrap a set of credential env vars destined for the ACP child only.
@@ -62,6 +77,18 @@ mod tests {
     #[test]
     fn empty_by_default() {
         assert!(AcpEnv::default().is_empty());
+    }
+
+    #[test]
+    fn debug_redacts_credential_values() {
+        let creds = AcpEnv::new(HashMap::from([(
+            "CLAUDE_CODE_OAUTH_TOKEN".to_string(),
+            "sk-ant-oat01-secret".to_string(),
+        )]));
+        let rendered = format!("{creds:?}");
+        // The key may appear (helpful for debugging) but never the token value.
+        assert!(!rendered.contains("sk-ant-oat01-secret"));
+        assert!(rendered.contains("CLAUDE_CODE_OAUTH_TOKEN"));
     }
 
     #[test]

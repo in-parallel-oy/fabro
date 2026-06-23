@@ -10,9 +10,12 @@
 //!     [`KnownHosts::Accept`], which would trust-on-first-use a key we never
 //!     verified.
 //!   * **Ephemeral key handling.** The per-run private key is materialized into
-//!     a `0600` file under a tmpfs dir (`/dev/shm` when available) for the
-//!     lifetime of the session — system ssh reads identities from a path — and
-//!     removed on drop. It never lands on persistent storage.
+//!     a `0600` file under a **tmpfs** dir (`/dev/shm`, or an operator-supplied
+//!     `FABRO_GCLOUD_SSH_SECRET_DIR` tmpfs mount) for the lifetime of the
+//!     session — system ssh reads identities from a path — and removed on drop.
+//!     If no tmpfs is available the session **fails closed** rather than writing
+//!     the private key to the OS temp dir, which may be persistent disk: the key
+//!     never lands on durable storage.
 //!     (`ponytail`: an ssh-agent injection path would keep it purely in-memory;
 //!     deferred — the openssh crate has no clean agent-injection seam.)
 
@@ -159,19 +162,24 @@ impl SshRunner for OpensshRunner {
     }
 }
 
-/// A short-lived directory on tmpfs (RAM-backed when `/dev/shm` exists) holding
-/// SSH secrets. Best-effort removed on drop.
+/// A short-lived directory on a tmpfs (RAM-backed) mount holding SSH secrets.
+/// Creation fails rather than falling back to persistent disk. Best-effort
+/// removed on drop.
 struct SecretDir {
     path: PathBuf,
 }
 
 impl SecretDir {
+    /// Create the secret dir on a tmpfs-backed base, failing closed when none is
+    /// available (never writes the private key to persistent disk).
     fn create() -> crate::Result<Self> {
-        let base = if std::path::Path::new("/dev/shm").is_dir() {
-            PathBuf::from("/dev/shm")
-        } else {
-            std::env::temp_dir()
-        };
+        Self::create_in(tmpfs_base()?)
+    }
+
+    /// Create the secret dir under an explicit base. The caller is responsible
+    /// for the base being RAM-backed; `create` enforces that, this is the
+    /// dependency-free seam used by tests.
+    fn create_in(base: PathBuf) -> crate::Result<Self> {
         let unique = format!("fabro-gcloud-ssh-{}", uuid::Uuid::new_v4());
         let path = base.join(unique);
         std::fs::create_dir(&path)
@@ -195,6 +203,38 @@ impl Drop for SecretDir {
     }
 }
 
+/// Resolve a tmpfs-backed base directory for the short-lived SSH private key.
+///
+/// Order: an operator-supplied `FABRO_GCLOUD_SSH_SECRET_DIR` tmpfs mount, else
+/// `/dev/shm` (the canonical Linux tmpfs). We deliberately do **not** fall back
+/// to `std::env::temp_dir()`: on most hosts that is persistent disk, and the
+/// per-run private key must never touch durable storage. With no tmpfs we fail
+/// closed so the run errors instead of silently leaking the key to disk.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "Intentional process-env lookup facade for the operator-supplied tmpfs override; no fixed EnvVars entry exists for this gcloud-only knob."
+)]
+fn tmpfs_base() -> crate::Result<PathBuf> {
+    if let Some(dir) = std::env::var_os("FABRO_GCLOUD_SSH_SECRET_DIR") {
+        let path = PathBuf::from(dir);
+        if path.is_dir() {
+            return Ok(path);
+        }
+        return Err(crate::Error::message(
+            "FABRO_GCLOUD_SSH_SECRET_DIR is set but is not a directory; point it at a writable tmpfs mount",
+        ));
+    }
+    let shm = PathBuf::from("/dev/shm");
+    if shm.is_dir() {
+        return Ok(shm);
+    }
+    Err(crate::Error::message(
+        "no tmpfs available for the ephemeral SSH key: /dev/shm is missing and \
+         FABRO_GCLOUD_SSH_SECRET_DIR is unset. Refusing to write the per-run private key to \
+         persistent disk — mount a tmpfs (e.g. /dev/shm) on the control-plane host.",
+    ))
+}
+
 #[cfg(unix)]
 fn set_mode(path: &std::path::Path, mode: u32) -> crate::Result<()> {
     use std::os::unix::fs::PermissionsExt;
@@ -213,11 +253,30 @@ mod tests {
 
     #[test]
     fn secret_dir_is_removed_on_drop() {
+        // Use `create_in` with a cross-platform base so the drop behaviour is
+        // testable on dev hosts without `/dev/shm` (e.g. macOS).
         let path = {
-            let dir = SecretDir::create().unwrap();
+            let dir = SecretDir::create_in(std::env::temp_dir()).unwrap();
             dir.write_file("id", b"secret", 0o600).unwrap();
             dir.path.clone()
         };
         assert!(!path.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "Test reads the override env var to skip when an operator override is set; no EnvVars entry exists for this gcloud-only knob."
+    )]
+    fn tmpfs_base_uses_dev_shm_not_temp_dir() {
+        // The production resolver must pick the tmpfs, never the (possibly
+        // persistent) OS temp dir. Only asserted when no operator override is in
+        // play and the canonical tmpfs exists.
+        if std::env::var_os("FABRO_GCLOUD_SSH_SECRET_DIR").is_none()
+            && std::path::Path::new("/dev/shm").is_dir()
+        {
+            assert_eq!(tmpfs_base().unwrap(), PathBuf::from("/dev/shm"));
+        }
     }
 }

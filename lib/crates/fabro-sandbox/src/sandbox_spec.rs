@@ -18,7 +18,7 @@ use crate::daytona::{self, DaytonaConfig, DaytonaSandbox};
 #[cfg(feature = "docker")]
 use crate::docker::{self, DockerSandbox, DockerSandboxOptions};
 #[cfg(feature = "gcloud")]
-use crate::gcloud::{GcloudConfig, GcloudSandbox};
+use crate::gcloud::{GcloudConfig, GcloudSandbox, auth::GcpAuth};
 use crate::local::LocalSandbox;
 use crate::{Sandbox, SandboxEventCallback};
 
@@ -263,10 +263,12 @@ impl SandboxSpec {
                 clone_branch,
                 sa_key_json,
             } => {
+                let http = reqwest::Client::new();
+                let auth = Arc::new(GcpAuth::new(http.clone(), sa_key_json.clone()));
                 let mut sandbox = GcloudSandbox::new(
                     config.as_ref().clone(),
-                    reqwest::Client::new(),
-                    sa_key_json.clone(),
+                    http,
+                    auth,
                     *run_id,
                     clone_origin_url.clone(),
                     clone_branch.clone(),

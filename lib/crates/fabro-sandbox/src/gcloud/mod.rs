@@ -88,15 +88,18 @@ pub struct GcloudSandbox {
 impl GcloudSandbox {
     /// Construct a sandbox for a single run. The ephemeral keypair is
     /// generated here and lives only in memory.
+    ///
+    /// `auth` is shared (an [`Arc`]) so the token cache lives with the provider
+    /// and the access token is reused across operations rather than re-minted
+    /// per sandbox.
     pub fn new(
         config: GcloudConfig,
         http: reqwest::Client,
-        sa_key_json: Option<String>,
+        auth: Arc<GcpAuth>,
         run_id: Option<RunId>,
         clone_url: Option<String>,
         clone_branch: Option<String>,
     ) -> crate::Result<Self> {
-        let auth = GcpAuth::new(http.clone(), sa_key_json);
         let compute = Arc::new(ComputeClient::new(http, auth));
         let keypair = EphemeralKeypair::generate()?;
         Ok(Self {
@@ -726,9 +729,10 @@ impl Sandbox for GcloudSandbox {
     }
 
     async fn git_push_ref(&self, refspec: &str) -> crate::Result<()> {
-        let cmd = format!("git push origin {}", shell_quote(refspec));
-        let result = self.exec_command(&cmd, 120_000, None, None, None).await?;
-        result.into_result("git push").map(|_| ())
+        // Reuse the shared push ritual (credential refresh → push → log) rather
+        // than hand-rolling `git push origin`, so the gcloud path can't silently
+        // skip `refresh_push_credentials` the way docker/daytona don't.
+        crate::git_push_via_exec(self, refspec).await
     }
 
     fn resume_setup_commands(&self, run_branch: &str) -> Vec<String> {
@@ -793,7 +797,8 @@ mod tests {
             ..Default::default()
         };
         let config = GcloudConfig::resolve(&settings, EgressPolicy::Block).unwrap();
-        GcloudSandbox::new(config, reqwest::Client::new(), None, None, None, None).unwrap()
+        let auth = Arc::new(GcpAuth::new(reqwest::Client::new(), None));
+        GcloudSandbox::new(config, reqwest::Client::new(), auth, None, None, None).unwrap()
     }
 
     #[test]

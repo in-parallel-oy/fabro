@@ -33,60 +33,103 @@ impl Default for EgressPolicy {
 
 impl EgressPolicy {
     /// Map a run's resolved [`SandboxNetworkPolicy`] onto an egress policy.
-    /// Unknown/essentials-only modes conservatively resolve to `AllowAll`
-    /// (the metadata-server drop still applies).
+    ///
+    /// `Unknown` is the serde **default** mode — it is what every run that omits
+    /// a network policy deserializes to, *not* an unrecognized/corrupt value — so
+    /// it maps to `AllowAll` (the unrestricted default; the metadata-server drop
+    /// still applies). Flipping it to `Block` would silently sever egress for the
+    /// common no-policy run, which is why it is *not* treated as fail-closed.
+    ///
+    /// `EssentialsOnly`, by contrast, is an **explicit operator request** to
+    /// constrain egress that this provider has no allow-set to honour. Rather
+    /// than silently widening it to unrestricted, we log a warning so the dropped
+    /// intent is observable, then fall through to `AllowAll` (the safe-to-run, if
+    /// unconstrained, behaviour) until an essentials allow-list is defined.
     #[must_use]
     pub fn from_network_policy(policy: &SandboxNetworkPolicy) -> Self {
         match policy.mode() {
             SandboxNetworkPolicyMode::Blocked => Self::Block,
             SandboxNetworkPolicyMode::CidrAllowList => Self::AllowList(policy.cidrs().to_vec()),
-            SandboxNetworkPolicyMode::Open
-            | SandboxNetworkPolicyMode::EssentialsOnly
-            | SandboxNetworkPolicyMode::Unknown => Self::AllowAll,
+            SandboxNetworkPolicyMode::EssentialsOnly => {
+                tracing::warn!(
+                    "gcloud provider: network policy mode 'essentials_only' is not honoured by \
+                     this provider (no essentials allow-set) — egress is left unrestricted apart \
+                     from the always-on metadata-server drop"
+                );
+                Self::AllowAll
+            }
+            SandboxNetworkPolicyMode::Open | SandboxNetworkPolicyMode::Unknown => Self::AllowAll,
         }
     }
 
-    /// Render an iptables fragment (bash) enforcing this policy on the VM. The
-    /// metadata-server drop is unconditional so untrusted job code can never
-    /// reach `169.254.169.254`, regardless of policy.
+    /// Render a host firewall fragment (bash) enforcing this policy on the VM,
+    /// covering **both** address families: `iptables` (IPv4) *and* `ip6tables`
+    /// (IPv6). Rendering only IPv4 would leave host egress wide open on an
+    /// IPv6-enabled subnet, bypassing the in-VM defence-in-depth layer.
+    ///
+    /// The metadata-server drop is unconditional so untrusted job code can never
+    /// reach `169.254.169.254`, regardless of policy. The GCE metadata server is
+    /// IPv4-only, so there is no IPv6 counterpart to drop.
     #[must_use]
     pub fn iptables_script(&self) -> String {
         let mut lines = vec![
             "#!/usr/bin/env bash".to_string(),
             "set -euo pipefail".to_string(),
             "# Always drop egress to the GCE metadata server (no SA token leak).".to_string(),
+            "# It is IPv4-only (169.254.169.254); there is no IPv6 equivalent.".to_string(),
             "iptables -A OUTPUT -d 169.254.169.254 -j DROP || true".to_string(),
         ];
 
         match self {
             Self::AllowAll => {}
             Self::Block => {
-                lines.push("iptables -A OUTPUT -o lo -j ACCEPT || true".to_string());
-                lines.push(
-                    "iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT || true"
-                        .to_string(),
-                );
-                lines.push("iptables -P OUTPUT DROP || true".to_string());
+                for bin in FIREWALL_BINS {
+                    push_baseline_accepts(&mut lines, bin);
+                    lines.push(format!("{bin} -P OUTPUT DROP || true"));
+                }
             }
             Self::AllowList(cidrs) => {
-                lines.push("iptables -A OUTPUT -o lo -j ACCEPT || true".to_string());
-                lines.push(
-                    "iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT || true"
-                        .to_string(),
-                );
-                for cidr in cidrs {
-                    // The CIDR is operator/run supplied; restrict to the
-                    // iptables address charset so it can't inject shell.
-                    if cidr.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b':' || b == b'/') {
-                        lines.push(format!("iptables -A OUTPUT -d {cidr} -j ACCEPT || true"));
-                    }
+                for bin in FIREWALL_BINS {
+                    push_baseline_accepts(&mut lines, bin);
                 }
-                lines.push("iptables -P OUTPUT DROP || true".to_string());
+                for cidr in cidrs {
+                    if !is_safe_cidr(cidr) {
+                        continue;
+                    }
+                    // Route each CIDR to its address family: a v6 CIDR fed to
+                    // `iptables` (or a v4 CIDR to `ip6tables`) is rejected, so
+                    // without family routing the allow rule silently never takes
+                    // effect and the traffic is dropped by the default policy.
+                    let bin = if cidr.contains(':') { "ip6tables" } else { "iptables" };
+                    lines.push(format!("{bin} -A OUTPUT -d {cidr} -j ACCEPT || true"));
+                }
+                for bin in FIREWALL_BINS {
+                    lines.push(format!("{bin} -P OUTPUT DROP || true"));
+                }
             }
         }
 
         lines.join("\n")
     }
+}
+
+/// The two firewall binaries we render rules for, one per IP family.
+const FIREWALL_BINS: [&str; 2] = ["iptables", "ip6tables"];
+
+/// Loopback + established/related accepts that must precede a default-drop so
+/// the SSH control channel and local traffic survive the policy.
+fn push_baseline_accepts(lines: &mut Vec<String>, bin: &str) {
+    lines.push(format!("{bin} -A OUTPUT -o lo -j ACCEPT || true"));
+    lines.push(format!(
+        "{bin} -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT || true"
+    ));
+}
+
+/// True when a CIDR is restricted to the iptables/ip6tables address charset, so
+/// an operator/run-supplied value can't inject shell into the rendered script.
+fn is_safe_cidr(cidr: &str) -> bool {
+    cidr.bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b':' || b == b'/')
 }
 
 #[cfg(test)]
@@ -116,5 +159,49 @@ mod tests {
     fn maps_blocked_network_policy() {
         let policy = SandboxNetworkPolicy::blocked();
         assert_eq!(EgressPolicy::from_network_policy(&policy), EgressPolicy::Block);
+    }
+
+    #[test]
+    fn maps_default_unknown_policy_to_allow_all() {
+        // Unknown is the serde default (policy-less run): it must stay AllowAll,
+        // not silently become a default-drop that severs the common run.
+        let policy = SandboxNetworkPolicy::default();
+        assert_eq!(policy.mode(), SandboxNetworkPolicyMode::Unknown);
+        assert_eq!(EgressPolicy::from_network_policy(&policy), EgressPolicy::AllowAll);
+    }
+
+    #[test]
+    fn maps_essentials_only_to_allow_all_unhonoured() {
+        // EssentialsOnly is an explicit operator request this provider can't
+        // honour; it resolves to AllowAll (and warns) rather than pretending to
+        // constrain egress.
+        let policy = SandboxNetworkPolicy::essentials_only();
+        assert_eq!(EgressPolicy::from_network_policy(&policy), EgressPolicy::AllowAll);
+    }
+
+    #[test]
+    fn block_renders_both_address_families() {
+        let script = EgressPolicy::Block.iptables_script();
+        // Without the ip6tables default-drop, IPv6 egress is unrestricted on an
+        // IPv6-enabled subnet.
+        assert!(script.contains("iptables -P OUTPUT DROP"));
+        assert!(script.contains("ip6tables -P OUTPUT DROP"));
+        assert!(script.contains("ip6tables -A OUTPUT -o lo -j ACCEPT"));
+    }
+
+    #[test]
+    fn allow_list_routes_each_cidr_to_its_family() {
+        let script = EgressPolicy::AllowList(vec![
+            "10.0.0.0/8".to_string(),
+            "2001:db8::/32".to_string(),
+        ])
+        .iptables_script();
+        assert!(script.contains("iptables -A OUTPUT -d 10.0.0.0/8 -j ACCEPT"));
+        assert!(script.contains("ip6tables -A OUTPUT -d 2001:db8::/32 -j ACCEPT"));
+        // The v6 CIDR must NOT be handed to iptables (it would be rejected).
+        assert!(!script.contains("iptables -A OUTPUT -d 2001:db8::/32"));
+        // Both families default-drop.
+        assert!(script.contains("iptables -P OUTPUT DROP"));
+        assert!(script.contains("ip6tables -P OUTPUT DROP"));
     }
 }

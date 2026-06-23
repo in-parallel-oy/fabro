@@ -35,7 +35,11 @@ pub enum AcpEngine {
 /// the request body before the manifest is parsed, so the secret never enters
 /// `submitted_manifest_bytes`, the persisted run, or a serde error rendered
 /// from the manifest.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// `Debug` is hand-rolled to redact `env` values: this struct carries the live
+/// credential material, and the surrounding seam goes to lengths to keep secrets
+/// out of logs/errors. A derived `Debug` would print every token verbatim, so it
+/// renders only the engine + the credential key names.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct InjectedAcpCredentials {
     /// The ACP agent the `env` material authenticates.
     pub engine: AcpEngine,
@@ -68,10 +72,23 @@ impl InjectedAcpCredentials {
     }
 }
 
+impl std::fmt::Debug for InjectedAcpCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InjectedAcpCredentials")
+            .field("engine", &self.engine)
+            .field("env_keys", &self.env.keys().collect::<Vec<_>>())
+            .finish()
+    }
+}
+
 /// Engine-specific, workflow-side form of the injected credentials. Built from
 /// [`InjectedAcpCredentials`] once, then threaded to the ACP backend. `Clone`
 /// because the backend factory closure may be invoked per stage.
-#[derive(Debug, Clone, Default)]
+///
+/// `Debug` is hand-rolled to redact the payload: both `ClaudeEnv` (token map)
+/// and `CodexAuthJson` (a materialized `auth.json` containing access + id
+/// tokens) carry live secrets, so the rendering names only the active variant.
+#[derive(Clone, Default)]
 pub enum AcpCredentials {
     /// No per-run credentials were injected.
     #[default]
@@ -82,6 +99,17 @@ pub enum AcpCredentials {
     /// Codex: a materialized `auth.json` body to write into `$CODEX_HOME`
     /// inside the sandbox for the duration of the ACP turn.
     CodexAuthJson(String),
+}
+
+impl std::fmt::Debug for AcpCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let variant = match self {
+            Self::None => "None",
+            Self::ClaudeEnv(_) => "ClaudeEnv(<redacted>)",
+            Self::CodexAuthJson(_) => "CodexAuthJson(<redacted>)",
+        };
+        write!(f, "AcpCredentials::{variant}")
+    }
 }
 
 impl TryFrom<InjectedAcpCredentials> for AcpCredentials {
@@ -356,6 +384,27 @@ mod tests {
         .to_string()
         .into_bytes();
         assert!(split_acp_credentials(&body).is_err());
+    }
+
+    #[test]
+    fn debug_redacts_injected_and_converted_secrets() {
+        let injected = InjectedAcpCredentials {
+            engine: AcpEngine::Codex,
+            env:    codex_env(),
+        };
+        // InjectedAcpCredentials Debug shows engine + key names, never values.
+        let injected_dbg = format!("{injected:?}");
+        assert!(!injected_dbg.contains(CODEX_ACCESS));
+        assert!(!injected_dbg.contains(CODEX_ID_TOKEN));
+        assert!(injected_dbg.contains("CODEX_ID_TOKEN")); // key name is fine
+
+        // The converted Codex auth.json (access + id tokens inside) must not
+        // surface through Debug either.
+        let creds = AcpCredentials::try_from(injected).unwrap();
+        let creds_dbg = format!("{creds:?}");
+        assert!(!creds_dbg.contains(CODEX_ACCESS));
+        assert!(!creds_dbg.contains(CODEX_ID_TOKEN));
+        assert!(creds_dbg.contains("redacted"));
     }
 
     #[test]

@@ -5,6 +5,8 @@
 //! a [`GcloudSandbox`], initializes it (insert VM → pin host key → SSH → clone)
 //! and projects the live instance into a [`SandboxInfo`].
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use fabro_types::{
     SandboxInfo, SandboxNetwork, SandboxProviderKind, SandboxResources, SandboxState,
@@ -17,23 +19,32 @@ use crate::gcloud::config::{GcloudConfig, GcloudSettings};
 use crate::Sandbox;
 use crate::gcloud::{GcloudSandbox, auth::GcpAuth};
 
-/// GCE-per-run provider. Stateless beyond the resolved operator settings and a
-/// shared HTTP client.
+/// GCE-per-run provider. Stateless beyond the resolved operator settings, a
+/// shared HTTP client, and a shared credential source.
 #[derive(Clone)]
 pub struct GcloudSandboxProvider {
     settings: GcloudSettings,
     http:     reqwest::Client,
+    /// One shared [`GcpAuth`] so the access-token cache is process-wide: every
+    /// `compute()` and each created [`GcloudSandbox`] reuse a single minted
+    /// token across operations instead of re-minting (and re-signing an SA JWT /
+    /// re-round-tripping the token endpoint) per list/get/create/delete.
+    auth:     Arc<GcpAuth>,
 }
 
 impl GcloudSandboxProvider {
     #[must_use]
     pub fn new(settings: GcloudSettings, http: reqwest::Client) -> Self {
-        Self { settings, http }
+        let auth = Arc::new(GcpAuth::new(http.clone(), settings.sa_key_json.clone()));
+        Self {
+            settings,
+            http,
+            auth,
+        }
     }
 
     fn compute(&self) -> ComputeClient {
-        let auth = GcpAuth::new(self.http.clone(), self.settings.sa_key_json.clone());
-        ComputeClient::new(self.http.clone(), auth)
+        ComputeClient::new(self.http.clone(), Arc::clone(&self.auth))
     }
 
     /// Resolve a config for read-only operations (list/get/delete), which only
@@ -85,7 +96,7 @@ impl SandboxProvider for GcloudSandboxProvider {
         let sandbox = GcloudSandbox::new(
             *config,
             self.http.clone(),
-            self.settings.sa_key_json.clone(),
+            Arc::clone(&self.auth),
             run_id,
             clone_origin_url,
             clone_branch,

@@ -14,6 +14,7 @@
 //!     anything missing them.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Instant;
 
 use serde::Deserialize;
@@ -83,14 +84,19 @@ struct InstanceList {
 }
 
 /// Compute REST client bound to one credential source.
+///
+/// `auth` is an [`Arc`] so the token cache is shared across every client built
+/// for the same provider: a single minted access token is reused across
+/// list/get/create/delete instead of being re-minted (and re-signing an SA JWT /
+/// re-round-tripping to the token endpoint) per operation.
 pub struct ComputeClient {
     http: reqwest::Client,
-    auth: GcpAuth,
+    auth: Arc<GcpAuth>,
 }
 
 impl ComputeClient {
     #[must_use]
-    pub fn new(http: reqwest::Client, auth: GcpAuth) -> Self {
+    pub fn new(http: reqwest::Client, auth: Arc<GcpAuth>) -> Self {
         Self { http, auth }
     }
 

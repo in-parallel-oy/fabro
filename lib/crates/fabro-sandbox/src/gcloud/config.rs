@@ -108,6 +108,21 @@ impl GcloudConfig {
                 .ok_or_else(|| crate::Error::message(format!("gcloud provider: {name} is not configured")))
         };
 
+        // A restrictive egress policy relies on TWO layers (VPC firewall scoped
+        // by the network tag + host iptables). With no `FABRO_GCLOUD_EGRESS_TAG`
+        // the firewall layer is silently absent and only the in-VM iptables drop
+        // applies — surface that so an operator doesn't believe they have
+        // network isolation they don't actually have.
+        if settings.egress_tag.is_none()
+            && matches!(egress, EgressPolicy::Block | EgressPolicy::AllowList(_))
+        {
+            tracing::warn!(
+                "gcloud provider: a restrictive egress policy is configured but \
+                 FABRO_GCLOUD_EGRESS_TAG is unset — the VPC-firewall enforcement layer is \
+                 absent; only the in-VM iptables defence applies"
+            );
+        }
+
         Ok(Self {
             project: require(&settings.project, "FABRO_GCLOUD_PROJECT")?,
             zone: require(&settings.zone, "FABRO_GCLOUD_ZONE")?,
