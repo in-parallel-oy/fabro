@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::Result;
-#[cfg(any(feature = "docker", feature = "daytona"))]
+#[cfg(any(feature = "docker", feature = "daytona", feature = "gcloud"))]
 use chrono::{DateTime, Utc};
 use fabro_types::{
     RunId, RunSandboxInstance, SandboxDetails, SandboxNetwork, SandboxProviderKind,
@@ -64,7 +64,7 @@ fn local_details(record: &RunSandboxInstance) -> SandboxDetails {
     }
 }
 
-#[cfg(any(feature = "docker", feature = "daytona"))]
+#[cfg(any(feature = "docker", feature = "daytona", feature = "gcloud"))]
 fn parse_rfc3339_utc(value: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(value)
         .ok()
@@ -808,6 +808,94 @@ pub(crate) mod daytona {
             let network = daytona_network(false, None);
             assert_eq!(network.egress, SandboxNetworkPolicy::open());
             assert_eq!(network.ingress, SandboxNetworkPolicy::blocked());
+        }
+    }
+}
+
+#[cfg(feature = "gcloud")]
+pub(crate) mod gcloud {
+    use std::collections::BTreeMap;
+
+    use fabro_types::{
+        SandboxInfo, SandboxNetwork, SandboxProviderKind, SandboxResources, SandboxState,
+        SandboxTimestamps,
+    };
+
+    use super::parse_rfc3339_utc;
+    use crate::gcloud::GcloudConfig;
+    use crate::gcloud::compute::{Instance, RUN_ID_LABEL_KEY};
+
+    /// Project a live GCE [`Instance`] into a provider-neutral [`SandboxInfo`],
+    /// mirroring the docker/daytona projections so every provider builds
+    /// `SandboxInfo` in this canonical layer rather than inline in its surface.
+    pub(crate) fn gcloud_info_from_instance(
+        instance: &Instance,
+        config: &GcloudConfig,
+    ) -> SandboxInfo {
+        let mut labels: BTreeMap<String, String> = instance
+            .labels
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        let display_name = labels
+            .get(RUN_ID_LABEL_KEY)
+            .cloned()
+            .map(|run_id| format!("run {run_id}"));
+        labels
+            .entry("zone".to_string())
+            .or_insert_with(|| config.zone.clone());
+
+        SandboxInfo {
+            provider:          SandboxProviderKind::Gcloud,
+            id:                instance.name.clone(),
+            display_name,
+            state:             normalize_gcloud_state(instance.status.as_deref()),
+            native_state:      instance.status.clone(),
+            image:             Some(config.vm_image.clone()),
+            snapshot:          None,
+            region:            Some(config.region()),
+            web_url:           None,
+            working_directory: Some(config.working_dir.clone()),
+            resources:         SandboxResources::default(),
+            network:           SandboxNetwork::unknown(),
+            labels,
+            timestamps:        SandboxTimestamps {
+                created_at:       instance
+                    .creation_timestamp
+                    .as_deref()
+                    .and_then(parse_rfc3339_utc),
+                last_activity_at: None,
+            },
+        }
+    }
+
+    /// Map a GCE instance `status` string onto the neutral [`SandboxState`].
+    fn normalize_gcloud_state(status: Option<&str>) -> SandboxState {
+        match status {
+            Some("PROVISIONING" | "STAGING") => SandboxState::Provisioning,
+            Some("RUNNING") => SandboxState::Running,
+            Some("STOPPING") => SandboxState::Stopping,
+            Some("TERMINATED" | "STOPPED" | "SUSPENDED") => SandboxState::Stopped,
+            _ => SandboxState::Unknown,
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn maps_gce_status_to_neutral_state() {
+            assert_eq!(normalize_gcloud_state(Some("RUNNING")), SandboxState::Running);
+            assert_eq!(
+                normalize_gcloud_state(Some("PROVISIONING")),
+                SandboxState::Provisioning
+            );
+            assert_eq!(
+                normalize_gcloud_state(Some("TERMINATED")),
+                SandboxState::Stopped
+            );
+            assert_eq!(normalize_gcloud_state(None), SandboxState::Unknown);
         }
     }
 }

@@ -21,7 +21,6 @@
 //! * `compute.instances.insert`
 //! * `compute.instances.delete`
 //! * `compute.instances.get`
-//! * `compute.instances.setMetadata`
 //! * `compute.instances.getGuestAttributes` — **required for host-key pinning**;
 //!   without it [`compute::ComputeClient::host_key_from_guest_attributes`]
 //!   returns 403 and `initialize()` fails fast with an actionable error rather
@@ -506,13 +505,10 @@ impl Sandbox for GcloudSandbox {
     ) -> crate::Result<ExecStreamingResult> {
         // A genuine streaming impl: spawn the command with piped stdout and
         // forward chunks live, collecting them for the final ExecResult.
+        // `spawn_stdio_process` applies the working-dir + env wrapping itself, so
+        // pass the raw command through rather than wrapping it twice.
         let mut process = self
-            .spawn_stdio_process(
-                &self.build_exec_script(command, working_dir, env_vars),
-                None,
-                None,
-                cancel_token,
-            )
+            .spawn_stdio_process(command, working_dir, env_vars, cancel_token)
             .await?;
         let started = Instant::now();
 

@@ -11,9 +11,10 @@
 //! This type only *describes* the policy and renders the host-side iptables
 //! fragment; it never opens a socket.
 
-use fabro_types::{SandboxNetworkPolicy, SandboxNetworkPolicyMode};
-
 /// Resolved per-run egress policy.
+///
+/// Constructed on the run path by `gcloud_config_from_environment`, which maps
+/// the run's `EnvironmentNetworkMode` onto these variants.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EgressPolicy {
     /// Drop all outbound traffic (except loopback + the established control
@@ -25,43 +26,7 @@ pub enum EgressPolicy {
     AllowList(Vec<String>),
 }
 
-impl Default for EgressPolicy {
-    fn default() -> Self {
-        Self::AllowAll
-    }
-}
-
 impl EgressPolicy {
-    /// Map a run's resolved [`SandboxNetworkPolicy`] onto an egress policy.
-    ///
-    /// `Unknown` is the serde **default** mode — it is what every run that omits
-    /// a network policy deserializes to, *not* an unrecognized/corrupt value — so
-    /// it maps to `AllowAll` (the unrestricted default; the metadata-server drop
-    /// still applies). Flipping it to `Block` would silently sever egress for the
-    /// common no-policy run, which is why it is *not* treated as fail-closed.
-    ///
-    /// `EssentialsOnly`, by contrast, is an **explicit operator request** to
-    /// constrain egress that this provider has no allow-set to honour. Rather
-    /// than silently widening it to unrestricted, we log a warning so the dropped
-    /// intent is observable, then fall through to `AllowAll` (the safe-to-run, if
-    /// unconstrained, behaviour) until an essentials allow-list is defined.
-    #[must_use]
-    pub fn from_network_policy(policy: &SandboxNetworkPolicy) -> Self {
-        match policy.mode() {
-            SandboxNetworkPolicyMode::Blocked => Self::Block,
-            SandboxNetworkPolicyMode::CidrAllowList => Self::AllowList(policy.cidrs().to_vec()),
-            SandboxNetworkPolicyMode::EssentialsOnly => {
-                tracing::warn!(
-                    "gcloud provider: network policy mode 'essentials_only' is not honoured by \
-                     this provider (no essentials allow-set) — egress is left unrestricted apart \
-                     from the always-on metadata-server drop"
-                );
-                Self::AllowAll
-            }
-            SandboxNetworkPolicyMode::Open | SandboxNetworkPolicyMode::Unknown => Self::AllowAll,
-        }
-    }
-
     /// Render a host firewall fragment (bash) enforcing this policy on the VM,
     /// covering **both** address families: `iptables` (IPv4) *and* `ip6tables`
     /// (IPv6). Rendering only IPv4 would leave host egress wide open on an
@@ -153,30 +118,6 @@ mod tests {
     fn allow_list_rejects_injection() {
         let script = EgressPolicy::AllowList(vec!["10.0.0.0/8; rm -rf /".to_string()]).iptables_script();
         assert!(!script.contains("rm -rf"));
-    }
-
-    #[test]
-    fn maps_blocked_network_policy() {
-        let policy = SandboxNetworkPolicy::blocked();
-        assert_eq!(EgressPolicy::from_network_policy(&policy), EgressPolicy::Block);
-    }
-
-    #[test]
-    fn maps_default_unknown_policy_to_allow_all() {
-        // Unknown is the serde default (policy-less run): it must stay AllowAll,
-        // not silently become a default-drop that severs the common run.
-        let policy = SandboxNetworkPolicy::default();
-        assert_eq!(policy.mode(), SandboxNetworkPolicyMode::Unknown);
-        assert_eq!(EgressPolicy::from_network_policy(&policy), EgressPolicy::AllowAll);
-    }
-
-    #[test]
-    fn maps_essentials_only_to_allow_all_unhonoured() {
-        // EssentialsOnly is an explicit operator request this provider can't
-        // honour; it resolves to AllowAll (and warns) rather than pretending to
-        // constrain egress.
-        let policy = SandboxNetworkPolicy::essentials_only();
-        assert_eq!(EgressPolicy::from_network_policy(&policy), EgressPolicy::AllowAll);
     }
 
     #[test]

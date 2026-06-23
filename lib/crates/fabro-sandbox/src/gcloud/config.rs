@@ -14,9 +14,6 @@ use std::time::Duration;
 
 use crate::gcloud::egress::EgressPolicy;
 
-/// Default Fabro install/control port a provisioned VM listens on. Matches the
-/// metafactory fleet default so a shared image needs no re-pin.
-pub const DEFAULT_FABRO_PORT: u16 = 32_276;
 /// Instance name prefix. The control-plane SA's IAM condition is expected to
 /// be bound to `resource.name.startsWith("<prefix>")` to cap blast radius.
 pub const DEFAULT_NAME_PREFIX: &str = "fabro-run-";
@@ -38,7 +35,6 @@ pub struct GcloudSettings {
     pub name_prefix:  Option<String>,
     pub ssh_user:     Option<String>,
     pub working_dir:  Option<String>,
-    pub fabro_port:   Option<u16>,
     /// Network tag applied to the VM so a pre-created VPC firewall rule can
     /// scope egress. Paired with the host iptables drop in the startup script.
     pub egress_tag:   Option<String>,
@@ -61,7 +57,6 @@ impl GcloudSettings {
             name_prefix:  lookup("FABRO_GCLOUD_NAME_PREFIX"),
             ssh_user:     lookup("FABRO_GCLOUD_SSH_USER"),
             working_dir:  lookup("FABRO_GCLOUD_WORKING_DIR"),
-            fabro_port:   lookup("FABRO_GCLOUD_FABRO_PORT").and_then(|v| v.parse().ok()),
             egress_tag:   lookup("FABRO_GCLOUD_EGRESS_TAG"),
             sa_key_json:  lookup("FABRO_GCLOUD_SA_KEY_JSON"),
         }
@@ -90,7 +85,6 @@ pub struct GcloudConfig {
     pub name_prefix:           String,
     pub ssh_user:              String,
     pub working_dir:           String,
-    pub fabro_port:            u16,
     pub egress_tag:            Option<String>,
     pub egress:                EgressPolicy,
     pub operation_timeout:     Duration,
@@ -141,7 +135,6 @@ impl GcloudConfig {
                 .working_dir
                 .clone()
                 .unwrap_or_else(|| DEFAULT_WORKING_DIR.to_string()),
-            fabro_port: settings.fabro_port.unwrap_or(DEFAULT_FABRO_PORT),
             egress_tag: settings.egress_tag.clone(),
             egress,
             operation_timeout: Duration::from_secs(180),

@@ -16,7 +16,6 @@ cap blast radius to fleet VMs. Do **not** grant `roles/compute.instanceAdmin.v1`
 | `compute.instances.insert` | `instances.insert` (create VM) |
 | `compute.instances.delete` | `instances.delete` (teardown) |
 | `compute.instances.get` | `instances.get` (IP + labels) |
-| `compute.instances.setMetadata` | metadata scrub after registration |
 | `compute.instances.getGuestAttributes` | **host-key pinning** (see below) |
 | `compute.disks.create` | boot disk creation |
 | `compute.subnetworks.use` | attach the VM to the subnetwork |
@@ -61,6 +60,5 @@ metadata server (and the VM has no attached SA token anyway).
 | `FABRO_GCLOUD_NAME_PREFIX` | no | defaults to `fabro-run-` |
 | `FABRO_GCLOUD_SSH_USER` | no | defaults to `fabro` |
 | `FABRO_GCLOUD_WORKING_DIR` | no | clone destination on the VM |
-| `FABRO_GCLOUD_FABRO_PORT` | no | defaults to `32276` |
 | `FABRO_GCLOUD_EGRESS_TAG` | no | VPC firewall network tag |
 | `FABRO_GCLOUD_SA_KEY_JSON` | no | SA key JSON (off-GCP auth fallback) |

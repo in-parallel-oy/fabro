@@ -229,7 +229,7 @@ impl ComputeClient {
                 "GCE getGuestAttributes for instance '{name}' was denied (403). Host-key pinning \
                  requires the `compute.instances.getGuestAttributes` IAM permission on the \
                  control-plane service account; add it to the custom role (it is NOT included in \
-                 `compute.instances.{{insert,delete,get,setMetadata}}`)."
+                 `compute.instances.{{insert,delete,get}}`)."
             )));
         }
         // Any other non-success: not yet published / transient — retry.
@@ -241,7 +241,7 @@ impl ComputeClient {
             .json()
             .await
             .map_err(|err| crate::Error::context("GCE guest attributes were not JSON", err))?;
-        Ok(parse_host_key(&body, name))
+        Ok(parse_host_key(&body))
     }
 
     async fn post_json<T: for<'de> Deserialize<'de>>(
@@ -366,7 +366,7 @@ fn operation_name(op: Operation) -> crate::Result<String> {
 /// VM publishes entries under `hostkeys/<type>`; prefer ed25519, else the
 /// first entry. Returns a `known_hosts`-ready line (`<host> <type> <key>` is
 /// assembled by the caller; here we return `<type> <base64>`).
-fn parse_host_key(body: &Value, _name: &str) -> Option<String> {
+fn parse_host_key(body: &Value) -> Option<String> {
     let items = body
         .get("queryValue")
         .and_then(|qv| qv.get("items"))
@@ -469,7 +469,7 @@ mod tests {
                 { "namespace": "hostkeys", "key": "ssh-ed25519", "value": "ssh-ed25519 AAAAED" }
             ]}
         });
-        assert_eq!(parse_host_key(&body, "n").as_deref(), Some("ssh-ed25519 AAAAED"));
+        assert_eq!(parse_host_key(&body).as_deref(), Some("ssh-ed25519 AAAAED"));
     }
 
     #[test]
