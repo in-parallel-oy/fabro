@@ -84,7 +84,7 @@ Fabro is open source and ships as a single Rust binary with zero runtime depende
 
 ```bash
 # Install
-curl -fsSL https://fabro.sh/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/in-parallel-oy/fabro/main/apps/marketing/public/install.sh | bash
 
 # Run a workflow
 fabro run implement

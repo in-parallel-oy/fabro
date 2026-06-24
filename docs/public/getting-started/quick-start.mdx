@@ -26,28 +26,28 @@ On Intel Macs, run Fabro in a Linux x86_64 container or VM. Native Windows isn't
 <Tabs>
   <Tab title="Claude Code">
     ```bash
-    curl -fsSL https://fabro.sh/install.md | claude
+    curl -fsSL https://raw.githubusercontent.com/in-parallel-oy/fabro/main/apps/marketing/public/install.md | claude
     ```
   </Tab>
   <Tab title="Codex">
     ```bash
-    codex "$(curl -fsSL https://fabro.sh/install.md)"
+    codex "$(curl -fsSL https://raw.githubusercontent.com/in-parallel-oy/fabro/main/apps/marketing/public/install.md)"
     ```
   </Tab>
   <Tab title="Homebrew">
     ```bash
-    brew install fabro-sh/tap/fabro-nightly
+    brew install in-parallel-oy/tap/fabro-nightly
     ```
   </Tab>
   <Tab title="Bash">
     ```bash
-    curl -fsSL https://fabro.sh/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/in-parallel-oy/fabro/main/apps/marketing/public/install.sh | bash
     ```
   </Tab>
 </Tabs>
 
 <Tip>
-Release binaries and the multi-arch Docker image ship with [SLSA Build Provenance](/reference/verifying-releases) attestations you can verify with `gh attestation verify`.
+Release binaries ship with [SLSA Build Provenance](/reference/verifying-releases) attestations you can verify with `gh attestation verify`.
 </Tip>
 
 <Note>

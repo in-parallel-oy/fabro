@@ -4,7 +4,7 @@ description: "Automated code review that catches bugs, style issues, and securit
 thumbnail: "/showcase/pr-review-bot.png"
 tags: ["code-review", "ci-cd", "github"]
 languages: ["typescript", "python"]
-github: "https://github.com/fabro-sh/fabro/tree/main/examples/pr-review-bot"
+github: "https://github.com/in-parallel-oy/fabro/tree/main/examples/pr-review-bot"
 models: ["claude-sonnet-4-5", "claude-haiku-4-5"]
 skills: ["code-review", "git", "github"]
 prompt: "Review this pull request for bugs, security issues, and style violations. Focus on logic errors and potential runtime failures. Summarize findings as inline comments on the diff, then produce a top-level review with an overall assessment and a clear approve/request-changes verdict."

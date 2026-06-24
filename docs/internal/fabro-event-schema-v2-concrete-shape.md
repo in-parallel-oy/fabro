@@ -6,7 +6,7 @@ Status: implemented
 
 This document turns the settled design decisions from the event-schema discussion into a concrete wire-contract proposal.
 
-It intentionally supersedes the earlier framing in [fabro-event-schema-v2-proposal.md](/Users/bhelmkamp/p/fabro-sh/fabro/docs-internal/fabro-event-schema-v2-proposal.md) for:
+It intentionally supersedes the earlier framing in [fabro-event-schema-v2-proposal.md](/Users/bhelmkamp/p/in-parallel-oy/fabro/docs-internal/fabro-event-schema-v2-proposal.md) for:
 
 - proposal 1: one canonical persisted log, not two truths
 - proposal 2: formalize and generalize the existing `since_seq` replay contract, rather than inventing replay from scratch
@@ -269,21 +269,21 @@ The durable model remains simple: replay ordered events, no duplicate truth laye
 
 An engineer implementing this proposal should make only these structural changes unless a later section explicitly says otherwise.
 
-1. Update [`RunEvent`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-types/src/run_event/mod.rs) to add:
+1. Update [`RunEvent`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-types/src/run_event/mod.rs) to add:
    - `stage_id`
    - `parallel_group_id`
    - `parallel_branch_id`
    - `tool_call_id`
    - `actor`
-2. Update `RunEvent::to_value()` and `RunEvent` parsing in [`run_event/mod.rs`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-types/src/run_event/mod.rs) so the new envelope fields serialize and deserialize.
-3. Extend `StoredEventFields` and `stored_event_fields()` in [`event.rs`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-workflow/src/event.rs) to populate:
+2. Update `RunEvent::to_value()` and `RunEvent` parsing in [`run_event/mod.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-types/src/run_event/mod.rs) so the new envelope fields serialize and deserialize.
+3. Extend `StoredEventFields` and `stored_event_fields()` in [`event.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-workflow/src/event.rs) to populate:
    - `stage_id`
    - `parallel_group_id`
    - `parallel_branch_id`
    - `tool_call_id` on tool-lifecycle events
    - `actor` when there is a clear primary actor
    These values should come from the emitter's current execution context for stage and parallel scope, and from event-specific payloads for `tool_call_id`.
-4. Leave [`EventEnvelope`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-store/src/types.rs) structurally unchanged:
+4. Leave [`EventEnvelope`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-store/src/types.rs) structurally unchanged:
    - `seq: u32`
    - `payload: EventPayload`
 5. Update API/SSE envelope serialization so wire JSON is flattened:
@@ -304,11 +304,11 @@ An engineer implementing this proposal should make only these structural changes
 
 V2 should keep the current hand-coded domain split for prop structs:
 
-- run props in [`run.rs`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-types/src/run_event/run.rs)
-- stage and checkpoint props in [`stage.rs`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-types/src/run_event/stage.rs)
-- agent props in [`agent.rs`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-types/src/run_event/agent.rs)
-- infra/setup props in [`infra.rs`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-types/src/run_event/infra.rs)
-- parallel/interview/git/misc props in [`misc.rs`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-types/src/run_event/misc.rs)
+- run props in [`run.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-types/src/run_event/run.rs)
+- stage and checkpoint props in [`stage.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-types/src/run_event/stage.rs)
+- agent props in [`agent.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-types/src/run_event/agent.rs)
+- infra/setup props in [`infra.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-types/src/run_event/infra.rs)
+- parallel/interview/git/misc props in [`misc.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-types/src/run_event/misc.rs)
 
 That split is part of the design quality. V2 should keep adding hand-coded prop structs, not collapse everything into generic maps.
 

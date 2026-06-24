@@ -19,7 +19,7 @@ Definitions use compact TOML:
 ```toml
 [automations.nightly-deps]
 name = "Nightly dependency update"
-repository = "fabro-sh/fabro"
+repository = "in-parallel-oy/fabro"
 ref = "main"
 workflow = "dependency-update"
 

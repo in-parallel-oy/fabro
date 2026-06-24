@@ -83,9 +83,9 @@ Additional board decisions:
 
 Update the shared contract in:
 
-- [docs/api-reference/fabro-api.yaml](/Users/bhelmkamp/p/fabro-sh/fabro/docs/api-reference/fabro-api.yaml)
-- [lib/crates/fabro-types/src/status.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-types/src/status.rs)
-- [lib/crates/fabro-types/src/run_event/mod.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-types/src/run_event/mod.rs)
+- [docs/api-reference/fabro-api.yaml](/Users/bhelmkamp/p/in-parallel-oy/fabro/docs/api-reference/fabro-api.yaml)
+- [lib/crates/fabro-types/src/status.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-types/src/status.rs)
+- [lib/crates/fabro-types/src/run_event/mod.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-types/src/run_event/mod.rs)
 - generated Rust client/types under `lib/crates/fabro-api`
 - generated TypeScript models under `lib/packages/fabro-api-client/src/models/`
 
@@ -109,12 +109,12 @@ Required changes:
 
 Add event-backed lifecycle support in:
 
-- [lib/crates/fabro-workflow/src/event.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-workflow/src/event.rs)
-- [lib/crates/fabro-types/src/run_event/mod.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-types/src/run_event/mod.rs)
-- [lib/crates/fabro-workflow/src/handler/human.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-workflow/src/handler/human.rs)
-- [lib/crates/fabro-workflow/src/operations/start.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-workflow/src/operations/start.rs)
-- [lib/crates/fabro-workflow/src/run_control.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-workflow/src/run_control.rs)
-- [lib/crates/fabro-types/src/status.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-types/src/status.rs)
+- [lib/crates/fabro-workflow/src/event.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-workflow/src/event.rs)
+- [lib/crates/fabro-types/src/run_event/mod.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-types/src/run_event/mod.rs)
+- [lib/crates/fabro-workflow/src/handler/human.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-workflow/src/handler/human.rs)
+- [lib/crates/fabro-workflow/src/operations/start.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-workflow/src/operations/start.rs)
+- [lib/crates/fabro-workflow/src/run_control.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-workflow/src/run_control.rs)
+- [lib/crates/fabro-types/src/status.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-types/src/status.rs)
 
 Add new explicit lifecycle events:
 
@@ -178,11 +178,11 @@ Transition helper updates in `status.rs`:
 
 Update durable state and operator-facing API behavior in:
 
-- [lib/crates/fabro-store/src/run_state.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-store/src/run_state.rs)
-- [lib/crates/fabro-store/src/types.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-store/src/types.rs)
-- [lib/crates/fabro-store/src/slate/mod.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-store/src/slate/mod.rs)
-- [lib/crates/fabro-server/src/server.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-server/src/server.rs)
-- [lib/crates/fabro-server/src/demo/mod.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-server/src/demo/mod.rs)
+- [lib/crates/fabro-store/src/run_state.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-store/src/run_state.rs)
+- [lib/crates/fabro-store/src/types.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-store/src/types.rs)
+- [lib/crates/fabro-store/src/slate/mod.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-store/src/slate/mod.rs)
+- [lib/crates/fabro-server/src/server.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-server/src/server.rs)
+- [lib/crates/fabro-server/src/demo/mod.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-server/src/demo/mod.rs)
 
 Projection changes:
 
@@ -229,10 +229,10 @@ Live managed-run reconciliation:
 
 Update the web-only board projection in:
 
-- [lib/crates/fabro-server/src/server.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-server/src/server.rs)
-- [apps/fabro-web/app/data/runs.ts](/Users/bhelmkamp/p/fabro-sh/fabro/apps/fabro-web/app/data/runs.ts)
-- [apps/fabro-web/app/routes/runs.tsx](/Users/bhelmkamp/p/fabro-sh/fabro/apps/fabro-web/app/routes/runs.tsx)
-- [apps/fabro-web/app/routes/run-detail.tsx](/Users/bhelmkamp/p/fabro-sh/fabro/apps/fabro-web/app/routes/run-detail.tsx)
+- [lib/crates/fabro-server/src/server.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-server/src/server.rs)
+- [apps/fabro-web/app/data/runs.ts](/Users/bhelmkamp/p/in-parallel-oy/fabro/apps/fabro-web/app/data/runs.ts)
+- [apps/fabro-web/app/routes/runs.tsx](/Users/bhelmkamp/p/in-parallel-oy/fabro/apps/fabro-web/app/routes/runs.tsx)
+- [apps/fabro-web/app/routes/run-detail.tsx](/Users/bhelmkamp/p/in-parallel-oy/fabro/apps/fabro-web/app/routes/run-detail.tsx)
 
 Required changes:
 
@@ -276,9 +276,9 @@ Rationale:
 
 Update CLI consumers in:
 
-- [lib/crates/fabro-cli/src/server_runs.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-cli/src/server_runs.rs)
-- [lib/crates/fabro-cli/src/commands/runs/list.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-cli/src/commands/runs/list.rs)
-- [lib/crates/fabro-cli/src/commands/run/wait.rs](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-cli/src/commands/run/wait.rs)
+- [lib/crates/fabro-cli/src/server_runs.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-cli/src/server_runs.rs)
+- [lib/crates/fabro-cli/src/commands/runs/list.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-cli/src/commands/runs/list.rs)
+- [lib/crates/fabro-cli/src/commands/run/wait.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-cli/src/commands/run/wait.rs)
 
 Required changes:
 

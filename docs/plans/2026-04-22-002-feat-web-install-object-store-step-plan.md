@@ -457,16 +457,16 @@ install validation, runtime mode:
 
 ## Sources & References
 
-- **Origin document:** [docs/brainstorms/2026-04-22-web-install-object-store-choice-requirements.md](/Users/bhelmkamp/p/fabro-sh/fabro-4/docs/brainstorms/2026-04-22-web-install-object-store-choice-requirements.md:1)
-- Related code: [lib/crates/fabro-server/src/install.rs](/Users/bhelmkamp/p/fabro-sh/fabro-4/lib/crates/fabro-server/src/install.rs:1)
-- Related code: [lib/crates/fabro-server/src/serve.rs](/Users/bhelmkamp/p/fabro-sh/fabro-4/lib/crates/fabro-server/src/serve.rs:323)
-- Related code: [lib/crates/fabro-server/src/server_secrets.rs](/Users/bhelmkamp/p/fabro-sh/fabro-4/lib/crates/fabro-server/src/server_secrets.rs:1)
-- Related code: [lib/crates/fabro-server/src/security_headers.rs](/Users/bhelmkamp/p/fabro-sh/fabro-4/lib/crates/fabro-server/src/security_headers.rs:1)
-- Related code: [lib/crates/fabro-install/src/lib.rs](/Users/bhelmkamp/p/fabro-sh/fabro-4/lib/crates/fabro-install/src/lib.rs:123)
-- Related code: [lib/crates/fabro-store/src/artifact_store.rs](/Users/bhelmkamp/p/fabro-sh/fabro-4/lib/crates/fabro-store/src/artifact_store.rs:42)
-- Related code: [lib/crates/fabro-store/src/slate/mod.rs](/Users/bhelmkamp/p/fabro-sh/fabro-4/lib/crates/fabro-store/src/slate/mod.rs:53)
-- Related code: [apps/fabro-web/app/install-app.tsx](/Users/bhelmkamp/p/fabro-sh/fabro-4/apps/fabro-web/app/install-app.tsx:43)
-- Related code: [docs/administration/deploy-server.mdx](/Users/bhelmkamp/p/fabro-sh/fabro-4/docs/administration/deploy-server.mdx:30)
-- Related code: [docs/administration/server-configuration.mdx](/Users/bhelmkamp/p/fabro-sh/fabro-4/docs/administration/server-configuration.mdx:270)
+- **Origin document:** [docs/brainstorms/2026-04-22-web-install-object-store-choice-requirements.md](/Users/bhelmkamp/p/in-parallel-oy/fabro-4/docs/brainstorms/2026-04-22-web-install-object-store-choice-requirements.md:1)
+- Related code: [lib/crates/fabro-server/src/install.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro-4/lib/crates/fabro-server/src/install.rs:1)
+- Related code: [lib/crates/fabro-server/src/serve.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro-4/lib/crates/fabro-server/src/serve.rs:323)
+- Related code: [lib/crates/fabro-server/src/server_secrets.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro-4/lib/crates/fabro-server/src/server_secrets.rs:1)
+- Related code: [lib/crates/fabro-server/src/security_headers.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro-4/lib/crates/fabro-server/src/security_headers.rs:1)
+- Related code: [lib/crates/fabro-install/src/lib.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro-4/lib/crates/fabro-install/src/lib.rs:123)
+- Related code: [lib/crates/fabro-store/src/artifact_store.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro-4/lib/crates/fabro-store/src/artifact_store.rs:42)
+- Related code: [lib/crates/fabro-store/src/slate/mod.rs](/Users/bhelmkamp/p/in-parallel-oy/fabro-4/lib/crates/fabro-store/src/slate/mod.rs:53)
+- Related code: [apps/fabro-web/app/install-app.tsx](/Users/bhelmkamp/p/in-parallel-oy/fabro-4/apps/fabro-web/app/install-app.tsx:43)
+- Related code: [docs/administration/deploy-server.mdx](/Users/bhelmkamp/p/in-parallel-oy/fabro-4/docs/administration/deploy-server.mdx:30)
+- Related code: [docs/administration/server-configuration.mdx](/Users/bhelmkamp/p/in-parallel-oy/fabro-4/docs/administration/server-configuration.mdx:270)
 - External docs: https://docs.rs/object_store/latest/object_store/
 - External docs: https://docs.rs/object_store/latest/object_store/aws/struct.AmazonS3Builder.html

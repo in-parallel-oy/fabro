@@ -51,7 +51,7 @@ fallbacks = ["openai", "gemini"]
 reasoning_effort = "high"
 
 [[run.prepare.steps]]
-script = "git clone https://github.com/fabro-sh/fabro repo"
+script = "git clone https://github.com/in-parallel-oy/fabro repo"
 
 [[run.prepare.steps]]
 script = "cd repo && npm install"
@@ -99,7 +99,7 @@ exclude_globs = ["**/node_modules/**", "**/.cache/**"]
 
 [run.inputs]
 repo_name = "fabro"
-repo_url = "https://github.com/fabro-sh/fabro"
+repo_url = "https://github.com/in-parallel-oy/fabro"
 
 [run.artifacts]
 include = ["test-results/**", "playwright-report/**"]
@@ -372,7 +372,7 @@ Define inputs that are rendered into final workflow string attributes. See [Vari
 ```toml title="run.toml"
 [run.inputs]
 repo_name = "fabro"
-repo_url = "https://github.com/fabro-sh/fabro"
+repo_url = "https://github.com/in-parallel-oy/fabro"
 language = "rust"
 ```
 

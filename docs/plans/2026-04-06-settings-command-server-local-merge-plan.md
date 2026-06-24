@@ -51,15 +51,15 @@ The goal of this pass is to make `fabro settings` answer two distinct questions 
 
 ## Implementation Changes
 ### 1. CLI surface
-- Change `SettingsArgs` in [`lib/crates/fabro-cli/src/args.rs`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-cli/src/args.rs) to:
+- Change `SettingsArgs` in [`lib/crates/fabro-cli/src/args.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-cli/src/args.rs) to:
   - add `ServerTargetArgs`
   - add `--local`
   - keep optional `WORKFLOW`
   - remove `StorageDirArgs`
-- Update help text and parser tests in [`lib/crates/fabro-cli/tests/it/cmd/config.rs`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-cli/tests/it/cmd/config.rs) accordingly.
+- Update help text and parser tests in [`lib/crates/fabro-cli/tests/it/cmd/config.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-cli/tests/it/cmd/config.rs) accordingly.
 
 ### 2. Shared merge logic
-- Extract the server/default merge logic currently embedded in [`lib/crates/fabro-server/src/run_manifest.rs`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-server/src/run_manifest.rs) into a shared helper in `fabro-config` that both the server and CLI can call.
+- Extract the server/default merge logic currently embedded in [`lib/crates/fabro-server/src/run_manifest.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-server/src/run_manifest.rs) into a shared helper in `fabro-config` that both the server and CLI can call.
 - The helper should live in `fabro-config` because both `fabro-cli` and `fabro-server` already depend on it, while `fabro-cli` should not depend on `fabro-server` merge internals.
 - The shared helper should accept:
   - the local config layers already resolved by the CLI side
@@ -83,13 +83,13 @@ The goal of this pass is to make `fabro settings` answer two distinct questions 
 - The server should be switched to use the shared helper so `fabro settings` cannot drift from actual run semantics.
 
 ### 3. Server settings source
-- Implement the real `/api/v1/settings` route in [`lib/crates/fabro-server/src/server.rs`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-server/src/server.rs), matching the existing OpenAPI contract in [`docs/api-reference/fabro-api.yaml`](/Users/bhelmkamp/p/fabro-sh/fabro/docs/api-reference/fabro-api.yaml).
+- Implement the real `/api/v1/settings` route in [`lib/crates/fabro-server/src/server.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-server/src/server.rs), matching the existing OpenAPI contract in [`docs/api-reference/fabro-api.yaml`](/Users/bhelmkamp/p/in-parallel-oy/fabro/docs/api-reference/fabro-api.yaml).
 - The route should return the server’s current effective runtime settings from `AppState`, not just a raw disk parse.
 - The route should return the full runtime `Settings` object, not a reduced server-owned subset.
 - The CLI settings command should call this route when `--local` is not set.
 
 ### 4. Command behavior
-- In [`lib/crates/fabro-cli/src/commands/config/mod.rs`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-cli/src/commands/config/mod.rs):
+- In [`lib/crates/fabro-cli/src/commands/config/mod.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-cli/src/commands/config/mod.rs):
   - preserve the existing local merge path for `--local`
   - add a server-targeted path for the default behavior
 - Local-only resolution should keep the current semantics:
@@ -114,7 +114,7 @@ The goal of this pass is to make `fabro settings` answer two distinct questions 
 - This plan does not change `exec`, `system df`, `system prune`, or `store dump`.
 
 ## Test Plan
-- CLI parser/help coverage in [`lib/crates/fabro-cli/tests/it/cmd/config.rs`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-cli/tests/it/cmd/config.rs):
+- CLI parser/help coverage in [`lib/crates/fabro-cli/tests/it/cmd/config.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-cli/tests/it/cmd/config.rs):
   - `fabro settings --help` shows `--local` and `--server`
   - `fabro settings --local --server ...` is rejected
   - `--storage-dir` is no longer accepted

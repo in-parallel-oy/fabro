@@ -21,7 +21,7 @@ confirm which service handled a request.
 Build the local Fabro image from the current tree:
 
 ```sh
-cargo dev docker-build --tag fabro-sh/fabro:split-web-poc
+cargo dev docker-build --tag in-parallel-oy/fabro:split-web-poc
 ```
 
 Set local auth secrets:

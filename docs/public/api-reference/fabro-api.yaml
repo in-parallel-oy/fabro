@@ -6198,7 +6198,7 @@ components:
         repository:
           type: string
           description: GitHub repository slug in `owner/repo` form.
-          example: fabro-sh/fabro
+          example: in-parallel-oy/fabro
         ref:
           type: string
           description: Branch, tag, or SHA selector resolved when materializing a run.
@@ -11073,10 +11073,10 @@ components:
       properties:
         name:
           type: string
-          example: fabro-sh/fabro
+          example: in-parallel-oy/fabro
         origin_url:
           type: ["string", "null"]
-          example: https://github.com/fabro-sh/fabro.git
+          example: https://github.com/in-parallel-oy/fabro.git
         provider:
           type: string
           enum: [github, git, unknown]
@@ -11199,7 +11199,7 @@ components:
           type: string
           format: uri
           description: Computed GitHub web URL for the pull request.
-          example: https://github.com/fabro-sh/fabro/pull/123
+          example: https://github.com/in-parallel-oy/fabro/pull/123
 
     PullRequest:
       description: Stored pull request link plus optional live GitHub details.
@@ -11365,7 +11365,7 @@ components:
           type: string
           format: uri
           description: GitHub pull request URL to associate with the run. Must use the form `https://github.com/{owner}/{repo}/pull/{number}`.
-          example: https://github.com/fabro-sh/fabro/pull/123
+          example: https://github.com/in-parallel-oy/fabro/pull/123
 
     MergeMethod:
       description: GitHub merge method for a pull request.
@@ -11398,7 +11398,7 @@ components:
         html_url:
           type: string
           format: uri
-          example: https://github.com/fabro-sh/fabro/pull/123
+          example: https://github.com/in-parallel-oy/fabro/pull/123
         method:
           $ref: "#/components/schemas/MergeMethod"
 
@@ -11415,7 +11415,7 @@ components:
         html_url:
           type: string
           format: uri
-          example: https://github.com/fabro-sh/fabro/pull/123
+          example: https://github.com/in-parallel-oy/fabro/pull/123
 
     StageTiming:
       description: |

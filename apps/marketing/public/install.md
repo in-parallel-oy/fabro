@@ -19,13 +19,13 @@ command -v brew
 If `brew` is present, install via Homebrew (preferred — brew manages updates automatically):
 
 ```bash
-brew install fabro-sh/tap/fabro-nightly
+brew install in-parallel-oy/tap/fabro-nightly
 ```
 
 Otherwise, use the install script:
 
 ```bash
-curl -fsSL https://fabro.sh/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/in-parallel-oy/fabro/main/apps/marketing/public/install.sh | bash
 ```
 
 ## 2. Verify the binary

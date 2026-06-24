@@ -68,7 +68,7 @@ Refactor `fabro-cli` around an invocation-scoped `CommandContext` that centraliz
 - Implement in this order:
   - Step 1: add `CommandContext`, `ServerMode`, `ctx.server()` caching semantics, convert the storage-dir-backed connect path to construct `ServerStoreClient`, add `ServerSummaryLookup::from_client(...)`, and thread preloaded `machine_settings` / `base_config_path` into server resolution so migrated commands stop re-loading settings inside connection helpers
   - Step 2: migrate the workflow-oriented server commands:
-    - the main `run` command in [`commands/run/command.rs`](/Users/bhelmkamp/p/fabro-sh/fabro/lib/crates/fabro-cli/src/commands/run/command.rs)
+    - the main `run` command in [`commands/run/command.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro/lib/crates/fabro-cli/src/commands/run/command.rs)
     - `run create`
     - `run start`
     - `run attach`

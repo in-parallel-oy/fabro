@@ -4,7 +4,7 @@ description: "Generates comprehensive test suites from source code, covering edg
 thumbnail: "/showcase/test-generator.png"
 tags: ["testing", "code-generation", "automation"]
 languages: ["typescript", "rust"]
-github: "https://github.com/fabro-sh/fabro/tree/main/examples/test-generator"
+github: "https://github.com/in-parallel-oy/fabro/tree/main/examples/test-generator"
 models: ["claude-sonnet-4-5", "claude-haiku-4-5"]
 skills: ["code-review", "testing", "code-generation"]
 prompt: "Analyze the source files in this project and generate a comprehensive test suite. For each public function or method, write tests covering: happy path, edge cases, error conditions, and boundary values. Use the project's existing test framework and conventions. Run the tests and fix any failures before finishing."

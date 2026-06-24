@@ -42,7 +42,7 @@ Each phase compiles. Phases 1-2 are mechanically coupled because Docker and Dayt
 
 ## Problem Frame
 
-CLI runs on the host. Server runs in Docker. CLI sends `host_repo_path = ctx.cwd()` (for example `/Users/bhelmkamp/p/fabro-sh/fabro`) into the run manifest. Server records that for diagnostics. Worker code historically treated the field as an operational filesystem path and tried to:
+CLI runs on the host. Server runs in Docker. CLI sends `host_repo_path = ctx.cwd()` (for example `/Users/bhelmkamp/p/in-parallel-oy/fabro`) into the run manifest. Server records that for diagnostics. Worker code historically treated the field as an operational filesystem path and tried to:
 
 - spawn `git push` with `current_dir = /Users/...` -> ENOENT (warning: `git_push_failed`)
 - `git::sync_status` / `git::head_sha` against the path -> fails

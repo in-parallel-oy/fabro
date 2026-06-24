@@ -6,23 +6,23 @@
 
 AI coding agents are powerful but unpredictable. You either babysit every step or review a 50-file diff you don't trust. Fabro gives you a middle path: define the process as a graph, let agents execute it, and intervene only where it matters. [Why Fabro?](https://docs.fabro.sh/getting-started/why-fabro)
 
-[![Rust](https://github.com/fabro-sh/fabro/actions/workflows/rust.yml/badge.svg)](https://github.com/fabro-sh/fabro/actions/workflows/rust.yml)
+[![Rust](https://github.com/in-parallel-oy/fabro/actions/workflows/rust.yml/badge.svg)](https://github.com/in-parallel-oy/fabro/actions/workflows/rust.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE.md)
 [![docs](https://img.shields.io/badge/docs-fabro.sh-357F9E)](https://docs.fabro.sh)
 ![Discord](https://img.shields.io/discord/1256822430505373696)
 
 ```bash
 # With Claude Code
-curl -fsSL https://fabro.sh/install.md | claude
+curl -fsSL https://raw.githubusercontent.com/in-parallel-oy/fabro/main/apps/marketing/public/install.md | claude
 
 # With Codex
-codex "$(curl -fsSL https://fabro.sh/install.md)"
+codex "$(curl -fsSL https://raw.githubusercontent.com/in-parallel-oy/fabro/main/apps/marketing/public/install.md)"
 
 # With Homebrew
-brew install fabro-sh/tap/fabro-nightly
+brew install in-parallel-oy/tap/fabro-nightly
 
 # With Bash
-curl -fsSL https://fabro.sh/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/in-parallel-oy/fabro/main/apps/marketing/public/install.sh | bash
 ```
 
 Then run `fabro server start` to finish setup in your browser. The server opens a web wizard, exits when the wizard completes, and starts in configured mode the next time you run it.
@@ -116,19 +116,19 @@ Fabro ships with [comprehensive documentation](https://docs.fabro.sh) covering e
 
 ```bash
 # With Claude Code
-curl -fsSL https://fabro.sh/install.md | claude
+curl -fsSL https://raw.githubusercontent.com/in-parallel-oy/fabro/main/apps/marketing/public/install.md | claude
 
 # With Codex
-codex "$(curl -fsSL https://fabro.sh/install.md)"
+codex "$(curl -fsSL https://raw.githubusercontent.com/in-parallel-oy/fabro/main/apps/marketing/public/install.md)"
 
 # With Homebrew
-brew install fabro-sh/tap/fabro-nightly
+brew install in-parallel-oy/tap/fabro-nightly
 
 # With Bash
-curl -fsSL https://fabro.sh/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/in-parallel-oy/fabro/main/apps/marketing/public/install.sh | bash
 ```
 
-Release binaries and the multi-arch Docker image ship with SLSA Build Provenance attestations. See [Verifying Releases](https://docs.fabro.sh/reference/verifying-releases) to check an artifact was built by our GitHub Actions workflow.
+Release binaries ship with SLSA Build Provenance attestations. See [Verifying Releases](https://docs.fabro.sh/reference/verifying-releases) to check an artifact was built by our GitHub Actions workflow.
 
 Then finish setup in your browser and initialize Fabro in your project:
 
@@ -164,7 +164,7 @@ See the [deployment overview](https://docs.fabro.sh/administration/deployment) f
 Outside contributions are welcome! Whether it's a bug fix, a new feature, documentation, or a typo -- we'd love your help making Fabro better.
 
 - **Bug fixes and small improvements** -- Send a pull request directly.
-- **Larger features or changes** -- Open a [GitHub Issue](https://github.com/fabro-sh/fabro/issues) or start a [Discussion](https://github.com/fabro-sh/fabro/discussions) first so we can align on the approach.
+- **Larger features or changes** -- Open a [GitHub Issue](https://github.com/in-parallel-oy/fabro/issues) or start a [Discussion](https://github.com/in-parallel-oy/fabro/discussions) first so we can align on the approach.
 - **Questions** -- Open a Discussion or email [bryan@qlty.sh](mailto:bryan@qlty.sh).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development workflow.
@@ -173,8 +173,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development wo
 
 ## Help or Feedback
 
-- [Bug reports](https://github.com/fabro-sh/fabro/issues) via GitHub Issues
-- [Feature requests](https://github.com/fabro-sh/fabro/discussions) via GitHub Discussions
+- [Bug reports](https://github.com/in-parallel-oy/fabro/issues) via GitHub Issues
+- [Feature requests](https://github.com/in-parallel-oy/fabro/discussions) via GitHub Discussions
 - Email [bryan@qlty.sh](mailto:bryan@qlty.sh) for questions
 - See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and development workflow
 

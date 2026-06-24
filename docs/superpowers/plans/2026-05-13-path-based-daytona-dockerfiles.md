@@ -414,7 +414,7 @@
   If Daytona credentials are available and the implementer wants to verify provider integration, run:
 
   ```bash
-  fabro run --sandbox daytona --goal-file /Users/bhelmkamp/p/fabro-sh/fabro/docs/plans/2026-04-15-canonical-blocked-run-status-plan.md implement-plan
+  fabro run --sandbox daytona --goal-file /Users/bhelmkamp/p/in-parallel-oy/fabro/docs/plans/2026-04-15-canonical-blocked-run-status-plan.md implement-plan
   ```
 
   Expected: the run gets past Daytona snapshot Dockerfile parsing. The workflow itself may still fail later for unrelated implementation-plan reasons.

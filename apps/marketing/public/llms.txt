@@ -75,5 +75,5 @@ Fabro replaces the prompt-wait-review loop with version-controlled workflow grap
 ## Optional
 
 - [Changelog](https://docs.fabro.sh/changelog/2026-03-15): Latest changes and releases
-- [GitHub Repository](https://github.com/fabro-sh/fabro): Source code
+- [GitHub Repository](https://github.com/in-parallel-oy/fabro): Source code
 - [Discord](https://fabro.sh/discord): Community chat

@@ -7,8 +7,8 @@ Thanks for your interest in contributing to Fabro!
 Outside contributions are welcome! Whether it's a bug fix, a new feature, documentation, or a typo -- we'd love your help making Fabro better.
 
 - **Bug fixes and small improvements** -- Send a pull request directly. No need to open an issue first.
-- **Larger features or changes** -- Please open a [GitHub Issue](https://github.com/fabro-sh/fabro/issues) or start a [Discussion](https://github.com/fabro-sh/fabro/discussions) first so we can align on the approach before you invest significant time.
-- **Prefer not to write the code yourself?** -- As an alternative to opening a PR, you can file a [GitHub Issue](https://github.com/fabro-sh/fabro/issues) describing the bug or feature. A Fabro maintainer will implement it (supervising AI coding agents and workflows) and include you as a co-author on the commit that lands the change.
+- **Larger features or changes** -- Please open a [GitHub Issue](https://github.com/in-parallel-oy/fabro/issues) or start a [Discussion](https://github.com/in-parallel-oy/fabro/discussions) first so we can align on the approach before you invest significant time.
+- **Prefer not to write the code yourself?** -- As an alternative to opening a PR, you can file a [GitHub Issue](https://github.com/in-parallel-oy/fabro/issues) describing the bug or feature. A Fabro maintainer will implement it (supervising AI coding agents and workflows) and include you as a co-author on the commit that lands the change.
 - **Questions** -- Open a Discussion or email [bryan@qlty.sh](mailto:bryan@qlty.sh).
 
 ## Development setup

@@ -13,7 +13,7 @@ Add `--prerelease` to `fabro upgrade` so a single invocation picks the highest s
 - New bool flag `--prerelease` on `fabro upgrade`. Conflicts with `--version` (explicit version already selects any tag).
 - Scope: only the explicit `fabro upgrade` command. Background auto-check (`spawn_upgrade_check` / `check_and_print_notice`) stays stable-only.
 - Selection when `--prerelease` is set:
-  1. Fetch `GET /repos/fabro-sh/fabro/releases` (first page, 30 items — `gh` and HTTP backends).
+  1. Fetch `GET /repos/in-parallel-oy/fabro/releases` (first page, 30 items — `gh` and HTTP backends).
   2. Drop entries with `draft: true` or an unparseable `tag_name`.
   3. Pick the max by semver over the remaining set (stable + prereleases together). This means a newer stable beats an older beta; `--prerelease` *widens* the candidate set, it does not prefer prereleases.
   4. If the filtered set is empty, fall back to the existing stable-latest path (`/releases/latest`).

@@ -7,13 +7,13 @@ description: "Run the Fabro server as a Docker container with docker compose, EC
   The server interface is in private early access. Contact [bryan@qlty.sh](mailto:bryan@qlty.sh) if you're interested in trying it.
 </Warning>
 
-The supported deployment artifact is the official Fabro image at `ghcr.io/fabro-sh/fabro`. Everything else — `docker compose`, ECS, Cloud Run, Kubernetes, Railway — is just running this image somewhere with the right requirements.
+The supported deployment artifact is the official Fabro image at `ghcr.io/in-parallel-oy/fabro`. Everything else — `docker compose`, ECS, Cloud Run, Kubernetes, Railway — is just running this image somewhere with the right requirements.
 
 ## Requirements
 
 | Requirement | Value |
 |---|---|
-| **Image** | `ghcr.io/fabro-sh/fabro:nightly` (multi-arch; pin a version for production) |
+| **Image** | `ghcr.io/in-parallel-oy/fabro:nightly` (multi-arch; pin a version for production) |
 | **Persistent volume** | Mount at `/storage`. Stores run history, checkpoints, sessions, the dev token, and JWT keys. |
 | **Port** | The container binds to `$PORT` (default `32276`). Expose it. |
 | **LLM provider key** | Add at least one provider key during the install wizard or later with `fabro secret set` / `fabro provider login`. |
@@ -24,7 +24,7 @@ The supported deployment artifact is the official Fabro image at `ghcr.io/fabro-
 The repo ships a `docker-compose.yaml` at the root. Clone the repo (or copy the file), create a `.env` for bootstrap settings if needed, and start it:
 
 ```bash
-git clone https://github.com/fabro-sh/fabro.git
+git clone https://github.com/in-parallel-oy/fabro.git
 cd fabro
 cp .env.example .env
 # edit .env for bootstrap values such as SESSION_SECRET or FABRO_DEV_TOKEN if needed
@@ -33,7 +33,7 @@ docker compose up -d
 
 The compose file:
 
-- Pulls `ghcr.io/fabro-sh/fabro:nightly`
+- Pulls `ghcr.io/in-parallel-oy/fabro:nightly`
 - Creates a named volume `fabro-storage` mounted at `/storage`
 - Mounts `/var/run/docker.sock` so Fabro can spawn sandbox containers on the host daemon
 - Exposes port `32276`
@@ -85,13 +85,13 @@ Optional:
 |---|---|
 | `FABRO_DOMAIN` | Public hostname when using the Caddy reverse-proxy overlay |
 
-See [Server Configuration](/administration/server-configuration) for the full settings reference, and [`.env.example`](https://github.com/fabro-sh/fabro/blob/main/.env.example) for the complete list.
+See [Server Configuration](/administration/server-configuration) for the full settings reference, and [`.env.example`](https://github.com/in-parallel-oy/fabro/blob/main/.env.example) for the complete list.
 
 ## Cloud container services
 
 The same image works on any container orchestrator that supports the requirements above. Common patterns:
 
-- **AWS ECS / Fargate** — Task definition referencing `ghcr.io/fabro-sh/fabro:nightly`, EFS volume mounted at `/storage`, port `32276` published, environment variables for bootstrap values, and vault-backed optional integration secrets.
+- **AWS ECS / Fargate** — Task definition referencing `ghcr.io/in-parallel-oy/fabro:nightly`, EFS volume mounted at `/storage`, port `32276` published, environment variables for bootstrap values, and vault-backed optional integration secrets.
 - **Google Cloud Run** — Cloud Run with a backed volume mount at `/storage`. Pin minimum instances to 1; scale-to-zero interrupts running workflows.
 - **Kubernetes** — One-replica `StatefulSet` (not Deployment) with a `PersistentVolumeClaim` mounted at `/storage`. Expose via Service + Ingress.
 
@@ -99,7 +99,7 @@ In all cases: single replica, persistent `/storage`, expose `$PORT`, and configu
 
 ## Pinning a version
 
-`docker-compose.yaml` uses `:nightly` by default, so `docker compose pull && docker compose up -d` picks up the latest nightly. To pin a specific version, change the `image:` line to `ghcr.io/fabro-sh/fabro:<version>`.
+`docker-compose.yaml` uses `:nightly` by default, so `docker compose pull && docker compose up -d` picks up the latest nightly. To pin a specific version, change the `image:` line to `ghcr.io/in-parallel-oy/fabro:<version>`.
 
 Release artifacts ship with [SLSA Build Provenance](/reference/verifying-releases) attestations you can verify with `gh attestation verify`.
 

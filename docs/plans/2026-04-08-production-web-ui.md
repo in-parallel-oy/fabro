@@ -146,7 +146,7 @@ async fn demo_boards_runs_returns_run_list_items() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui && cargo nextest run -p fabro-server -- demo_boards_runs_returns_run_list_items`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui && cargo nextest run -p fabro-server -- demo_boards_runs_returns_run_list_items`
 Expected: FAIL (404 or route not found because `/boards/runs` is not in demo routes)
 
 - [ ] **Step 3: Implement demo `/boards/runs` handler**
@@ -171,13 +171,13 @@ In `server.rs` `demo_routes()`, add the route:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui && cargo nextest run -p fabro-server -- demo_boards_runs_returns_run_list_items`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui && cargo nextest run -p fabro-server -- demo_boards_runs_returns_run_list_items`
 Expected: PASS
 
 - [ ] **Step 5: Refactor and verify**
 
 Run full server test suite to check for regressions:
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui && ulimit -n 4096 && cargo nextest run -p fabro-server`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui && ulimit -n 4096 && cargo nextest run -p fabro-server`
 Expected: all PASS
 
 - [ ] **Step 6: Commit**
@@ -223,7 +223,7 @@ async fn demo_get_run_returns_store_run_summary_shape() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui && cargo nextest run -p fabro-server -- demo_get_run_returns_store_run_summary_shape`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui && cargo nextest run -p fabro-server -- demo_get_run_returns_store_run_summary_shape`
 Expected: FAIL (currently returns `id` not `run_id`, has `queue_position`, lacks `goal`/`workflow_slug`)
 
 - [ ] **Step 3: Rewrite demo `get_run_status` to return `StoreRunSummary` shape**
@@ -265,13 +265,13 @@ pub(crate) async fn get_run_status(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui && cargo nextest run -p fabro-server -- demo_get_run_returns_store_run_summary_shape`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui && cargo nextest run -p fabro-server -- demo_get_run_returns_store_run_summary_shape`
 Expected: PASS
 
 - [ ] **Step 5: Refactor and verify**
 
 Run full server test suite:
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui && ulimit -n 4096 && cargo nextest run -p fabro-server`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui && ulimit -n 4096 && cargo nextest run -p fabro-server`
 Expected: all PASS
 
 - [ ] **Step 6: Commit**
@@ -335,7 +335,7 @@ async fn boards_runs_returns_run_list_items_with_board_columns() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui && cargo nextest run -p fabro-server -- boards_runs_returns_run_list_items_with_board_columns`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui && cargo nextest run -p fabro-server -- boards_runs_returns_run_list_items_with_board_columns`
 Expected: FAIL (current handler returns RunStatusResponse shape without title/repository/workflow, and status is lifecycle not board column)
 
 - [ ] **Step 3: Rewrite `list_board_runs` to return enriched `RunListItem` data**
@@ -436,14 +436,14 @@ Note: the exact types and imports will need to be adjusted based on what is in s
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui && cargo nextest run -p fabro-server -- boards_runs_returns_run_list_items_with_board_columns`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui && cargo nextest run -p fabro-server -- boards_runs_returns_run_list_items_with_board_columns`
 Expected: PASS
 
 - [ ] **Step 5: Refactor and verify**
 
 Some existing tests assert on `status_reason` and `pending_control` fields from `/boards/runs` responses (e.g., tests for cancel and pause flows). These fields no longer exist in the `RunListItem` shape. Update those tests to assert `status_reason`/`pending_control` via `GET /runs/{id}` (which returns `StoreRunSummary` containing both fields) instead. The `/boards/runs` assertions in those tests should be updated to check for the new `RunListItem` fields or removed if redundant.
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui && ulimit -n 4096 && cargo nextest run -p fabro-server`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui && ulimit -n 4096 && cargo nextest run -p fabro-server`
 Expected: all PASS
 
 - [ ] **Step 6: Commit**
@@ -519,7 +519,7 @@ describe("mapRunSummaryToRunItem", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/data/runs.test.ts`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/data/runs.test.ts`
 Expected: FAIL (mapRunSummaryToRunItem does not exist yet)
 
 - [ ] **Step 3: Implement `mapRunSummaryToRunItem` and update run-detail loader**
@@ -589,13 +589,13 @@ Note: This works for both real and demo modes because Task 2 ensures the demo `g
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/data/runs.test.ts`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/data/runs.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Refactor and verify**
 
 Run typecheck and all tests:
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run typecheck && bun test`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run typecheck && bun test`
 Expected: all PASS
 
 - [ ] **Step 6: Commit**
@@ -651,7 +651,7 @@ describe("DemoModeProvider", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/lib/demo-mode.test.tsx`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/lib/demo-mode.test.tsx`
 Expected: FAIL (module not found)
 
 - [ ] **Step 3: Implement DemoModeProvider and useDemoMode**
@@ -695,12 +695,12 @@ import { DemoModeProvider } from "../lib/demo-mode";
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/lib/demo-mode.test.tsx`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/lib/demo-mode.test.tsx`
 Expected: PASS
 
 - [ ] **Step 5: Refactor and verify**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run typecheck && bun test`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run typecheck && bun test`
 Expected: all PASS
 
 - [ ] **Step 6: Commit**
@@ -751,7 +751,7 @@ describe("getVisibleNavigation", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/layouts/app-shell.test.tsx`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/layouts/app-shell.test.tsx`
 Expected: FAIL (getVisibleNavigation not exported)
 
 - [ ] **Step 3: Extract navigation filtering and conditionally hide items**
@@ -797,12 +797,12 @@ Note: The original tabs array has "Overview", "Stages", "Files Changed", "Billin
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/layouts/app-shell.test.tsx`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/layouts/app-shell.test.tsx`
 Expected: PASS
 
 - [ ] **Step 5: Refactor and verify**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run typecheck && bun test`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run typecheck && bun test`
 Expected: all PASS
 
 - [ ] **Step 6: Commit**
@@ -849,7 +849,7 @@ describe("isNotImplemented", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/api.test.ts`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/api.test.ts`
 Expected: FAIL (isNotImplemented not exported)
 
 - [ ] **Step 3: Implement `apiJsonOrNull` and `isNotImplemented`, update loaders**
@@ -919,12 +919,12 @@ export async function loader({ request, params }: any) {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/api.test.ts`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun test app/api.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Refactor and verify**
 
-Run: `cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run typecheck && bun test`
+Run: `cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run typecheck && bun test`
 Expected: all PASS
 
 - [ ] **Step 6: Commit**
@@ -946,7 +946,7 @@ git commit -m "feat(web): add apiJsonOrNull for graceful 501 handling in run-ove
 - [ ] **Step 1: Install Playwright and configure**
 
 ```bash
-cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web
+cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web
 bun add -d @playwright/test
 ```
 
@@ -1076,12 +1076,12 @@ In `apps/fabro-web/package.json`, add:
 
 First build the web app so the server can serve it:
 ```bash
-cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run build
+cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run build
 ```
 
 Then run the browser tests (this requires the fabro server to be running or the webServer config to start it):
 ```bash
-cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run test:browser
+cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run test:browser
 ```
 
 Expected: Tests may fail on first run due to the server startup command or auth configuration. Iterate on the Playwright config's `webServer.command` until the server starts correctly with auth disabled and serves the built SPA. The server's `AuthMode::Disabled` skips authentication, and `getAuthMe()` should still return a response (it returns a disabled-mode user). If `getAuthMe()` returns 401 in disabled mode, that indicates the server auth isn't properly disabled -- check the environment variables and CLI flags.
@@ -1090,7 +1090,7 @@ Expected: Tests may fail on first run due to the server startup command or auth 
 
 Run all tests including browser:
 ```bash
-cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run typecheck && bun test && bun run test:browser
+cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run typecheck && bun test && bun run test:browser
 ```
 Expected: all PASS
 
@@ -1108,28 +1108,28 @@ git commit -m "test(web): add Playwright browser smoke tests for production and 
 - [ ] **Step 1: Run all Rust tests**
 
 ```bash
-cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui && ulimit -n 4096 && cargo nextest run -p fabro-server
+cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui && ulimit -n 4096 && cargo nextest run -p fabro-server
 ```
 Expected: all PASS
 
 - [ ] **Step 2: Run all TypeScript tests**
 
 ```bash
-cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run typecheck && bun test
+cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run typecheck && bun test
 ```
 Expected: all PASS
 
 - [ ] **Step 3: Build production web app**
 
 ```bash
-cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run build
+cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run build
 ```
 Expected: Build succeeds with no errors
 
 - [ ] **Step 4: Run browser tests**
 
 ```bash
-cd /Users/bhelmkamp/p/fabro-sh/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run test:browser
+cd /Users/bhelmkamp/p/in-parallel-oy/fabro-3/.worktrees/production-web-ui/apps/fabro-web && bun run test:browser
 ```
 Expected: all PASS
 

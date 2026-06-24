@@ -4,7 +4,7 @@ description: "Keeps documentation in sync with code changes by detecting drift a
 thumbnail: "/showcase/docs-sync.png"
 tags: ["documentation", "automation", "ci-cd"]
 languages: ["typescript"]
-github: "https://github.com/fabro-sh/fabro/tree/main/examples/docs-sync"
+github: "https://github.com/in-parallel-oy/fabro/tree/main/examples/docs-sync"
 models: ["claude-sonnet-4-5"]
 skills: ["code-review", "git", "documentation"]
 prompt: "Compare the current codebase against the documentation. Identify any docs pages that are out of date with the code — changed APIs, renamed functions, removed features, or new features without docs. Update each affected page to match the current code, preserving the existing writing style and structure."

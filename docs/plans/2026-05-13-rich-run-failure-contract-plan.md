@@ -3,7 +3,7 @@ title: "refactor: Rich run failure contract"
 type: refactor
 status: completed
 date: 2026-05-13
-origin: https://github.com/fabro-sh/fabro/issues/198
+origin: https://github.com/in-parallel-oy/fabro/issues/198
 ---
 
 # refactor: Rich run failure contract

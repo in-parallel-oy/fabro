@@ -20,12 +20,12 @@ This pass keeps `RunProjection` and `NodeState` in `fabro-store`, does not move 
 
 ## Implementation Changes
 ### 1. Make the store projection reusable as the client model
-- Update [`lib/crates/fabro-store/src/run_state.rs`](/Users/bhelmkamp/p/fabro-sh/fabro-2/lib/crates/fabro-store/src/run_state.rs) so `RunProjection` and `NodeState` derive `serde::Deserialize` in addition to their current derives.
+- Update [`lib/crates/fabro-store/src/run_state.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro-2/lib/crates/fabro-store/src/run_state.rs) so `RunProjection` and `NodeState` derive `serde::Deserialize` in addition to their current derives.
 - Keep the field layout unchanged unless deserialization requires a minimal adjustment for the existing JSON shape.
 - Keep the current helper methods on `RunProjection` as the public access surface for downstream crates.
 
 ### 2. Remove the duplicated CLI runtime projection
-- Delete the local `RunProjection` and `NodeState` definitions from [`lib/crates/fabro-cli/src/server_client.rs`](/Users/bhelmkamp/p/fabro-sh/fabro-2/lib/crates/fabro-cli/src/server_client.rs).
+- Delete the local `RunProjection` and `NodeState` definitions from [`lib/crates/fabro-cli/src/server_client.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro-2/lib/crates/fabro-cli/src/server_client.rs).
 - Import `fabro_store::RunProjection` instead.
 - Keep `get_run_state()` structurally simple:
   - fetch `/api/v1/runs/{id}/state`
@@ -33,7 +33,7 @@ This pass keeps `RunProjection` and `NodeState` in `fabro-store`, does not move 
 - Do not recreate projection helper methods in the CLI.
 
 ### 3. Remove the duplicated CLI test projection
-- Delete the mirrored `RunProjection` and `NodeState` definitions from [`lib/crates/fabro-cli/tests/it/cmd/support.rs`](/Users/bhelmkamp/p/fabro-sh/fabro-2/lib/crates/fabro-cli/tests/it/cmd/support.rs).
+- Delete the mirrored `RunProjection` and `NodeState` definitions from [`lib/crates/fabro-cli/tests/it/cmd/support.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro-2/lib/crates/fabro-cli/tests/it/cmd/support.rs).
 - Reuse `fabro_store::RunProjection` in test helpers that fetch `/api/v1/runs/{id}/state`.
 - Rewrite any test call sites that depend on direct `nodes` map access to use the shared projection API instead:
   - `iter_nodes()`
@@ -41,7 +41,7 @@ This pass keeps `RunProjection` and `NodeState` in `fabro-store`, does not move 
   - `list_node_visits()`
 
 ### 4. Keep the server boundary unchanged
-- Leave [`lib/crates/fabro-server/src/server.rs`](/Users/bhelmkamp/p/fabro-sh/fabro-2/lib/crates/fabro-server/src/server.rs) behavior unchanged for `GET /api/v1/runs/{id}/state`.
+- Leave [`lib/crates/fabro-server/src/server.rs`](/Users/bhelmkamp/p/in-parallel-oy/fabro-2/lib/crates/fabro-server/src/server.rs) behavior unchanged for `GET /api/v1/runs/{id}/state`.
 - The endpoint already returns the store projection directly; this pass only removes downstream duplication.
 
 ## Public Interface Changes
