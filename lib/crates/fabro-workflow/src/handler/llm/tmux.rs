@@ -42,7 +42,7 @@ use tokio_util::sync::CancellationToken;
 use super::super::agent::{CodergenBackend, CodergenResult, CodergenRunRequest, OneShotRequest};
 use super::api::EffectiveRequestControls;
 use super::changed_files;
-use crate::context::{Context, WorkflowContext};
+use crate::context::{Context, WorkflowContext, keys};
 use crate::error::Error;
 use crate::event::Emitter;
 use crate::handler::NodeTimeoutPolicy;
@@ -64,7 +64,7 @@ struct AttentionMarker {
     #[serde(default)]
     state: String,
     #[serde(default)]
-    seq:   u64,
+    seq: u64,
 }
 
 /// Interactive tmux backend. Mirrors the ACP builder shape so `initialize.rs`
@@ -72,11 +72,11 @@ struct AttentionMarker {
 /// human's own local auth (D2).
 pub struct TmuxBackend {
     #[allow(dead_code, reason = "reserved for future env injection into tmux pane")]
-    tool_env:     Option<Arc<dyn ToolEnvProvider>>,
+    tool_env: Option<Arc<dyn ToolEnvProvider>>,
     #[allow(dead_code, reason = "reserved for steer relay integration (D8)")]
     steering_hub: Option<Arc<SteeringHub>>,
     #[allow(dead_code, reason = "reserved for future model-control resolution")]
-    catalog:      Option<Arc<Catalog>>,
+    catalog: Option<Arc<Catalog>>,
 }
 
 impl Default for TmuxBackend {
@@ -89,9 +89,9 @@ impl TmuxBackend {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            tool_env:     None,
+            tool_env: None,
             steering_hub: None,
-            catalog:      None,
+            catalog: None,
         }
     }
 
@@ -145,7 +145,10 @@ fn resolve_worktree(sandbox: &Arc<dyn Sandbox>) -> String {
 /// returns `None` (treated as "no gating signal available").
 async fn read_marker(sandbox: &Arc<dyn Sandbox>, marker_path: &str) -> Option<AttentionMarker> {
     let cmd = format!("cat {} 2>/dev/null", shell_quote(marker_path));
-    let result = sandbox.exec_command(&cmd, 5_000, None, None, None).await.ok()?;
+    let result = sandbox
+        .exec_command(&cmd, 5_000, None, None, None)
+        .await
+        .ok()?;
     if !result.is_success() {
         return None;
     }
@@ -166,6 +169,20 @@ fn deadline_passed(start: Instant, deadline: Option<Duration>) -> bool {
 }
 
 impl TmuxBackend {
+    fn reject_unsupported_threaded_turn(
+        &self,
+        request: &CodergenRunRequest<'_>,
+    ) -> Result<(), Error> {
+        if request.context.fidelity() == keys::Fidelity::Full {
+            if let Some(thread_id) = request.thread_id {
+                return Err(Error::handler(format!(
+                    "backend=\"tmux\" cannot safely run full-fidelity thread \"{thread_id}\" until workflow live-handle provisioning is available"
+                )));
+            }
+        }
+        Ok(())
+    }
+
     /// Block until the session marker reports `waiting` (ready for input). A
     /// missing marker is treated as ready so a freshly-attached session that
     /// has not yet written one is not deadlocked. Returns the `seq` observed at
@@ -189,7 +206,8 @@ impl TmuxBackend {
                 // are dropped and the turn hangs forever). Wait for the pane to settle, then
                 // proceed against seq 0.
                 None => {
-                    self.await_pane_settled(sandbox, session, emitter, cancel_token).await?;
+                    self.await_pane_settled(sandbox, session, emitter, cancel_token)
+                        .await?;
                     return Ok(0);
                 }
                 Some(marker) => {
@@ -298,7 +316,9 @@ impl TmuxBackend {
         let result = sandbox
             .exec_command(&cmd, 30_000, None, None, Some(cancel_token.child_token()))
             .await
-            .map_err(|e| Error::handler_with_source("Failed to paste prompt into tmux session", e))?;
+            .map_err(|e| {
+                Error::handler_with_source("Failed to paste prompt into tmux session", e)
+            })?;
         if !result.is_success() {
             return Err(Error::handler(format!(
                 "tmux paste failed (session \"{session}\"): {}",
@@ -337,6 +357,8 @@ impl TmuxBackend {
 #[async_trait]
 impl CodergenBackend for TmuxBackend {
     async fn run(&self, request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
+        self.reject_unsupported_threaded_turn(&request)?;
+
         let node = request.node;
         let context = request.context;
         let emitter = request.emitter;
@@ -356,7 +378,14 @@ impl CodergenBackend for TmuxBackend {
         // 4/5. Input arbitration: wait until the pane is `waiting`, recording
         //      the seq to detect the turn's completion.
         let seq_before = self
-            .await_ready(sandbox, &session, &marker_path, emitter, &cancel_token, deadline)
+            .await_ready(
+                sandbox,
+                &session,
+                &marker_path,
+                emitter,
+                &cancel_token,
+                deadline,
+            )
             .await?;
 
         // 6. Bracketed-paste + submit.
@@ -415,5 +444,72 @@ impl CodergenBackend for TmuxBackend {
         // Interactive turns have no protocol deadline; the executor's
         // wall-clock bounds the marker await.
         NodeTimeoutPolicy::ExecutorEnforced
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fabro_agent::{AgentToolRuntime, LocalSandbox};
+    use serde_json::json;
+
+    fn request_context(fidelity: keys::Fidelity) -> Context {
+        let context = Context::new();
+        context.set(keys::INTERNAL_FIDELITY, json!(fidelity.to_string()));
+        context
+    }
+
+    fn request_for<'a>(
+        node: &'a Node,
+        context: &'a Context,
+        emitter: &'a Arc<Emitter>,
+        sandbox: &'a Arc<dyn Sandbox>,
+        thread_id: Option<&'a str>,
+    ) -> CodergenRunRequest<'a> {
+        CodergenRunRequest {
+            node,
+            prompt: "prompt",
+            context,
+            thread_id,
+            emitter,
+            sandbox,
+            tool_hooks: None,
+            cancel_token: CancellationToken::new(),
+            agent_tool_runtime: AgentToolRuntime::default(),
+        }
+    }
+
+    #[test]
+    fn threaded_full_fidelity_turn_fails_closed() {
+        let node = Node::new("work");
+        let context = request_context(keys::Fidelity::Full);
+        let emitter = Arc::new(Emitter::default());
+        let dir = tempfile::tempdir().unwrap();
+        let sandbox: Arc<dyn Sandbox> = Arc::new(LocalSandbox::new(dir.path().to_path_buf()));
+        let request = request_for(&node, &context, &emitter, &sandbox, Some("shared"));
+
+        let err = TmuxBackend::new()
+            .reject_unsupported_threaded_turn(&request)
+            .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("cannot safely run full-fidelity thread"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn non_full_threaded_turn_is_allowed() {
+        let node = Node::new("work");
+        let context = request_context(keys::Fidelity::SummaryHigh);
+        let emitter = Arc::new(Emitter::default());
+        let dir = tempfile::tempdir().unwrap();
+        let sandbox: Arc<dyn Sandbox> = Arc::new(LocalSandbox::new(dir.path().to_path_buf()));
+        let request = request_for(&node, &context, &emitter, &sandbox, Some("shared"));
+
+        TmuxBackend::new()
+            .reject_unsupported_threaded_turn(&request)
+            .expect("non-full fidelity does not require tmux thread reuse");
     }
 }
