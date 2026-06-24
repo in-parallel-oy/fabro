@@ -357,6 +357,10 @@ fn manifest_args_overrides(
         // the CLI placed in manifest.args (unknown backend ⇒ None, ignored downstream).
         backend:          args.backend.as_deref().and_then(|b| b.parse().ok()),
         skip_prepare:     args.skip_prepare.unwrap_or(false),
+        // ponytail: rebase anchor — Overseer handshake. Read the session/worktree the
+        // CLI placed in manifest.args so the resolved run carries them to worker launch.
+        overseer_session:  args.overseer_session.as_deref(),
+        overseer_worktree: args.overseer_worktree.as_deref(),
         environment:      args.environment.as_deref(),
         docker_image:     args.docker_image.as_deref(),
         preserve_sandbox: args.preserve_sandbox,
@@ -1839,6 +1843,10 @@ root = "/srv/fabro"
             preserve_sandbox: None,
             provider:         None,
             environment:      None,
+            backend:          None,
+            skip_prepare:     None,
+            overseer_session:  None,
+            overseer_worktree: None,
             docker_image:     None,
             input:            Vec::new(),
             verbose:          None,
@@ -1872,6 +1880,10 @@ override = "server"
             preserve_sandbox: None,
             provider:         None,
             environment:      None,
+            backend:          None,
+            skip_prepare:     None,
+            overseer_session:  None,
+            overseer_worktree: None,
             docker_image:     None,
             input:            vec!["override=cli".to_string()],
             verbose:          None,

@@ -67,6 +67,13 @@ pub struct RunLayer {
     /// the resolved run omits `[run.prepare]` steps (host already provisioned).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skip_prepare:  Option<bool>,
+    /// ponytail: rebase anchor — Overseer handshake. The tmux session the backend drives
+    /// + the worktree for run-state/markers, carried from manifest.args so they survive
+    /// to the (daemon-spawned) worker, which the server re-exports them onto as env.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overseer_session:  Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overseer_worktree: Option<String>,
 }
 
 /// `[run.integrations]` — run-level integration knobs.

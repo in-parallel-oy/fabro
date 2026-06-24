@@ -50,6 +50,15 @@ pub struct RunNamespace {
     // `backend_override` (read later at backend resolution), `--skip-prepare`'s whole
     // effect is destructive and applied at resolve: `prepare.commands` is emptied, so
     // every downstream consumer honors it without a second knob to read.
+    /// ponytail: rebase anchor — Overseer handshake. The tmux session the tmux backend
+    /// drives + the worktree for run-state/markers. Read at worker launch by the server
+    /// and re-exported as OVERSEER_SESSION/OVERSEER_WORKTREE onto the worker process
+    /// (which the daemon spawns without Overseer's env), so tmux.rs / run_state.rs read
+    /// them via `std::env::var` unchanged.
+    #[serde(default)]
+    pub overseer_session: Option<String>,
+    #[serde(default)]
+    pub overseer_worktree: Option<String>,
 }
 
 #[expect(
@@ -81,6 +90,8 @@ impl Default for RunNamespace {
             artifacts:     ArtifactsSettings::default(),
             integrations:  RunIntegrationsSettings::default(),
             backend_override: None, // ponytail: rebase anchor — tmux backend
+            overseer_session: None, // ponytail: rebase anchor — Overseer handshake
+            overseer_worktree: None,
         }
     }
 }

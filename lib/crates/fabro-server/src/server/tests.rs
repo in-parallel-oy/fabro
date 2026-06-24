@@ -2300,6 +2300,56 @@ fn worker_command_omits_github_app_private_key_when_unset() {
     );
 }
 
+// ponytail: rebase anchor — Overseer handshake. The whole point of the manifest.args
+// thread is that the daemon-spawned worker gets OVERSEER_SESSION/WORKTREE re-exported
+// as env (the tmux backend + run-state publisher read them via std::env::var). Pin that
+// the spec values reach the worker command, and that absence leaves the env untouched.
+#[cfg(unix)]
+#[test]
+fn worker_command_re_exports_overseer_handshake_when_present() {
+    let storage_dir = tempfile::tempdir().unwrap();
+    let state = worker_command_test_state(storage_dir.path(), &["dev-token"], Some(TEST_DEV_TOKEN));
+    let spec = worker_launch_spec(
+        state.as_ref(),
+        RunId::new(),
+        RunExecutionMode::Start,
+        storage_dir.path(),
+        false,
+        None,
+        Some("overseer_claude_feat".to_string()),
+        Some("/repo.feat".to_string()),
+    )
+    .unwrap();
+    let cmd = LocalWorkerRuntime::command_for_spec(&spec);
+
+    assert_eq!(
+        command_env_value(&cmd, "OVERSEER_SESSION"),
+        EnvOverride::Set("overseer_claude_feat".to_string())
+    );
+    assert_eq!(
+        command_env_value(&cmd, "OVERSEER_WORKTREE"),
+        EnvOverride::Set("/repo.feat".to_string())
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn worker_command_omits_overseer_handshake_when_unset() {
+    let storage_dir = tempfile::tempdir().unwrap();
+    let state = worker_command_test_state(storage_dir.path(), &["dev-token"], Some(TEST_DEV_TOKEN));
+    let cmd = worker_command(
+        state.as_ref(),
+        RunId::new(),
+        RunExecutionMode::Start,
+        storage_dir.path(),
+        false,
+    )
+    .unwrap();
+
+    assert_eq!(command_env_value(&cmd, "OVERSEER_SESSION"), EnvOverride::Unchanged);
+    assert_eq!(command_env_value(&cmd, "OVERSEER_WORKTREE"), EnvOverride::Unchanged);
+}
+
 #[cfg(unix)]
 #[test]
 fn worker_command_sets_fabro_log_from_server_logging_config() {
@@ -2644,7 +2694,8 @@ fn worker_command(
     run_dir: &Path,
     agent_fabro_tools_enabled: bool,
 ) -> anyhow::Result<Command> {
-    let spec = worker_launch_spec(state, run_id, mode, run_dir, agent_fabro_tools_enabled, None)?;
+    let spec =
+        worker_launch_spec(state, run_id, mode, run_dir, agent_fabro_tools_enabled, None, None, None)?;
     Ok(LocalWorkerRuntime::command_for_spec(&spec))
 }
 

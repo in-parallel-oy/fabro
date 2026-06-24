@@ -3543,6 +3543,9 @@ fn worker_launch_spec(
     run_dir: &std::path::Path,
     agent_fabro_tools_enabled: bool,
     acp_credentials_json: Option<String>,
+    // ponytail: rebase anchor — Overseer handshake (re-exported onto the worker env).
+    overseer_session: Option<String>,
+    overseer_worktree: Option<String>,
 ) -> anyhow::Result<WorkerLaunchSpec> {
     let current_exe = std::env::current_exe().context("reading current executable path")?;
     let executable =
@@ -3582,6 +3585,8 @@ fn worker_launch_spec(
         active_config_path: state.active_config_path().to_path_buf(),
         github_app_private_key: state.vault_secret(EnvVars::GITHUB_APP_PRIVATE_KEY),
         acp_credentials_json,
+        overseer_session, // ponytail: rebase anchor — Overseer handshake
+        overseer_worktree,
     })
 }
 
@@ -4172,6 +4177,11 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
         }
     };
     let agent_fabro_tools_enabled = run_state.spec.settings.run.agent.fabro_tools;
+    // ponytail: rebase anchor — Overseer handshake. Pulled from the resolved run so the
+    // worker (spawned by the daemon, without Overseer's `tmux new-session -e` env) gets
+    // them re-exported as OVERSEER_SESSION/OVERSEER_WORKTREE.
+    let overseer_session = run_state.spec.settings.run.overseer_session.clone();
+    let overseer_worktree = run_state.spec.settings.run.overseer_worktree.clone();
     if reject_run_if_sandbox_provider_disabled(
         &state,
         &state.server_settings(),
@@ -4193,6 +4203,8 @@ async fn execute_run_subprocess(state: Arc<AppState>, run_id: RunId) {
             &run_dir_for_build,
             agent_fabro_tools_enabled,
             acp_credentials_json,
+            overseer_session,
+            overseer_worktree,
         )
     })
     .await

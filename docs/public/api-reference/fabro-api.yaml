@@ -8469,6 +8469,19 @@ components:
           description: >-
             ponytail (fork): skip the workflow's [run.prepare] steps (host
             provisioned them out-of-band, e.g. an Overseer worktree). Additive/optional.
+        overseer_session:
+          type: string
+          description: >-
+            ponytail (fork): the Overseer-owned tmux session the tmux backend drives.
+            Carried in manifest.args (not env) so it reaches the worker the persistent
+            daemon spawns; the server re-exports it as OVERSEER_SESSION on the worker.
+            Additive/optional.
+        overseer_worktree:
+          type: string
+          description: >-
+            ponytail (fork): the Overseer worktree for the run-state artifact + marker
+            files. Carried in manifest.args (see overseer_session); the server re-exports
+            it as OVERSEER_WORKTREE on the worker. Additive/optional.
         docker_image:
           type: string
           description: Per-run environment image override.

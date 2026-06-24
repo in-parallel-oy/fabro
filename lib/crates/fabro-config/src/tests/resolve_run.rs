@@ -52,6 +52,24 @@ script = "start-dev-services.sh"
     assert!(skipped.prepare.commands.is_empty());
 }
 
+// ponytail: rebase anchor — Overseer handshake. The session/worktree must survive
+// config→RunNamespace resolution so the server can re-export them onto the worker.
+#[test]
+fn overseer_handshake_resolves_onto_run_namespace() {
+    let run = super::workflow_settings_from_toml(
+        "_version = 1\n\n[run]\noverseer_session = \"overseer_claude_feat\"\noverseer_worktree = \"/repo.feat\"\n",
+    )
+    .expect("overseer handshake should resolve")
+    .run;
+    assert_eq!(run.overseer_session.as_deref(), Some("overseer_claude_feat"));
+    assert_eq!(run.overseer_worktree.as_deref(), Some("/repo.feat"));
+
+    let bare = super::workflow_settings_from_toml("_version = 1\n")
+        .expect("empty run should resolve")
+        .run;
+    assert!(bare.overseer_session.is_none() && bare.overseer_worktree.is_none());
+}
+
 #[test]
 fn run_model_controls_round_trip_through_resolve() {
     let settings = super::workflow_settings_from_toml(

@@ -99,6 +99,10 @@ pub fn resolve_run(
         // ponytail: rebase anchor — tmux backend. Layer precedence already
         // favors the CLI override (combine keeps the higher layer's Some).
         backend_override: layer.backend,
+        // ponytail: rebase anchor — Overseer handshake. Carried through so the server
+        // can re-export them onto the (daemon-spawned) worker process as env.
+        overseer_session: layer.overseer_session.clone(),
+        overseer_worktree: layer.overseer_worktree.clone(),
     }
 }
 

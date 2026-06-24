@@ -64,6 +64,11 @@ pub struct RunOverrideInput<'a> {
     pub backend:          Option<AgentBackend>,
     /// ponytail: rebase anchor — skip-prepare. Skip `[run.prepare]` steps when true.
     pub skip_prepare:     bool,
+    /// ponytail: rebase anchor — Overseer handshake. The tmux session the backend
+    /// drives + the worktree for run-state/markers; the server re-exports these onto
+    /// the worker process (env can't reach a daemon-spawned worker).
+    pub overseer_session:  Option<&'a str>,
+    pub overseer_worktree: Option<&'a str>,
     pub environment:      Option<&'a str>,
     pub docker_image:     Option<&'a str>,
     pub preserve_sandbox: Option<bool>,
@@ -129,6 +134,9 @@ pub fn build_run_overrides(input: RunOverrideInput<'_>) -> RunLayer {
         // ponytail: rebase anchor — skip-prepare. Some(true) only when the flag is set,
         // so the sparse override stays absent otherwise.
         skip_prepare: input.skip_prepare.then_some(true),
+        // ponytail: rebase anchor — Overseer handshake.
+        overseer_session: input.overseer_session.map(str::to_string),
+        overseer_worktree: input.overseer_worktree.map(str::to_string),
         ..RunLayer::default()
     }
 }
@@ -142,7 +150,9 @@ pub fn build_sparse_run_overrides(input: RunOverrideInput<'_>) -> Option<RunLaye
         || run.environment.is_some()
         || run.execution.is_some()
         || run.backend.is_some() // ponytail: rebase anchor — tmux backend
-        || run.skip_prepare.is_some()) // ponytail: rebase anchor — skip-prepare
+        || run.skip_prepare.is_some() // ponytail: rebase anchor — skip-prepare
+        || run.overseer_session.is_some() // ponytail: rebase anchor — Overseer handshake
+        || run.overseer_worktree.is_some())
     .then_some(run)
 }
 
@@ -891,6 +901,8 @@ pub fn manifest_args_is_empty(args: &types::ManifestArgs) -> bool {
         && args.environment.is_none()
         && args.backend.is_none() // ponytail: rebase anchor — backend override
         && args.skip_prepare.is_none() // ponytail: rebase anchor — skip-prepare
+        && args.overseer_session.is_none() // ponytail: rebase anchor — Overseer handshake
+        && args.overseer_worktree.is_none()
         && args.docker_image.is_none()
         && args.input.is_empty()
         && args.verbose.is_none()
@@ -918,6 +930,8 @@ mod tests {
             provider:         Some("openai"),
             backend:          None,
             skip_prepare:     false,
+            overseer_session:  None,
+            overseer_worktree: None,
             environment:      Some("local"),
             docker_image:     None,
             preserve_sandbox: Some(true),

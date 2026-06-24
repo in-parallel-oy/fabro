@@ -51,6 +51,11 @@ use crate::steering_hub::SteeringHub;
 /// Poll cadence for marker reads while gating/awaiting a turn.
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
 
+/// Max poll cycles to wait for a freshly-launched pane to settle before the first
+/// paste when no marker exists yet (~30s at `POLL_INTERVAL`). A REPL that never
+/// quiesces still proceeds after this — a soft cap, not a hard gate.
+const SETTLE_MAX_POLLS: u32 = 60;
+
 /// Per-session attention marker written by Overseer at
 /// `<worktree>/.overseer/<session>.json`. Only `state` and `seq` gate fabro;
 /// `session`/`at` are advisory and tolerated-if-absent.
@@ -168,6 +173,7 @@ impl TmuxBackend {
     async fn await_ready(
         &self,
         sandbox: &Arc<dyn Sandbox>,
+        session: &str,
         marker_path: &str,
         emitter: &Arc<Emitter>,
         cancel_token: &CancellationToken,
@@ -177,8 +183,15 @@ impl TmuxBackend {
         loop {
             match read_marker(sandbox, marker_path).await {
                 Some(marker) if marker.state == "waiting" => return Ok(marker.seq),
-                // No marker yet: proceed (seq starts at 0).
-                None => return Ok(0),
+                // No marker yet — typically the first turn: a freshly-launched REPL hasn't
+                // emitted a hook event (the marker is written on `Stop`/`PreToolUse`, none
+                // of which has fired). Don't paste into a still-booting TUI (the keystrokes
+                // are dropped and the turn hangs forever). Wait for the pane to settle, then
+                // proceed against seq 0.
+                None => {
+                    self.await_pane_settled(sandbox, session, emitter, cancel_token).await?;
+                    return Ok(0);
+                }
                 Some(marker) => {
                     if deadline_passed(start, deadline) {
                         // Soft cap; submit against the last-known seq anyway.
@@ -189,6 +202,34 @@ impl TmuxBackend {
             emitter.touch();
             poll_sleep(cancel_token).await?;
         }
+    }
+
+    /// Wait until the pane stops changing — two consecutive identical, non-empty
+    /// captures `POLL_INTERVAL` apart — so the first paste lands in a ready REPL, not a
+    /// booting one. Bounded by `SETTLE_MAX_POLLS`; a pane that never quiesces still
+    /// proceeds (best-effort, never a deadlock). Capture failures are treated as
+    /// "not settled yet" and keep polling.
+    async fn await_pane_settled(
+        &self,
+        sandbox: &Arc<dyn Sandbox>,
+        session: &str,
+        emitter: &Arc<Emitter>,
+        cancel_token: &CancellationToken,
+    ) -> Result<(), Error> {
+        let mut prev: Option<String> = None;
+        for _ in 0..SETTLE_MAX_POLLS {
+            poll_sleep(cancel_token).await?;
+            let snap = self
+                .capture_pane(sandbox, session, cancel_token)
+                .await
+                .unwrap_or_default();
+            if !snap.trim().is_empty() && prev.as_deref() == Some(snap.as_str()) {
+                return Ok(());
+            }
+            prev = Some(snap);
+            emitter.touch();
+        }
+        Ok(())
     }
 
     /// Block until the marker reports the node turn finished: `seq` advanced
@@ -241,12 +282,16 @@ impl TmuxBackend {
             .write_file(&prompt_path, prompt)
             .await
             .map_err(|e| Error::handler_with_source("Failed to write tmux prompt file", e))?;
-        // load-buffer → paste-buffer -p (bracketed) → Enter to submit.
+        // load-buffer → paste-buffer -p (bracketed) → Enter to submit. `&&`-chained so a
+        // failure (e.g. the target session vanished) propagates as a non-zero exit; the
+        // `rm` cleanup runs in an EXIT trap so it can't mask that failure (a plain
+        // trailing `rm` would make the whole command "succeed" even when the paste never
+        // landed — which silently hangs the turn).
         let cmd = format!(
-            "tmux load-buffer -- {file}; \
-             tmux paste-buffer -p -t {session}; \
-             tmux send-keys -t {session} Enter; \
-             rm -f {file}",
+            "trap 'rm -f {file}' EXIT; \
+             tmux load-buffer -- {file} && \
+             tmux paste-buffer -p -t {session} && \
+             tmux send-keys -t {session} Enter",
             file = shell_quote(&prompt_path),
             session = shell_quote(session),
         );
@@ -311,7 +356,7 @@ impl CodergenBackend for TmuxBackend {
         // 4/5. Input arbitration: wait until the pane is `waiting`, recording
         //      the seq to detect the turn's completion.
         let seq_before = self
-            .await_ready(sandbox, &marker_path, emitter, &cancel_token, deadline)
+            .await_ready(sandbox, &session, &marker_path, emitter, &cancel_token, deadline)
             .await?;
 
         // 6. Bracketed-paste + submit.

@@ -15,11 +15,28 @@ pub(crate) fn run_manifest_args(args: &RunArgs) -> Option<types::ManifestArgs> {
         // the server via manifest.args (env can't reach a shared/persistent server).
         backend:          args.backend.clone(),
         skip_prepare:     args.skip_prepare.then_some(true),
+        // ponytail: rebase anchor — Overseer handshake. The `fabro run` controller
+        // inherits OVERSEER_SESSION/WORKTREE (Overseer stamps them via `tmux
+        // new-session -e`), but the worker the daemon spawns does NOT — so carry them
+        // in manifest.args like the other per-run overrides; the server re-exports
+        // them onto the worker process.
+        overseer_session:  overseer_env("OVERSEER_SESSION"),
+        overseer_worktree: overseer_env("OVERSEER_WORKTREE"),
         docker_image:     None,
         input:            args.inputs.values.clone(),
         verbose:          args.verbose.then_some(true),
     };
     (!fabro_manifest::manifest_args_is_empty(&payload)).then_some(payload)
+}
+
+/// Read a non-empty Overseer handshake var from the controller's inherited env.
+/// ponytail: rebase anchor — Overseer handshake.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the fabro run controller reads the Overseer handshake from its inherited env"
+)]
+fn overseer_env(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|v| !v.is_empty())
 }
 
 pub(crate) fn preflight_manifest_args(args: &PreflightArgs) -> Option<types::ManifestArgs> {
@@ -33,6 +50,8 @@ pub(crate) fn preflight_manifest_args(args: &PreflightArgs) -> Option<types::Man
         environment:      args.environment.clone(),
         backend:          None, // ponytail: rebase anchor — skip-prepare/backend (preflight: none)
         skip_prepare:     None,
+        overseer_session:  None, // ponytail: rebase anchor — Overseer handshake (preflight: none)
+        overseer_worktree: None,
         docker_image:     None,
         input:            args.inputs.values.clone(),
         verbose:          args.verbose.then_some(true),

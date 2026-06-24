@@ -23,6 +23,17 @@ fn sparse_flag(value: bool) -> Option<bool> {
     value.then_some(true)
 }
 
+/// Read a non-empty Overseer handshake var from the controller's inherited env.
+/// ponytail: rebase anchor — Overseer handshake. Carried into the resolved run so the
+/// worker (which the daemon spawns without this env) gets it re-exported server-side.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the fabro run controller reads the Overseer handshake from its inherited env"
+)]
+fn overseer_env(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|v| !v.is_empty())
+}
+
 fn cli_layer_for_verbose(verbose: bool) -> Option<CliLayer> {
     verbose.then(|| CliLayer {
         output: Some(CliOutputLayer {
@@ -86,12 +97,18 @@ fn parse_backend_override(raw: Option<&str>) -> Result<Option<AgentBackend>> {
 pub(crate) fn run_args_overrides(args: &RunArgs) -> Result<ManifestSettingsOverrides> {
     let cwd = current_dir_or_dot();
     let goal = goal_layer_from_args(args.goal.as_deref(), args.goal_file.as_deref(), &cwd)?;
+    // ponytail: rebase anchor — Overseer handshake. Owned so the borrows below outlive
+    // the RunOverrideInput.
+    let overseer_session = overseer_env("OVERSEER_SESSION");
+    let overseer_worktree = overseer_env("OVERSEER_WORKTREE");
     let mut run = build_run_overrides(RunOverrideInput {
         goal:             None,
         model:            args.model.as_deref(),
         provider:         args.provider.as_deref(),
         backend:          parse_backend_override(args.backend.as_deref())?,
         skip_prepare:     args.skip_prepare, // ponytail: rebase anchor — skip-prepare
+        overseer_session:  overseer_session.as_deref(),
+        overseer_worktree: overseer_worktree.as_deref(),
         environment:      args.environment.as_deref(),
         docker_image:     None,
         preserve_sandbox: sparse_flag(args.preserve_sandbox),
@@ -117,6 +134,8 @@ pub(crate) fn preflight_args_overrides(args: &PreflightArgs) -> Result<ManifestS
         provider:         args.provider.as_deref(),
         backend:          None, // ponytail: rebase anchor — tmux backend (preflight has no --backend)
         skip_prepare:     false, // ponytail: rebase anchor — skip-prepare (preflight has no --skip-prepare)
+        overseer_session:  None, // ponytail: rebase anchor — Overseer handshake (preflight: none)
+        overseer_worktree: None,
         environment:      args.environment.as_deref(),
         docker_image:     None,
         preserve_sandbox: None,
