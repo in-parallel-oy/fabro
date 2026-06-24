@@ -91,6 +91,7 @@ pub(crate) fn run_args_overrides(args: &RunArgs) -> Result<ManifestSettingsOverr
         model:            args.model.as_deref(),
         provider:         args.provider.as_deref(),
         backend:          parse_backend_override(args.backend.as_deref())?,
+        skip_prepare:     args.skip_prepare, // ponytail: rebase anchor — skip-prepare
         environment:      args.environment.as_deref(),
         docker_image:     None,
         preserve_sandbox: sparse_flag(args.preserve_sandbox),
@@ -115,6 +116,7 @@ pub(crate) fn preflight_args_overrides(args: &PreflightArgs) -> Result<ManifestS
         model:            args.model.as_deref(),
         provider:         args.provider.as_deref(),
         backend:          None, // ponytail: rebase anchor — tmux backend (preflight has no --backend)
+        skip_prepare:     false, // ponytail: rebase anchor — skip-prepare (preflight has no --skip-prepare)
         environment:      args.environment.as_deref(),
         docker_image:     None,
         preserve_sandbox: None,

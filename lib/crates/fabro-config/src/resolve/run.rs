@@ -51,6 +51,20 @@ pub fn resolve_run(
 
     super::warn_if_demoted_template("run.working_dir", layer.working_dir.as_deref());
 
+    // ponytail: rebase anchor — skip-prepare. Clearing the resolved prepare commands
+    // here is the SINGLE source of truth: every downstream consumer (the CLI manifest's
+    // setup_commands at run_manifest.rs, operations/start.rs's LifecycleOptions, …) reads
+    // `prepare.commands`, so a per-consumer gate would miss a path (it did — the CLI run
+    // path bakes setup commands into the manifest, not via start.rs).
+    let skip_prepare = layer.skip_prepare.unwrap_or(false);
+    let prepare = {
+        let mut prepare = resolve_prepare(layer.prepare.as_ref(), errors);
+        if skip_prepare {
+            prepare.commands.clear();
+        }
+        prepare
+    };
+
     RunNamespace {
         goal: resolve_goal(layer.goal.as_ref()),
         working_dir: layer.working_dir.clone(),
@@ -58,7 +72,7 @@ pub fn resolve_run(
         inputs: layer.inputs.clone().unwrap_or_default(),
         model: resolve_model(layer.model.as_ref()),
         git: resolve_git(layer.git.as_ref()),
-        prepare: resolve_prepare(layer.prepare.as_ref(), errors),
+        prepare,
         execution: resolve_execution(layer.execution.as_ref()),
         checkpoint: resolve_checkpoint(layer.checkpoint.as_ref()),
         clone,

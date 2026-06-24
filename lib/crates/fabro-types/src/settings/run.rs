@@ -46,6 +46,10 @@ pub struct RunNamespace {
     /// applied at backend resolution; `None` defers to per-node `backend=`.
     #[serde(default)]
     pub backend_override: Option<crate::AgentBackend>,
+    // ponytail: rebase anchor — skip-prepare carries NO field here on purpose. Unlike
+    // `backend_override` (read later at backend resolution), `--skip-prepare`'s whole
+    // effect is destructive and applied at resolve: `prepare.commands` is emptied, so
+    // every downstream consumer honors it without a second knob to read.
 }
 
 #[expect(

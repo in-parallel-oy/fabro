@@ -8459,6 +8459,16 @@ components:
         environment:
           type: string
           description: Named environment slug to select for the run.
+        backend:
+          type: string
+          description: >-
+            ponytail (fork): per-run agent backend override (api | acp | tmux),
+            applied over the node-declared backend. Additive/optional.
+        skip_prepare:
+          type: boolean
+          description: >-
+            ponytail (fork): skip the workflow's [run.prepare] steps (host
+            provisioned them out-of-band, e.g. an Overseer worktree). Additive/optional.
         docker_image:
           type: string
           description: Per-run environment image override.

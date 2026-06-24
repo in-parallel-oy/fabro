@@ -29,6 +29,29 @@ fn workflow_settings_from_layer(
     super::workflow_settings_from_layer(layer)
 }
 
+// ponytail: rebase anchor — skip-prepare. `--skip-prepare` empties the resolved
+// `prepare.commands` (the single source of truth every consumer reads). Pin both
+// branches so the clear can't silently regress and the default can't silently clear.
+#[test]
+fn skip_prepare_clears_resolved_prepare_commands() {
+    let with_steps = r#"
+_version = 1
+
+[[run.prepare.steps]]
+script = "start-dev-services.sh"
+"#;
+
+    let kept = super::workflow_settings_from_toml(with_steps)
+        .expect("prepare steps should resolve")
+        .run;
+    assert_eq!(kept.prepare.commands, vec!["start-dev-services.sh".to_string()]);
+
+    let skipped = super::workflow_settings_from_toml(&format!("{with_steps}\n[run]\nskip_prepare = true\n"))
+        .expect("skip_prepare should resolve")
+        .run;
+    assert!(skipped.prepare.commands.is_empty());
+}
+
 #[test]
 fn run_model_controls_round_trip_through_resolve() {
     let settings = super::workflow_settings_from_toml(

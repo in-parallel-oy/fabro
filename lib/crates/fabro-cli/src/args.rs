@@ -259,6 +259,13 @@ pub(crate) struct RunArgs {
     #[arg(long = "backend")]
     pub(crate) backend: Option<String>,
 
+    /// Skip the workflow's `[run.prepare]` steps — for hosts that already provisioned
+    /// them out-of-band (e.g. an Overseer worktree where overmind boots the dev server,
+    /// so the container/VM-only prepare scripts neither apply nor need re-running).
+    // ponytail: rebase anchor — skip-prepare (Overseer local flows).
+    #[arg(long = "skip-prepare")]
+    pub(crate) skip_prepare: bool,
+
     /// Enable verbose output
     #[arg(short, long)]
     pub(crate) verbose: bool,

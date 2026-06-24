@@ -353,7 +353,10 @@ fn manifest_args_overrides(
         goal:             None,
         model:            args.model.as_deref(),
         provider:         args.provider.as_deref(),
-        backend:          None, // ponytail: rebase anchor — tmux backend (server path unused)
+        // ponytail: rebase anchor — backend/skip-prepare. Read the per-run overrides
+        // the CLI placed in manifest.args (unknown backend ⇒ None, ignored downstream).
+        backend:          args.backend.as_deref().and_then(|b| b.parse().ok()),
+        skip_prepare:     args.skip_prepare.unwrap_or(false),
         environment:      args.environment.as_deref(),
         docker_image:     args.docker_image.as_deref(),
         preserve_sandbox: args.preserve_sandbox,

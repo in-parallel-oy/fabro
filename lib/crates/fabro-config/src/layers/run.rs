@@ -63,6 +63,10 @@ pub struct RunLayer {
     /// ponytail: rebase anchor — tmux backend. Run-level `--backend` override.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend:       Option<fabro_types::AgentBackend>,
+    /// ponytail: rebase anchor — skip-prepare. Run-level `--skip-prepare`: when true,
+    /// the resolved run omits `[run.prepare]` steps (host already provisioned).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip_prepare:  Option<bool>,
 }
 
 /// `[run.integrations]` — run-level integration knobs.

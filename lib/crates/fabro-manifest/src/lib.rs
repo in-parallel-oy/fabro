@@ -62,6 +62,8 @@ pub struct RunOverrideInput<'a> {
     pub provider:         Option<&'a str>,
     /// ponytail: rebase anchor — tmux backend. Pre-parsed `--backend` override.
     pub backend:          Option<AgentBackend>,
+    /// ponytail: rebase anchor — skip-prepare. Skip `[run.prepare]` steps when true.
+    pub skip_prepare:     bool,
     pub environment:      Option<&'a str>,
     pub docker_image:     Option<&'a str>,
     pub preserve_sandbox: Option<bool>,
@@ -124,6 +126,9 @@ pub fn build_run_overrides(input: RunOverrideInput<'_>) -> RunLayer {
         execution,
         // ponytail: rebase anchor — tmux backend.
         backend: input.backend,
+        // ponytail: rebase anchor — skip-prepare. Some(true) only when the flag is set,
+        // so the sparse override stays absent otherwise.
+        skip_prepare: input.skip_prepare.then_some(true),
         ..RunLayer::default()
     }
 }
@@ -136,7 +141,8 @@ pub fn build_sparse_run_overrides(input: RunOverrideInput<'_>) -> Option<RunLaye
         || run.model.is_some()
         || run.environment.is_some()
         || run.execution.is_some()
-        || run.backend.is_some()) // ponytail: rebase anchor — tmux backend
+        || run.backend.is_some() // ponytail: rebase anchor — tmux backend
+        || run.skip_prepare.is_some()) // ponytail: rebase anchor — skip-prepare
     .then_some(run)
 }
 
@@ -883,6 +889,8 @@ pub fn manifest_args_is_empty(args: &types::ManifestArgs) -> bool {
         && args.preserve_sandbox.is_none()
         && args.provider.is_none()
         && args.environment.is_none()
+        && args.backend.is_none() // ponytail: rebase anchor — backend override
+        && args.skip_prepare.is_none() // ponytail: rebase anchor — skip-prepare
         && args.docker_image.is_none()
         && args.input.is_empty()
         && args.verbose.is_none()
@@ -909,6 +917,7 @@ mod tests {
             model:            Some("gpt-5.4-mini"),
             provider:         Some("openai"),
             backend:          None,
+            skip_prepare:     false,
             environment:      Some("local"),
             docker_image:     None,
             preserve_sandbox: Some(true),

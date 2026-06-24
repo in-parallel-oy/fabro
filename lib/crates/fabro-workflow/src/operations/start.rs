@@ -486,6 +486,8 @@ impl RunSession {
             steering_hub: services.steering_hub,
             on_node: services.on_node,
             lifecycle: LifecycleOptions {
+                // ponytail: skip-prepare is applied at resolve (prepare.commands cleared),
+                // so this reads empty for a --skip-prepare run without a gate here.
                 setup_commands:           resolved.prepare.commands.clone(),
                 setup_command_timeout_ms: resolved.prepare.timeout_ms,
             },

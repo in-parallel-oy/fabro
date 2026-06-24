@@ -64,6 +64,10 @@ pub fn run_tool_manifest_args(spec: &ValidatedCreateRunSpec) -> Option<types::Ma
         preserve_sandbox: spec.preserve_sandbox.filter(|value| *value),
         provider: spec.provider.clone(),
         environment: spec.environment.clone(),
+        // ponytail: rebase anchor — backend/skip-prepare. The MCP-tool spec doesn't
+        // carry these (CLI-only today); None keeps the literal complete after regen.
+        backend: None,
+        skip_prepare: None,
         verbose: None,
     };
     (!fabro_manifest::manifest_args_is_empty(&payload)).then_some(payload)
@@ -74,7 +78,10 @@ pub fn run_tool_run_overrides(spec: &ValidatedCreateRunSpec) -> Option<RunLayer>
         goal:             spec.goal.as_deref(),
         model:            spec.model.as_deref(),
         provider:         spec.provider.as_deref(),
-        backend:          None, // ponytail: rebase anchor — tmux backend (server path unused)
+        // ponytail: rebase anchor — backend/skip-prepare. TODO(wire): read from spec
+        // once it carries them (see notes).
+        backend:          None,
+        skip_prepare:     false,
         environment:      spec.environment.as_deref(),
         docker_image:     None,
         preserve_sandbox: spec.preserve_sandbox,
