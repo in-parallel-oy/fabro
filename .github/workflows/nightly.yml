@@ -12,20 +12,13 @@ permissions: {}
 jobs:
   tag-nightly:
     name: Tag nightly
-    runs-on: ubuntu-24.04-x86-32-cores
+    runs-on: ubuntu-24.04
     environment: nightly
     permissions:
-      contents: read
+      contents: write
     env:
       CARGO_TERM_COLOR: always
     steps:
-      - name: Mint GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
-        with:
-          client-id: ${{ vars.FABRO_RELEASES_APP_CLIENT_ID }}
-          private-key: ${{ secrets.FABRO_RELEASES_APP_PRIVATE_KEY }}
-
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0 # full history + tags for nightly probing
@@ -58,11 +51,11 @@ jobs:
 
       - name: Release nightly
         if: steps.skip.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git config user.name "fabro-releases[bot]"
-          git config user.email "fabro-releases[bot]@users.noreply.github.com"
-          release_token='${{ steps.app-token.outputs.token }}'
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin \
-            "https://x-access-token:${release_token}@github.com/${GITHUB_REPOSITORY}.git"
-          unset release_token
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           cargo --locked dev release --nightly

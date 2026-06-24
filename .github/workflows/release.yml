@@ -27,25 +27,13 @@ jobs:
           - target: aarch64-apple-darwin
             runner: macos-15-xlarge
           - target: x86_64-unknown-linux-gnu
-            runner: ubuntu-24.04-x86-32-cores
-          - target: aarch64-unknown-linux-gnu
-            runner: ubuntu-22.04-arm-32-cores
-          - target: x86_64-unknown-linux-musl
-            runner: ubuntu-24.04-x86-32-cores
-            musl: true
-          - target: aarch64-unknown-linux-musl
-            runner: ubuntu-24.04-arm-32-cores
-            musl: true
+            runner: ubuntu-24.04
     env:
       LIBZ_SYS_STATIC: "1"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-
-      - name: Install unzip (ARM Linux runner image lacks it; setup-bun needs it)
-        if: runner.os == 'Linux' && runner.arch == 'ARM64'
-        run: sudo apt-get update && sudo apt-get install -y unzip
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -60,54 +48,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libssl-dev
 
-      - name: Install musl toolchain for x86_64-musl tests
-        if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: sudo apt-get install -y musl-tools
-
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
         with:
           targets: ${{ matrix.target }}
-
-      - name: Set up zig
-        if: matrix.musl
-        uses: mlugg/setup-zig@8d6198c65fb0feaa111df26e6b467fea8345e46f # v2.0.5
-        with:
-          version: 0.13.0
-
-      - name: Install cargo-zigbuild
-        if: matrix.musl
-        uses: taiki-e/install-action@773334c0e05d7e699e4d78234494308223f3a2cf # v2
-        with:
-          tool: cargo-zigbuild
 
       - uses: taiki-e/install-action@773334c0e05d7e699e4d78234494308223f3a2cf # nextest
 
       - name: Refresh embedded SPA
         run: cargo --locked dev spa refresh
 
-      - name: Test (x86_64-musl)
-        # nextest still shells through cargo test for this target, so
-        # build.rs C code needs an explicit musl compiler/linker.
-        if: matrix.target == 'x86_64-unknown-linux-musl'
-        env:
-          CC_x86_64_unknown_linux_musl: musl-gcc
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
-        run: cargo nextest run --locked --workspace --target ${{ matrix.target }} --release --status-level slow --profile ci
-
       - name: Test
-        # aarch64-musl test runs have not been validated on the compile
-        # runner yet; shipping binary is exercised via Docker smoke tests.
-        # Re-enable after verifying the workspace passes on this target.
-        if: matrix.target != 'aarch64-unknown-linux-musl' && matrix.target != 'x86_64-unknown-linux-musl'
         run: cargo nextest run --locked --workspace --target ${{ matrix.target }} --release --status-level slow --profile ci
-
-      - name: Build (musl via cargo-zigbuild)
-        if: matrix.musl
-        run: cargo zigbuild --locked --target ${{ matrix.target }} --release -p fabro-cli
 
       - name: Build
-        if: ${{ !matrix.musl }}
         run: cargo build --locked --target ${{ matrix.target }} --release -p fabro-cli
 
       - name: Package
@@ -156,193 +110,3 @@ jobs:
             PRERELEASE_FLAG="--prerelease"
           fi
           gh release create "$TAG_NAME" target/distrib/* --generate-notes $PRERELEASE_FLAG
-
-  docker:
-    name: Docker image
-    needs: compile
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          path: target/distrib
-          pattern: artifacts-fabro-*-linux-musl
-          merge-multiple: true
-
-      - name: Stage binaries for Docker build context
-        run: |
-          for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
-            case "$target" in
-              x86_64-*) arch=amd64 ;;
-              aarch64-*) arch=arm64 ;;
-            esac
-            mkdir -p "tmp/docker-context/$arch"
-            tar -xzf "target/distrib/fabro-${target}.tar.gz" -C target/distrib
-            cp "target/distrib/fabro-${target}/fabro" "tmp/docker-context/$arch/fabro"
-          done
-
-      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
-
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
-
-      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - id: meta
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
-        with:
-          images: ghcr.io/fabro-sh/fabro
-          tags: |
-            type=match,pattern=v(.*),group=1
-            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
-            type=raw,value=nightly,enable=${{ contains(github.ref_name, '-nightly.') }}
-
-      - name: Build amd64 image for smoke test
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64
-          load: true
-          tags: fabro-smoke:amd64
-
-      - name: Smoke-test amd64 image
-        run: docker run --rm --platform linux/amd64 fabro-smoke:amd64 fabro version
-
-      - name: Build arm64 image for smoke test
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/arm64
-          load: true
-          tags: fabro-smoke:arm64
-
-      - name: Smoke-test arm64 image
-        run: docker run --rm --platform linux/arm64 fabro-smoke:arm64 fabro version
-
-      - id: build
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-      - name: Attest image provenance
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
-        with:
-          subject-name: ghcr.io/fabro-sh/fabro
-          subject-digest: ${{ steps.build.outputs.digest }}
-          push-to-registry: true
-
-  update-homebrew:
-    name: Update Homebrew Formula
-    needs: release
-    if: ${{ !contains(github.ref_name, '-') }}
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          path: target/distrib
-          pattern: artifacts-fabro-*
-          merge-multiple: true
-
-      - name: Generate and push formula
-        env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          TAG_NAME: ${{ github.ref_name }}
-        run: |
-          VERSION="${TAG_NAME#v}"
-
-          SHA_AARCH64_DARWIN=$(awk '{print $1}' target/distrib/fabro-aarch64-apple-darwin.tar.gz.sha256)
-          SHA_X86_64_LINUX=$(awk '{print $1}' target/distrib/fabro-x86_64-unknown-linux-gnu.tar.gz.sha256)
-          SHA_AARCH64_LINUX=$(awk '{print $1}' target/distrib/fabro-aarch64-unknown-linux-gnu.tar.gz.sha256)
-
-          sed \
-            -e "s/{{VERSION}}/$VERSION/g" \
-            -e "s/{{SHA_AARCH64_DARWIN}}/$SHA_AARCH64_DARWIN/g" \
-            -e "s/{{SHA_X86_64_LINUX}}/$SHA_X86_64_LINUX/g" \
-            -e "s/{{SHA_AARCH64_LINUX}}/$SHA_AARCH64_LINUX/g" \
-            installer/fabro.rb.template > fabro.rb
-
-          git clone https://x-access-token:${GH_TOKEN}@github.com/fabro-sh/homebrew-tap.git tap
-          cp fabro.rb tap/Formula/fabro.rb
-          jq --arg version "$VERSION" --arg tag "$TAG_NAME" \
-             '.stable = {version: $version, tag: $tag}' \
-             tap/versions.json > tap/versions.json.tmp
-          mv tap/versions.json.tmp tap/versions.json
-          cd tap
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/fabro.rb versions.json
-          git diff --cached --quiet || (git commit -m "Update fabro to ${TAG_NAME}" && git push)
-
-  update-homebrew-nightly:
-    name: Update Homebrew Nightly Formula
-    needs: release
-    if: ${{ contains(github.ref_name, '-') }}
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          path: target/distrib
-          pattern: artifacts-fabro-*
-          merge-multiple: true
-
-      - name: Generate and push nightly formula
-        env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          TAG_NAME: ${{ github.ref_name }}
-        run: |
-          VERSION="${TAG_NAME#v}"
-
-          SHA_AARCH64_DARWIN=$(awk '{print $1}' target/distrib/fabro-aarch64-apple-darwin.tar.gz.sha256)
-          SHA_X86_64_LINUX=$(awk '{print $1}' target/distrib/fabro-x86_64-unknown-linux-gnu.tar.gz.sha256)
-          SHA_AARCH64_LINUX=$(awk '{print $1}' target/distrib/fabro-aarch64-unknown-linux-gnu.tar.gz.sha256)
-
-          sed \
-            -e "s/{{VERSION}}/$VERSION/g" \
-            -e "s/{{SHA_AARCH64_DARWIN}}/$SHA_AARCH64_DARWIN/g" \
-            -e "s/{{SHA_X86_64_LINUX}}/$SHA_X86_64_LINUX/g" \
-            -e "s/{{SHA_AARCH64_LINUX}}/$SHA_AARCH64_LINUX/g" \
-            installer/fabro-nightly.rb.template > fabro-nightly.rb
-
-          git clone https://x-access-token:${GH_TOKEN}@github.com/fabro-sh/homebrew-tap.git tap
-          cp fabro-nightly.rb tap/Formula/fabro-nightly.rb
-          jq --arg version "$VERSION" --arg tag "$TAG_NAME" \
-             '.nightly = {version: $version, tag: $tag}' \
-             tap/versions.json > tap/versions.json.tmp
-          mv tap/versions.json.tmp tap/versions.json
-          cd tap
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/fabro-nightly.rb versions.json
-          git diff --cached --quiet || (git commit -m "Update fabro-nightly to ${TAG_NAME}" && git push)

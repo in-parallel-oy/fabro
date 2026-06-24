@@ -1,6 +1,6 @@
 services:
   fabro:
-    image: ghcr.io/fabro-sh/fabro:${FABRO_VERSION:-nightly}
+    image: ghcr.io/in-parallel-oy/fabro:${FABRO_VERSION:-nightly}
     restart: unless-stopped
     ports:
       - "${FABRO_PORT:-32276}:32276"

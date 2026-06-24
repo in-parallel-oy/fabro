@@ -1,6 +1,6 @@
 services:
   fabro:
-    image: fabro-sh/fabro
+    image: in-parallel-oy/fabro
     restart: unless-stopped
     ports:
       - "32276:32276"

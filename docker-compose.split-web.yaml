@@ -1,6 +1,6 @@
 services:
   fabro-api:
-    image: ${FABRO_IMAGE:-fabro-sh/fabro:split-web-poc}
+    image: ${FABRO_IMAGE:-in-parallel-oy/fabro:split-web-poc}
     restart: unless-stopped
     expose:
       - "32276"
