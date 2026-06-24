@@ -39,7 +39,7 @@ pub enum RunEventSink {
     Callback(Arc<RunEventSinkCallback>),
     Map {
         transform: Arc<RunEventTransform>,
-        inner:     Box<Self>,
+        inner: Box<Self>,
     },
     Composite(Vec<Self>),
 }
@@ -95,7 +95,7 @@ impl RunEventSink {
     {
         Self::Map {
             transform: Arc::new(transform),
-            inner:     Box::new(inner),
+            inner: Box::new(inner),
         }
     }
 
@@ -232,35 +232,42 @@ mod tests {
             None,
         );
         let run_store = store.create_run(&fixtures::RUN_7).await.unwrap();
-        append_event(&run_store, &fixtures::RUN_7, &Event::RunCreated {
-            run_id:           fixtures::RUN_7,
-            title:            None,
-            settings:         serde_json::to_value(WorkflowSettings::default()).unwrap(),
-            graph:            serde_json::to_value(Graph::new("test")).unwrap(),
-            workflow_source:  None,
-            workflow_config:  None,
-            labels:           std::collections::BTreeMap::new(),
-            run_dir:          "/tmp/test".to_string(),
-            source_directory: None,
-            workflow_slug:    None,
-            automation:       None,
-            db_prefix:        None,
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            git:              None,
-            fork_source_ref:  None,
-            retried_from:     None,
-            parent_id:        None,
-            web_url:          None,
-        })
+        append_event(
+            &run_store,
+            &fixtures::RUN_7,
+            &Event::RunCreated {
+                run_id: fixtures::RUN_7,
+                title: None,
+                settings: serde_json::to_value(WorkflowSettings::default()).unwrap(),
+                graph: serde_json::to_value(Graph::new("test")).unwrap(),
+                workflow_source: None,
+                workflow_config: None,
+                labels: std::collections::BTreeMap::new(),
+                run_dir: "/tmp/test".to_string(),
+                source_directory: None,
+                workflow_slug: None,
+                automation: None,
+                db_prefix: None,
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                git: None,
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
+            },
+        )
         .await
         .unwrap();
-        let stored = to_run_event(&fixtures::RUN_7, &Event::RunNotice {
-            level:            RunNoticeLevel::Warn,
-            code:             "example".to_string(),
-            message:          "notice".to_string(),
-            exec_output_tail: None,
-        });
+        let stored = to_run_event(
+            &fixtures::RUN_7,
+            &Event::RunNotice {
+                level: RunNoticeLevel::Warn,
+                code: "example".to_string(),
+                message: "notice".to_string(),
+                exec_output_tail: None,
+            },
+        );
         let payload = build_redacted_event_payload(&stored, &fixtures::RUN_7).unwrap();
         run_store.append_event(&payload).await.unwrap();
 

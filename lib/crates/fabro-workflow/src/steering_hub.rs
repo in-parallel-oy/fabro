@@ -84,14 +84,14 @@ impl ActiveControlHandle for SessionControlHandle {
 
 #[derive(Clone)]
 struct ActiveEntry {
-    handle:      Arc<dyn ActiveControlHandle>,
+    handle: Arc<dyn ActiveControlHandle>,
     pair_handle: Option<SessionControlHandle>,
-    session_id:  String,
+    session_id: String,
 }
 
 #[derive(Debug, Clone)]
 struct ActivePair {
-    record:     PairRecord,
+    record: PairRecord,
     /// Snapshot of the agent session id active at `start_pair` time. Used to
     /// detect session replacement on subsequent pair commands and on
     /// `AgentSessionDeactivated` cleanup; intentionally not exposed in the
@@ -113,10 +113,10 @@ pub enum PairControlError {
     reason = "external callers refer to it as SteeringHub"
 )]
 pub struct SteeringHub {
-    active:      RwLock<HashMap<StageId, ActiveEntry>>,
+    active: RwLock<HashMap<StageId, ActiveEntry>>,
     active_pair: Mutex<Option<ActivePair>>,
-    pending:     Mutex<VecDeque<SteeringItem>>,
-    emitter:     Arc<Emitter>,
+    pending: Mutex<VecDeque<SteeringItem>>,
+    emitter: Arc<Emitter>,
 }
 
 impl SteeringHub {
@@ -196,11 +196,14 @@ impl SteeringHub {
                 true
             }
             None => {
-                active.insert(stage_id.clone(), ActiveEntry {
-                    handle,
-                    pair_handle,
-                    session_id: session_id.to_string(),
-                });
+                active.insert(
+                    stage_id.clone(),
+                    ActiveEntry {
+                        handle,
+                        pair_handle,
+                        session_id: session_id.to_string(),
+                    },
+                );
                 true
             }
         }
@@ -261,7 +264,7 @@ impl SteeringHub {
     /// in the run-wide pending buffer.
     pub fn deliver_steer(&self, text: String, actor: Option<Principal>) {
         self.emitter.emit(&Event::RunSteer {
-            text:  text.clone(),
+            text: text.clone(),
             actor: actor.clone(),
         });
 
@@ -285,11 +288,11 @@ impl SteeringHub {
 
             if let Some(dropped_actor) = dropped_actor {
                 self.emitter.emit(&Event::AgentSteerDropped {
-                    reason:  AgentSteerDroppedReason::QueueFull,
-                    count:   1,
-                    actor:   Some(dropped_actor),
+                    reason: AgentSteerDroppedReason::QueueFull,
+                    count: 1,
+                    actor: Some(dropped_actor),
                     node_id: None,
-                    visit:   None,
+                    visit: None,
                 });
             }
             self.emitter.emit(&Event::AgentSteerBuffered { actor });
@@ -302,7 +305,7 @@ impl SteeringHub {
             Self::enqueue_into_session_queue(
                 entry.handle.as_ref(),
                 SteeringItem::Steering {
-                    text:  text.clone(),
+                    text: text.clone(),
                     actor: actor.clone(),
                 },
                 &self.emitter,
@@ -325,10 +328,10 @@ impl SteeringHub {
         for (stage_id, entry) in active.iter() {
             entry.handle.interrupt(actor.cloned());
             self.emitter.emit(&Event::AgentInterruptInjected {
-                node_id:    stage_id.node_id().to_string(),
-                visit:      stage_id.visit(),
+                node_id: stage_id.node_id().to_string(),
+                visit: stage_id.visit(),
                 session_id: entry.session_id.clone(),
-                actor:      actor.cloned(),
+                actor: actor.cloned(),
             });
         }
     }
@@ -346,31 +349,31 @@ impl SteeringHub {
             actor: actor.cloned(),
         });
         self.emitter.emit(&Event::RunSteer {
-            text:  text.to_string(),
+            text: text.to_string(),
             actor: actor.cloned(),
         });
 
         for (stage_id, entry) in active.iter() {
             if let Some(evicted) = entry.handle.interrupt_then_enqueue_bounded(
                 SteeringItem::Steering {
-                    text:  text.to_string(),
+                    text: text.to_string(),
                     actor: actor.cloned(),
                 },
                 PER_SESSION_QUEUE_CAP,
             ) {
                 self.emitter.emit(&Event::AgentSteerDropped {
-                    reason:  AgentSteerDroppedReason::QueueFull,
-                    count:   1,
-                    actor:   evicted.actor().cloned(),
+                    reason: AgentSteerDroppedReason::QueueFull,
+                    count: 1,
+                    actor: evicted.actor().cloned(),
                     node_id: Some(stage_id.node_id().to_string()),
-                    visit:   Some(stage_id.visit()),
+                    visit: Some(stage_id.visit()),
                 });
             }
             self.emitter.emit(&Event::AgentInterruptInjected {
-                node_id:    stage_id.node_id().to_string(),
-                visit:      stage_id.visit(),
+                node_id: stage_id.node_id().to_string(),
+                visit: stage_id.visit(),
                 session_id: entry.session_id.clone(),
-                actor:      actor.cloned(),
+                actor: actor.cloned(),
             });
         }
     }
@@ -656,11 +659,11 @@ impl SteeringHub {
     ) {
         if let Some(evicted) = handle.enqueue_bounded(item, PER_SESSION_QUEUE_CAP) {
             emitter.emit(&Event::AgentSteerDropped {
-                reason:  AgentSteerDroppedReason::QueueFull,
-                count:   1,
-                actor:   evicted.actor().cloned(),
+                reason: AgentSteerDroppedReason::QueueFull,
+                count: 1,
+                actor: evicted.actor().cloned(),
                 node_id: stage_id.map(|s| s.node_id().to_string()),
-                visit:   stage_id.map(StageId::visit),
+                visit: stage_id.map(StageId::visit),
             });
         }
     }
@@ -711,7 +714,7 @@ mod tests {
 
     fn pair_target(stage_id: &StageId, _session_id: &str) -> PairTarget {
         PairTarget {
-            stage_id:   stage_id.clone(),
+            stage_id: stage_id.clone(),
             node_label: stage_id.node_id().to_string(),
         }
     }
@@ -722,7 +725,7 @@ mod tests {
 
     #[derive(Default)]
     struct FakeAcpControlHandle {
-        queue:       Mutex<Vec<SteeringItem>>,
+        queue: Mutex<Vec<SteeringItem>>,
         interrupted: Mutex<usize>,
     }
 
@@ -770,10 +773,10 @@ mod tests {
             }),
         );
         assert_eq!(hub.pending_len(), 1);
-        assert_eq!(names.lock().unwrap().as_slice(), [
-            "run.steer",
-            "agent.steer.buffered"
-        ]);
+        assert_eq!(
+            names.lock().unwrap().as_slice(),
+            ["run.steer", "agent.steer.buffered"]
+        );
     }
 
     #[test]
@@ -926,12 +929,15 @@ mod tests {
         assert_eq!(hub.pending_len(), 0);
         let events = events.lock().unwrap();
         let names = events.iter().map(RunEvent::event_name).collect::<Vec<_>>();
-        assert_eq!(names, [
-            "run.interrupt",
-            "agent.interrupt.injected",
-            "run.interrupt",
-            "agent.interrupt.injected",
-        ]);
+        assert_eq!(
+            names,
+            [
+                "run.interrupt",
+                "agent.interrupt.injected",
+                "run.interrupt",
+                "agent.interrupt.injected",
+            ]
+        );
         assert_eq!(events[1].stage_id, Some(stage.clone()));
         assert_eq!(events[1].session_id.as_deref(), Some("session-a"));
         assert_eq!(events[3].stage_id, Some(stage));
@@ -952,11 +958,10 @@ mod tests {
         assert_eq!(hub.pending_len(), 0);
         let events = events.lock().unwrap();
         let names = events.iter().map(RunEvent::event_name).collect::<Vec<_>>();
-        assert_eq!(names, [
-            "run.interrupt",
-            "run.steer",
-            "agent.interrupt.injected",
-        ]);
+        assert_eq!(
+            names,
+            ["run.interrupt", "run.steer", "agent.interrupt.injected",]
+        );
         assert_eq!(events[2].stage_id, Some(stage));
         assert_eq!(events[2].session_id.as_deref(), Some("session-a"));
     }
@@ -1004,13 +1009,16 @@ mod tests {
             .iter()
             .map(|event| event.event_name().to_string())
             .collect::<Vec<_>>();
-        assert_eq!(names, [
-            "run.pair.started",
-            "agent.pair.system_message",
-            "agent.pair.user_message",
-            "agent.pair.system_message",
-            "run.pair.ended"
-        ]);
+        assert_eq!(
+            names,
+            [
+                "run.pair.started",
+                "agent.pair.system_message",
+                "agent.pair.user_message",
+                "agent.pair.system_message",
+                "run.pair.ended"
+            ]
+        );
     }
 
     #[test]
@@ -1054,11 +1062,14 @@ mod tests {
             .iter()
             .map(|event| event.event_name().to_string())
             .collect::<Vec<_>>();
-        assert_eq!(names, [
-            "run.pair.started",
-            "agent.pair.system_message",
-            "run.pair.ended"
-        ]);
+        assert_eq!(
+            names,
+            [
+                "run.pair.started",
+                "agent.pair.system_message",
+                "run.pair.ended"
+            ]
+        );
     }
 
     #[test]

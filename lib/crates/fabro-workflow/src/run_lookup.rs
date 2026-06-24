@@ -20,26 +20,26 @@ use crate::run_status::RunStatus;
 
 #[derive(Debug, Clone)]
 struct RunLocalState {
-    dir_name:      String,
+    dir_name: String,
     start_time_dt: Option<DateTime<Utc>>,
-    end_time:      Option<DateTime<Utc>>,
-    path:          PathBuf,
-    is_orphan:     bool,
+    end_time: Option<DateTime<Utc>>,
+    path: PathBuf,
+    is_orphan: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct RunInfo {
     #[serde(skip)]
-    summary:           Option<Run>,
-    pub dir_name:      String,
+    summary: Option<Run>,
+    pub dir_name: String,
     #[serde(skip)]
     pub start_time_dt: Option<DateTime<Utc>>,
     #[serde(skip)]
-    pub end_time:      Option<DateTime<Utc>>,
+    pub end_time: Option<DateTime<Utc>>,
     #[serde(skip)]
-    pub path:          PathBuf,
+    pub path: PathBuf,
     #[serde(skip)]
-    pub is_orphan:     bool,
+    pub is_orphan: bool,
 }
 
 impl RunInfo {
@@ -221,13 +221,16 @@ fn scan_orphan_runs(base: &Path) -> Result<Vec<RunInfo>> {
             .and_then(|m| m.modified().ok())
             .map(|time| -> DateTime<Utc> { time.into() });
 
-        runs.push(RunInfo::new(None, RunLocalState {
-            dir_name,
-            start_time_dt: mtime_dt,
-            end_time: None,
-            path,
-            is_orphan: true,
-        }));
+        runs.push(RunInfo::new(
+            None,
+            RunLocalState {
+                dir_name,
+                start_time_dt: mtime_dt,
+                end_time: None,
+                path,
+                is_orphan: true,
+            },
+        ));
     }
 
     runs.sort_by(|a, b| {
@@ -294,13 +297,16 @@ fn run_info_from_summary(summary: &Run, scratch_base: &Path) -> Option<RunInfo> 
         None
     };
 
-    Some(RunInfo::new(Some(summary.clone()), RunLocalState {
-        dir_name,
-        start_time_dt: Some(start_time_dt),
-        end_time,
-        path,
-        is_orphan: false,
-    }))
+    Some(RunInfo::new(
+        Some(summary.clone()),
+        RunLocalState {
+            dir_name,
+            start_time_dt: Some(start_time_dt),
+            end_time,
+            path,
+            is_orphan: false,
+        },
+    ))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -476,25 +482,25 @@ mod tests {
 
     fn sample_run_spec() -> RunSpec {
         RunSpec {
-            run_id:           fixtures::RUN_1,
-            settings:         WorkflowSettings::default(),
-            graph:            Graph::new("test"),
-            graph_source:     None,
-            workflow_slug:    Some("test".to_string()),
-            automation:       None,
+            run_id: fixtures::RUN_1,
+            settings: WorkflowSettings::default(),
+            graph: Graph::new("test"),
+            graph_source: None,
+            workflow_slug: Some("test".to_string()),
+            automation: None,
             source_directory: Some("/tmp/project".to_string()),
-            git:              Some(fabro_types::GitContext {
-                origin_url:   String::new(),
-                branch:       "main".to_string(),
-                sha:          None,
-                dirty:        fabro_types::DirtyStatus::Clean,
+            git: Some(fabro_types::GitContext {
+                origin_url: String::new(),
+                branch: "main".to_string(),
+                sha: None,
+                dirty: fabro_types::DirtyStatus::Clean,
                 push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
             }),
-            labels:           HashMap::new(),
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            definition_blob:  None,
-            fork_source_ref:  None,
+            labels: HashMap::new(),
+            provenance: test_support::test_run_provenance(),
+            manifest_blob: None,
+            definition_blob: None,
+            fork_source_ref: None,
         }
     }
 
@@ -507,32 +513,40 @@ mod tests {
         let store = memory_store();
         let run_spec = sample_run_spec();
         let run_store = store.create_run(&fixtures::RUN_1).await.unwrap();
-        append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
-            run_id:           fixtures::RUN_1,
-            title:            None,
-            settings:         serde_json::to_value(&run_spec.settings).unwrap(),
-            graph:            serde_json::to_value(&run_spec.graph).unwrap(),
-            workflow_source:  None,
-            workflow_config:  None,
-            labels:           run_spec.labels.clone().into_iter().collect(),
-            run_dir:          run_dir.display().to_string(),
-            source_directory: run_spec.source_directory.clone(),
-            workflow_slug:    run_spec.workflow_slug.clone(),
-            automation:       None,
-            db_prefix:        None,
-            provenance:       run_spec.provenance.clone(),
-            manifest_blob:    None,
-            git:              run_spec.git.clone(),
-            fork_source_ref:  run_spec.fork_source_ref.clone(),
-            retried_from:     None,
-            parent_id:        None,
-            web_url:          None,
-        })
+        append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::RunCreated {
+                run_id: fixtures::RUN_1,
+                title: None,
+                settings: serde_json::to_value(&run_spec.settings).unwrap(),
+                graph: serde_json::to_value(&run_spec.graph).unwrap(),
+                workflow_source: None,
+                workflow_config: None,
+                labels: run_spec.labels.clone().into_iter().collect(),
+                run_dir: run_dir.display().to_string(),
+                source_directory: run_spec.source_directory.clone(),
+                workflow_slug: run_spec.workflow_slug.clone(),
+                automation: None,
+                db_prefix: None,
+                provenance: run_spec.provenance.clone(),
+                manifest_blob: None,
+                git: run_spec.git.clone(),
+                fork_source_ref: run_spec.fork_source_ref.clone(),
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
+            },
+        )
         .await
         .unwrap();
-        append_event(&run_store, &fixtures::RUN_1, &Event::RunSubmitted {
-            definition_blob: None,
-        })
+        append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::RunSubmitted {
+                definition_blob: None,
+            },
+        )
         .await
         .unwrap();
 

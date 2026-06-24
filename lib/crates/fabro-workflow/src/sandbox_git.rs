@@ -16,19 +16,19 @@ use crate::sandbox_git_runtime::SandboxGitRuntime;
 pub struct GitCommandError {
     pub message: String,
     #[source]
-    pub source:  fabro_sandbox::Error,
+    pub source: fabro_sandbox::Error,
 }
 
 /// Captured git state for a workflow run, shared with handlers.
 #[derive(Debug, Clone)]
 pub struct GitState {
-    pub run_id:                    RunId,
-    pub base_sha:                  String,
-    pub run_branch:                Option<String>,
-    pub meta_branch:               Option<String>,
-    pub checkpoint_exclude_globs:  Vec<String>,
+    pub run_id: RunId,
+    pub base_sha: String,
+    pub run_branch: Option<String>,
+    pub meta_branch: Option<String>,
+    pub checkpoint_exclude_globs: Vec<String>,
     pub checkpoint_skip_git_hooks: bool,
-    pub git_author:                GitAuthor,
+    pub git_author: GitAuthor,
 }
 
 pub const GIT_REMOTE: &str =
@@ -38,20 +38,20 @@ pub(crate) fn exec_err(label: &str, r: fabro_sandbox::ExecResult) -> GitCommandE
     if r.is_timed_out() {
         return GitCommandError {
             message: format!("{label} timed out after {}ms", r.duration_ms),
-            source:  fabro_sandbox::Error::exec(label, r),
+            source: fabro_sandbox::Error::exec(label, r),
         };
     }
     if r.is_cancelled() {
         return GitCommandError {
             message: format!("{label} cancelled after {}ms", r.duration_ms),
-            source:  fabro_sandbox::Error::exec(label, r),
+            source: fabro_sandbox::Error::exec(label, r),
         };
     }
 
     let exit = r.display_exit_code();
     GitCommandError {
         message: format!("{label} failed (exit {exit})"),
-        source:  fabro_sandbox::Error::exec(label, r),
+        source: fabro_sandbox::Error::exec(label, r),
     }
 }
 
@@ -91,7 +91,7 @@ pub async fn git_checkpoint(
         Err(e) => {
             return Err(GitCommandError {
                 message: "git add failed".to_string(),
-                source:  e,
+                source: e,
             });
         }
     }
@@ -100,18 +100,18 @@ pub async fn git_checkpoint(
     let completed_str = completed_count.to_string();
     let mut trailers = vec![
         Trailer {
-            key:   "Fabro-Run",
+            key: "Fabro-Run",
             value: run_id,
         },
         Trailer {
-            key:   "Fabro-Completed",
+            key: "Fabro-Completed",
             value: &completed_str,
         },
     ];
     let shadow_sha_ref = shadow_sha.as_deref().unwrap_or("");
     if shadow_sha.is_some() {
         trailers.push(Trailer {
-            key:   "Fabro-Checkpoint",
+            key: "Fabro-Checkpoint",
             value: shadow_sha_ref,
         });
     }
@@ -122,7 +122,7 @@ pub async fn git_checkpoint(
     if let Err(e) = sandbox.write_file(&msg_path, &message).await {
         return Err(GitCommandError {
             message: "failed to write commit message file".to_string(),
-            source:  e,
+            source: e,
         });
     }
 
@@ -143,7 +143,7 @@ pub async fn git_checkpoint(
         Err(e) => {
             return Err(GitCommandError {
                 message: "git commit failed".to_string(),
-                source:  e,
+                source: e,
             });
         }
     }
@@ -157,7 +157,7 @@ pub async fn git_checkpoint(
         Ok(r) => Err(exec_err("git rev-parse HEAD", r)),
         Err(e) => Err(GitCommandError {
             message: "git rev-parse HEAD failed".to_string(),
-            source:  e,
+            source: e,
         }),
     }
 }
@@ -231,7 +231,7 @@ pub(crate) async fn git_diff_with_timeout(
         Ok(r) => Err(exec_err("git diff", r)),
         Err(e) => Err(GitCommandError {
             message: "git diff failed".to_string(),
-            source:  e,
+            source: e,
         }),
     }
 }
@@ -311,37 +311,37 @@ fn sandbox_git_hardening_env() -> std::collections::HashMap<String, String> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RawDiffEntry {
     Added {
-        path:     String,
+        path: String,
         new_blob: String,
         new_mode: String,
     },
     Modified {
-        path:     String,
+        path: String,
         old_blob: String,
         new_blob: String,
         new_mode: String,
     },
     Deleted {
-        path:     String,
+        path: String,
         old_blob: String,
         old_mode: String,
     },
     Renamed {
-        old_path:   String,
-        new_path:   String,
-        old_blob:   String,
-        new_blob:   String,
-        new_mode:   String,
+        old_path: String,
+        new_path: String,
+        old_blob: String,
+        new_blob: String,
+        new_mode: String,
         similarity: u8,
     },
     Symlink {
-        path:        String,
+        path: String,
         change_kind: SymlinkChange,
-        old_blob:    Option<String>,
-        new_blob:    Option<String>,
+        old_blob: Option<String>,
+        new_blob: Option<String>,
     },
     Submodule {
-        path:        String,
+        path: String,
         change_kind: SubmoduleChange,
     },
 }
@@ -390,7 +390,7 @@ impl std::error::Error for DiffError {}
 /// --batch-check`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlobMeta {
-    pub sha:  String,
+    pub sha: String,
     /// `None` if the blob is missing (git reports `missing`).
     pub size: Option<u64>,
 }
@@ -518,47 +518,47 @@ fn classify_entry(
 
     Ok(match (status, is_symlink_change, is_submodule_change) {
         ("A", true, _) => RawDiffEntry::Symlink {
-            path:        path.to_string(),
+            path: path.to_string(),
             change_kind: SymlinkChange::Added,
-            old_blob:    None,
-            new_blob:    Some(dst_sha.to_string()),
+            old_blob: None,
+            new_blob: Some(dst_sha.to_string()),
         },
         ("A", _, true) => RawDiffEntry::Submodule {
-            path:        path.to_string(),
+            path: path.to_string(),
             change_kind: SubmoduleChange::Added,
         },
         ("A", _, _) => RawDiffEntry::Added {
-            path:     path.to_string(),
+            path: path.to_string(),
             new_blob: dst_sha.to_string(),
             new_mode: dst_mode.to_string(),
         },
         ("D", true, _) => RawDiffEntry::Symlink {
-            path:        path.to_string(),
+            path: path.to_string(),
             change_kind: SymlinkChange::Deleted,
-            old_blob:    Some(src_sha.to_string()),
-            new_blob:    None,
+            old_blob: Some(src_sha.to_string()),
+            new_blob: None,
         },
         ("D", _, true) => RawDiffEntry::Submodule {
-            path:        path.to_string(),
+            path: path.to_string(),
             change_kind: SubmoduleChange::Deleted,
         },
         ("D", _, _) => RawDiffEntry::Deleted {
-            path:     path.to_string(),
+            path: path.to_string(),
             old_blob: src_sha.to_string(),
             old_mode: src_mode.to_string(),
         },
         ("M" | "T", true, _) => RawDiffEntry::Symlink {
-            path:        path.to_string(),
+            path: path.to_string(),
             change_kind: SymlinkChange::Modified,
-            old_blob:    Some(src_sha.to_string()),
-            new_blob:    Some(dst_sha.to_string()),
+            old_blob: Some(src_sha.to_string()),
+            new_blob: Some(dst_sha.to_string()),
         },
         ("M" | "T", _, true) => RawDiffEntry::Submodule {
-            path:        path.to_string(),
+            path: path.to_string(),
             change_kind: SubmoduleChange::Modified,
         },
         ("M" | "T", _, _) => RawDiffEntry::Modified {
-            path:     path.to_string(),
+            path: path.to_string(),
             old_blob: src_sha.to_string(),
             new_blob: dst_sha.to_string(),
             new_mode: dst_mode.to_string(),
@@ -577,7 +577,7 @@ pub use fabro_types::{DiffStats, DiffSummary};
 #[derive(Debug, Default)]
 pub struct DiffNumstat {
     /// Repo-relative paths (post-rename) that git classifies as binary.
-    pub binary_paths:       HashSet<String>,
+    pub binary_paths: HashSet<String>,
     /// Repo-relative paths (post-rename) to line stats for text files.
     pub line_stats_by_path: HashMap<String, DiffStats>,
 }
@@ -659,10 +659,13 @@ pub async fn list_diff_numstat(
             continue;
         };
         let path = extract_new_path_from_numstat(path_s);
-        out.line_stats_by_path.insert(path, DiffStats {
-            additions: adds,
-            deletions: dels,
-        });
+        out.line_stats_by_path.insert(
+            path,
+            DiffStats {
+                additions: adds,
+                deletions: dels,
+            },
+        );
     }
     Ok(out)
 }
@@ -876,8 +879,8 @@ mod tests {
 
     struct ScriptedSandbox {
         exec_results: Mutex<VecDeque<ExecResult>>,
-        commands:     Mutex<Vec<String>>,
-        write_paths:  Mutex<Vec<String>>,
+        commands: Mutex<Vec<String>>,
+        write_paths: Mutex<Vec<String>>,
         delete_paths: Mutex<Vec<String>>,
     }
 
@@ -885,8 +888,8 @@ mod tests {
         fn new(exec_results: Vec<ExecResult>) -> Self {
             Self {
                 exec_results: Mutex::new(exec_results.into()),
-                commands:     Mutex::new(Vec::new()),
-                write_paths:  Mutex::new(Vec::new()),
+                commands: Mutex::new(Vec::new()),
+                write_paths: Mutex::new(Vec::new()),
                 delete_paths: Mutex::new(Vec::new()),
             }
         }
@@ -1022,9 +1025,9 @@ mod tests {
 
     fn exec_ok() -> ExecResult {
         ExecResult {
-            stdout:      String::new(),
-            stderr:      String::new(),
-            exit_code:   Some(0),
+            stdout: String::new(),
+            stderr: String::new(),
+            exit_code: Some(0),
             termination: CommandTermination::Exited,
             duration_ms: 1,
         }
@@ -1042,9 +1045,9 @@ mod tests {
 
     fn exec_failed(exit_code: i32, stdout: &str, stderr: &str) -> ExecResult {
         ExecResult {
-            stdout:      stdout.to_string(),
-            stderr:      stderr.to_string(),
-            exit_code:   Some(exit_code),
+            stdout: stdout.to_string(),
+            stderr: stderr.to_string(),
+            exit_code: Some(exit_code),
             termination: CommandTermination::Exited,
             duration_ms: 1,
         }

@@ -102,18 +102,18 @@ fn test_emitter_arc(label: &str) -> Arc<Emitter> {
 
 fn test_run_options(run_dir: &Path, run_id: &str) -> RunOptions {
     RunOptions {
-        run_dir:          run_dir.to_path_buf(),
-        cancel_token:     tokio_util::sync::CancellationToken::new(),
-        run_id:           test_run_id(run_id),
-        settings:         WorkflowSettings::default(),
-        git:              None,
-        pre_run_git:      None,
-        fork_source_ref:  None,
-        labels:           HashMap::new(),
-        github_app:       None,
-        base_branch:      None,
+        run_dir: run_dir.to_path_buf(),
+        cancel_token: tokio_util::sync::CancellationToken::new(),
+        run_id: test_run_id(run_id),
+        settings: WorkflowSettings::default(),
+        git: None,
+        pre_run_git: None,
+        fork_source_ref: None,
+        labels: HashMap::new(),
+        github_app: None,
+        base_branch: None,
         display_base_sha: None,
-        workflow_slug:    None,
+        workflow_slug: None,
     }
 }
 
@@ -160,10 +160,10 @@ fn persisted_workflow(graph: Graph, source: String, run_dir: &Path, run_id: RunI
                     .to_string(),
             ),
             git: Some(fabro_types::GitContext {
-                origin_url:   String::new(),
-                branch:       "main".to_string(),
-                sha:          None,
-                dirty:        fabro_types::DirtyStatus::Clean,
+                origin_url: String::new(),
+                branch: "main".to_string(),
+                sha: None,
+                dirty: fabro_types::DirtyStatus::Clean,
                 push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
             }),
             labels: HashMap::new(),
@@ -197,33 +197,41 @@ async fn seed_created_and_starting(
     run_options: &RunOptions,
     graph: &Graph,
 ) {
-    append_event(run_store, &run_options.run_id, &Event::RunCreated {
-        run_id:           run_options.run_id,
-        title:            None,
-        settings:         serde_json::to_value(&run_options.settings).unwrap(),
-        graph:            serde_json::to_value(graph).unwrap(),
-        workflow_source:  None,
-        workflow_config:  None,
-        labels:           run_options.labels.clone().into_iter().collect(),
-        run_dir:          run_options.run_dir.display().to_string(),
-        source_directory: Some(std::env::current_dir().unwrap().display().to_string()),
-        workflow_slug:    run_options.workflow_slug.clone(),
-        automation:       None,
-        db_prefix:        None,
-        provenance:       test_support::test_run_provenance(),
-        manifest_blob:    None,
-        git:              run_options.pre_run_git.clone(),
-        fork_source_ref:  run_options.fork_source_ref.clone(),
-        retried_from:     None,
-        parent_id:        None,
-        web_url:          None,
-    })
+    append_event(
+        run_store,
+        &run_options.run_id,
+        &Event::RunCreated {
+            run_id: run_options.run_id,
+            title: None,
+            settings: serde_json::to_value(&run_options.settings).unwrap(),
+            graph: serde_json::to_value(graph).unwrap(),
+            workflow_source: None,
+            workflow_config: None,
+            labels: run_options.labels.clone().into_iter().collect(),
+            run_dir: run_options.run_dir.display().to_string(),
+            source_directory: Some(std::env::current_dir().unwrap().display().to_string()),
+            workflow_slug: run_options.workflow_slug.clone(),
+            automation: None,
+            db_prefix: None,
+            provenance: test_support::test_run_provenance(),
+            manifest_blob: None,
+            git: run_options.pre_run_git.clone(),
+            fork_source_ref: run_options.fork_source_ref.clone(),
+            retried_from: None,
+            parent_id: None,
+            web_url: None,
+        },
+    )
     .await
     .unwrap();
-    append_event(run_store, &run_options.run_id, &Event::RunRunnable {
-        source: fabro_types::RunRunnableSource::StartRequested,
-        actor:  None,
-    })
+    append_event(
+        run_store,
+        &run_options.run_id,
+        &Event::RunRunnable {
+            source: fabro_types::RunRunnableSource::StartRequested,
+            actor: None,
+        },
+    )
     .await
     .unwrap();
     append_event(run_store, &run_options.run_id, &Event::RunStarting)
@@ -259,18 +267,18 @@ async fn execute_test_run_with_options(
             },
             llm: LlmSpec {
                 backend_override: None, // ponytail: rebase anchor — tmux backend
-                model:          "test-model".to_string(),
-                provider_id:    fabro_model::ProviderId::anthropic(),
+                model: "test-model".to_string(),
+                provider_id: fabro_model::ProviderId::anthropic(),
                 fallback_chain: Vec::new(),
-                mcp_servers:    Vec::new(),
+                mcp_servers: Vec::new(),
                 model_controls: RunModelControls::default(),
-                dry_run:        true,
+                dry_run: true,
             },
             interviewer: Arc::new(AutoApproveInterviewer::engine()),
             steering_hub: Arc::new(crate::steering_hub::SteeringHub::new(emitter.clone())),
             catalog: test_catalog(),
             lifecycle: LifecycleOptions {
-                setup_commands:           vec![],
+                setup_commands: vec![],
                 setup_command_timeout_ms: 1_000,
             },
             run_options,
@@ -278,9 +286,9 @@ async fn execute_test_run_with_options(
             workflow_bundle: None,
             hooks: HookSettings { hooks: vec![] },
             sandbox_env: SandboxEnvSpec {
-                toml_env:           HashMap::new(),
+                toml_env: HashMap::new(),
                 github_permissions: None,
-                origin_url:         None,
+                origin_url: None,
             },
             vault: None,
             git: git_options,
@@ -322,12 +330,12 @@ async fn execute_runs_start_to_exit_and_returns_final_context() {
             },
             llm: LlmSpec {
                 backend_override: None, // ponytail: rebase anchor — tmux backend
-                model:          "test-model".to_string(),
-                provider_id:    fabro_model::ProviderId::anthropic(),
+                model: "test-model".to_string(),
+                provider_id: fabro_model::ProviderId::anthropic(),
                 fallback_chain: Vec::new(),
-                mcp_servers:    Vec::new(),
+                mcp_servers: Vec::new(),
                 model_controls: RunModelControls::default(),
-                dry_run:        true,
+                dry_run: true,
             },
             interviewer: Arc::new(AutoApproveInterviewer::engine()),
             steering_hub: Arc::new(crate::steering_hub::SteeringHub::new(test_emitter_arc(
@@ -335,7 +343,7 @@ async fn execute_runs_start_to_exit_and_returns_final_context() {
             ))),
             catalog: test_catalog(),
             lifecycle: LifecycleOptions {
-                setup_commands:           vec![],
+                setup_commands: vec![],
                 setup_command_timeout_ms: 1_000,
             },
             run_options,
@@ -343,9 +351,9 @@ async fn execute_runs_start_to_exit_and_returns_final_context() {
             workflow_bundle: None,
             hooks: HookSettings { hooks: vec![] },
             sandbox_env: SandboxEnvSpec {
-                toml_env:           HashMap::new(),
+                toml_env: HashMap::new(),
                 github_permissions: None,
-                origin_url:         None,
+                origin_url: None,
             },
             vault: None,
             git: None,
@@ -400,12 +408,12 @@ async fn run_with_lifecycle(
             },
             llm: LlmSpec {
                 backend_override: None, // ponytail: rebase anchor — tmux backend
-                model:          "test-model".to_string(),
-                provider_id:    fabro_model::ProviderId::anthropic(),
+                model: "test-model".to_string(),
+                provider_id: fabro_model::ProviderId::anthropic(),
                 fallback_chain: Vec::new(),
-                mcp_servers:    Vec::new(),
+                mcp_servers: Vec::new(),
                 model_controls: RunModelControls::default(),
-                dry_run:        true,
+                dry_run: true,
             },
             interviewer: Arc::new(AutoApproveInterviewer::engine()),
             steering_hub: Arc::new(crate::steering_hub::SteeringHub::new(emitter.clone())),
@@ -416,9 +424,9 @@ async fn run_with_lifecycle(
             workflow_bundle: None,
             hooks: HookSettings { hooks: vec![] },
             sandbox_env: SandboxEnvSpec {
-                toml_env:           HashMap::new(),
+                toml_env: HashMap::new(),
                 github_permissions: None,
-                origin_url:         None,
+                origin_url: None,
             },
             vault: None,
             git: None,
@@ -824,8 +832,8 @@ async fn execute_persists_start_record_and_node_status() {
     let dir = tempfile::tempdir().unwrap();
     let mut run_options = test_run_options(dir.path(), "test-run");
     run_options.git = Some(GitCheckpointOptions {
-        base_sha:    Some("abc123".into()),
-        run_branch:  Some(format!("fabro/run/{}", test_run_id("test-run"))),
+        base_sha: Some("abc123".into()),
+        run_branch: Some(format!("fabro/run/{}", test_run_id("test-run"))),
         meta_branch: None,
     });
 
@@ -898,9 +906,12 @@ async fn timeout_causes_fail_status_record() {
         .completion
         .as_ref()
         .unwrap();
-    assert_eq!(status.outcome, StageOutcome::Failed {
-        retry_requested: false,
-    });
+    assert_eq!(
+        status.outcome,
+        StageOutcome::Failed {
+            retry_requested: false,
+        }
+    );
 
     let events = executed.engine.run.run_store.list_events().await.unwrap();
     let stage_failed = events
@@ -1038,9 +1049,12 @@ async fn panic_handler_returns_panic_message() {
     .await;
 
     let outcome = result.expect("runner should convert panic into a failed outcome");
-    assert_eq!(outcome.status, StageOutcome::Failed {
-        retry_requested: false,
-    });
+    assert_eq!(
+        outcome.status,
+        StageOutcome::Failed {
+            retry_requested: false,
+        }
+    );
 }
 
 #[tokio::test]

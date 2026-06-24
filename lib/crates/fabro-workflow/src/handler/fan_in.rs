@@ -153,9 +153,9 @@ impl Handler for FanInHandler {
 }
 
 struct Candidate {
-    id:     String,
+    id: String,
     status: String,
-    score:  f64,
+    score: f64,
     timing: StageTiming,
 }
 
@@ -173,9 +173,9 @@ fn heuristic_select(results: &serde_json::Value) -> Candidate {
     let arr = results.as_array().unwrap_or(&empty_vec);
     if arr.is_empty() {
         return Candidate {
-            id:     "unknown".to_string(),
+            id: "unknown".to_string(),
             status: "failed".to_string(),
-            score:  0.0,
+            score: 0.0,
             timing: StageTiming::default(),
         };
     }
@@ -183,7 +183,7 @@ fn heuristic_select(results: &serde_json::Value) -> Candidate {
     let mut candidates: Vec<Candidate> = arr
         .iter()
         .map(|v| Candidate {
-            id:     v
+            id: v
                 .get("id")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown")
@@ -193,7 +193,7 @@ fn heuristic_select(results: &serde_json::Value) -> Candidate {
                 .and_then(|v| v.as_str())
                 .unwrap_or("failed")
                 .to_string(),
-            score:  v
+            score: v
                 .get("score")
                 .and_then(serde_json::Value::as_f64)
                 .unwrap_or(0.0),
@@ -218,9 +218,9 @@ fn heuristic_select(results: &serde_json::Value) -> Candidate {
     });
 
     candidates.into_iter().next().unwrap_or_else(|| Candidate {
-        id:     "unknown".to_string(),
+        id: "unknown".to_string(),
         status: "failed".to_string(),
-        score:  0.0,
+        score: 0.0,
         timing: StageTiming::default(),
     })
 }
@@ -253,14 +253,14 @@ async fn llm_evaluate(
 
     emitter.emit_scoped(
         &Event::Prompt {
-            stage:            node_id.to_string(),
-            visit:            stage_scope.visit,
-            text:             full_prompt.clone(),
-            mode:             Some(StageModelUsage::MODE_FAN_IN.to_string()),
-            provider:         None,
-            model:            None,
+            stage: node_id.to_string(),
+            visit: stage_scope.visit,
+            text: full_prompt.clone(),
+            mode: Some(StageModelUsage::MODE_FAN_IN.to_string()),
+            provider: None,
+            model: None,
             reasoning_effort: None,
-            speed:            None,
+            speed: None,
         },
         &stage_scope,
     );
@@ -297,11 +297,11 @@ async fn llm_evaluate(
                 serde_json::to_string_pretty(&outcome).unwrap_or_else(|_| "{}".to_string());
             emitter.emit_scoped(
                 &Event::PromptCompleted {
-                    node_id:  node_id.to_string(),
+                    node_id: node_id.to_string(),
                     response: response_text.clone(),
-                    model:    String::new(),
+                    model: String::new(),
                     provider: String::new(),
-                    billing:  None,
+                    billing: None,
                 },
                 &stage_scope,
             );
@@ -315,11 +315,11 @@ async fn llm_evaluate(
         Ok(CodergenResult::Text { text, timing, .. }) => {
             emitter.emit_scoped(
                 &Event::PromptCompleted {
-                    node_id:  node_id.to_string(),
+                    node_id: node_id.to_string(),
                     response: text.clone(),
-                    model:    String::new(),
+                    model: String::new(),
                     provider: String::new(),
-                    billing:  None,
+                    billing: None,
                 },
                 &stage_scope,
             );
@@ -385,9 +385,12 @@ mod tests {
             .execute(&node, &context, &graph, run_dir, &make_services())
             .await
             .unwrap();
-        assert_eq!(outcome.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
     }
 
     #[tokio::test]
@@ -494,11 +497,11 @@ mod tests {
             async fn run(&self, _request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
                 // Return text that contains the ID "branch_b"
                 Ok(CodergenResult::Text {
-                    text:              "The best candidate is branch_b".to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: "The best candidate is branch_b".to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::default(),
+                    timing: StageTiming::default(),
                 })
             }
         }
@@ -544,11 +547,11 @@ mod tests {
         impl CodergenBackend for TimingBackend {
             async fn run(&self, _request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
                 Ok(CodergenResult::Text {
-                    text:              "branch_b".to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: "branch_b".to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::new(0, 200, 300),
+                    timing: StageTiming::new(0, 200, 300),
                 })
             }
         }
@@ -598,9 +601,12 @@ mod tests {
             .execute(&node, &context, &graph, run_dir, &make_services())
             .await
             .unwrap();
-        assert_eq!(outcome.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert!(
             outcome
                 .failure_reason()

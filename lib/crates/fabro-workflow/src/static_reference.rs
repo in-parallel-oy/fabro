@@ -41,7 +41,7 @@ pub enum AttributeScope {
 #[derive(Debug, Error)]
 #[error("templates are not supported in {kind}s: {value}")]
 pub struct StaticReferenceError {
-    kind:  ReferenceKind,
+    kind: ReferenceKind,
     value: String,
 }
 

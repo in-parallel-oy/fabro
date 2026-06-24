@@ -51,21 +51,21 @@ pub(crate) enum RunMetadataError {
 
 #[derive(Debug)]
 pub(crate) struct MetadataSnapshot {
-    pub commit_sha:  String,
-    pub push_error:  Option<String>,
+    pub commit_sha: String,
+    pub push_error: Option<String>,
     pub entry_count: usize,
-    pub bytes:       u64,
+    pub bytes: u64,
 }
 
 pub(crate) struct RunMetadataRuntime {
-    degraded:        AtomicBool,
+    degraded: AtomicBool,
     warning_emitted: AtomicBool,
 }
 
 impl RunMetadataRuntime {
     pub(crate) fn new() -> Self {
         Self {
-            degraded:        AtomicBool::new(false),
+            degraded: AtomicBool::new(false),
             warning_emitted: AtomicBool::new(false),
         }
     }
@@ -92,7 +92,7 @@ pub(crate) trait AuthProvider: Send + Sync {
 }
 
 struct GitHubAuthProvider {
-    creds:      fabro_github::GitHubCredentials,
+    creds: fabro_github::GitHubCredentials,
     origin_url: String,
 }
 
@@ -126,7 +126,7 @@ impl AuthProvider for NoAuth {
 #[derive(Clone)]
 pub(crate) struct RunMetadataWriterHandle {
     writer: Arc<Mutex<RunMetadataWriter>>,
-    auth:   Arc<dyn AuthProvider>,
+    auth: Arc<dyn AuthProvider>,
 }
 
 impl RunMetadataWriterHandle {
@@ -270,15 +270,15 @@ pub(crate) async fn mint_token(
 }
 
 pub(crate) struct RunMetadataWriter {
-    store:        Store,
-    tempdir:      tempfile::TempDir,
-    remote_url:   String,
-    branch:       String,
-    author:       GitAuthor,
-    fetch_depth:  Option<i32>,
+    store: Store,
+    tempdir: tempfile::TempDir,
+    remote_url: String,
+    branch: String,
+    author: GitAuthor,
+    fetch_depth: Option<i32>,
     push_enabled: bool,
-    parent_oid:   Option<Oid>,
-    discovered:   bool,
+    parent_oid: Option<Oid>,
+    discovered: bool,
 }
 
 impl RunMetadataWriter {
@@ -626,25 +626,25 @@ mod tests {
         let projection = RunProjection::new(
             "Metadata".to_string(),
             RunSpec {
-                run_id:           fabro_types::fixtures::RUN_1,
-                settings:         WorkflowSettings::default(),
-                graph:            fabro_types::Graph::new("metadata"),
-                graph_source:     None,
-                workflow_slug:    Some("metadata".to_string()),
-                automation:       None,
+                run_id: fabro_types::fixtures::RUN_1,
+                settings: WorkflowSettings::default(),
+                graph: fabro_types::Graph::new("metadata"),
+                graph_source: None,
+                workflow_slug: Some("metadata".to_string()),
+                automation: None,
                 source_directory: Some("/Users/client/project".to_string()),
-                git:              Some(GitContext {
-                    origin_url:   "https://github.com/fabro-sh/fabro.git".to_string(),
-                    branch:       "main".to_string(),
-                    sha:          None,
-                    dirty:        DirtyStatus::Clean,
+                git: Some(GitContext {
+                    origin_url: "https://github.com/in-parallel-oy/fabro.git".to_string(),
+                    branch: "main".to_string(),
+                    sha: None,
+                    dirty: DirtyStatus::Clean,
                     push_outcome: PreRunPushOutcome::NotAttempted,
                 }),
-                labels:           HashMap::new(),
-                provenance:       test_support::test_run_provenance(),
-                manifest_blob:    None,
-                definition_blob:  None,
-                fork_source_ref:  None,
+                labels: HashMap::new(),
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                definition_blob: None,
+                fork_source_ref: None,
             },
             chrono::Utc::now(),
         );
@@ -657,31 +657,31 @@ mod tests {
 
     fn run_options_for_origin(origin_url: &str) -> RunOptions {
         RunOptions {
-            settings:         WorkflowSettings::default(),
-            run_dir:          tempfile::tempdir().unwrap().path().to_path_buf(),
-            cancel_token:     tokio_util::sync::CancellationToken::new(),
-            run_id:           fabro_types::fixtures::RUN_1,
-            labels:           HashMap::new(),
-            workflow_slug:    Some("metadata".to_string()),
-            github_app:       Some(fabro_github::GitHubCredentials::Installation(
+            settings: WorkflowSettings::default(),
+            run_dir: tempfile::tempdir().unwrap().path().to_path_buf(),
+            cancel_token: tokio_util::sync::CancellationToken::new(),
+            run_id: fabro_types::fixtures::RUN_1,
+            labels: HashMap::new(),
+            workflow_slug: Some("metadata".to_string()),
+            github_app: Some(fabro_github::GitHubCredentials::Installation(
                 fabro_github::InstallationToken {
-                    token:      "ghs_token".to_string(),
+                    token: "ghs_token".to_string(),
                     expires_at: chrono::Utc::now() + chrono::Duration::hours(1),
                 },
             )),
-            pre_run_git:      Some(GitContext {
-                origin_url:   origin_url.to_string(),
-                branch:       "main".to_string(),
-                sha:          None,
-                dirty:        DirtyStatus::Clean,
+            pre_run_git: Some(GitContext {
+                origin_url: origin_url.to_string(),
+                branch: "main".to_string(),
+                sha: None,
+                dirty: DirtyStatus::Clean,
                 push_outcome: PreRunPushOutcome::NotAttempted,
             }),
-            fork_source_ref:  None,
-            base_branch:      None,
+            fork_source_ref: None,
+            base_branch: None,
             display_base_sha: None,
-            git:              Some(GitCheckpointOptions {
-                base_sha:    None,
-                run_branch:  None,
+            git: Some(GitCheckpointOptions {
+                base_sha: None,
+                run_branch: None,
                 meta_branch: Some("fabro/meta/test-run".to_string()),
             }),
         }
@@ -716,17 +716,17 @@ mod tests {
         let commit_sha = run_git(remote.path(), &["rev-parse", branch]);
         assert_eq!(commit_sha, snapshot.commit_sha);
         assert_eq!(
-            run_git_bytes(remote.path(), &[
-                "show",
-                &format!("{commit_sha}:binary/payload.bin")
-            ]),
+            run_git_bytes(
+                remote.path(),
+                &["show", &format!("{commit_sha}:binary/payload.bin")]
+            ),
             vec![0, 159, 146, 150]
         );
         assert_eq!(
-            run_git(remote.path(), &[
-                "show",
-                &format!("{commit_sha}:path with spaces.txt")
-            ]),
+            run_git(
+                remote.path(),
+                &["show", &format!("{commit_sha}:path with spaces.txt")]
+            ),
             "quoted path"
         );
     }
@@ -809,24 +809,18 @@ mod tests {
             .await
             .unwrap();
 
-        let parent_line = run_git(remote.path(), &[
-            "rev-list",
-            "--parents",
-            "-n",
-            "1",
-            &third.commit_sha,
-        ]);
+        let parent_line = run_git(
+            remote.path(),
+            &["rev-list", "--parents", "-n", "1", &third.commit_sha],
+        );
         assert_eq!(
             parent_line,
             format!("{} {}", third.commit_sha, second.commit_sha)
         );
-        let root_line = run_git(remote.path(), &[
-            "rev-list",
-            "--parents",
-            "-n",
-            "1",
-            &first.commit_sha,
-        ]);
+        let root_line = run_git(
+            remote.path(),
+            &["rev-list", "--parents", "-n", "1", &first.commit_sha],
+        );
         assert_eq!(root_line, first.commit_sha);
     }
 

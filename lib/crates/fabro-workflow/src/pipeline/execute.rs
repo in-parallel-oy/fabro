@@ -71,8 +71,8 @@ pub async fn execute(init: Initialized) -> Executed {
 
     let handler = Arc::new(WorkflowNodeHandler {
         services: Arc::clone(&engine),
-        run_dir:  run_options.run_dir.clone(),
-        graph:    Arc::clone(&graph_arc),
+        run_dir: run_options.run_dir.clone(),
+        graph: Arc::clone(&graph_arc),
     });
 
     let settings_arc = Arc::new(run_options.clone());
@@ -276,7 +276,7 @@ pub async fn execute(init: Initialized) -> Executed {
             let stall_timeout = graph.stall_timeout().unwrap_or_default();
             let idle_secs = stall_timeout.as_secs();
             engine.run.emitter.emit(&Event::StallWatchdogTimeout {
-                node:         node_id.clone(),
+                node: node_id.clone(),
                 idle_seconds: idle_secs,
             });
             (

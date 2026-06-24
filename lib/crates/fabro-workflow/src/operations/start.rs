@@ -53,70 +53,70 @@ use crate::steering_hub::SteeringHub;
 use crate::workflow_bundle::{RunDefinition, WorkflowBundle};
 
 struct RunSession {
-    cancel_token:      CancellationToken,
-    emitter:           Arc<Emitter>,
-    sandbox:           SandboxSpec,
-    llm:               LlmSpec,
-    interviewer:       Arc<dyn Interviewer>,
-    steering_hub:      Arc<SteeringHub>,
-    on_node:           crate::OnNodeCallback,
-    lifecycle:         LifecycleOptions,
-    hooks:             fabro_hooks::HookSettings,
-    sandbox_env:       SandboxEnvSpec,
-    seed_context:      Option<Context>,
-    run_store:         RunStoreHandle,
-    event_sink:        RunEventSink,
-    artifact_sink:     Option<ArtifactSink>,
-    git:               Option<GitCheckpointOptions>,
-    github_app:        Option<fabro_github::GitHubCredentials>,
+    cancel_token: CancellationToken,
+    emitter: Arc<Emitter>,
+    sandbox: SandboxSpec,
+    llm: LlmSpec,
+    interviewer: Arc<dyn Interviewer>,
+    steering_hub: Arc<SteeringHub>,
+    on_node: crate::OnNodeCallback,
+    lifecycle: LifecycleOptions,
+    hooks: fabro_hooks::HookSettings,
+    sandbox_env: SandboxEnvSpec,
+    seed_context: Option<Context>,
+    run_store: RunStoreHandle,
+    event_sink: RunEventSink,
+    artifact_sink: Option<ArtifactSink>,
+    git: Option<GitCheckpointOptions>,
+    github_app: Option<fabro_github::GitHubCredentials>,
     registry_override: Option<Arc<HandlerRegistry>>,
-    preserve_sandbox:  bool,
-    stop_on_terminal:  bool,
-    pr_config:         Option<PullRequestSettings>,
-    pr_github_app:     Option<fabro_github::GitHubCredentials>,
-    pr_origin_url:     Option<String>,
-    pr_model:          String,
-    workflow_path:     Option<ManifestPath>,
-    workflow_bundle:   Option<Arc<WorkflowBundle>>,
-    run_control:       Option<Arc<RunControlState>>,
-    vault:             Option<Arc<AsyncRwLock<Vault>>>,
-    catalog:           Arc<Catalog>,
-    fabro_run_tools:   Option<FabroRunToolServices>,
-    acp_credentials:   crate::handler::llm::AcpCredentials,
+    preserve_sandbox: bool,
+    stop_on_terminal: bool,
+    pr_config: Option<PullRequestSettings>,
+    pr_github_app: Option<fabro_github::GitHubCredentials>,
+    pr_origin_url: Option<String>,
+    pr_model: String,
+    workflow_path: Option<ManifestPath>,
+    workflow_bundle: Option<Arc<WorkflowBundle>>,
+    run_control: Option<Arc<RunControlState>>,
+    vault: Option<Arc<AsyncRwLock<Vault>>>,
+    catalog: Arc<Catalog>,
+    fabro_run_tools: Option<FabroRunToolServices>,
+    acp_credentials: crate::handler::llm::AcpCredentials,
 }
 
 struct ResolvedStartLlm {
-    model:          String,
-    provider_id:    ProviderId,
+    model: String,
+    provider_id: ProviderId,
     fallback_chain: Vec<FallbackTarget>,
 }
 
 pub struct StartServices {
-    pub run_id:             RunId,
-    pub cancel_token:       CancellationToken,
-    pub emitter:            Arc<Emitter>,
-    pub interviewer:        Arc<dyn Interviewer>,
-    pub steering_hub:       Arc<SteeringHub>,
-    pub run_store:          RunStoreHandle,
-    pub event_sink:         RunEventSink,
-    pub artifact_sink:      Option<ArtifactSink>,
-    pub run_control:        Option<Arc<RunControlState>>,
-    pub github_app:         Option<fabro_github::GitHubCredentials>,
+    pub run_id: RunId,
+    pub cancel_token: CancellationToken,
+    pub emitter: Arc<Emitter>,
+    pub interviewer: Arc<dyn Interviewer>,
+    pub steering_hub: Arc<SteeringHub>,
+    pub run_store: RunStoreHandle,
+    pub event_sink: RunEventSink,
+    pub artifact_sink: Option<ArtifactSink>,
+    pub run_control: Option<Arc<RunControlState>>,
+    pub github_app: Option<fabro_github::GitHubCredentials>,
     /// Server-resolved GitHub integration permissions to inject into the
     /// sandbox env. Empty when github integration has no permissions.
     pub github_permissions: HashMap<String, String>,
-    pub vault:              Option<Arc<AsyncRwLock<Vault>>>,
-    pub catalog:            Arc<Catalog>,
-    pub on_node:            crate::OnNodeCallback,
-    pub registry_override:  Option<Arc<HandlerRegistry>>,
-    pub fabro_run_tools:    Option<FabroRunToolServices>,
+    pub vault: Option<Arc<AsyncRwLock<Vault>>>,
+    pub catalog: Arc<Catalog>,
+    pub on_node: crate::OnNodeCallback,
+    pub registry_override: Option<Arc<HandlerRegistry>>,
+    pub fabro_run_tools: Option<FabroRunToolServices>,
     /// Per-run ACP credential injection (GOAL B). Threaded to the ACP backend
     /// only; never merged into the shared sandbox `base_env`.
-    pub acp_credentials:    crate::handler::llm::AcpCredentials,
+    pub acp_credentials: crate::handler::llm::AcpCredentials,
 }
 
 pub struct Started {
-    pub finalized:     Finalized,
+    pub finalized: Finalized,
     pub final_context: Option<Context>,
 }
 
@@ -155,7 +155,7 @@ pub async fn start(run_dir: &Path, services: StartServices) -> Result<Started, E
             &services.run_id,
             &Event::RunStartRequested {
                 resume: false,
-                actor:  None,
+                actor: None,
             },
         )
         .await
@@ -165,7 +165,7 @@ pub async fn start(run_dir: &Path, services: StartServices) -> Result<Started, E
             &services.run_id,
             &Event::RunRunnable {
                 source: RunRunnableSource::StartRequested,
-                actor:  None,
+                actor: None,
             },
         )
         .await
@@ -400,11 +400,11 @@ impl RunSession {
                 SandboxSpec::Local { working_directory }
             }
             SandboxProviderKind::Docker => SandboxSpec::Docker {
-                config:           resolve_docker_config(resolved),
-                github_app:       services.github_app.clone(),
-                run_id:           Some(record.run_id),
+                config: resolve_docker_config(resolved),
+                github_app: services.github_app.clone(),
+                run_id: Some(record.run_id),
                 clone_origin_url: record.repo_origin_url().map(str::to_string),
-                clone_branch:     record.base_branch().map(str::to_string),
+                clone_branch: record.base_branch().map(str::to_string),
             },
             SandboxProviderKind::Daytona => {
                 let api_key = match &services.vault {
@@ -488,7 +488,7 @@ impl RunSession {
             lifecycle: LifecycleOptions {
                 // ponytail: skip-prepare is applied at resolve (prepare.commands cleared),
                 // so this reads empty for a --skip-prepare run without a gate here.
-                setup_commands:           resolved.prepare.commands.clone(),
+                setup_commands: resolved.prepare.commands.clone(),
                 setup_command_timeout_ms: resolved.prepare.timeout_ms,
             },
             hooks: fabro_hooks::HookSettings {
@@ -550,8 +550,8 @@ fn git_checkpoint_options_from_start(
 
     let start = start?;
     start.run_branch.as_ref().map(|_| GitCheckpointOptions {
-        base_sha:    start.base_sha.clone(),
-        run_branch:  start.run_branch.clone(),
+        base_sha: start.base_sha.clone(),
+        run_branch: start.run_branch.clone(),
         meta_branch: settings
             .run
             .meta_branch
@@ -651,7 +651,7 @@ fn resolve_fallback_chain(
                     .closest(&provider_id, reference)
                     .map(|model| FallbackTarget {
                         provider: provider_id.to_string(),
-                        model:    model.id.clone(),
+                        model: model.id.clone(),
                     })
             }
             ResolvedModelRef::Model { provider, model } => {
@@ -723,8 +723,8 @@ fn runtime_mcp_server(
 
 fn runtime_hook_definition(definition: &ResolvedHookDefinition) -> fabro_hooks::HookDefinition {
     fabro_hooks::HookDefinition {
-        name:       definition.name.clone(),
-        event:      match definition.event {
+        name: definition.name.clone(),
+        event: match definition.event {
             ResolvedHookEvent::RunStart => fabro_hooks::HookEvent::RunStart,
             ResolvedHookEvent::RunComplete => fabro_hooks::HookEvent::RunComplete,
             ResolvedHookEvent::RunFailed => fabro_hooks::HookEvent::RunFailed,
@@ -742,12 +742,12 @@ fn runtime_hook_definition(definition: &ResolvedHookDefinition) -> fabro_hooks::
             ResolvedHookEvent::PostToolUse => fabro_hooks::HookEvent::PostToolUse,
             ResolvedHookEvent::PostToolUseFailure => fabro_hooks::HookEvent::PostToolUseFailure,
         },
-        command:    definition.command.clone(),
-        hook_type:  definition.hook_type.as_ref().map(runtime_hook_type),
-        matcher:    definition.matcher.clone(),
-        blocking:   definition.blocking,
+        command: definition.command.clone(),
+        hook_type: definition.hook_type.as_ref().map(runtime_hook_type),
+        matcher: definition.matcher.clone(),
+        blocking: definition.blocking,
         timeout_ms: definition.timeout_ms,
-        sandbox:    definition.sandbox,
+        sandbox: definition.sandbox,
     }
 }
 
@@ -762,10 +762,10 @@ fn runtime_hook_type(hook_type: &ResolvedHookType) -> fabro_hooks::HookType {
             allowed_env_vars,
             tls,
         } => fabro_hooks::HookType::Http {
-            url:              url.clone(),
-            headers:          headers.clone(),
+            url: url.clone(),
+            headers: headers.clone(),
             allowed_env_vars: allowed_env_vars.clone(),
-            tls:              match tls {
+            tls: match tls {
                 ResolvedTlsMode::Verify => fabro_hooks::TlsMode::Verify,
                 ResolvedTlsMode::NoVerify => fabro_hooks::TlsMode::NoVerify,
                 ResolvedTlsMode::Off => fabro_hooks::TlsMode::Off,
@@ -773,15 +773,15 @@ fn runtime_hook_type(hook_type: &ResolvedHookType) -> fabro_hooks::HookType {
         },
         ResolvedHookType::Prompt { prompt, model } => fabro_hooks::HookType::Prompt {
             prompt: prompt.clone(),
-            model:  model.clone(),
+            model: model.clone(),
         },
         ResolvedHookType::Agent {
             prompt,
             model,
             max_tool_rounds,
         } => fabro_hooks::HookType::Agent {
-            prompt:          prompt.clone(),
-            model:           model.clone(),
+            prompt: prompt.clone(),
+            model: model.clone(),
             max_tool_rounds: *max_tool_rounds,
         },
     }
@@ -798,18 +798,18 @@ impl RunSession {
 
         let record = persisted.run_spec();
         let run_options = RunOptions {
-            settings:         record.settings.clone(),
-            run_dir:          persisted.run_dir().to_path_buf(),
-            cancel_token:     self.cancel_token,
-            run_id:           record.run_id,
-            labels:           record.labels.clone(),
-            workflow_slug:    record.workflow_slug.clone(),
-            github_app:       self.github_app.clone(),
-            pre_run_git:      record.git.clone(),
-            fork_source_ref:  record.fork_source_ref.clone(),
-            base_branch:      record.base_branch().map(str::to_string),
+            settings: record.settings.clone(),
+            run_dir: persisted.run_dir().to_path_buf(),
+            cancel_token: self.cancel_token,
+            run_id: record.run_id,
+            labels: record.labels.clone(),
+            workflow_slug: record.workflow_slug.clone(),
+            github_app: self.github_app.clone(),
+            pre_run_git: record.git.clone(),
+            fork_source_ref: record.fork_source_ref.clone(),
+            base_branch: record.base_branch().map(str::to_string),
             display_base_sha: None,
-            git:              self.git.clone(),
+            git: self.git.clone(),
         };
 
         let last_git_sha: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
@@ -918,10 +918,10 @@ impl RunSession {
                 .clone(),
         };
         let pr_opts = PullRequestOptions {
-            pr_config:  self.pr_config,
+            pr_config: self.pr_config,
             github_app: self.pr_github_app,
             origin_url: self.pr_origin_url,
-            model:      self.pr_model,
+            model: self.pr_model,
         };
 
         let concluded = match Box::pin(pipeline::finalize(executed, &finalize_opts)).await {
@@ -950,11 +950,11 @@ impl RunSession {
 }
 
 struct DetachedRunBootstrapGuard {
-    run_id:       RunId,
-    run_store:    RunStoreHandle,
-    event_sink:   RunEventSink,
+    run_id: RunId,
+    run_store: RunStoreHandle,
+    event_sink: RunEventSink,
     cancel_token: CancellationToken,
-    active:       bool,
+    active: bool,
 }
 
 impl DetachedRunBootstrapGuard {
@@ -1029,11 +1029,11 @@ async fn run_store_reaches_terminal(run_store: &RunStoreHandle, timeout: Duratio
 }
 
 struct DetachedRunCompletionGuard {
-    event_sink:   RunEventSink,
-    run_id:       RunId,
-    run_store:    RunStoreHandle,
+    event_sink: RunEventSink,
+    run_id: RunId,
+    run_store: RunStoreHandle,
     cancel_token: CancellationToken,
-    active:       bool,
+    active: bool,
 }
 
 impl DetachedRunCompletionGuard {
@@ -1098,12 +1098,16 @@ impl Drop for DetachedRunCompletionGuard {
                     0,
                 )
                 .await;
-                let _ = append_event_to_sink(&event_sink, &run_id, &Event::RunNotice {
-                    level:            RunNoticeLevel::Error,
-                    code:             code.to_string(),
-                    message:          message.to_string(),
-                    exec_output_tail: None,
-                })
+                let _ = append_event_to_sink(
+                    &event_sink,
+                    &run_id,
+                    &Event::RunNotice {
+                        level: RunNoticeLevel::Error,
+                        code: code.to_string(),
+                        message: message.to_string(),
+                        exec_output_tail: None,
+                    },
+                )
                 .await;
             });
         }
@@ -1122,9 +1126,9 @@ async fn persist_detached_failure(
     emit_workflow_run_failed(run_id, run_store, event_sink, error, reason, 0).await;
 
     let event = Event::RunNotice {
-        level:            RunNoticeLevel::Error,
-        code:             format!("{phase}_failed"),
-        message:          error.to_string(),
+        level: RunNoticeLevel::Error,
+        code: format!("{phase}_failed"),
+        message: error.to_string(),
         exec_output_tail: None,
     };
     if let Err(err) = append_event_to_sink(event_sink, &run_id, &event).await {
@@ -1264,10 +1268,13 @@ mod tests {
             &settings,
         );
 
-        assert_eq!(chain, vec![FallbackTarget {
-            provider: "openai".to_string(),
-            model:    "gpt-5.5".to_string(),
-        }]);
+        assert_eq!(
+            chain,
+            vec![FallbackTarget {
+                provider: "openai".to_string(),
+                model: "gpt-5.5".to_string(),
+            }]
+        );
     }
 
     #[test]
@@ -1285,10 +1292,13 @@ mod tests {
             &settings,
         );
 
-        assert_eq!(chain, vec![FallbackTarget {
-            provider: "openai".to_string(),
-            model:    "gpt-5.4-mini".to_string(),
-        }]);
+        assert_eq!(
+            chain,
+            vec![FallbackTarget {
+                provider: "openai".to_string(),
+                model: "gpt-5.4-mini".to_string(),
+            }]
+        );
     }
 
     #[test]
@@ -1347,7 +1357,7 @@ reasoning = false
             name: "gemini".to_string(),
             transport: ResolvedMcpTransport::Stdio {
                 command: vec!["python".to_string()],
-                env:     HashMap::from([(
+                env: HashMap::from([(
                     "GEMINI_API_KEY".to_string(),
                     "{{ env.GEMINI_API_KEY }}".to_string(),
                 )]),
@@ -1375,12 +1385,12 @@ reasoning = false
                     ..EnvironmentImageLayer::default()
                 }),
                 resources: Some(EnvironmentResourcesLayer {
-                    cpu:    Some(4),
+                    cpu: Some(4),
                     memory: Some("2GB".parse().unwrap()),
-                    disk:   None,
+                    disk: None,
                 }),
                 network: Some(EnvironmentNetworkLayer {
-                    mode:  Some("block".to_string()),
+                    mode: Some("block".to_string()),
                     allow: Vec::new(),
                 }),
                 env: StickyMap::from(HashMap::from([(
@@ -1408,7 +1418,7 @@ reasoning = false
         let start = fabro_types::StartRecord {
             start_time: Utc::now(),
             run_branch: Some("fabro/run/test".to_string()),
-            base_sha:   Some("abc123".to_string()),
+            base_sha: Some("abc123".to_string()),
         };
 
         assert!(
@@ -1423,7 +1433,7 @@ reasoning = false
         let start = fabro_types::StartRecord {
             start_time: Utc::now(),
             run_branch: Some("fabro/run/test".to_string()),
-            base_sha:   Some("abc123".to_string()),
+            base_sha: Some("abc123".to_string()),
         };
 
         let git = git_checkpoint_options_from_start(&settings, &fixtures::RUN_1, Some(start))
@@ -1440,7 +1450,7 @@ reasoning = false
             &store,
             crate::operations::CreateRunInput {
                 workflow: crate::operations::WorkflowInput::DotSource {
-                    source:   dot.to_string(),
+                    source: dot.to_string(),
                     base_dir: None,
                 },
                 settings: settings_from_run_layer(RunLayer {
@@ -1520,28 +1530,32 @@ reasoning = false
         timing: fabro_types::StageTiming,
         billing: Option<BilledModelUsage>,
     ) {
-        crate::event::append_event(run_store, &fixtures::RUN_1, &Event::StageCompleted {
-            node_id: node_id.to_string(),
-            name: node_id.to_string(),
-            index: 0,
-            timing,
-            status: StageOutcome::Succeeded.to_string(),
-            preferred_label: None,
-            suggested_next_ids: Vec::new(),
-            billing,
-            failure: None,
-            notes: None,
-            files_touched: Vec::new(),
-            context_updates: None,
-            jump_to_node: None,
-            context_values: None,
-            node_visits: None,
-            loop_failure_signatures: None,
-            restart_failure_signatures: None,
-            response: None,
-            attempt: 1,
-            max_attempts: 1,
-        })
+        crate::event::append_event(
+            run_store,
+            &fixtures::RUN_1,
+            &Event::StageCompleted {
+                node_id: node_id.to_string(),
+                name: node_id.to_string(),
+                index: 0,
+                timing,
+                status: StageOutcome::Succeeded.to_string(),
+                preferred_label: None,
+                suggested_next_ids: Vec::new(),
+                billing,
+                failure: None,
+                notes: None,
+                files_touched: Vec::new(),
+                context_updates: None,
+                jump_to_node: None,
+                context_values: None,
+                node_visits: None,
+                loop_failure_signatures: None,
+                restart_failure_signatures: None,
+                response: None,
+                attempt: 1,
+                max_attempts: 1,
+            },
+        )
         .await
         .unwrap();
     }
@@ -1826,7 +1840,7 @@ reasoning = false
             (
                 ManifestPath::from_wire("workflow.fabro").unwrap(),
                 BundledWorkflow {
-                    path:   ManifestPath::from_wire("workflow.fabro").unwrap(),
+                    path: ManifestPath::from_wire("workflow.fabro").unwrap(),
                     source: r#"digraph Root {
                         graph [goal="Bundle child"]
                         start [shape=Mdiamond]
@@ -1841,13 +1855,13 @@ reasoning = false
                     }"#
                     .to_string(),
                     config: None,
-                    files:  HashMap::new(),
+                    files: HashMap::new(),
                 },
             ),
             (
                 ManifestPath::from_wire("children/review.fabro").unwrap(),
                 BundledWorkflow {
-                    path:   ManifestPath::from_wire("children/review.fabro").unwrap(),
+                    path: ManifestPath::from_wire("children/review.fabro").unwrap(),
                     source: r"digraph Review {
                         start [shape=Mdiamond]
                         exit [shape=Msquare]
@@ -1855,7 +1869,7 @@ reasoning = false
                     }"
                     .to_string(),
                     config: None,
-                    files:  HashMap::new(),
+                    files: HashMap::new(),
                 },
             ),
         ]));
@@ -1917,15 +1931,18 @@ reasoning = false
 
         let (_persisted, store) = persisted_workflow(MINIMAL_DOT, &storage_root).await;
 
-        let started = start(&run_dir, StartServices {
-            on_node: Some(Arc::new({
-                let visited = Arc::clone(&visited);
-                move |node_id: &str| {
-                    visited.lock().unwrap().push(node_id.to_string());
-                }
-            })),
-            ..test_start_services(&store, &run_dir, emitter, registry).await
-        })
+        let started = start(
+            &run_dir,
+            StartServices {
+                on_node: Some(Arc::new({
+                    let visited = Arc::clone(&visited);
+                    move |node_id: &str| {
+                        visited.lock().unwrap().push(node_id.to_string());
+                    }
+                })),
+                ..test_start_services(&store, &run_dir, emitter, registry).await
+            },
+        )
         .await
         .unwrap();
 
@@ -1945,17 +1962,17 @@ reasoning = false
 
         // Seed an authoritative checkpoint event so start() sees it
         let checkpoint = Checkpoint {
-            timestamp:                  chrono::Utc::now(),
-            current_node:               "start".into(),
-            completed_nodes:            vec!["start".to_string()],
-            node_retries:               HashMap::new(),
-            context_values:             Context::new().snapshot(),
-            node_outcomes:              HashMap::new(),
-            next_node_id:               Some("exit".to_string()),
-            git_commit_sha:             None,
-            loop_failure_signatures:    HashMap::new(),
+            timestamp: chrono::Utc::now(),
+            current_node: "start".into(),
+            completed_nodes: vec!["start".to_string()],
+            node_retries: HashMap::new(),
+            context_values: Context::new().snapshot(),
+            node_outcomes: HashMap::new(),
+            next_node_id: Some("exit".to_string()),
+            git_commit_sha: None,
+            loop_failure_signatures: HashMap::new(),
             restart_failure_signatures: HashMap::new(),
-            node_visits:                HashMap::new(),
+            node_visits: HashMap::new(),
         };
         crate::event::append_event(
             &store.open_run(&fixtures::RUN_1).await.unwrap(),
@@ -2047,47 +2064,55 @@ reasoning = false
             HashMap::new(),
         );
         let conclusion = crate::records::Conclusion {
-            timestamp:            Utc::now(),
-            status:               StageOutcome::Succeeded,
-            timing:               fabro_types::RunTiming::wall_only(1),
-            failure:              None,
+            timestamp: Utc::now(),
+            status: StageOutcome::Succeeded,
+            timing: fabro_types::RunTiming::wall_only(1),
+            failure: None,
             final_git_commit_sha: None,
-            stages:               vec![],
-            billing:              None,
-            total_retries:        0,
-            diff:                 fabro_types::RunDiff::default(),
+            stages: vec![],
+            billing: None,
+            total_retries: 0,
+            diff: fabro_types::RunDiff::default(),
         };
         let run_store = store.open_run(&fixtures::RUN_1).await.unwrap();
-        crate::event::append_event(&run_store, &fixtures::RUN_1, &Event::CheckpointCompleted {
-            node_id: checkpoint.current_node.clone(),
-            status: "succeeded".to_string(),
-            current_node: checkpoint.current_node.clone(),
-            completed_nodes: checkpoint.completed_nodes.clone(),
-            node_retries: checkpoint.node_retries.clone().into_iter().collect(),
-            context_values: checkpoint.context_values.clone().into_iter().collect(),
-            node_outcomes: checkpoint.node_outcomes.clone().into_iter().collect(),
-            next_node_id: checkpoint.next_node_id.clone(),
-            git_commit_sha: checkpoint.git_commit_sha.clone(),
-            loop_failure_signatures: checkpoint
-                .loop_failure_signatures
-                .iter()
-                .map(|(sig, count)| (sig.to_string(), *count))
-                .collect(),
-            restart_failure_signatures: checkpoint
-                .restart_failure_signatures
-                .iter()
-                .map(|(sig, count)| (sig.to_string(), *count))
-                .collect(),
-            node_visits: checkpoint.node_visits.clone().into_iter().collect(),
-            diff: None,
-            diff_summary: None,
-        })
+        crate::event::append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::CheckpointCompleted {
+                node_id: checkpoint.current_node.clone(),
+                status: "succeeded".to_string(),
+                current_node: checkpoint.current_node.clone(),
+                completed_nodes: checkpoint.completed_nodes.clone(),
+                node_retries: checkpoint.node_retries.clone().into_iter().collect(),
+                context_values: checkpoint.context_values.clone().into_iter().collect(),
+                node_outcomes: checkpoint.node_outcomes.clone().into_iter().collect(),
+                next_node_id: checkpoint.next_node_id.clone(),
+                git_commit_sha: checkpoint.git_commit_sha.clone(),
+                loop_failure_signatures: checkpoint
+                    .loop_failure_signatures
+                    .iter()
+                    .map(|(sig, count)| (sig.to_string(), *count))
+                    .collect(),
+                restart_failure_signatures: checkpoint
+                    .restart_failure_signatures
+                    .iter()
+                    .map(|(sig, count)| (sig.to_string(), *count))
+                    .collect(),
+                node_visits: checkpoint.node_visits.clone().into_iter().collect(),
+                diff: None,
+                diff_summary: None,
+            },
+        )
         .await
         .unwrap();
-        crate::event::append_event(&run_store, &fixtures::RUN_1, &Event::RunRunnable {
-            source: RunRunnableSource::StartRequested,
-            actor:  None,
-        })
+        crate::event::append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::RunRunnable {
+                source: RunRunnableSource::StartRequested,
+                actor: None,
+            },
+        )
         .await
         .unwrap();
         crate::event::append_event(&run_store, &fixtures::RUN_1, &Event::RunStarting)
@@ -2096,17 +2121,21 @@ reasoning = false
         crate::event::append_event(&run_store, &fixtures::RUN_1, &Event::RunRunning)
             .await
             .unwrap();
-        crate::event::append_event(&run_store, &fixtures::RUN_1, &Event::WorkflowRunCompleted {
-            timing:               conclusion.timing,
-            artifact_count:       0,
-            status:               "succeeded".to_string(),
-            reason:               crate::run_status::SuccessReason::Completed,
-            total_usd_micros:     None,
-            final_git_commit_sha: None,
-            final_patch:          None,
-            diff_summary:         None,
-            billing:              None,
-        })
+        crate::event::append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::WorkflowRunCompleted {
+                timing: conclusion.timing,
+                artifact_count: 0,
+                status: "succeeded".to_string(),
+                reason: crate::run_status::SuccessReason::Completed,
+                total_usd_micros: None,
+                final_git_commit_sha: None,
+                final_patch: None,
+                diff_summary: None,
+                billing: None,
+            },
+        )
         .await
         .unwrap();
 

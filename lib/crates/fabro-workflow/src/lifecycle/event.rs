@@ -29,23 +29,23 @@ type FailureSignatureSnapshot = (
 
 /// Sub-lifecycle responsible for emitting workflow run events.
 pub(crate) struct EventLifecycle {
-    pub emitter:               Arc<Emitter>,
-    pub graph_name:            String,
-    pub run_id:                RunId,
-    pub run_start:             Mutex<Instant>,
+    pub emitter: Arc<Emitter>,
+    pub graph_name: String,
+    pub run_id: RunId,
+    pub run_start: Mutex<Instant>,
     /// Set in on_edge_selected when loop_restart approved; emitted+cleared in
     /// on_run_start.
-    pub restarted_from:        Arc<Mutex<Option<(String, String)>>>,
+    pub restarted_from: Arc<Mutex<Option<(String, String)>>>,
     // Config for WorkflowRunStarted payload
-    pub base_branch:           Option<String>,
-    pub base_sha:              Option<String>,
-    pub run_branch:            Option<String>,
-    pub worktree_dir:          Option<String>,
-    pub goal:                  Option<String>,
+    pub base_branch: Option<String>,
+    pub base_sha: Option<String>,
+    pub run_branch: Option<String>,
+    pub worktree_dir: Option<String>,
+    pub goal: Option<String>,
     /// Shared git checkpoint result (written by GitLifecycle, read by
     /// EventLifecycle when emitting CheckpointCompleted).
     pub checkpoint_git_result: Arc<Mutex<Option<GitCheckpointResult>>>,
-    pub circuit_breaker:       Arc<CircuitBreakerLifecycle>,
+    pub circuit_breaker: Arc<CircuitBreakerLifecycle>,
 }
 
 fn snapshot_failure_signatures(
@@ -99,9 +99,9 @@ pub(super) fn stage_visit(state: &WfRunState, node_id: &str) -> u32 {
 
 pub(crate) fn stage_scope_for(state: &WfRunState, node_id: &str) -> StageScope {
     StageScope {
-        node_id:            node_id.to_string(),
-        visit:              stage_visit(state, node_id),
-        parallel_group_id:  state.context.parallel_group_id(),
+        node_id: node_id.to_string(),
+        visit: stage_visit(state, node_id),
+        parallel_group_id: state.context.parallel_group_id(),
         parallel_branch_id: state.context.parallel_branch_id(),
     }
 }
@@ -126,13 +126,13 @@ impl RunLifecycle<WorkflowGraph> for EventLifecycle {
 
         // Emit RunStarted
         self.emitter.emit(&Event::WorkflowRunStarted {
-            name:         self.graph_name.clone(),
-            run_id:       self.run_id,
-            base_branch:  self.base_branch.clone(),
-            base_sha:     self.base_sha.clone(),
-            run_branch:   self.run_branch.clone(),
+            name: self.graph_name.clone(),
+            run_id: self.run_id,
+            base_branch: self.base_branch.clone(),
+            base_sha: self.base_sha.clone(),
+            run_branch: self.run_branch.clone(),
             worktree_dir: self.worktree_dir.clone(),
-            goal:         self.goal.clone(),
+            goal: self.goal.clone(),
         });
         self.emitter.emit(&Event::RunRunning);
 
@@ -155,11 +155,11 @@ impl RunLifecycle<WorkflowGraph> for EventLifecycle {
             snapshot_failure_signatures(&self.circuit_breaker);
         self.emitter.emit_scoped(
             &Event::StageStarted {
-                node_id:      gv.id.clone(),
-                name:         gv.label().to_string(),
-                index:        stage_index,
+                node_id: gv.id.clone(),
+                name: gv.label().to_string(),
+                index: stage_index,
                 handler_type: gv.handler_type().unwrap_or_default().to_string(),
-                attempt:      1,
+                attempt: 1,
                 max_attempts: 1,
             },
             &scope,
@@ -203,11 +203,11 @@ impl RunLifecycle<WorkflowGraph> for EventLifecycle {
         let scope = stage_scope_for(state, &gv.id);
         self.emitter.emit_scoped(
             &Event::StageStarted {
-                node_id:      gv.id.clone(),
-                name:         gv.label().to_string(),
-                index:        state.stage_index,
+                node_id: gv.id.clone(),
+                name: gv.label().to_string(),
+                index: state.stage_index,
                 handler_type: gv.handler_type().unwrap_or_default().to_string(),
-                attempt:      ctx.attempt as usize,
+                attempt: ctx.attempt as usize,
                 max_attempts: ctx.max_attempts as usize,
             },
             &scope,
@@ -247,12 +247,12 @@ impl RunLifecycle<WorkflowGraph> for EventLifecycle {
 
             self.emitter.emit_scoped(
                 &Event::StageRetrying {
-                    node_id:      gv.id.clone(),
-                    name:         gv.label().to_string(),
-                    index:        stage_index,
-                    attempt:      ctx.attempt as usize,
+                    node_id: gv.id.clone(),
+                    name: gv.label().to_string(),
+                    index: stage_index,
+                    attempt: ctx.attempt as usize,
                     max_attempts: ctx.result.max_attempts as usize,
-                    delay_ms:     ctx.backoff_delay.map_or(0, crate::millis_u64),
+                    delay_ms: ctx.backoff_delay.map_or(0, crate::millis_u64),
                 },
                 &scope,
             );
@@ -429,15 +429,15 @@ impl RunLifecycle<WorkflowGraph> for EventLifecycle {
                 self.emitter.emit_scoped(
                     &Event::GitCommit {
                         node_id: Some(node.id().to_string()),
-                        sha:     sha.clone(),
+                        sha: sha.clone(),
                     },
                     &scope,
                 );
             }
             for push in &result.push_results {
                 self.emitter.emit(&Event::GitPush {
-                    branch:           push.refspec.clone(),
-                    success:          push.success,
+                    branch: push.refspec.clone(),
+                    success: push.success,
                     exec_output_tail: push.exec_output_tail.clone(),
                 });
             }

@@ -92,10 +92,10 @@ impl Handler for CommandHandler {
         let stage_scope = StageScope::for_handler(context, &node.id);
         services.run.emitter.emit_scoped(
             &Event::CommandStarted {
-                node_id:    node.id.clone(),
-                script:     script.to_string(),
-                command:    command.clone(),
-                language:   language.to_string(),
+                node_id: node.id.clone(),
+                script: script.to_string(),
+                command: command.clone(),
+                language: language.to_string(),
                 timeout_ms: timeout_ms(node),
             },
             &stage_scope,
@@ -148,12 +148,12 @@ impl Handler for CommandHandler {
 
         services.run.emitter.emit_scoped(
             &Event::CommandCompleted {
-                node_id:        node.id.clone(),
-                output:         finalized.output_ref.clone(),
-                exit_code:      result.exit_code,
-                duration_ms:    result.duration_ms,
-                termination:    result.termination,
-                output_bytes:   finalized.output_bytes,
+                node_id: node.id.clone(),
+                output: finalized.output_ref.clone(),
+                exit_code: result.exit_code,
+                duration_ms: result.duration_ms,
+                termination: result.termination,
+                output_bytes: finalized.output_bytes,
                 live_streaming: streaming.live_streaming,
             },
             &stage_scope,
@@ -248,19 +248,19 @@ mod tests {
             Ok(RunProjection::new(
                 "Test run".to_string(),
                 RunSpec {
-                    run_id:           fixtures::RUN_1,
-                    settings:         WorkflowSettings::default(),
-                    graph:            Graph::new("test"),
-                    graph_source:     None,
-                    workflow_slug:    None,
-                    automation:       None,
+                    run_id: fixtures::RUN_1,
+                    settings: WorkflowSettings::default(),
+                    graph: Graph::new("test"),
+                    graph_source: None,
+                    workflow_slug: None,
+                    automation: None,
                     source_directory: None,
-                    labels:           std::collections::HashMap::default(),
-                    provenance:       test_support::test_run_provenance(),
-                    manifest_blob:    None,
-                    definition_blob:  None,
-                    git:              None,
-                    fork_source_ref:  None,
+                    labels: std::collections::HashMap::default(),
+                    provenance: test_support::test_run_provenance(),
+                    manifest_blob: None,
+                    definition_blob: None,
+                    git: None,
+                    fork_source_ref: None,
                 },
                 chrono::Utc::now(),
             ))
@@ -345,25 +345,25 @@ mod tests {
             run_store,
             &fixtures::RUN_1,
             &crate::event::Event::RunCreated {
-                run_id:           fixtures::RUN_1,
-                title:            None,
-                settings:         serde_json::to_value(WorkflowSettings::default()).unwrap(),
-                graph:            serde_json::to_value(Graph::new("test")).unwrap(),
-                workflow_source:  None,
-                workflow_config:  None,
-                labels:           std::collections::BTreeMap::default(),
-                run_dir:          "/tmp".to_string(),
+                run_id: fixtures::RUN_1,
+                title: None,
+                settings: serde_json::to_value(WorkflowSettings::default()).unwrap(),
+                graph: serde_json::to_value(Graph::new("test")).unwrap(),
+                workflow_source: None,
+                workflow_config: None,
+                labels: std::collections::BTreeMap::default(),
+                run_dir: "/tmp".to_string(),
                 source_directory: None,
-                workflow_slug:    None,
-                automation:       None,
-                db_prefix:        None,
-                provenance:       test_support::test_run_provenance(),
-                manifest_blob:    None,
-                git:              None,
-                fork_source_ref:  None,
-                retried_from:     None,
-                parent_id:        None,
-                web_url:          None,
+                workflow_slug: None,
+                automation: None,
+                db_prefix: None,
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                git: None,
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
             },
         )
         .await
@@ -383,9 +383,12 @@ mod tests {
             .execute(&node, &context, &graph, run_dir.path(), &services)
             .await
             .unwrap();
-        assert_eq!(outcome.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert_eq!(outcome.failure_reason(), Some("No script specified"));
     }
 
@@ -514,9 +517,12 @@ mod tests {
             .execute(&node, &context, &graph, run_dir.path(), &services)
             .await
             .unwrap();
-        assert_eq!(outcome.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
     }
 
     #[tokio::test]
@@ -817,9 +823,12 @@ mod tests {
             .execute(&node, &context, &graph, run_dir.path(), &make_services())
             .await
             .unwrap();
-        assert_eq!(outcome.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
     }
 
     #[tokio::test]
@@ -842,9 +851,12 @@ mod tests {
             .execute(&node, &context, &graph, run_dir.path(), &make_services())
             .await
             .unwrap();
-        assert_eq!(outcome.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert!(
             outcome
                 .failure_reason()
@@ -911,10 +923,10 @@ mod tests {
     /// proving that `CommandHandler` delegates to the sandbox rather than
     /// spawning a host process.
     struct SpySandbox {
-        exec_result:           fabro_agent::sandbox::ExecResult,
-        exec_error:            Option<String>,
-        captured_command:      std::sync::Mutex<Option<String>>,
-        captured_env_vars:     std::sync::Mutex<Option<std::collections::HashMap<String, String>>>,
+        exec_result: fabro_agent::sandbox::ExecResult,
+        exec_error: Option<String>,
+        captured_command: std::sync::Mutex<Option<String>>,
+        captured_env_vars: std::sync::Mutex<Option<std::collections::HashMap<String, String>>>,
         captured_cancel_token: std::sync::Mutex<Option<bool>>,
     }
 
@@ -931,16 +943,16 @@ mod tests {
 
         fn fail(message: impl Into<String>) -> Self {
             Self {
-                exec_result:           fabro_agent::sandbox::ExecResult {
-                    stdout:      String::new(),
-                    stderr:      String::new(),
-                    exit_code:   Some(1),
+                exec_result: fabro_agent::sandbox::ExecResult {
+                    stdout: String::new(),
+                    stderr: String::new(),
+                    exit_code: Some(1),
                     termination: CommandTermination::Exited,
                     duration_ms: 0,
                 },
-                exec_error:            Some(message.into()),
-                captured_command:      std::sync::Mutex::new(None),
-                captured_env_vars:     std::sync::Mutex::new(None),
+                exec_error: Some(message.into()),
+                captured_command: std::sync::Mutex::new(None),
+                captured_env_vars: std::sync::Mutex::new(None),
                 captured_cancel_token: std::sync::Mutex::new(None),
             }
         }
@@ -1044,7 +1056,7 @@ mod tests {
         async fn mint(&self) -> anyhow::Result<fabro_github::InstallationToken> {
             let call = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
             Ok(fabro_github::InstallationToken {
-                token:      format!("ghs_{call}"),
+                token: format!("ghs_{call}"),
                 expires_at: chrono::Utc::now() + chrono::Duration::minutes(10),
             })
         }
@@ -1053,9 +1065,9 @@ mod tests {
     #[tokio::test]
     async fn executes_script_via_sandbox() {
         let spy = std::sync::Arc::new(SpySandbox::new(fabro_agent::sandbox::ExecResult {
-            stdout:      "SANDBOX_MARKER\n".into(),
-            stderr:      String::new(),
-            exit_code:   Some(0),
+            stdout: "SANDBOX_MARKER\n".into(),
+            stderr: String::new(),
+            exit_code: Some(0),
             termination: CommandTermination::Exited,
             duration_ms: 5,
         }));
@@ -1093,9 +1105,9 @@ mod tests {
     #[tokio::test]
     async fn executes_python_script_via_sandbox() {
         let spy = std::sync::Arc::new(SpySandbox::new(fabro_agent::sandbox::ExecResult {
-            stdout:      "PYTHON_SANDBOX\n".into(),
-            stderr:      String::new(),
-            exit_code:   Some(0),
+            stdout: "PYTHON_SANDBOX\n".into(),
+            stderr: String::new(),
+            exit_code: Some(0),
             termination: CommandTermination::Exited,
             duration_ms: 5,
         }));
@@ -1136,9 +1148,9 @@ mod tests {
     #[tokio::test]
     async fn passes_env_vars_to_sandbox() {
         let spy = std::sync::Arc::new(SpySandbox::new(fabro_agent::sandbox::ExecResult {
-            stdout:      String::new(),
-            stderr:      String::new(),
-            exit_code:   Some(0),
+            stdout: String::new(),
+            stderr: String::new(),
+            exit_code: Some(0),
             termination: CommandTermination::Exited,
             duration_ms: 5,
         }));
@@ -1171,9 +1183,9 @@ mod tests {
     #[tokio::test]
     async fn refreshes_github_token_for_each_command_stage_when_near_expiry() {
         let spy = std::sync::Arc::new(SpySandbox::new(fabro_agent::sandbox::ExecResult {
-            stdout:      String::new(),
-            stderr:      String::new(),
-            exit_code:   Some(0),
+            stdout: String::new(),
+            stderr: String::new(),
+            exit_code: Some(0),
             termination: CommandTermination::Exited,
             duration_ms: 5,
         }));
@@ -1226,9 +1238,9 @@ mod tests {
     #[tokio::test]
     async fn passes_run_cancellation_to_sandbox() {
         let spy = std::sync::Arc::new(SpySandbox::new(fabro_agent::sandbox::ExecResult {
-            stdout:      String::new(),
-            stderr:      String::new(),
-            exit_code:   Some(0),
+            stdout: String::new(),
+            stderr: String::new(),
+            exit_code: Some(0),
             termination: CommandTermination::Exited,
             duration_ms: 5,
         }));
@@ -1257,9 +1269,9 @@ mod tests {
     #[tokio::test]
     async fn script_handler_timeout_error_includes_output_tails() {
         let spy = std::sync::Arc::new(SpySandbox::new(fabro_agent::sandbox::ExecResult {
-            stdout:      "partial stdout\n".into(),
-            stderr:      "partial stderr\n".into(),
-            exit_code:   None,
+            stdout: "partial stdout\n".into(),
+            stderr: "partial stderr\n".into(),
+            exit_code: None,
             termination: CommandTermination::TimedOut,
             duration_ms: 50,
         }));
@@ -1338,9 +1350,12 @@ mod tests {
             .execute(&node, &context, &graph, run_dir.path(), &services)
             .await
             .unwrap();
-        assert_eq!(outcome.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         let reason = outcome.failure_reason().unwrap();
         assert!(
             reason.contains("build output"),
@@ -1399,9 +1414,12 @@ mod tests {
             .execute(&node, &context, &graph, run_dir.path(), &services)
             .await
             .unwrap();
-        assert_eq!(outcome.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         let command_output = outcome
             .context_updates
             .get(keys::COMMAND_OUTPUT)

@@ -38,7 +38,7 @@ static PR_CONTENT_SCHEMA: LazyLock<serde_json::Value> = LazyLock::new(|| {
 #[derive(Debug, serde::Deserialize)]
 pub struct PrContent {
     pub title: String,
-    pub body:  String,
+    pub body: String,
 }
 
 /// System prompt that instructs the LLM how to write a Fabro PR title and
@@ -454,26 +454,26 @@ pub struct AutoMergeOptions {
 
 /// Inputs for [`maybe_open_pull_request`].
 pub struct OpenPullRequestRequest<'a> {
-    pub github:      github_app::GitHubContext<'a>,
-    pub origin_url:  &'a str,
+    pub github: github_app::GitHubContext<'a>,
+    pub origin_url: &'a str,
     pub base_branch: &'a str,
     pub head_branch: &'a str,
-    pub goal:        &'a str,
-    pub diff:        &'a str,
-    pub model:       &'a str,
-    pub draft:       bool,
-    pub auto_merge:  Option<AutoMergeOptions>,
-    pub run_store:   &'a RunStoreHandle,
-    pub llm_source:  &'a dyn CredentialSource,
-    pub catalog:     Arc<Catalog>,
-    pub conclusion:  Option<&'a Conclusion>,
-    pub run_state:   Option<&'a RunProjection>,
+    pub goal: &'a str,
+    pub diff: &'a str,
+    pub model: &'a str,
+    pub draft: bool,
+    pub auto_merge: Option<AutoMergeOptions>,
+    pub run_store: &'a RunStoreHandle,
+    pub llm_source: &'a dyn CredentialSource,
+    pub catalog: Arc<Catalog>,
+    pub conclusion: Option<&'a Conclusion>,
+    pub run_state: Option<&'a RunProjection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreatedPullRequest {
-    pub link:        PullRequestLink,
-    pub title:       String,
+    pub link: PullRequestLink,
+    pub title: String,
     pub base_branch: String,
     pub head_branch: String,
 }
@@ -698,14 +698,14 @@ mod tests {
     use crate::services::EngineServices;
 
     struct MockProvider {
-        name:          String,
+        name: String,
         response_text: String,
     }
 
     impl MockProvider {
         fn new(name: &str, text: &str) -> Self {
             Self {
-                name:          name.to_string(),
+                name: name.to_string(),
                 response_text: text.to_string(),
             }
         }
@@ -719,21 +719,21 @@ mod tests {
 
         async fn complete(&self, _request: &Request) -> Result<Response, LlmError> {
             Ok(Response {
-                id:            "resp_1".into(),
-                model:         "mock-model".into(),
-                provider:      "mock".into(),
-                message:       Message::assistant(&self.response_text),
+                id: "resp_1".into(),
+                model: "mock-model".into(),
+                provider: "mock".into(),
+                message: Message::assistant(&self.response_text),
                 finish_reason: FinishReason::Stop,
-                usage:         TokenCounts {
+                usage: TokenCounts {
                     input_tokens: 10,
                     output_tokens: 20,
                     ..Default::default()
                 },
-                raw:           None,
-                warnings:      vec![],
-                rate_limit:    None,
-                cost_usd:      None,
-                cost_source:   None,
+                raw: None,
+                warnings: vec![],
+                rate_limit: None,
+                cost_usd: None,
+                cost_source: None,
             })
         }
 
@@ -749,21 +749,21 @@ mod tests {
                         ..Default::default()
                     },
                     Response {
-                        id:            "resp_1".into(),
-                        model:         "mock-model".into(),
-                        provider:      "mock".into(),
-                        message:       Message::assistant(&text),
+                        id: "resp_1".into(),
+                        model: "mock-model".into(),
+                        provider: "mock".into(),
+                        message: Message::assistant(&text),
                         finish_reason: FinishReason::Stop,
-                        usage:         TokenCounts {
+                        usage: TokenCounts {
                             input_tokens: 10,
                             output_tokens: 20,
                             ..Default::default()
                         },
-                        raw:           None,
-                        warnings:      vec![],
-                        rate_limit:    None,
-                        cost_usd:      None,
-                        cost_source:   None,
+                        raw: None,
+                        warnings: vec![],
+                        rate_limit: None,
+                        cost_usd: None,
+                        cost_source: None,
                     },
                 )),
             ];
@@ -786,12 +786,13 @@ mod tests {
 
     fn test_catalog_with_provider_base_url(provider: &str, base_url: &str) -> Arc<Catalog> {
         let mut settings = LlmCatalogSettings::default();
-        settings
-            .providers
-            .insert(provider.to_string(), ProviderCatalogSettings {
+        settings.providers.insert(
+            provider.to_string(),
+            ProviderCatalogSettings {
                 base_url: Some(base_url.to_string()),
                 ..ProviderCatalogSettings::default()
-            });
+            },
+        );
         Arc::new(
             Catalog::from_builtin_with_overrides(&settings)
                 .expect("catalog with custom base_url should build"),
@@ -819,19 +820,19 @@ mod tests {
         RunProjection::new(
             "Test run".to_string(),
             RunSpec {
-                run_id:           fixtures::RUN_1,
-                settings:         WorkflowSettings::default(),
-                graph:            Graph::new("test"),
-                graph_source:     None,
-                workflow_slug:    None,
-                automation:       None,
+                run_id: fixtures::RUN_1,
+                settings: WorkflowSettings::default(),
+                graph: Graph::new("test"),
+                graph_source: None,
+                workflow_slug: None,
+                automation: None,
                 source_directory: None,
-                labels:           HashMap::new(),
-                provenance:       test_support::test_run_provenance(),
-                manifest_blob:    None,
-                definition_blob:  None,
-                git:              None,
-                fork_source_ref:  None,
+                labels: HashMap::new(),
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                definition_blob: None,
+                git: None,
+                fork_source_ref: None,
             },
             Utc::now(),
         )
@@ -873,40 +874,40 @@ mod tests {
 
     fn make_test_conclusion() -> Conclusion {
         Conclusion {
-            timestamp:            Utc::now(),
-            status:               crate::outcome::StageOutcome::Succeeded,
-            timing:               fabro_types::RunTiming::wall_only(150_000),
-            failure:              None,
+            timestamp: Utc::now(),
+            status: crate::outcome::StageOutcome::Succeeded,
+            timing: fabro_types::RunTiming::wall_only(150_000),
+            failure: None,
             final_git_commit_sha: None,
-            stages:               vec![
+            stages: vec![
                 StageSummary {
-                    stage_id:           "plan".to_string(),
-                    stage_label:        "plan".to_string(),
-                    timing:             fabro_types::StageTiming::wall_only(45_000),
+                    stage_id: "plan".to_string(),
+                    stage_label: "plan".to_string(),
+                    timing: fabro_types::StageTiming::wall_only(45_000),
                     billing_usd_micros: Some(120_000),
-                    retries:            0,
+                    retries: 0,
                 },
                 StageSummary {
-                    stage_id:           "implement".to_string(),
-                    stage_label:        "implement".to_string(),
-                    timing:             fabro_types::StageTiming::wall_only(90_000),
+                    stage_id: "implement".to_string(),
+                    stage_label: "implement".to_string(),
+                    timing: fabro_types::StageTiming::wall_only(90_000),
                     billing_usd_micros: Some(250_000),
-                    retries:            0,
+                    retries: 0,
                 },
                 StageSummary {
-                    stage_id:           "simplify".to_string(),
-                    stage_label:        "simplify".to_string(),
-                    timing:             fabro_types::StageTiming::wall_only(15_000),
+                    stage_id: "simplify".to_string(),
+                    stage_label: "simplify".to_string(),
+                    timing: fabro_types::StageTiming::wall_only(15_000),
                     billing_usd_micros: Some(50_000),
-                    retries:            0,
+                    retries: 0,
                 },
             ],
-            billing:              Some(BilledTokenCounts {
+            billing: Some(BilledTokenCounts {
                 total_usd_micros: Some(420_000),
                 ..BilledTokenCounts::default()
             }),
-            total_retries:        0,
-            diff:                 fabro_types::RunDiff::default(),
+            total_retries: 0,
+            diff: fabro_types::RunDiff::default(),
         }
     }
 
@@ -928,8 +929,8 @@ mod tests {
             base_branch: None,
             display_base_sha: None,
             git: Some(GitCheckpointOptions {
-                base_sha:    None,
-                run_branch:  Some("fabro/run/test".to_string()),
+                base_sha: None,
+                run_branch: Some("fabro/run/test".to_string()),
                 meta_branch: None,
             }),
         };
@@ -941,12 +942,15 @@ mod tests {
             services: EngineServices::test_default().run,
         };
 
-        let finalized = pull_request(concluded, &PullRequestOptions {
-            pr_config:  None,
-            github_app: None,
-            origin_url: None,
-            model:      "test-model".to_string(),
-        })
+        let finalized = pull_request(
+            concluded,
+            &PullRequestOptions {
+                pr_config: None,
+                github_app: None,
+                origin_url: None,
+                model: "test-model".to_string(),
+            },
+        )
         .await;
 
         assert_eq!(finalized.pushed_branch, None);
@@ -1137,47 +1141,51 @@ mod tests {
         let run_store = store.create_run(&fixtures::RUN_1).await.unwrap();
 
         let run_spec = RunSpec {
-            run_id:           fixtures::RUN_1,
-            settings:         fabro_types::WorkflowSettings::default(),
-            graph:            Graph::new("test"),
-            graph_source:     None,
-            workflow_slug:    Some("test".to_string()),
-            automation:       None,
+            run_id: fixtures::RUN_1,
+            settings: fabro_types::WorkflowSettings::default(),
+            graph: Graph::new("test"),
+            graph_source: None,
+            workflow_slug: Some("test".to_string()),
+            automation: None,
             source_directory: Some("/tmp/project".to_string()),
-            git:              Some(fabro_types::GitContext {
-                origin_url:   String::new(),
-                branch:       "main".to_string(),
-                sha:          None,
-                dirty:        fabro_types::DirtyStatus::Clean,
+            git: Some(fabro_types::GitContext {
+                origin_url: String::new(),
+                branch: "main".to_string(),
+                sha: None,
+                dirty: fabro_types::DirtyStatus::Clean,
                 push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
             }),
-            labels:           HashMap::new(),
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            definition_blob:  None,
-            fork_source_ref:  None,
+            labels: HashMap::new(),
+            provenance: test_support::test_run_provenance(),
+            manifest_blob: None,
+            definition_blob: None,
+            fork_source_ref: None,
         };
-        append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
-            run_id:           fixtures::RUN_1,
-            title:            None,
-            settings:         serde_json::to_value(&run_spec.settings).unwrap(),
-            graph:            serde_json::to_value(&run_spec.graph).unwrap(),
-            workflow_source:  Some("digraph test { plan -> code }".to_string()),
-            workflow_config:  None,
-            labels:           run_spec.labels.clone().into_iter().collect(),
-            run_dir:          "/tmp/project".to_string(),
-            source_directory: run_spec.source_directory.clone(),
-            workflow_slug:    run_spec.workflow_slug.clone(),
-            automation:       None,
-            db_prefix:        None,
-            provenance:       run_spec.provenance.clone(),
-            manifest_blob:    None,
-            git:              run_spec.git.clone(),
-            fork_source_ref:  None,
-            retried_from:     None,
-            parent_id:        None,
-            web_url:          None,
-        })
+        append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::RunCreated {
+                run_id: fixtures::RUN_1,
+                title: None,
+                settings: serde_json::to_value(&run_spec.settings).unwrap(),
+                graph: serde_json::to_value(&run_spec.graph).unwrap(),
+                workflow_source: Some("digraph test { plan -> code }".to_string()),
+                workflow_config: None,
+                labels: run_spec.labels.clone().into_iter().collect(),
+                run_dir: "/tmp/project".to_string(),
+                source_directory: run_spec.source_directory.clone(),
+                workflow_slug: run_spec.workflow_slug.clone(),
+                automation: None,
+                db_prefix: None,
+                provenance: run_spec.provenance.clone(),
+                manifest_blob: None,
+                git: run_spec.git.clone(),
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
+            },
+        )
         .await
         .unwrap();
         let body = build_pr_content_with_client(
@@ -1208,71 +1216,79 @@ mod tests {
         let run_store = store.create_run(&fixtures::RUN_1).await.unwrap();
 
         let run_spec = RunSpec {
-            run_id:           fixtures::RUN_1,
-            settings:         fabro_types::WorkflowSettings::default(),
-            graph:            Graph::new("test"),
-            graph_source:     None,
-            workflow_slug:    Some("test".to_string()),
-            automation:       None,
+            run_id: fixtures::RUN_1,
+            settings: fabro_types::WorkflowSettings::default(),
+            graph: Graph::new("test"),
+            graph_source: None,
+            workflow_slug: Some("test".to_string()),
+            automation: None,
             source_directory: Some("/tmp/project".to_string()),
-            git:              Some(fabro_types::GitContext {
-                origin_url:   String::new(),
-                branch:       "main".to_string(),
-                sha:          None,
-                dirty:        fabro_types::DirtyStatus::Clean,
+            git: Some(fabro_types::GitContext {
+                origin_url: String::new(),
+                branch: "main".to_string(),
+                sha: None,
+                dirty: fabro_types::DirtyStatus::Clean,
                 push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
             }),
-            labels:           HashMap::new(),
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            definition_blob:  None,
-            fork_source_ref:  None,
+            labels: HashMap::new(),
+            provenance: test_support::test_run_provenance(),
+            manifest_blob: None,
+            definition_blob: None,
+            fork_source_ref: None,
         };
-        append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
-            run_id:           fixtures::RUN_1,
-            title:            None,
-            settings:         serde_json::to_value(&run_spec.settings).unwrap(),
-            graph:            serde_json::to_value(&run_spec.graph).unwrap(),
-            workflow_source:  Some("digraph test { plan -> code }".to_string()),
-            workflow_config:  None,
-            labels:           run_spec.labels.clone().into_iter().collect(),
-            run_dir:          "/tmp/project".to_string(),
-            source_directory: run_spec.source_directory.clone(),
-            workflow_slug:    run_spec.workflow_slug.clone(),
-            automation:       None,
-            db_prefix:        None,
-            provenance:       run_spec.provenance.clone(),
-            manifest_blob:    None,
-            git:              run_spec.git.clone(),
-            fork_source_ref:  None,
-            retried_from:     None,
-            parent_id:        None,
-            web_url:          None,
-        })
+        append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::RunCreated {
+                run_id: fixtures::RUN_1,
+                title: None,
+                settings: serde_json::to_value(&run_spec.settings).unwrap(),
+                graph: serde_json::to_value(&run_spec.graph).unwrap(),
+                workflow_source: Some("digraph test { plan -> code }".to_string()),
+                workflow_config: None,
+                labels: run_spec.labels.clone().into_iter().collect(),
+                run_dir: "/tmp/project".to_string(),
+                source_directory: run_spec.source_directory.clone(),
+                workflow_slug: run_spec.workflow_slug.clone(),
+                automation: None,
+                db_prefix: None,
+                provenance: run_spec.provenance.clone(),
+                manifest_blob: None,
+                git: run_spec.git.clone(),
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
+            },
+        )
         .await
         .unwrap();
-        append_event(&run_store, &fixtures::RUN_1, &Event::StageCompleted {
-            node_id: "plan".to_string(),
-            name: "plan".to_string(),
-            index: 0,
-            timing: fabro_types::StageTiming::wall_only(1),
-            status: "succeeded".to_string(),
-            preferred_label: None,
-            suggested_next_ids: vec![],
-            billing: None,
-            failure: None,
-            notes: None,
-            files_touched: vec![],
-            context_updates: None,
-            jump_to_node: None,
-            context_values: None,
-            node_visits: None,
-            loop_failure_signatures: None,
-            restart_failure_signatures: None,
-            response: Some("Plan from store".to_string()),
-            attempt: 1,
-            max_attempts: 1,
-        })
+        append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::StageCompleted {
+                node_id: "plan".to_string(),
+                name: "plan".to_string(),
+                index: 0,
+                timing: fabro_types::StageTiming::wall_only(1),
+                status: "succeeded".to_string(),
+                preferred_label: None,
+                suggested_next_ids: vec![],
+                billing: None,
+                failure: None,
+                notes: None,
+                files_touched: vec![],
+                context_updates: None,
+                jump_to_node: None,
+                context_values: None,
+                node_visits: None,
+                loop_failure_signatures: None,
+                restart_failure_signatures: None,
+                response: Some("Plan from store".to_string()),
+                attempt: 1,
+                max_attempts: 1,
+            },
+        )
         .await
         .unwrap();
 
@@ -1538,26 +1554,26 @@ mod tests {
         let run_store_handle: RunStoreHandle = run_store.into();
         let llm_source = test_llm_source();
         let creds = fabro_github::GitHubCredentials::App(fabro_github::GitHubAppCredentials {
-            app_id:          "123".to_string(),
+            app_id: "123".to_string(),
             private_key_pem: "unused".to_string(),
-            slug:            None,
+            slug: None,
         });
         let base_url = github_app::github_api_base_url();
         let result = maybe_open_pull_request(OpenPullRequestRequest {
-            github:      github_app::GitHubContext::new(&creds, &base_url),
-            origin_url:  "https://github.com/owner/repo.git",
+            github: github_app::GitHubContext::new(&creds, &base_url),
+            origin_url: "https://github.com/owner/repo.git",
             base_branch: "main",
             head_branch: "fabro/run/123",
-            goal:        "Fix bug",
-            diff:        "",
-            model:       "claude-sonnet-4-20250514",
-            draft:       false,
-            auto_merge:  None,
-            run_store:   &run_store_handle,
-            llm_source:  llm_source.as_ref(),
-            catalog:     test_catalog(),
-            conclusion:  None,
-            run_state:   None,
+            goal: "Fix bug",
+            diff: "",
+            model: "claude-sonnet-4-20250514",
+            draft: false,
+            auto_merge: None,
+            run_store: &run_store_handle,
+            llm_source: llm_source.as_ref(),
+            catalog: test_catalog(),
+            conclusion: None,
+            run_state: None,
         })
         .await;
         assert!(result.is_ok());
@@ -1570,47 +1586,55 @@ mod tests {
         let store = test_store();
         let run_store = store.create_run(&fixtures::RUN_1).await.unwrap();
         let run_spec = RunSpec {
-            run_id:           fixtures::RUN_1,
-            settings:         fabro_types::WorkflowSettings::default(),
-            graph:            Graph::new("test"),
-            graph_source:     None,
-            workflow_slug:    None,
-            automation:       None,
+            run_id: fixtures::RUN_1,
+            settings: fabro_types::WorkflowSettings::default(),
+            graph: Graph::new("test"),
+            graph_source: None,
+            workflow_slug: None,
+            automation: None,
             source_directory: Some(tmp.path().display().to_string()),
-            git:              None,
-            labels:           std::collections::HashMap::new(),
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            definition_blob:  None,
-            fork_source_ref:  None,
+            git: None,
+            labels: std::collections::HashMap::new(),
+            provenance: test_support::test_run_provenance(),
+            manifest_blob: None,
+            definition_blob: None,
+            fork_source_ref: None,
         };
-        append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
-            run_id:           fixtures::RUN_1,
-            title:            None,
-            settings:         serde_json::to_value(&run_spec.settings).unwrap(),
-            graph:            serde_json::to_value(&run_spec.graph).unwrap(),
-            workflow_source:  None,
-            workflow_config:  None,
-            labels:           run_spec.labels.clone().into_iter().collect(),
-            run_dir:          tmp.path().display().to_string(),
-            source_directory: run_spec.source_directory.clone(),
-            workflow_slug:    None,
-            automation:       None,
-            db_prefix:        None,
-            provenance:       run_spec.provenance.clone(),
-            manifest_blob:    None,
-            git:              None,
-            fork_source_ref:  None,
-            retried_from:     None,
-            parent_id:        None,
-            web_url:          None,
-        })
+        append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::RunCreated {
+                run_id: fixtures::RUN_1,
+                title: None,
+                settings: serde_json::to_value(&run_spec.settings).unwrap(),
+                graph: serde_json::to_value(&run_spec.graph).unwrap(),
+                workflow_source: None,
+                workflow_config: None,
+                labels: run_spec.labels.clone().into_iter().collect(),
+                run_dir: tmp.path().display().to_string(),
+                source_directory: run_spec.source_directory.clone(),
+                workflow_slug: None,
+                automation: None,
+                db_prefix: None,
+                provenance: run_spec.provenance.clone(),
+                manifest_blob: None,
+                git: None,
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
+            },
+        )
         .await
         .unwrap();
-        append_event(&run_store, &fixtures::RUN_1, &Event::RunRunnable {
-            source: fabro_types::RunRunnableSource::StartRequested,
-            actor:  None,
-        })
+        append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::RunRunnable {
+                source: fabro_types::RunRunnableSource::StartRequested,
+                actor: None,
+            },
+        )
         .await
         .unwrap();
         append_event(&run_store, &fixtures::RUN_1, &Event::RunStarting)
@@ -1619,19 +1643,23 @@ mod tests {
         append_event(&run_store, &fixtures::RUN_1, &Event::RunRunning)
             .await
             .unwrap();
-        append_event(&run_store, &fixtures::RUN_1, &Event::WorkflowRunCompleted {
-            timing:               fabro_types::RunTiming::wall_only(1),
-            artifact_count:       0,
-            status:               "succeeded".to_string(),
-            reason:               SuccessReason::Completed,
-            total_usd_micros:     None,
-            final_git_commit_sha: None,
-            final_patch:          Some(
-                "diff --git a/src/lib.rs b/src/lib.rs\n+fn from_store() {}\n".to_string(),
-            ),
-            diff_summary:         None,
-            billing:              None,
-        })
+        append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::WorkflowRunCompleted {
+                timing: fabro_types::RunTiming::wall_only(1),
+                artifact_count: 0,
+                status: "succeeded".to_string(),
+                reason: SuccessReason::Completed,
+                total_usd_micros: None,
+                final_git_commit_sha: None,
+                final_patch: Some(
+                    "diff --git a/src/lib.rs b/src/lib.rs\n+fn from_store() {}\n".to_string(),
+                ),
+                diff_summary: None,
+                billing: None,
+            },
+        )
         .await
         .unwrap();
 
@@ -1699,65 +1727,73 @@ mod tests {
         let run_store = store.create_run(&fixtures::RUN_1).await.unwrap();
 
         let run_spec = RunSpec {
-            run_id:           fixtures::RUN_1,
-            settings:         fabro_types::WorkflowSettings::default(),
-            graph:            Graph::new("test"),
-            graph_source:     None,
-            workflow_slug:    Some("test".to_string()),
-            automation:       None,
+            run_id: fixtures::RUN_1,
+            settings: fabro_types::WorkflowSettings::default(),
+            graph: Graph::new("test"),
+            graph_source: None,
+            workflow_slug: Some("test".to_string()),
+            automation: None,
             source_directory: Some("/tmp/project".to_string()),
-            git:              None,
-            labels:           HashMap::new(),
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            definition_blob:  None,
-            fork_source_ref:  None,
+            git: None,
+            labels: HashMap::new(),
+            provenance: test_support::test_run_provenance(),
+            manifest_blob: None,
+            definition_blob: None,
+            fork_source_ref: None,
         };
-        append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
-            run_id:           fixtures::RUN_1,
-            title:            None,
-            settings:         serde_json::to_value(&run_spec.settings).unwrap(),
-            graph:            serde_json::to_value(&run_spec.graph).unwrap(),
-            workflow_source:  Some("digraph test { plan -> code }".to_string()),
-            workflow_config:  None,
-            labels:           run_spec.labels.clone().into_iter().collect(),
-            run_dir:          "/tmp/project".to_string(),
-            source_directory: run_spec.source_directory.clone(),
-            workflow_slug:    run_spec.workflow_slug.clone(),
-            automation:       None,
-            db_prefix:        None,
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            git:              None,
-            fork_source_ref:  None,
-            retried_from:     None,
-            parent_id:        None,
-            web_url:          None,
-        })
+        append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::RunCreated {
+                run_id: fixtures::RUN_1,
+                title: None,
+                settings: serde_json::to_value(&run_spec.settings).unwrap(),
+                graph: serde_json::to_value(&run_spec.graph).unwrap(),
+                workflow_source: Some("digraph test { plan -> code }".to_string()),
+                workflow_config: None,
+                labels: run_spec.labels.clone().into_iter().collect(),
+                run_dir: "/tmp/project".to_string(),
+                source_directory: run_spec.source_directory.clone(),
+                workflow_slug: run_spec.workflow_slug.clone(),
+                automation: None,
+                db_prefix: None,
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                git: None,
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
+            },
+        )
         .await
         .unwrap();
-        append_event(&run_store, &fixtures::RUN_1, &Event::StageCompleted {
-            node_id: "plan".to_string(),
-            name: "plan".to_string(),
-            index: 0,
-            timing: fabro_types::StageTiming::wall_only(1),
-            status: "succeeded".to_string(),
-            preferred_label: None,
-            suggested_next_ids: vec![],
-            billing: None,
-            failure: None,
-            notes: None,
-            files_touched: vec![],
-            context_updates: None,
-            jump_to_node: None,
-            context_values: None,
-            node_visits: None,
-            loop_failure_signatures: None,
-            restart_failure_signatures: None,
-            response: Some("Plan from store".to_string()),
-            attempt: 1,
-            max_attempts: 1,
-        })
+        append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::StageCompleted {
+                node_id: "plan".to_string(),
+                name: "plan".to_string(),
+                index: 0,
+                timing: fabro_types::StageTiming::wall_only(1),
+                status: "succeeded".to_string(),
+                preferred_label: None,
+                suggested_next_ids: vec![],
+                billing: None,
+                failure: None,
+                notes: None,
+                files_touched: vec![],
+                context_updates: None,
+                jump_to_node: None,
+                context_values: None,
+                node_visits: None,
+                loop_failure_signatures: None,
+                restart_failure_signatures: None,
+                response: Some("Plan from store".to_string()),
+                attempt: 1,
+                max_attempts: 1,
+            },
+        )
         .await
         .unwrap();
         let payload = pr_content_json("Mock", "   \n");
@@ -1789,18 +1825,18 @@ mod tests {
     /// client from the credential source, so the in-process MockProvider
     /// cannot intercept — we mock the OpenAI HTTP endpoint instead.
     struct FallbackHarness {
-        _vault_dir:     tempfile::TempDir,
+        _vault_dir: tempfile::TempDir,
         // Held to keep the mock listener alive for the duration of the test;
         // the test interacts with it via `Client::from_source` (which goes
         // out via HTTP to the mock URL stored in `llm_source`).
-        openai_server:  MockServer,
-        github_server:  MockServer,
+        openai_server: MockServer,
+        github_server: MockServer,
         openai_mock_id: usize,
         github_mock_id: usize,
-        llm_source:     Arc<dyn CredentialSource>,
-        catalog:        Arc<Catalog>,
-        creds:          fabro_github::GitHubCredentials,
-        run_store:      RunStoreHandle,
+        llm_source: Arc<dyn CredentialSource>,
+        catalog: Arc<Catalog>,
+        creds: fabro_github::GitHubCredentials,
+        run_store: RunStoreHandle,
     }
 
     impl FallbackHarness {
@@ -1870,47 +1906,55 @@ mod tests {
         // Seed a non-empty `final_patch` so `load_pull_request_diff` returns
         // diff content and the early-return for empty diffs does not fire.
         let run_spec = RunSpec {
-            run_id:           fixtures::RUN_1,
-            settings:         fabro_types::WorkflowSettings::default(),
-            graph:            Graph::new("test"),
-            graph_source:     None,
-            workflow_slug:    None,
-            automation:       None,
+            run_id: fixtures::RUN_1,
+            settings: fabro_types::WorkflowSettings::default(),
+            graph: Graph::new("test"),
+            graph_source: None,
+            workflow_slug: None,
+            automation: None,
             source_directory: None,
-            git:              None,
-            labels:           HashMap::new(),
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            definition_blob:  None,
-            fork_source_ref:  None,
+            git: None,
+            labels: HashMap::new(),
+            provenance: test_support::test_run_provenance(),
+            manifest_blob: None,
+            definition_blob: None,
+            fork_source_ref: None,
         };
-        append_event(&run_store, &fixtures::RUN_1, &Event::RunCreated {
-            run_id:           fixtures::RUN_1,
-            title:            None,
-            settings:         serde_json::to_value(&run_spec.settings).unwrap(),
-            graph:            serde_json::to_value(&run_spec.graph).unwrap(),
-            workflow_source:  None,
-            workflow_config:  None,
-            labels:           run_spec.labels.clone().into_iter().collect(),
-            run_dir:          "/tmp/x".to_string(),
-            source_directory: None,
-            workflow_slug:    None,
-            automation:       None,
-            db_prefix:        None,
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            git:              None,
-            fork_source_ref:  None,
-            retried_from:     None,
-            parent_id:        None,
-            web_url:          None,
-        })
+        append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::RunCreated {
+                run_id: fixtures::RUN_1,
+                title: None,
+                settings: serde_json::to_value(&run_spec.settings).unwrap(),
+                graph: serde_json::to_value(&run_spec.graph).unwrap(),
+                workflow_source: None,
+                workflow_config: None,
+                labels: run_spec.labels.clone().into_iter().collect(),
+                run_dir: "/tmp/x".to_string(),
+                source_directory: None,
+                workflow_slug: None,
+                automation: None,
+                db_prefix: None,
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                git: None,
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
+            },
+        )
         .await
         .unwrap();
-        append_event(&run_store, &fixtures::RUN_1, &Event::RunRunnable {
-            source: fabro_types::RunRunnableSource::StartRequested,
-            actor:  None,
-        })
+        append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::RunRunnable {
+                source: fabro_types::RunRunnableSource::StartRequested,
+                actor: None,
+            },
+        )
         .await
         .unwrap();
         append_event(&run_store, &fixtures::RUN_1, &Event::RunStarting)
@@ -1919,19 +1963,23 @@ mod tests {
         append_event(&run_store, &fixtures::RUN_1, &Event::RunRunning)
             .await
             .unwrap();
-        append_event(&run_store, &fixtures::RUN_1, &Event::WorkflowRunCompleted {
-            timing:               fabro_types::RunTiming::wall_only(1),
-            artifact_count:       0,
-            status:               "succeeded".to_string(),
-            reason:               SuccessReason::Completed,
-            total_usd_micros:     None,
-            final_git_commit_sha: None,
-            final_patch:          Some(
-                "diff --git a/src/lib.rs b/src/lib.rs\n+fn from_store() {}\n".to_string(),
-            ),
-            diff_summary:         None,
-            billing:              None,
-        })
+        append_event(
+            &run_store,
+            &fixtures::RUN_1,
+            &Event::WorkflowRunCompleted {
+                timing: fabro_types::RunTiming::wall_only(1),
+                artifact_count: 0,
+                status: "succeeded".to_string(),
+                reason: SuccessReason::Completed,
+                total_usd_micros: None,
+                final_git_commit_sha: None,
+                final_patch: Some(
+                    "diff --git a/src/lib.rs b/src/lib.rs\n+fn from_store() {}\n".to_string(),
+                ),
+                diff_summary: None,
+                billing: None,
+            },
+        )
         .await
         .unwrap();
 

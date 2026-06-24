@@ -169,11 +169,11 @@ impl Handler for PromptHandler {
 
         services.run.emitter.emit_scoped(
             &Event::PromptCompleted {
-                node_id:  node.id.clone(),
+                node_id: node.id.clone(),
                 response: response_text.clone(),
-                model:    response_model,
+                model: response_model,
                 provider: response_provider,
-                billing:  stage_usage.clone(),
+                billing: stage_usage.clone(),
             },
             &stage_scope,
         );
@@ -270,26 +270,25 @@ mod tests {
             run_store,
             &fixtures::RUN_1,
             &crate::event::Event::RunCreated {
-                run_id:           fixtures::RUN_1,
-                title:            None,
-                settings:         serde_json::to_value(fabro_types::WorkflowSettings::default())
-                    .unwrap(),
-                graph:            serde_json::to_value(fabro_types::Graph::new("test")).unwrap(),
-                workflow_source:  None,
-                workflow_config:  None,
-                labels:           std::collections::BTreeMap::default(),
-                run_dir:          "/tmp".to_string(),
+                run_id: fixtures::RUN_1,
+                title: None,
+                settings: serde_json::to_value(fabro_types::WorkflowSettings::default()).unwrap(),
+                graph: serde_json::to_value(fabro_types::Graph::new("test")).unwrap(),
+                workflow_source: None,
+                workflow_config: None,
+                labels: std::collections::BTreeMap::default(),
+                run_dir: "/tmp".to_string(),
                 source_directory: None,
-                workflow_slug:    None,
-                automation:       None,
-                db_prefix:        None,
-                provenance:       test_support::test_run_provenance(),
-                manifest_blob:    None,
-                git:              None,
-                fork_source_ref:  None,
-                retried_from:     None,
-                parent_id:        None,
-                web_url:          None,
+                workflow_slug: None,
+                automation: None,
+                db_prefix: None,
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                git: None,
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
             },
         )
         .await
@@ -346,11 +345,11 @@ mod tests {
                 _request: OneShotRequest<'_>,
             ) -> Result<CodergenResult, Error> {
                 Ok(CodergenResult::Text {
-                    text:              "one-shot response".to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: "one-shot response".to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::default(),
+                    timing: StageTiming::default(),
                 })
             }
 
@@ -360,7 +359,7 @@ mod tests {
             ) -> Result<crate::handler::llm::api::EffectiveRequestControls, Error> {
                 Ok(crate::handler::llm::api::EffectiveRequestControls {
                     reasoning_effort: Some(ReasoningEffort::High),
-                    speed:            Some(Speed::Fast),
+                    speed: Some(Speed::Fast),
                 })
             }
         }
@@ -404,11 +403,11 @@ mod tests {
                 _request: OneShotRequest<'_>,
             ) -> Result<CodergenResult, Error> {
                 Ok(CodergenResult::Text {
-                    text:              "one-shot response".to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: "one-shot response".to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::new(0, 200, 300),
+                    timing: StageTiming::new(0, 200, 300),
                 })
             }
         }
@@ -442,11 +441,11 @@ mod tests {
                 _request: OneShotRequest<'_>,
             ) -> Result<CodergenResult, Error> {
                 Ok(CodergenResult::Text {
-                    text:              r#"{"passed": true}"#.to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: r#"{"passed": true}"#.to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::default(),
+                    timing: StageTiming::default(),
                 })
             }
         }
@@ -490,11 +489,11 @@ mod tests {
                 _request: OneShotRequest<'_>,
             ) -> Result<CodergenResult, Error> {
                 Ok(CodergenResult::Text {
-                    text:              r#"{"outcome": 123}"#.to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: r#"{"outcome": 123}"#.to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::default(),
+                    timing: StageTiming::default(),
                 })
             }
         }
@@ -516,9 +515,12 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(outcome.status, crate::outcome::StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            crate::outcome::StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert_eq!(
             outcome.failure_reason(),
             Some("output schema validation failed after 0 repair attempt(s)")
@@ -540,11 +542,11 @@ mod tests {
                 _request: OneShotRequest<'_>,
             ) -> Result<CodergenResult, Error> {
                 Ok(CodergenResult::Text {
-                    text:              "one-shot response".to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: "one-shot response".to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::default(),
+                    timing: StageTiming::default(),
                 })
             }
 
@@ -554,7 +556,7 @@ mod tests {
             ) -> Result<crate::handler::llm::api::EffectiveRequestControls, Error> {
                 Ok(crate::handler::llm::api::EffectiveRequestControls {
                     reasoning_effort: Some(ReasoningEffort::High),
-                    speed:            Some(Speed::Fast),
+                    speed: Some(Speed::Fast),
                 })
             }
         }
@@ -585,7 +587,7 @@ mod tests {
     }
 
     struct OneShotCapturingBackend {
-        captured_prompt:        Arc<std::sync::Mutex<Option<String>>>,
+        captured_prompt: Arc<std::sync::Mutex<Option<String>>>,
         captured_system_prompt: Arc<std::sync::Mutex<Option<Option<String>>>>,
     }
 
@@ -600,11 +602,11 @@ mod tests {
             *self.captured_system_prompt.lock().unwrap() =
                 Some(request.system_prompt.map(String::from));
             Ok(CodergenResult::Text {
-                text:              "classified".to_string(),
-                usage:             None,
-                files_touched:     Vec::new(),
+                text: "classified".to_string(),
+                usage: None,
+                files_touched: Vec::new(),
                 last_file_touched: None,
-                timing:            StageTiming::default(),
+                timing: StageTiming::default(),
             })
         }
     }
@@ -615,7 +617,7 @@ mod tests {
 
         let captured = Arc::new(Mutex::new(None));
         let backend = OneShotCapturingBackend {
-            captured_prompt:        captured.clone(),
+            captured_prompt: captured.clone(),
             captured_system_prompt: Arc::new(Mutex::new(None)),
         };
         let handler = PromptHandler::new(Some(Box::new(backend)));
@@ -652,7 +654,7 @@ mod tests {
 
         let captured_sys = Arc::new(Mutex::new(None));
         let backend = OneShotCapturingBackend {
-            captured_prompt:        Arc::new(Mutex::new(None)),
+            captured_prompt: Arc::new(Mutex::new(None)),
             captured_system_prompt: captured_sys.clone(),
         };
         let handler = PromptHandler::new(Some(Box::new(backend)));
@@ -685,7 +687,7 @@ mod tests {
 
         let captured_sys = Arc::new(Mutex::new(None));
         let backend = OneShotCapturingBackend {
-            captured_prompt:        Arc::new(Mutex::new(None)),
+            captured_prompt: Arc::new(Mutex::new(None)),
             captured_system_prompt: captured_sys.clone(),
         };
         let handler = PromptHandler::new(Some(Box::new(backend)));
@@ -761,7 +763,7 @@ reasoning = false
 
         let captured_sys = Arc::new(Mutex::new(None));
         let backend = OneShotCapturingBackend {
-            captured_prompt:        Arc::new(Mutex::new(None)),
+            captured_prompt: Arc::new(Mutex::new(None)),
             captured_system_prompt: captured_sys.clone(),
         };
         let handler = PromptHandler::new(Some(Box::new(backend)));
@@ -838,7 +840,7 @@ reasoning = false
 
         let captured_sys = Arc::new(Mutex::new(None));
         let backend = OneShotCapturingBackend {
-            captured_prompt:        Arc::new(Mutex::new(None)),
+            captured_prompt: Arc::new(Mutex::new(None)),
             captured_system_prompt: captured_sys.clone(),
         };
         let handler = PromptHandler::new(Some(Box::new(backend)));

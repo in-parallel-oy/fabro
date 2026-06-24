@@ -162,17 +162,21 @@ mod tests {
         event::append_event(&run_store, run_id, &Event::RunRunning)
             .await
             .unwrap();
-        event::append_event(&run_store, run_id, &Event::WorkflowRunCompleted {
-            timing:               fabro_types::RunTiming::wall_only(10),
-            artifact_count:       0,
-            status:               "succeeded".to_string(),
-            reason:               SuccessReason::Completed,
-            total_usd_micros:     None,
-            final_git_commit_sha: None,
-            final_patch:          None,
-            diff_summary:         None,
-            billing:              None,
-        })
+        event::append_event(
+            &run_store,
+            run_id,
+            &Event::WorkflowRunCompleted {
+                timing: fabro_types::RunTiming::wall_only(10),
+                artifact_count: 0,
+                status: "succeeded".to_string(),
+                reason: SuccessReason::Completed,
+                total_usd_micros: None,
+                final_git_commit_sha: None,
+                final_patch: None,
+                diff_summary: None,
+                billing: None,
+            },
+        )
         .await
         .unwrap();
     }
@@ -214,37 +218,44 @@ mod tests {
     }
 
     async fn seed_created(run_store: &fabro_store::RunDatabase, run_id: &RunId) {
-        event::append_event(run_store, run_id, &Event::RunCreated {
-            run_id:           *run_id,
-            title:            None,
-            settings:         serde_json::to_value(fabro_types::WorkflowSettings::default())
-                .unwrap(),
-            graph:            serde_json::to_value(fabro_types::Graph::new("test")).unwrap(),
-            workflow_source:  None,
-            workflow_config:  None,
-            labels:           std::collections::BTreeMap::default(),
-            run_dir:          "/tmp".to_string(),
-            source_directory: None,
-            workflow_slug:    None,
-            automation:       None,
-            db_prefix:        None,
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            git:              None,
-            fork_source_ref:  None,
-            retried_from:     None,
-            parent_id:        None,
-            web_url:          None,
-        })
+        event::append_event(
+            run_store,
+            run_id,
+            &Event::RunCreated {
+                run_id: *run_id,
+                title: None,
+                settings: serde_json::to_value(fabro_types::WorkflowSettings::default()).unwrap(),
+                graph: serde_json::to_value(fabro_types::Graph::new("test")).unwrap(),
+                workflow_source: None,
+                workflow_config: None,
+                labels: std::collections::BTreeMap::default(),
+                run_dir: "/tmp".to_string(),
+                source_directory: None,
+                workflow_slug: None,
+                automation: None,
+                db_prefix: None,
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                git: None,
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
+            },
+        )
         .await
         .unwrap();
     }
 
     async fn seed_runnable(run_store: &fabro_store::RunDatabase, run_id: &RunId) {
-        event::append_event(run_store, run_id, &Event::RunRunnable {
-            source: fabro_types::RunRunnableSource::StartRequested,
-            actor:  None,
-        })
+        event::append_event(
+            run_store,
+            run_id,
+            &Event::RunRunnable {
+                source: fabro_types::RunRunnableSource::StartRequested,
+                actor: None,
+            },
+        )
         .await
         .unwrap();
     }
@@ -271,11 +282,14 @@ mod tests {
         seed_succeeded(&store, &run_id).await;
 
         let outcome = archive(&store, &run_id, None).await.unwrap();
-        assert_eq!(outcome, ArchiveOutcome::Archived {
-            prior_status: TerminalStatus::Succeeded {
-                reason: SuccessReason::Completed,
-            },
-        });
+        assert_eq!(
+            outcome,
+            ArchiveOutcome::Archived {
+                prior_status: TerminalStatus::Succeeded {
+                    reason: SuccessReason::Completed,
+                },
+            }
+        );
         assert_eq!(
             current_status(&store, &run_id).await,
             RunStatus::Succeeded {
@@ -291,9 +305,12 @@ mod tests {
             .state()
             .await
             .unwrap();
-        assert_eq!(projection.status, RunStatus::Succeeded {
-            reason: SuccessReason::Completed,
-        });
+        assert_eq!(
+            projection.status,
+            RunStatus::Succeeded {
+                reason: SuccessReason::Completed,
+            }
+        );
         assert!(projection.archived_at.is_some());
     }
 
@@ -304,14 +321,20 @@ mod tests {
         seed_failed(&store, &run_id).await;
 
         let outcome = archive(&store, &run_id, None).await.unwrap();
-        assert_eq!(outcome, ArchiveOutcome::Archived {
-            prior_status: TerminalStatus::Failed {
+        assert_eq!(
+            outcome,
+            ArchiveOutcome::Archived {
+                prior_status: TerminalStatus::Failed {
+                    reason: FailureReason::WorkflowError,
+                },
+            }
+        );
+        assert_eq!(
+            current_status(&store, &run_id).await,
+            RunStatus::Failed {
                 reason: FailureReason::WorkflowError,
-            },
-        });
-        assert_eq!(current_status(&store, &run_id).await, RunStatus::Failed {
-            reason: FailureReason::WorkflowError,
-        });
+            }
+        );
         assert!(is_archived(&store, &run_id).await);
     }
 
@@ -354,11 +377,14 @@ mod tests {
         archive(&store, &run_id, None).await.unwrap();
 
         let outcome = unarchive(&store, &run_id, None).await.unwrap();
-        assert_eq!(outcome, UnarchiveOutcome::Unarchived {
-            restored_status: TerminalStatus::Succeeded {
-                reason: SuccessReason::Completed,
-            },
-        });
+        assert_eq!(
+            outcome,
+            UnarchiveOutcome::Unarchived {
+                restored_status: TerminalStatus::Succeeded {
+                    reason: SuccessReason::Completed,
+                },
+            }
+        );
         let projection = store
             .open_run_reader(&run_id)
             .await
@@ -366,9 +392,12 @@ mod tests {
             .state()
             .await
             .unwrap();
-        assert_eq!(projection.status, RunStatus::Succeeded {
-            reason: SuccessReason::Completed,
-        });
+        assert_eq!(
+            projection.status,
+            RunStatus::Succeeded {
+                reason: SuccessReason::Completed,
+            }
+        );
     }
 
     #[tokio::test]
@@ -379,14 +408,20 @@ mod tests {
         archive(&store, &run_id, None).await.unwrap();
 
         let outcome = unarchive(&store, &run_id, None).await.unwrap();
-        assert_eq!(outcome, UnarchiveOutcome::Unarchived {
-            restored_status: TerminalStatus::Failed {
+        assert_eq!(
+            outcome,
+            UnarchiveOutcome::Unarchived {
+                restored_status: TerminalStatus::Failed {
+                    reason: FailureReason::WorkflowError,
+                },
+            }
+        );
+        assert_eq!(
+            current_status(&store, &run_id).await,
+            RunStatus::Failed {
                 reason: FailureReason::WorkflowError,
-            },
-        });
-        assert_eq!(current_status(&store, &run_id).await, RunStatus::Failed {
-            reason: FailureReason::WorkflowError,
-        });
+            }
+        );
     }
 
     #[tokio::test]
@@ -399,11 +434,14 @@ mod tests {
         let outcome = unarchive(&store, &run_id, None).await.unwrap();
         let events_after = event_count(&store, &run_id).await;
 
-        assert_eq!(outcome, UnarchiveOutcome::NotArchived {
-            status: RunStatus::Succeeded {
-                reason: SuccessReason::Completed,
-            },
-        });
+        assert_eq!(
+            outcome,
+            UnarchiveOutcome::NotArchived {
+                status: RunStatus::Succeeded {
+                    reason: SuccessReason::Completed,
+                },
+            }
+        );
         assert_eq!(events_before, events_after);
     }
 

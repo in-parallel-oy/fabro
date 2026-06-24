@@ -10,14 +10,14 @@ use crate::records::{Checkpoint, RunSpec};
 #[derive(Debug, Clone)]
 pub struct ForkRunInput {
     pub source_run_id: RunId,
-    pub target:        Option<ForkTarget>,
+    pub target: Option<ForkTarget>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedForkTarget {
     pub checkpoint_ordinal: usize,
-    pub node_id:            String,
-    pub visit:              usize,
+    pub node_id: String,
+    pub visit: usize,
 }
 
 impl ResolvedForkTarget {
@@ -30,8 +30,8 @@ impl ResolvedForkTarget {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForkOutcome {
     pub source_run_id: RunId,
-    pub new_run_id:    RunId,
-    pub target:        ResolvedForkTarget,
+    pub new_run_id: RunId,
+    pub target: ResolvedForkTarget,
 }
 
 pub async fn fork_run(
@@ -94,8 +94,8 @@ pub async fn fork_run(
         new_run_id,
         target: ResolvedForkTarget {
             checkpoint_ordinal: entry.ordinal,
-            node_id:            entry.node_name.clone(),
-            visit:              entry.visit,
+            node_id: entry.node_name.clone(),
+            visit: entry.visit,
         },
     })
 }
@@ -148,29 +148,33 @@ async fn persist_forked_run(
         .await
         .map_err(|err| Error::engine(err.to_string()))?;
 
-    event::append_event(&run_store, &spec.run_id, &Event::RunCreated {
-        run_id:           spec.run_id,
-        title:            None,
-        settings:         serde_json::to_value(&spec.settings)
-            .map_err(|err| Error::engine(err.to_string()))?,
-        graph:            serde_json::to_value(&spec.graph)
-            .map_err(|err| Error::engine(err.to_string()))?,
-        workflow_source:  projection.spec.graph_source.clone(),
-        workflow_config:  None,
-        labels:           spec.labels.clone().into_iter().collect(),
-        run_dir:          String::new(),
-        source_directory: spec.source_directory.clone(),
-        workflow_slug:    spec.workflow_slug.clone(),
-        automation:       spec.automation.clone(),
-        db_prefix:        None,
-        provenance:       spec.provenance.clone(),
-        manifest_blob:    spec.manifest_blob,
-        git:              spec.git.clone(),
-        fork_source_ref:  spec.fork_source_ref.clone(),
-        retried_from:     None,
-        parent_id:        None,
-        web_url:          None,
-    })
+    event::append_event(
+        &run_store,
+        &spec.run_id,
+        &Event::RunCreated {
+            run_id: spec.run_id,
+            title: None,
+            settings: serde_json::to_value(&spec.settings)
+                .map_err(|err| Error::engine(err.to_string()))?,
+            graph: serde_json::to_value(&spec.graph)
+                .map_err(|err| Error::engine(err.to_string()))?,
+            workflow_source: projection.spec.graph_source.clone(),
+            workflow_config: None,
+            labels: spec.labels.clone().into_iter().collect(),
+            run_dir: String::new(),
+            source_directory: spec.source_directory.clone(),
+            workflow_slug: spec.workflow_slug.clone(),
+            automation: spec.automation.clone(),
+            db_prefix: None,
+            provenance: spec.provenance.clone(),
+            manifest_blob: spec.manifest_blob,
+            git: spec.git.clone(),
+            fork_source_ref: spec.fork_source_ref.clone(),
+            retried_from: None,
+            parent_id: None,
+            web_url: None,
+        },
+    )
     .await
     .map_err(|err| Error::engine(err.to_string()))?;
 
@@ -185,9 +189,13 @@ async fn persist_forked_run(
         .await
         .map_err(|err| Error::engine(err.to_string()))?;
     }
-    event::append_event(&run_store, &spec.run_id, &Event::RunSubmitted {
-        definition_blob: spec.definition_blob,
-    })
+    event::append_event(
+        &run_store,
+        &spec.run_id,
+        &Event::RunSubmitted {
+            definition_blob: spec.definition_blob,
+        },
+    )
     .await
     .map_err(|err| Error::engine(err.to_string()))
 }
@@ -302,14 +310,14 @@ mod tests {
     fn fork_replay_keeps_stage_scoped_session_activation_only() {
         assert!(replay_event_for_fork_projection(
             &EventBody::AgentSessionActivated(fabro_types::run_event::AgentSessionActivatedProps {
-                thread_id:        None,
-                provider:         Some("openai".to_string()),
-                model:            Some("gpt-5.4".to_string()),
+                thread_id: None,
+                provider: Some("openai".to_string()),
+                model: Some("gpt-5.4".to_string()),
                 reasoning_effort: None,
-                speed:            None,
+                speed: None,
                 permission_level: None,
-                capabilities:     vec![fabro_types::SessionCapability::Steer],
-                visit:            1,
+                capabilities: vec![fabro_types::SessionCapability::Steer],
+                visit: 1,
             })
         ));
         assert!(replay_event_for_fork_projection(
@@ -321,7 +329,7 @@ mod tests {
         assert!(!replay_event_for_fork_projection(
             &EventBody::AgentSessionStarted(fabro_types::run_event::AgentSessionStartedProps {
                 provider: Some("openai".to_string()),
-                model:    Some("gpt-5.4".to_string()),
+                model: Some("gpt-5.4".to_string()),
             })
         ));
         assert!(!replay_event_for_fork_projection(
@@ -333,29 +341,29 @@ mod tests {
     fn fork_replay_preserves_agent_acp_projection_events() {
         assert!(replay_event_for_fork_projection(
             &EventBody::AgentAcpStarted(fabro_types::run_event::AgentAcpStartedProps {
-                visit:       1,
-                command:     "python fake_agent.py".to_string(),
+                visit: 1,
+                command: "python fake_agent.py".to_string(),
                 config_name: Some("fake".to_string()),
             })
         ));
         assert!(replay_event_for_fork_projection(
             &EventBody::AgentAcpCancelled(fabro_types::run_event::AgentAcpCancelledProps {
-                stdout:      "partial".to_string(),
-                stderr:      "cancelled".to_string(),
+                stdout: "partial".to_string(),
+                stderr: "cancelled".to_string(),
                 duration_ms: 7,
             })
         ));
         assert!(replay_event_for_fork_projection(
             &EventBody::AgentAcpTimedOut(fabro_types::run_event::AgentAcpTimedOutProps {
-                stdout:      "partial".to_string(),
-                stderr:      "timeout".to_string(),
+                stdout: "partial".to_string(),
+                stderr: "timeout".to_string(),
                 duration_ms: 99,
             })
         ));
         assert!(!replay_event_for_fork_projection(
             &EventBody::AgentAcpCompleted(fabro_types::run_event::AgentAcpCompletedProps {
-                stdout:      "done".to_string(),
-                stderr:      String::new(),
+                stdout: "done".to_string(),
+                stderr: String::new(),
                 stop_reason: "end_turn".to_string(),
                 duration_ms: 42,
             })
@@ -370,86 +378,101 @@ mod tests {
         let graph = Graph::new("fork-source");
         let settings = WorkflowSettings::default();
 
-        event::append_event(&source, &source_run_id, &Event::RunCreated {
-            run_id:           source_run_id,
-            title:            None,
-            settings:         serde_json::to_value(&settings).unwrap(),
-            graph:            serde_json::to_value(&graph).unwrap(),
-            workflow_source:  Some("digraph fork_source {}".to_string()),
-            workflow_config:  None,
-            labels:           BTreeMap::new(),
-            run_dir:          "/tmp/source".to_string(),
-            source_directory: Some("/client/source".to_string()),
-            workflow_slug:    Some("fork-source".to_string()),
-            automation:       None,
-            db_prefix:        None,
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            git:              Some(fabro_types::GitContext {
-                origin_url:   "https://github.com/example/repo.git".to_string(),
-                branch:       "main".to_string(),
-                sha:          None,
-                dirty:        fabro_types::DirtyStatus::Clean,
-                push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
-            }),
-            fork_source_ref:  None,
-            retried_from:     None,
-            parent_id:        None,
-            web_url:          None,
-        })
+        event::append_event(
+            &source,
+            &source_run_id,
+            &Event::RunCreated {
+                run_id: source_run_id,
+                title: None,
+                settings: serde_json::to_value(&settings).unwrap(),
+                graph: serde_json::to_value(&graph).unwrap(),
+                workflow_source: Some("digraph fork_source {}".to_string()),
+                workflow_config: None,
+                labels: BTreeMap::new(),
+                run_dir: "/tmp/source".to_string(),
+                source_directory: Some("/client/source".to_string()),
+                workflow_slug: Some("fork-source".to_string()),
+                automation: None,
+                db_prefix: None,
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                git: Some(fabro_types::GitContext {
+                    origin_url: "https://github.com/example/repo.git".to_string(),
+                    branch: "main".to_string(),
+                    sha: None,
+                    dirty: fabro_types::DirtyStatus::Clean,
+                    push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
+                }),
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
+            },
+        )
         .await
         .unwrap();
 
         let mut node_visits = BTreeMap::new();
         node_visits.insert("work".to_string(), 1);
-        event::append_event(&source, &source_run_id, &Event::StageCompleted {
-            node_id: "work".to_string(),
-            name: "Work".to_string(),
-            index: 1,
-            timing: fabro_types::StageTiming::wall_only(10),
-            status: "succeeded".to_string(),
-            preferred_label: None,
-            suggested_next_ids: Vec::new(),
-            billing: None,
-            failure: None,
-            notes: None,
-            files_touched: Vec::new(),
-            context_updates: None,
-            jump_to_node: None,
-            context_values: None,
-            node_visits: Some(node_visits.clone()),
-            loop_failure_signatures: None,
-            restart_failure_signatures: None,
-            response: Some("historical response".to_string()),
-            attempt: 1,
-            max_attempts: 1,
-        })
+        event::append_event(
+            &source,
+            &source_run_id,
+            &Event::StageCompleted {
+                node_id: "work".to_string(),
+                name: "Work".to_string(),
+                index: 1,
+                timing: fabro_types::StageTiming::wall_only(10),
+                status: "succeeded".to_string(),
+                preferred_label: None,
+                suggested_next_ids: Vec::new(),
+                billing: None,
+                failure: None,
+                notes: None,
+                files_touched: Vec::new(),
+                context_updates: None,
+                jump_to_node: None,
+                context_values: None,
+                node_visits: Some(node_visits.clone()),
+                loop_failure_signatures: None,
+                restart_failure_signatures: None,
+                response: Some("historical response".to_string()),
+                attempt: 1,
+                max_attempts: 1,
+            },
+        )
         .await
         .unwrap();
 
-        event::append_event(&source, &source_run_id, &Event::CheckpointCompleted {
-            node_id: "work".to_string(),
-            status: "succeeded".to_string(),
-            current_node: "work".to_string(),
-            completed_nodes: vec!["work".to_string()],
-            node_retries: BTreeMap::new(),
-            context_values: BTreeMap::new(),
-            node_outcomes: BTreeMap::new(),
-            next_node_id: None,
-            git_commit_sha: Some("abc123".to_string()),
-            loop_failure_signatures: BTreeMap::new(),
-            restart_failure_signatures: BTreeMap::new(),
-            node_visits,
-            diff: None,
-            diff_summary: None,
-        })
+        event::append_event(
+            &source,
+            &source_run_id,
+            &Event::CheckpointCompleted {
+                node_id: "work".to_string(),
+                status: "succeeded".to_string(),
+                current_node: "work".to_string(),
+                completed_nodes: vec!["work".to_string()],
+                node_retries: BTreeMap::new(),
+                context_values: BTreeMap::new(),
+                node_outcomes: BTreeMap::new(),
+                next_node_id: None,
+                git_commit_sha: Some("abc123".to_string()),
+                loop_failure_signatures: BTreeMap::new(),
+                restart_failure_signatures: BTreeMap::new(),
+                node_visits,
+                diff: None,
+                diff_summary: None,
+            },
+        )
         .await
         .unwrap();
 
-        let outcome = fork_run(&store, &ForkRunInput {
-            source_run_id,
-            target: None,
-        })
+        let outcome = fork_run(
+            &store,
+            &ForkRunInput {
+                source_run_id,
+                target: None,
+            },
+        )
         .await
         .unwrap();
 

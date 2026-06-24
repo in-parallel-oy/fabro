@@ -60,34 +60,34 @@ fn build_checkpoint(
 /// Result of a git checkpoint operation, shared with EventLifecycle.
 #[derive(Debug, Clone)]
 pub(crate) struct GitCheckpointResult {
-    pub commit_sha:   Option<String>,
+    pub commit_sha: Option<String>,
     pub push_results: Vec<PushResult>,
-    pub diff:         Option<String>,
+    pub diff: Option<String>,
     pub diff_summary: Option<DiffSummary>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct PushResult {
-    pub refspec:          String,
-    pub success:          bool,
+    pub refspec: String,
+    pub success: bool,
     pub exec_output_tail: Option<fabro_types::ExecOutputTail>,
 }
 
 /// Sub-lifecycle responsible for git operations (checkpoint commits, pushes,
 /// diffs).
 pub(crate) struct GitLifecycle {
-    pub sandbox:               Arc<dyn fabro_sandbox::Sandbox>,
-    pub emitter:               Arc<Emitter>,
-    pub run_id:                RunId,
-    pub run_store:             RunStoreHandle,
-    pub run_options:           Arc<RunOptions>,
-    pub sandbox_git:           Arc<SandboxGitRuntime>,
-    pub metadata_runtime:      Arc<RunMetadataRuntime>,
-    pub metadata_writer:       Option<RunMetadataWriterHandle>,
-    pub start_node_id:         Option<String>,
+    pub sandbox: Arc<dyn fabro_sandbox::Sandbox>,
+    pub emitter: Arc<Emitter>,
+    pub run_id: RunId,
+    pub run_store: RunStoreHandle,
+    pub run_options: Arc<RunOptions>,
+    pub sandbox_git: Arc<SandboxGitRuntime>,
+    pub metadata_runtime: Arc<RunMetadataRuntime>,
+    pub metadata_writer: Option<RunMetadataWriterHandle>,
+    pub start_node_id: Option<String>,
     // Cross-lifecycle data (shared with EventLifecycle)
     pub checkpoint_git_result: Arc<Mutex<Option<GitCheckpointResult>>>,
-    pub last_git_sha:          Arc<Mutex<Option<String>>>,
+    pub last_git_sha: Arc<Mutex<Option<String>>>,
 }
 
 #[async_trait]
@@ -289,9 +289,9 @@ impl RunLifecycle<WorkflowGraph> for GitLifecycle {
         match commit_result {
             Ok(sha) => {
                 let mut git_result = GitCheckpointResult {
-                    commit_sha:   Some(sha.clone()),
+                    commit_sha: Some(sha.clone()),
                     push_results: Vec::new(),
-                    diff:         None,
+                    diff: None,
                     diff_summary: None,
                 };
 
@@ -696,20 +696,20 @@ mod tests {
 
     fn run_options(run_dir: &Path, meta_branch: &str) -> Arc<RunOptions> {
         Arc::new(RunOptions {
-            settings:         WorkflowSettings::default(),
-            run_dir:          run_dir.to_path_buf(),
-            cancel_token:     tokio_util::sync::CancellationToken::new(),
-            run_id:           fixtures::RUN_1,
-            labels:           HashMap::new(),
-            workflow_slug:    Some("metadata".to_string()),
-            github_app:       None,
-            pre_run_git:      None,
-            fork_source_ref:  None,
-            base_branch:      None,
+            settings: WorkflowSettings::default(),
+            run_dir: run_dir.to_path_buf(),
+            cancel_token: tokio_util::sync::CancellationToken::new(),
+            run_id: fixtures::RUN_1,
+            labels: HashMap::new(),
+            workflow_slug: Some("metadata".to_string()),
+            github_app: None,
+            pre_run_git: None,
+            fork_source_ref: None,
+            base_branch: None,
             display_base_sha: None,
-            git:              Some(GitCheckpointOptions {
-                base_sha:    None,
-                run_branch:  None,
+            git: Some(GitCheckpointOptions {
+                base_sha: None,
+                run_branch: None,
                 meta_branch: Some(meta_branch.to_string()),
             }),
         })
@@ -723,27 +723,31 @@ mod tests {
             None,
         ));
         let run_store = store.create_run(&run_id).await.unwrap();
-        append_event(&run_store, &run_id, &Event::RunCreated {
-            run_id,
-            title: None,
-            settings: serde_json::to_value(WorkflowSettings::default()).unwrap(),
-            graph: serde_json::to_value(fabro_types::Graph::new("metadata")).unwrap(),
-            workflow_source: None,
-            workflow_config: None,
-            labels: BTreeMap::new(),
-            run_dir: "/tmp/run".to_string(),
-            source_directory: Some("/tmp/project".to_string()),
-            workflow_slug: Some("metadata".to_string()),
-            automation: None,
-            db_prefix: None,
-            provenance: test_support::test_run_provenance(),
-            manifest_blob: None,
-            git: None,
-            fork_source_ref: None,
-            retried_from: None,
-            parent_id: None,
-            web_url: None,
-        })
+        append_event(
+            &run_store,
+            &run_id,
+            &Event::RunCreated {
+                run_id,
+                title: None,
+                settings: serde_json::to_value(WorkflowSettings::default()).unwrap(),
+                graph: serde_json::to_value(fabro_types::Graph::new("metadata")).unwrap(),
+                workflow_source: None,
+                workflow_config: None,
+                labels: BTreeMap::new(),
+                run_dir: "/tmp/run".to_string(),
+                source_directory: Some("/tmp/project".to_string()),
+                workflow_slug: Some("metadata".to_string()),
+                automation: None,
+                db_prefix: None,
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                git: None,
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
+            },
+        )
         .await
         .unwrap();
         run_store
@@ -873,11 +877,14 @@ mod tests {
 
         let events = events.lock().unwrap();
         let names = events.iter().map(RunEvent::event_name).collect::<Vec<_>>();
-        assert_eq!(names, vec![
-            "metadata.snapshot.started",
-            "metadata.snapshot.failed",
-            "run.notice",
-        ]);
+        assert_eq!(
+            names,
+            vec![
+                "metadata.snapshot.started",
+                "metadata.snapshot.failed",
+                "run.notice",
+            ]
+        );
         match &events[1].body {
             EventBody::MetadataSnapshotFailed(props) => {
                 assert_eq!(props.phase, MetadataSnapshotPhase::Init);
@@ -933,11 +940,14 @@ mod tests {
         assert!(runtime.metadata_degraded());
         let events = events.lock().unwrap();
         let names = events.iter().map(RunEvent::event_name).collect::<Vec<_>>();
-        assert_eq!(names, vec![
-            "metadata.snapshot.started",
-            "metadata.snapshot.failed",
-            "run.notice",
-        ]);
+        assert_eq!(
+            names,
+            vec![
+                "metadata.snapshot.started",
+                "metadata.snapshot.failed",
+                "run.notice",
+            ]
+        );
         match &events[1].body {
             EventBody::MetadataSnapshotFailed(props) => {
                 assert_eq!(props.phase, MetadataSnapshotPhase::Init);
@@ -984,11 +994,14 @@ mod tests {
 
         let events = events.lock().unwrap();
         let names = events.iter().map(RunEvent::event_name).collect::<Vec<_>>();
-        assert_eq!(names, vec![
-            "metadata.snapshot.started",
-            "metadata.snapshot.failed",
-            "run.notice",
-        ]);
+        assert_eq!(
+            names,
+            vec![
+                "metadata.snapshot.started",
+                "metadata.snapshot.failed",
+                "run.notice",
+            ]
+        );
         assert_eq!(events[1].node_id.as_deref(), Some("build"));
         match &events[1].body {
             EventBody::MetadataSnapshotFailed(props) => {
@@ -1070,8 +1083,8 @@ mod tests {
 
         let mut options = run_options(repo, "fabro/metadata/run").as_ref().clone();
         options.git = Some(GitCheckpointOptions {
-            base_sha:    Some(base),
-            run_branch:  None,
+            base_sha: Some(base),
+            run_branch: None,
             meta_branch: None,
         });
         let lifecycle = git_lifecycle_with_writer(
@@ -1144,8 +1157,8 @@ mod tests {
         let mut options = run_options(repo, "fabro/metadata/run").as_ref().clone();
         options.settings.run.run_branch.push = false;
         options.git = Some(GitCheckpointOptions {
-            base_sha:    None,
-            run_branch:  Some("fabro/run/test".to_string()),
+            base_sha: None,
+            run_branch: Some("fabro/run/test".to_string()),
             meta_branch: None,
         });
         let lifecycle = git_lifecycle_with_writer(
@@ -1265,15 +1278,15 @@ mod tests {
             lifecycle.metadata_writer.clone(),
         );
         let conclusion = Conclusion {
-            timestamp:            chrono::Utc::now(),
-            status:               StageOutcome::Succeeded,
-            timing:               fabro_types::RunTiming::wall_only(10),
-            failure:              None,
+            timestamp: chrono::Utc::now(),
+            status: StageOutcome::Succeeded,
+            timing: fabro_types::RunTiming::wall_only(10),
+            failure: None,
             final_git_commit_sha: None,
-            stages:               Vec::new(),
-            billing:              None,
-            total_retries:        0,
-            diff:                 fabro_types::RunDiff::default(),
+            stages: Vec::new(),
+            billing: None,
+            total_retries: 0,
+            diff: fabro_types::RunDiff::default(),
         };
         write_finalize_commit(
             lifecycle.run_options.as_ref(),

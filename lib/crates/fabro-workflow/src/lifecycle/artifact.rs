@@ -37,15 +37,15 @@ const ARTIFACT_UPLOAD_RETRY_DELAYS: [Duration; 3] = [
 
 /// Sub-lifecycle responsible for artifact collection, offloading, and syncing.
 pub(crate) struct ArtifactLifecycle {
-    pub sandbox:         Arc<dyn fabro_sandbox::Sandbox>,
-    pub run_store:       RunStoreHandle,
-    pub emitter:         Arc<Emitter>,
-    pub run_id:          RunId,
-    pub artifact_globs:  Vec<String>,
-    pub artifact_sink:   Option<ArtifactSink>,
+    pub sandbox: Arc<dyn fabro_sandbox::Sandbox>,
+    pub run_store: RunStoreHandle,
+    pub emitter: Arc<Emitter>,
+    pub run_id: RunId,
+    pub artifact_globs: Vec<String>,
+    pub artifact_sink: Option<ArtifactSink>,
     /// Per-attempt state: epoch seconds when the attempt started.
     attempt_start_epoch: std::sync::Mutex<Option<f64>>,
-    captured_artifacts:  std::sync::Mutex<HashSet<ArtifactIdentity>>,
+    captured_artifacts: std::sync::Mutex<HashSet<ArtifactIdentity>>,
 }
 
 impl ArtifactLifecycle {
@@ -166,14 +166,14 @@ impl RunLifecycle<WorkflowGraph> for ArtifactLifecycle {
                 for asset in &new_assets {
                     self.emitter.emit_scoped(
                         &Event::ArtifactCaptured {
-                            node_id:        node_id.to_string(),
-                            attempt:        ctx.attempt,
-                            node_slug:      node_slug.clone(),
-                            path:           asset.path.clone(),
-                            mime:           asset.mime.clone(),
-                            content_md5:    asset.content_md5.clone(),
+                            node_id: node_id.to_string(),
+                            attempt: ctx.attempt,
+                            node_slug: node_slug.clone(),
+                            path: asset.path.clone(),
+                            mime: asset.mime.clone(),
+                            content_md5: asset.content_md5.clone(),
                             content_sha256: asset.content_sha256.clone(),
-                            bytes:          asset.bytes,
+                            bytes: asset.bytes,
                         },
                         &scope,
                     );

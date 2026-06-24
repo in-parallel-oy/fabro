@@ -18,26 +18,26 @@ use crate::transforms::variable_expansion::{
 
 pub struct ImportTransform {
     current_dir: PathBuf,
-    resolver:    Arc<dyn FileResolver>,
-    inputs:      HashMap<String, toml::Value>,
+    resolver: Arc<dyn FileResolver>,
+    inputs: HashMap<String, toml::Value>,
     source_name: Option<String>,
     source_text: Option<String>,
     render_mode: RenderMode,
 }
 
 struct PlaceholderOptions {
-    default_attrs:    HashMap<String, AttrValue>,
-    class_names:      Vec<String>,
+    default_attrs: HashMap<String, AttrValue>,
+    class_names: Vec<String>,
     normalized_class: String,
 }
 
 struct PreparedImport {
-    graph:               Graph,
-    start_id:            String,
-    exit_id:             String,
-    entry_id:            String,
+    graph: Graph,
+    start_id: String,
+    exit_id: String,
+    entry_id: String,
     exit_predecessor_id: String,
-    diagnostics:         Vec<Diagnostic>,
+    diagnostics: Vec<Diagnostic>,
 }
 
 enum ImportPrepareError {
@@ -221,7 +221,7 @@ impl ImportTransform {
                 AttrValue::String(parent_goal.to_string()),
             );
             let (templated_graph, template_diagnostics) = TemplateTransform {
-                inputs:      self.inputs.clone(),
+                inputs: self.inputs.clone(),
                 source_name: Some(source_name),
                 source_text: Some(source_text),
                 render_mode: self.render_mode,

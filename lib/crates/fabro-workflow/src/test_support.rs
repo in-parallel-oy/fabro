@@ -83,16 +83,24 @@ pub fn test_usage(
 /// Append the `RunStartRequested → RunRunnable → RunStarting → RunRunning`
 /// sequence so subsequent calls observe the run as live.
 pub async fn mark_run_running(run_store: &fabro_store::RunDatabase, run_id: &fabro_types::RunId) {
-    append_event(run_store, run_id, &Event::RunStartRequested {
-        resume: false,
-        actor:  None,
-    })
+    append_event(
+        run_store,
+        run_id,
+        &Event::RunStartRequested {
+            resume: false,
+            actor: None,
+        },
+    )
     .await
     .expect("seed run.start_requested");
-    append_event(run_store, run_id, &Event::RunRunnable {
-        source: fabro_types::RunRunnableSource::StartRequested,
-        actor:  None,
-    })
+    append_event(
+        run_store,
+        run_id,
+        &Event::RunRunnable {
+            source: fabro_types::RunRunnableSource::StartRequested,
+            actor: None,
+        },
+    )
     .await
     .expect("seed run.runnable");
     append_event(run_store, run_id, &Event::RunStarting)
@@ -114,13 +122,13 @@ pub fn test_store_dir(run_dir: &std::path::Path) -> PathBuf {
 
 struct InitializedOptions {
     hook_runner: Option<Arc<fabro_hooks::HookRunner>>,
-    env:         HashMap<String, String>,
-    checkpoint:  Option<Checkpoint>,
-    llm_source:  Option<Arc<dyn CredentialSource>>,
+    env: HashMap<String, String>,
+    checkpoint: Option<Checkpoint>,
+    llm_source: Option<Arc<dyn CredentialSource>>,
 }
 
 struct InitializedState {
-    initialized:  Initialized,
+    initialized: Initialized,
     store_logger: StoreProgressLogger,
 }
 
@@ -157,44 +165,52 @@ async fn initialized(
         .await
         .expect("failed to create slate-backed test run store");
     let run_store = inner_store;
-    append_event(&run_store, &run_options.run_id, &Event::RunCreated {
-        run_id:           run_options.run_id,
-        title:            None,
-        settings:         serde_json::to_value(&run_options.settings)
-            .expect("failed to serialize settings"),
-        graph:            serde_json::to_value(graph).expect("failed to serialize graph"),
-        workflow_source:  None,
-        workflow_config:  None,
-        labels:           run_options
-            .labels
-            .clone()
-            .into_iter()
-            .collect::<BTreeMap<_, _>>(),
-        run_dir:          run_options.run_dir.display().to_string(),
-        source_directory: Some(sandbox.working_directory().to_string()),
-        workflow_slug:    run_options.workflow_slug.clone(),
-        automation:       None,
-        db_prefix:        None,
-        provenance:       fabro_types::RunProvenance {
-            server:  None,
-            client:  None,
-            subject: fabro_types::Principal::System {
-                system_kind: fabro_types::SystemActorKind::Engine,
+    append_event(
+        &run_store,
+        &run_options.run_id,
+        &Event::RunCreated {
+            run_id: run_options.run_id,
+            title: None,
+            settings: serde_json::to_value(&run_options.settings)
+                .expect("failed to serialize settings"),
+            graph: serde_json::to_value(graph).expect("failed to serialize graph"),
+            workflow_source: None,
+            workflow_config: None,
+            labels: run_options
+                .labels
+                .clone()
+                .into_iter()
+                .collect::<BTreeMap<_, _>>(),
+            run_dir: run_options.run_dir.display().to_string(),
+            source_directory: Some(sandbox.working_directory().to_string()),
+            workflow_slug: run_options.workflow_slug.clone(),
+            automation: None,
+            db_prefix: None,
+            provenance: fabro_types::RunProvenance {
+                server: None,
+                client: None,
+                subject: fabro_types::Principal::System {
+                    system_kind: fabro_types::SystemActorKind::Engine,
+                },
             },
+            manifest_blob: None,
+            git: run_options.pre_run_git.clone(),
+            fork_source_ref: run_options.fork_source_ref.clone(),
+            retried_from: None,
+            parent_id: None,
+            web_url: None,
         },
-        manifest_blob:    None,
-        git:              run_options.pre_run_git.clone(),
-        fork_source_ref:  run_options.fork_source_ref.clone(),
-        retried_from:     None,
-        parent_id:        None,
-        web_url:          None,
-    })
+    )
     .await
     .expect("failed to seed run.created event in run store");
-    append_event(&run_store, &run_options.run_id, &Event::RunRunnable {
-        source: fabro_types::RunRunnableSource::StartRequested,
-        actor:  None,
-    })
+    append_event(
+        &run_store,
+        &run_options.run_id,
+        &Event::RunRunnable {
+            source: fabro_types::RunRunnableSource::StartRequested,
+            actor: None,
+        },
+    )
     .await
     .expect("failed to seed run.runnable event in run store");
     append_event(&run_store, &run_options.run_id, &Event::RunStarting)
@@ -213,16 +229,16 @@ async fn initialized(
     let locations = RunLocations::for_sandbox(None, sandbox.as_ref(), run_options.run_dir.clone());
     InitializedState {
         initialized: Initialized {
-            graph:         graph.clone(),
-            source:        String::new(),
-            run_options:   run_options.clone(),
-            checkpoint:    options.checkpoint,
-            seed_context:  None,
-            on_node:       None,
+            graph: graph.clone(),
+            source: String::new(),
+            run_options: run_options.clone(),
+            checkpoint: options.checkpoint,
+            seed_context: None,
+            on_node: None,
             artifact_sink: Some(ArtifactSink::Store(artifact_store)),
-            run_control:   None,
-            engine:        Arc::new(EngineServices {
-                run:             RunServices::new(
+            run_control: None,
+            engine: Arc::new(EngineServices {
+                run: RunServices::new(
                     run_store.into(),
                     emitter,
                     sandbox,
@@ -239,17 +255,17 @@ async fn initialized(
                     Arc::new(RunMetadataRuntime::new()),
                     None,
                 ),
-                registry:        Arc::new(registry),
-                interviewer:     Arc::new(AutoApproveInterviewer::engine()),
-                git_state:       std::sync::RwLock::new(None),
-                base_env:        options.env,
-                github_token:    None,
-                inputs:          run_options.settings.run.inputs.clone(),
-                dry_run:         run_options.dry_run_enabled(),
-                workflow_path:   None,
+                registry: Arc::new(registry),
+                interviewer: Arc::new(AutoApproveInterviewer::engine()),
+                git_state: std::sync::RwLock::new(None),
+                base_env: options.env,
+                github_token: None,
+                inputs: run_options.settings.run.inputs.clone(),
+                dry_run: run_options.dry_run_enabled(),
+                workflow_path: None,
                 workflow_bundle: None,
             }),
-            model:         String::new(),
+            model: String::new(),
         },
         store_logger,
     }
@@ -270,9 +286,9 @@ pub async fn run_graph(
         run_options,
         InitializedOptions {
             hook_runner: None,
-            env:         HashMap::new(),
-            checkpoint:  None,
-            llm_source:  None,
+            env: HashMap::new(),
+            checkpoint: None,
+            llm_source: None,
         },
     )
     .await;
@@ -295,9 +311,9 @@ pub async fn run_graph_with_state(
         run_options,
         InitializedOptions {
             hook_runner: None,
-            env:         HashMap::new(),
-            checkpoint:  None,
-            llm_source:  None,
+            env: HashMap::new(),
+            checkpoint: None,
+            llm_source: None,
         },
     )
     .await;
@@ -330,9 +346,9 @@ pub async fn run_graph_with_hooks(
         run_options,
         InitializedOptions {
             hook_runner: Some(hook_runner),
-            env:         env.unwrap_or_default(),
-            checkpoint:  None,
-            llm_source:  None,
+            env: env.unwrap_or_default(),
+            checkpoint: None,
+            llm_source: None,
         },
     )
     .await;
@@ -357,9 +373,9 @@ pub async fn run_graph_with_hooks_and_state(
         run_options,
         InitializedOptions {
             hook_runner: Some(hook_runner),
-            env:         env.unwrap_or_default(),
-            checkpoint:  None,
-            llm_source:  None,
+            env: env.unwrap_or_default(),
+            checkpoint: None,
+            llm_source: None,
         },
     )
     .await;
@@ -391,9 +407,9 @@ pub async fn run_graph_from_checkpoint(
         run_options,
         InitializedOptions {
             hook_runner: None,
-            env:         HashMap::new(),
-            checkpoint:  Some(checkpoint.clone()),
-            llm_source:  None,
+            env: HashMap::new(),
+            checkpoint: Some(checkpoint.clone()),
+            llm_source: None,
         },
     )
     .await;
@@ -417,9 +433,9 @@ pub async fn run_graph_from_checkpoint_with_state(
         run_options,
         InitializedOptions {
             hook_runner: None,
-            env:         HashMap::new(),
-            checkpoint:  Some(checkpoint.clone()),
-            llm_source:  None,
+            env: HashMap::new(),
+            checkpoint: Some(checkpoint.clone()),
+            llm_source: None,
         },
     )
     .await;
@@ -451,9 +467,9 @@ pub async fn run_graph_with_state_and_llm_source(
         run_options,
         InitializedOptions {
             hook_runner: None,
-            env:         HashMap::new(),
-            checkpoint:  None,
-            llm_source:  Some(llm_source),
+            env: HashMap::new(),
+            checkpoint: None,
+            llm_source: Some(llm_source),
         },
     )
     .await;
@@ -472,8 +488,8 @@ pub async fn run_graph_with_state_and_llm_source(
 
 pub struct WorkflowRunner {
     registry: std::sync::Mutex<Option<HandlerRegistry>>,
-    emitter:  Arc<Emitter>,
-    sandbox:  Arc<dyn Sandbox>,
+    emitter: Arc<Emitter>,
+    sandbox: Arc<dyn Sandbox>,
 }
 
 impl WorkflowRunner {

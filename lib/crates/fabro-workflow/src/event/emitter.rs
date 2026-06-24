@@ -22,8 +22,8 @@ type EventListener = Arc<dyn Fn(&RunEvent) + Send + Sync>;
 
 /// Callback-based event emitter for workflow run events.
 pub struct Emitter {
-    run_id:        RunId,
-    listeners:     std::sync::Mutex<Vec<EventListener>>,
+    run_id: RunId,
+    listeners: std::sync::Mutex<Vec<EventListener>>,
     /// Epoch milliseconds of the last `emit()` or `touch()` call. 0 until first
     /// event.
     last_event_at: AtomicI64,
@@ -181,13 +181,13 @@ mod tests {
             received_clone.lock().unwrap().push(event.clone());
         });
         emitter.emit(&Event::WorkflowRunStarted {
-            name:         "test".to_string(),
-            run_id:       fixtures::RUN_1,
-            base_branch:  None,
-            base_sha:     None,
-            run_branch:   None,
+            name: "test".to_string(),
+            run_id: fixtures::RUN_1,
+            base_branch: None,
+            base_sha: None,
+            run_branch: None,
             worktree_dir: None,
-            goal:         None,
+            goal: None,
         });
         let events = received.lock().unwrap();
         assert_eq!(events.len(), 1);

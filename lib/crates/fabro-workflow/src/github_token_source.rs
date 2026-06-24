@@ -14,11 +14,11 @@ pub trait IatMinter: Send + Sync {
 }
 
 pub struct AppIatMinter {
-    creds:       GitHubAppCredentials,
-    http:        fabro_http::HttpClient,
-    owner:       String,
-    repo:        String,
-    api_base:    String,
+    creds: GitHubAppCredentials,
+    http: fabro_http::HttpClient,
+    owner: String,
+    repo: String,
+    api_base: String,
     install_url: Option<String>,
     permissions: serde_json::Value,
 }
@@ -71,7 +71,7 @@ enum SourceState {
     StaticIat(InstallationToken),
     Mintable {
         minter: Arc<dyn IatMinter>,
-        cache:  Mutex<Option<InstallationToken>>,
+        cache: Mutex<Option<InstallationToken>>,
     },
 }
 
@@ -158,14 +158,14 @@ mod tests {
     }
 
     struct MockMinter {
-        calls:  AtomicUsize,
+        calls: AtomicUsize,
         script: Mutex<VecDeque<MintAction>>,
     }
 
     impl MockMinter {
         fn new(script: Vec<MintAction>) -> Self {
             Self {
-                calls:  AtomicUsize::new(0),
+                calls: AtomicUsize::new(0),
                 script: Mutex::new(script.into()),
             }
         }
@@ -201,14 +201,14 @@ mod tests {
     #[tokio::test]
     async fn static_iat_returns_valid_token_and_rejects_expired_token() {
         let valid = GitHubTokenSource::static_iat(InstallationToken {
-            token:      "ghs_valid".to_string(),
+            token: "ghs_valid".to_string(),
             expires_at: chrono::Utc::now() + chrono::Duration::minutes(30),
         });
         assert_eq!(valid.current_token().await.unwrap(), "ghs_valid");
         assert!(!valid.is_refreshable());
 
         let expired = GitHubTokenSource::static_iat(InstallationToken {
-            token:      "ghs_expired".to_string(),
+            token: "ghs_expired".to_string(),
             expires_at: chrono::Utc::now() - chrono::Duration::seconds(1),
         });
         assert!(expired.current_token().await.is_err());

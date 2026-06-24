@@ -18,13 +18,13 @@ pub struct RewindInput {
 pub enum RewindOutcome {
     Full {
         source_run_id: RunId,
-        new_run_id:    RunId,
-        target:        ResolvedForkTarget,
+        new_run_id: RunId,
+        target: ResolvedForkTarget,
     },
     Partial {
         source_run_id: RunId,
-        new_run_id:    RunId,
-        target:        ResolvedForkTarget,
+        new_run_id: RunId,
+        target: ResolvedForkTarget,
         archive_error: String,
     },
 }
@@ -51,10 +51,13 @@ pub async fn rewind(
         )));
     }
 
-    let forked = Box::pin(fork::fork_run(store, &ForkRunInput {
-        source_run_id: input.run_id,
-        target:        input.target.clone(),
-    }))
+    let forked = Box::pin(fork::fork_run(
+        store,
+        &ForkRunInput {
+            source_run_id: input.run_id,
+            target: input.target.clone(),
+        },
+    ))
     .await?;
 
     match archive::archive(store, &input.run_id, actor).await {
@@ -62,14 +65,14 @@ pub async fn rewind(
             append_superseded_event_best_effort(store, &forked).await;
             Ok(RewindOutcome::Full {
                 source_run_id: forked.source_run_id,
-                new_run_id:    forked.new_run_id,
-                target:        forked.target,
+                new_run_id: forked.new_run_id,
+                target: forked.target,
             })
         }
         Err(err) => Ok(RewindOutcome::Partial {
             source_run_id: forked.source_run_id,
-            new_run_id:    forked.new_run_id,
-            target:        forked.target,
+            new_run_id: forked.new_run_id,
+            target: forked.target,
             archive_error: err.to_string(),
         }),
     }
@@ -89,10 +92,10 @@ async fn append_superseded_event_best_effort(store: &Database, forked: &ForkOutc
         }
     };
     let event = Event::RunSupersededBy {
-        new_run_id:                forked.new_run_id,
+        new_run_id: forked.new_run_id,
         target_checkpoint_ordinal: forked.target.checkpoint_ordinal,
-        target_node_id:            forked.target.node_id.clone(),
-        target_visit:              forked.target.visit,
+        target_node_id: forked.target.node_id.clone(),
+        target_visit: forked.target.visit,
     };
     if let Err(err) = event::append_event(&run_store, &forked.source_run_id, &event).await {
         error!(

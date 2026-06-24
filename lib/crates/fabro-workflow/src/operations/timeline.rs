@@ -47,16 +47,16 @@ impl FromStr for ForkTarget {
 
 #[derive(Debug, Clone)]
 pub struct TimelineEntry {
-    pub ordinal:        usize,
-    pub node_name:      String,
-    pub visit:          usize,
+    pub ordinal: usize,
+    pub node_name: String,
+    pub visit: usize,
     pub checkpoint_seq: u32,
     pub run_commit_sha: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct RunTimeline {
-    pub entries:      Vec<TimelineEntry>,
+    pub entries: Vec<TimelineEntry>,
     pub parallel_map: HashMap<String, String>,
 }
 
@@ -241,19 +241,19 @@ mod tests {
         RunProjection::new(
             "Test run".to_string(),
             RunSpec {
-                run_id:           fixtures::RUN_1,
-                settings:         WorkflowSettings::default(),
-                graph:            Graph::new("test"),
-                graph_source:     None,
-                workflow_slug:    None,
-                automation:       None,
+                run_id: fixtures::RUN_1,
+                settings: WorkflowSettings::default(),
+                graph: Graph::new("test"),
+                graph_source: None,
+                workflow_slug: None,
+                automation: None,
                 source_directory: None,
-                labels:           HashMap::new(),
-                provenance:       test_support::test_run_provenance(),
-                manifest_blob:    None,
-                definition_blob:  None,
-                git:              None,
-                fork_source_ref:  None,
+                labels: HashMap::new(),
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                definition_blob: None,
+                git: None,
+                fork_source_ref: None,
             },
             Utc::now(),
         )
@@ -290,25 +290,25 @@ mod tests {
     #[test]
     fn resolve_latest_visit() {
         let timeline = RunTimeline {
-            entries:      vec![
+            entries: vec![
                 TimelineEntry {
-                    ordinal:        1,
-                    node_name:      "start".to_string(),
-                    visit:          1,
+                    ordinal: 1,
+                    node_name: "start".to_string(),
+                    visit: 1,
                     checkpoint_seq: 7,
                     run_commit_sha: Some("aaa".to_string()),
                 },
                 TimelineEntry {
-                    ordinal:        2,
-                    node_name:      "build".to_string(),
-                    visit:          1,
+                    ordinal: 2,
+                    node_name: "build".to_string(),
+                    visit: 1,
                     checkpoint_seq: 9,
                     run_commit_sha: Some("bbb".to_string()),
                 },
                 TimelineEntry {
-                    ordinal:        3,
-                    node_name:      "build".to_string(),
-                    visit:          2,
+                    ordinal: 3,
+                    node_name: "build".to_string(),
+                    visit: 2,
                     checkpoint_seq: 11,
                     run_commit_sha: Some("ccc".to_string()),
                 },
@@ -347,13 +347,13 @@ mod tests {
         graph.nodes.insert("a".to_string(), a);
 
         graph.edges.push(fabro_graphviz::graph::Edge {
-            from:  "parallel1".to_string(),
-            to:    "a".to_string(),
+            from: "parallel1".to_string(),
+            to: "a".to_string(),
             attrs: HashMap::new(),
         });
         graph.edges.push(fabro_graphviz::graph::Edge {
-            from:  "a".to_string(),
-            to:    "fan_in1".to_string(),
+            from: "a".to_string(),
+            to: "fan_in1".to_string(),
             attrs: HashMap::new(),
         });
 

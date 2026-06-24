@@ -14,13 +14,13 @@ use crate::runtime_store::RunStoreHandle;
 
 #[derive(Debug, Clone)]
 pub struct FinalizedCommandLogs {
-    pub output_ref:   String,
+    pub output_ref: String,
     pub output_bytes: u64,
-    pub output_text:  String,
+    pub output_text: String,
 }
 
 pub struct CommandLogRecorder {
-    output:      Mutex<File>,
+    output: Mutex<File>,
     output_path: PathBuf,
 }
 

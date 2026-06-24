@@ -117,7 +117,7 @@ enum AgentApiErrorDisposition {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct EffectiveRequestControls {
     pub(crate) reasoning_effort: Option<ReasoningEffort>,
-    pub(crate) speed:            Option<Speed>,
+    pub(crate) speed: Option<Speed>,
 }
 
 fn classify_agent_error(err: fabro_agent::Error, allow_failover: bool) -> AgentApiErrorDisposition {
@@ -226,11 +226,11 @@ fn fabro_run_tool(
     let name = definition.name.to_string();
     RegisteredTool {
         definition: LlmToolDefinition {
-            name:        name.clone(),
+            name: name.clone(),
             description: definition.description.to_string(),
-            parameters:  definition.parameters.clone(),
+            parameters: definition.parameters.clone(),
         },
-        executor:   Arc::new(move |args, _context: ToolContext| {
+        executor: Arc::new(move |args, _context: ToolContext| {
             let name = name.clone();
             let services = services.clone();
             Box::pin(async move {
@@ -239,7 +239,7 @@ fn fabro_run_tool(
                     .map_err(|err| err.to_string())
             })
         }),
-        source:     ToolSource::Native,
+        source: ToolSource::Native,
     }
 }
 
@@ -449,7 +449,7 @@ struct FileTracking {
     /// Set of all file paths successfully written/edited.
     touched: HashSet<String>,
     /// Most recently modified file path.
-    last:    Option<String>,
+    last: Option<String>,
 }
 
 fn track_file_event(event: &AgentEvent, state: &mut FileTracking) {
@@ -522,10 +522,10 @@ fn emit_agent_tools_available(
     emitter: &Arc<Emitter>,
 ) {
     emitter.emit(&Event::AgentToolsAvailable {
-        node_id:    node_id.to_string(),
-        visit:      stage_id.visit(),
+        node_id: node_id.to_string(),
+        visit: stage_id.visit(),
         session_id: session.id().to_string(),
-        tools:      session.agent_tool_summaries(),
+        tools: session.agent_tool_summaries(),
     });
 }
 
@@ -563,12 +563,12 @@ fn spawn_event_forwarder(
             {
                 emitter.emit_scoped(
                     &Event::Agent {
-                        stage:             node_id.clone(),
-                        visit:             scope.visit,
-                        event:             event.event.clone(),
-                        session_id:        Some(event.session_id.clone()),
+                        stage: node_id.clone(),
+                        visit: scope.visit,
+                        event: event.event.clone(),
+                        session_id: Some(event.session_id.clone()),
                         parent_session_id: event.parent_session_id.clone(),
-                        tool_call_id:      event.tool_call_id.clone(),
+                        tool_call_id: event.tool_call_id.clone(),
                     },
                     &scope,
                 );
@@ -582,23 +582,23 @@ fn spawn_event_forwarder(
 /// For `full` fidelity nodes sharing a thread key, sessions are cached
 /// and reused so the LLM sees the full conversation history.
 pub struct AgentApiBackend {
-    model:              String,
-    provider_id:        ProviderId,
-    fallback_chain:     Vec<FallbackTarget>,
-    sessions:           Mutex<HashMap<String, Session>>,
-    tool_env:           Option<Arc<dyn ToolEnvProvider>>,
-    mcp_servers:        Vec<McpServerSettings>,
-    tool_secrets:       ToolSecrets,
+    model: String,
+    provider_id: ProviderId,
+    fallback_chain: Vec<FallbackTarget>,
+    sessions: Mutex<HashMap<String, Session>>,
+    tool_env: Option<Arc<dyn ToolEnvProvider>>,
+    mcp_servers: Vec<McpServerSettings>,
+    tool_secrets: ToolSecrets,
     run_model_controls: RunModelControls,
-    source:             Arc<dyn CredentialSource>,
-    steering_hub:       Arc<SteeringHub>,
-    catalog:            Arc<Catalog>,
-    fabro_run_tools:    Option<FabroRunToolServices>,
+    source: Arc<dyn CredentialSource>,
+    steering_hub: Arc<SteeringHub>,
+    catalog: Arc<Catalog>,
+    fabro_run_tools: Option<FabroRunToolServices>,
 }
 
 struct OneShotCompletion {
     response: Response,
-    model:    ModelRef,
+    model: ModelRef,
 }
 
 impl AgentApiBackend {
@@ -874,17 +874,17 @@ impl AgentApiBackend {
         let handle = Arc::new(session.control_handle()) as Arc<dyn ActiveControlHandle>;
         let lease = ActivationLease::activate(
             ActivationLeaseOptions {
-                stage_id:         stage_id.clone(),
-                session_id:       session.id().to_string(),
-                thread_id:        thread_id.map(str::to_string),
-                provider:         Some(session.provider_id().to_string()),
-                model:            Some(session.model().to_string()),
+                stage_id: stage_id.clone(),
+                session_id: session.id().to_string(),
+                thread_id: thread_id.map(str::to_string),
+                provider: Some(session.provider_id().to_string()),
+                model: Some(session.model().to_string()),
                 reasoning_effort: session.reasoning_effort(),
-                speed:            session.speed(),
+                speed: session.speed(),
                 permission_level: session.permission_level(),
-                capabilities:     vec![SessionCapability::Steer],
-                hub:              Arc::clone(&self.steering_hub),
-                emitter:          Arc::clone(emitter),
+                capabilities: vec![SessionCapability::Steer],
+                hub: Arc::clone(&self.steering_hub),
+                emitter: Arc::clone(emitter),
             },
             &handle,
         )?;
@@ -928,16 +928,19 @@ impl AgentApiBackend {
         let default_provider = self.provider_id.to_string();
 
         let (response, model) = match result {
-            Ok(resp) => (resp, ModelRef {
-                provider: ProviderId::from(
-                    request
-                        .provider
-                        .clone()
-                        .unwrap_or_else(|| default_provider.clone()),
-                ),
-                model_id: request.model.clone(),
-                speed:    controls.speed,
-            }),
+            Ok(resp) => (
+                resp,
+                ModelRef {
+                    provider: ProviderId::from(
+                        request
+                            .provider
+                            .clone()
+                            .unwrap_or_else(|| default_provider.clone()),
+                    ),
+                    model_id: request.model.clone(),
+                    speed: controls.speed,
+                },
+            ),
             Err(sdk_err) if sdk_err.failover_eligible() && !fallback_chain.is_empty() => {
                 let error_msg = sdk_err.to_string();
                 let from_provider = request
@@ -952,12 +955,12 @@ impl AgentApiBackend {
                 for target in fallback_chain {
                     emitter.emit_scoped(
                         &Event::Failover {
-                            stage:         node.id.clone(),
+                            stage: node.id.clone(),
                             from_provider: from_provider.clone(),
-                            from_model:    from_model.clone(),
-                            to_provider:   target.provider.clone(),
-                            to_model:      target.model.clone(),
-                            error:         error_msg.clone(),
+                            from_model: from_model.clone(),
+                            to_provider: target.provider.clone(),
+                            to_model: target.model.clone(),
+                            error: error_msg.clone(),
                         },
                         stage_scope,
                     );
@@ -981,10 +984,10 @@ impl AgentApiBackend {
                         Ok(resp) => {
                             found = Some(OneShotCompletion {
                                 response: resp,
-                                model:    ModelRef {
+                                model: ModelRef {
                                     provider: ProviderId::from(target.provider.clone()),
                                     model_id: target.model.clone(),
-                                    speed:    controls.speed,
+                                    speed: controls.speed,
                                 },
                             });
                             break;
@@ -1123,14 +1126,11 @@ impl CodergenBackend for AgentApiBackend {
             )?;
 
             return Ok(CodergenResult::Text {
-                text:              response_text,
-                usage:             Some(stage_usage),
-                files_touched:     Vec::new(),
+                text: response_text,
+                usage: Some(stage_usage),
+                files_touched: Vec::new(),
                 last_file_touched: None,
-                timing:            StageTiming::active_only(
-                    crate::millis_u64(inference_duration),
-                    0,
-                ),
+                timing: StageTiming::active_only(crate::millis_u64(inference_duration), 0),
             });
         }
     }
@@ -1200,7 +1200,7 @@ impl CodergenBackend for AgentApiBackend {
         let file_tracking = Arc::new(Mutex::new(FileTracking {
             pending: HashMap::new(),
             touched: HashSet::new(),
-            last:    None,
+            last: None,
         }));
         let stage_scope = StageScope::for_handler(context, &node.id);
 
@@ -1310,12 +1310,12 @@ impl CodergenBackend for AgentApiBackend {
                     for (index, target) in self.fallback_chain.iter().enumerate() {
                         emitter.emit_scoped(
                             &Event::Failover {
-                                stage:         node.id.clone(),
+                                stage: node.id.clone(),
                                 from_provider: from_provider.clone(),
-                                from_model:    from_model.clone(),
-                                to_provider:   target.provider.clone(),
-                                to_model:      target.model.clone(),
-                                error:         error_msg.clone(),
+                                from_model: from_model.clone(),
+                                to_provider: target.provider.clone(),
+                                to_model: target.model.clone(),
+                                error: error_msg.clone(),
                             },
                             &stage_scope,
                         );
@@ -1514,7 +1514,7 @@ impl CodergenBackend for AgentApiBackend {
             &ModelRef {
                 provider: session.provider_id(),
                 model_id: session.model().to_string(),
-                speed:    billing_controls.speed,
+                speed: billing_controls.speed,
             },
             &total_usage,
         )?;
@@ -1563,7 +1563,7 @@ impl CodergenBackend for AgentApiBackend {
 /// report `true` so the loop drains.
 struct SteeringCompletionCoordinator {
     handle: Arc<dyn ActiveControlHandle>,
-    lease:  Mutex<Option<Arc<ActivationLease>>>,
+    lease: Mutex<Option<Arc<ActivationLease>>>,
 }
 
 impl CompletionCoordinator for SteeringCompletionCoordinator {
@@ -1700,7 +1700,7 @@ mod tests {
 
     struct TextTestProvider {
         provider: &'static str,
-        text:     &'static str,
+        text: &'static str,
     }
 
     #[async_trait]
@@ -1714,21 +1714,21 @@ mod tests {
             request: &Request,
         ) -> Result<fabro_llm::types::Response, LlmError> {
             Ok(fabro_llm::types::Response {
-                id:            "msg_fallback".to_string(),
-                model:         request.model.clone(),
-                provider:      self.provider.to_string(),
-                message:       Message::assistant(self.text),
+                id: "msg_fallback".to_string(),
+                model: request.model.clone(),
+                provider: self.provider.to_string(),
+                message: Message::assistant(self.text),
                 finish_reason: fabro_llm::types::FinishReason::Stop,
-                usage:         TokenCounts {
+                usage: TokenCounts {
                     input_tokens: 3,
                     output_tokens: 2,
                     ..TokenCounts::default()
                 },
-                raw:           None,
-                warnings:      vec![],
-                rate_limit:    None,
-                cost_usd:      None,
-                cost_source:   None,
+                raw: None,
+                warnings: vec![],
+                rate_limit: None,
+                cost_usd: None,
+                cost_source: None,
             })
         }
 
@@ -1875,15 +1875,18 @@ reasoning = false
             .filter(|name| name.starts_with("fabro_run_"))
             .collect::<Vec<_>>();
         registered.sort();
-        assert_eq!(registered, vec![
-            fabro_tool::FABRO_RUN_CREATE_TOOL_NAME,
-            fabro_tool::FABRO_RUN_EVENTS_TOOL_NAME,
-            fabro_tool::FABRO_RUN_GATHER_TOOL_NAME,
-            fabro_tool::FABRO_RUN_GET_TOOL_NAME,
-            fabro_tool::FABRO_RUN_INTERACT_TOOL_NAME,
-            fabro_tool::FABRO_RUN_PAIR_TOOL_NAME,
-            fabro_tool::FABRO_RUN_SEARCH_TOOL_NAME,
-        ]);
+        assert_eq!(
+            registered,
+            vec![
+                fabro_tool::FABRO_RUN_CREATE_TOOL_NAME,
+                fabro_tool::FABRO_RUN_EVENTS_TOOL_NAME,
+                fabro_tool::FABRO_RUN_GATHER_TOOL_NAME,
+                fabro_tool::FABRO_RUN_GET_TOOL_NAME,
+                fabro_tool::FABRO_RUN_INTERACT_TOOL_NAME,
+                fabro_tool::FABRO_RUN_PAIR_TOOL_NAME,
+                fabro_tool::FABRO_RUN_SEARCH_TOOL_NAME,
+            ]
+        );
 
         for definition in fabro_tool::tool_definitions() {
             let registered = registry
@@ -1898,10 +1901,14 @@ reasoning = false
     fn register_named_fabro_run_tools_registers_only_listed_tools() {
         let mut registry = ToolRegistry::new();
         let (services, _backend) = fabro_run_tool_services();
-        register_named_fabro_run_tools(&mut registry, &services, &[
-            fabro_tool::FABRO_RUN_EVENTS_TOOL_NAME,
-            fabro_tool::FABRO_RUN_INTERACT_TOOL_NAME,
-        ]);
+        register_named_fabro_run_tools(
+            &mut registry,
+            &services,
+            &[
+                fabro_tool::FABRO_RUN_EVENTS_TOOL_NAME,
+                fabro_tool::FABRO_RUN_INTERACT_TOOL_NAME,
+            ],
+        );
 
         let mut registered = registry
             .names()
@@ -1909,20 +1916,24 @@ reasoning = false
             .filter(|name| name.starts_with("fabro_run_"))
             .collect::<Vec<_>>();
         registered.sort();
-        assert_eq!(registered, vec![
-            fabro_tool::FABRO_RUN_EVENTS_TOOL_NAME,
-            fabro_tool::FABRO_RUN_INTERACT_TOOL_NAME,
-        ]);
+        assert_eq!(
+            registered,
+            vec![
+                fabro_tool::FABRO_RUN_EVENTS_TOOL_NAME,
+                fabro_tool::FABRO_RUN_INTERACT_TOOL_NAME,
+            ]
+        );
     }
 
     #[test]
     fn register_named_fabro_run_tools_ignores_unknown_names() {
         let mut registry = ToolRegistry::new();
         let (services, _backend) = fabro_run_tool_services();
-        register_named_fabro_run_tools(&mut registry, &services, &[
-            fabro_tool::FABRO_RUN_EVENTS_TOOL_NAME,
-            "not_a_real_tool",
-        ]);
+        register_named_fabro_run_tools(
+            &mut registry,
+            &services,
+            &[fabro_tool::FABRO_RUN_EVENTS_TOOL_NAME, "not_a_real_tool"],
+        );
 
         let registered = registry
             .names()
@@ -1954,9 +1965,10 @@ reasoning = false
         .expect("create tool should succeed");
 
         assert!(output.contains("created 1 Fabro run(s)"));
-        assert_eq!(backend.created_parent_ids.lock().unwrap().as_slice(), &[
-            Some(current_run_id())
-        ]);
+        assert_eq!(
+            backend.created_parent_ids.lock().unwrap().as_slice(),
+            &[Some(current_run_id())]
+        );
     }
 
     #[tokio::test]
@@ -1980,9 +1992,10 @@ reasoning = false
         .expect("create tool should succeed");
 
         assert!(output.contains("created 1 Fabro run(s), start requested for 1"));
-        assert_eq!(backend.started_run_ids.lock().unwrap().as_slice(), &[
-            child_run_id()
-        ]);
+        assert_eq!(
+            backend.started_run_ids.lock().unwrap().as_slice(),
+            &[child_run_id()]
+        );
     }
 
     #[tokio::test]
@@ -2061,9 +2074,10 @@ reasoning = false
 
         assert!(gathered.contains("gathered 1 Fabro run(s)"));
         assert!(listed.contains("returned 0 Fabro event(s)"));
-        assert_eq!(backend.created_parent_ids.lock().unwrap().as_slice(), &[
-            Some(current_run_id())
-        ]);
+        assert_eq!(
+            backend.created_parent_ids.lock().unwrap().as_slice(),
+            &[Some(current_run_id())]
+        );
     }
 
     #[tokio::test]
@@ -2119,24 +2133,25 @@ reasoning = false
 
         assert!(output.contains("read pair status for Fabro run"));
         assert!(output.contains("\"action\": \"status\""));
-        assert_eq!(backend.pair_status_run_ids.lock().unwrap().as_slice(), &[
-            child_run_id()
-        ]);
+        assert_eq!(
+            backend.pair_status_run_ids.lock().unwrap().as_slice(),
+            &[child_run_id()]
+        );
     }
 
     fn fabro_run_tool_services() -> (FabroRunToolServices, Arc<MockRunToolBackend>) {
         let backend = Arc::new(MockRunToolBackend {
-            child_id:            child_run_id(),
-            created_parent_ids:  Mutex::new(Vec::new()),
-            started_run_ids:     Mutex::new(Vec::new()),
-            approved_run_ids:    Mutex::new(Vec::new()),
-            denied_run_ids:      Mutex::new(Vec::new()),
+            child_id: child_run_id(),
+            created_parent_ids: Mutex::new(Vec::new()),
+            started_run_ids: Mutex::new(Vec::new()),
+            approved_run_ids: Mutex::new(Vec::new()),
+            denied_run_ids: Mutex::new(Vec::new()),
             pair_status_run_ids: Mutex::new(Vec::new()),
         });
         let services = FabroRunToolServices {
-            backend:            backend.clone(),
-            current_run_id:     current_run_id(),
-            base_cwd:           PathBuf::from("/tmp/fabro-test"),
+            backend: backend.clone(),
+            current_run_id: current_run_id(),
+            base_cwd: PathBuf::from("/tmp/fabro-test"),
             user_settings_path: PathBuf::from("/tmp/fabro-test/settings.toml"),
         };
         (services, backend)
@@ -2144,12 +2159,12 @@ reasoning = false
 
     fn tool_context() -> ToolContext {
         ToolContext {
-            env:                 Arc::new(LocalSandbox::new(PathBuf::from("."))),
-            cancel:              CancellationToken::new(),
-            tool_env_provider:   None,
-            session_id:          None,
-            root_session_id:     None,
-            tool_call_id:        None,
+            env: Arc::new(LocalSandbox::new(PathBuf::from("."))),
+            cancel: CancellationToken::new(),
+            tool_env_provider: None,
+            session_id: None,
+            root_session_id: None,
+            tool_call_id: None,
             agent_event_emitter: None,
         }
     }
@@ -2167,9 +2182,14 @@ reasoning = false
     }
 
     fn run(run_id: RunId, parent_id: Option<RunId>, children_count: u64) -> Run {
-        run_with_status(run_id, parent_id, children_count, RunStatus::Succeeded {
-            reason: SuccessReason::Completed,
-        })
+        run_with_status(
+            run_id,
+            parent_id,
+            children_count,
+            RunStatus::Succeeded {
+                reason: SuccessReason::Completed,
+            },
+        )
     }
 
     fn run_with_status(
@@ -2185,8 +2205,8 @@ reasoning = false
             title: "Test run".to_string(),
             goal: "Test run".to_string(),
             workflow: WorkflowRef {
-                slug:       Some("simple".to_string()),
-                name:       Some("Simple".to_string()),
+                slug: Some("simple".to_string()),
+                name: Some("Simple".to_string()),
                 graph_name: None,
                 node_count: 0,
                 edge_count: 0,
@@ -2209,10 +2229,10 @@ reasoning = false
             models: Vec::new(),
             source_directory: None,
             timestamps: RunTimestamps {
-                created_at:    chrono::Utc.with_ymd_and_hms(2026, 5, 21, 12, 0, 0).unwrap(),
-                started_at:    None,
+                created_at: chrono::Utc.with_ymd_and_hms(2026, 5, 21, 12, 0, 0).unwrap(),
+                started_at: None,
                 last_event_at: None,
-                completed_at:  None,
+                completed_at: None,
             },
             timing: None,
             billing: None,
@@ -2228,11 +2248,11 @@ reasoning = false
     }
 
     struct MockRunToolBackend {
-        child_id:            RunId,
-        created_parent_ids:  Mutex<Vec<Option<RunId>>>,
-        started_run_ids:     Mutex<Vec<RunId>>,
-        approved_run_ids:    Mutex<Vec<RunId>>,
-        denied_run_ids:      Mutex<Vec<RunId>>,
+        child_id: RunId,
+        created_parent_ids: Mutex<Vec<Option<RunId>>>,
+        started_run_ids: Mutex<Vec<RunId>>,
+        approved_run_ids: Mutex<Vec<RunId>>,
+        denied_run_ids: Mutex<Vec<RunId>>,
         pair_status_run_ids: Mutex<Vec<RunId>>,
     }
 
@@ -2384,9 +2404,9 @@ reasoning = false
         ) -> anyhow::Result<RunPairStatusResponse> {
             self.pair_status_run_ids.lock().unwrap().push(*run_id);
             Ok(RunPairStatusResponse {
-                run_id:       *run_id,
+                run_id: *run_id,
                 current_pair: None,
-                targets:      Vec::new(),
+                targets: Vec::new(),
             })
         }
     }
@@ -2395,7 +2415,7 @@ reasoning = false
         FileTracking {
             pending: HashMap::new(),
             touched: HashSet::new(),
-            last:    None,
+            last: None,
         }
     }
 
@@ -2411,9 +2431,9 @@ reasoning = false
 
         track_file_event(
             &AgentEvent::ToolCallStarted {
-                tool_name:    "write_file".to_string(),
+                tool_name: "write_file".to_string(),
                 tool_call_id: "tc1".to_string(),
-                arguments:    serde_json::Value::Object(args),
+                arguments: serde_json::Value::Object(args),
             },
             &mut state,
         );
@@ -2422,9 +2442,9 @@ reasoning = false
         track_file_event(
             &AgentEvent::ToolCallCompleted {
                 tool_call_id: "tc1".to_string(),
-                tool_name:    "write_file".to_string(),
-                is_error:     false,
-                output:       serde_json::Value::String("ok".to_string()),
+                tool_name: "write_file".to_string(),
+                is_error: false,
+                output: serde_json::Value::String("ok".to_string()),
             },
             &mut state,
         );
@@ -2444,9 +2464,9 @@ reasoning = false
 
         track_file_event(
             &AgentEvent::ToolCallStarted {
-                tool_name:    "edit_file".to_string(),
+                tool_name: "edit_file".to_string(),
                 tool_call_id: "tc-sub".to_string(),
-                arguments:    serde_json::Value::Object(args),
+                arguments: serde_json::Value::Object(args),
             },
             &mut state,
         );
@@ -2455,9 +2475,9 @@ reasoning = false
         track_file_event(
             &AgentEvent::ToolCallCompleted {
                 tool_call_id: "tc-sub".to_string(),
-                tool_name:    "edit_file".to_string(),
-                is_error:     false,
-                output:       serde_json::Value::String("ok".to_string()),
+                tool_name: "edit_file".to_string(),
+                is_error: false,
+                output: serde_json::Value::String("ok".to_string()),
             },
             &mut state,
         );
@@ -2477,9 +2497,9 @@ reasoning = false
 
         track_file_event(
             &AgentEvent::ToolCallStarted {
-                tool_name:    "edit_file".to_string(),
+                tool_name: "edit_file".to_string(),
                 tool_call_id: "tc-err".to_string(),
-                arguments:    serde_json::Value::Object(args),
+                arguments: serde_json::Value::Object(args),
             },
             &mut state,
         );
@@ -2487,9 +2507,9 @@ reasoning = false
         track_file_event(
             &AgentEvent::ToolCallCompleted {
                 tool_call_id: "tc-err".to_string(),
-                tool_name:    "edit_file".to_string(),
-                is_error:     true,
-                output:       serde_json::Value::String("failed".to_string()),
+                tool_name: "edit_file".to_string(),
+                is_error: true,
+                output: serde_json::Value::String("failed".to_string()),
             },
             &mut state,
         );
@@ -2621,7 +2641,7 @@ reasoning = false
         )
         .with_run_model_controls(fabro_types::settings::run::RunModelControls {
             reasoning_effort: Some("low".to_string()),
-            speed:            Some("fast".to_string()),
+            speed: Some("fast".to_string()),
         });
         let node = Node::new("work");
 
@@ -2641,7 +2661,7 @@ reasoning = false
         )
         .with_run_model_controls(fabro_types::settings::run::RunModelControls {
             reasoning_effort: Some("low".to_string()),
-            speed:            Some("fast".to_string()),
+            speed: Some("fast".to_string()),
         });
         let mut node = Node::new("work");
         node.attrs.insert(
@@ -2708,7 +2728,7 @@ reasoning = false
     async fn one_shot_falls_back_after_refusal_error() {
         let fallback_chain = vec![FallbackTarget {
             provider: "openai".to_string(),
-            model:    "gpt-5.5".to_string(),
+            model: "gpt-5.5".to_string(),
         }];
         let backend = AgentApiBackend::new_from_env(
             "claude-fable-5".to_string(),
@@ -2725,7 +2745,7 @@ reasoning = false
             "openai".to_string(),
             Arc::new(TextTestProvider {
                 provider: "openai",
-                text:     "fallback ok",
+                text: "fallback ok",
             }) as Arc<dyn ProviderAdapter>,
         );
         let client = Client::new(providers, Some("anthropic".to_string()), Vec::new());
@@ -2734,19 +2754,19 @@ reasoning = false
         let stage_scope = StageScope::for_handler(&context, &node.id);
         let emitter = Arc::new(Emitter::new(fabro_types::RunId::new()));
         let request = Request {
-            model:            "claude-fable-5".to_string(),
-            messages:         vec![Message::user("Hello")],
-            provider:         Some("anthropic".to_string()),
-            tools:            None,
-            tool_choice:      None,
-            response_format:  None,
-            temperature:      None,
-            top_p:            None,
-            max_tokens:       Some(128),
-            stop_sequences:   None,
+            model: "claude-fable-5".to_string(),
+            messages: vec![Message::user("Hello")],
+            provider: Some("anthropic".to_string()),
+            tools: None,
+            tool_choice: None,
+            response_format: None,
+            temperature: None,
+            top_p: None,
+            max_tokens: Some(128),
+            stop_sequences: None,
             reasoning_effort: None,
-            speed:            None,
-            metadata:         None,
+            speed: None,
+            metadata: None,
             provider_options: None,
         };
 
@@ -2806,13 +2826,13 @@ reasoning = false
 
         let result = backend
             .one_shot(OneShotRequest {
-                node:          &node,
-                prompt:        "Audit the result",
+                node: &node,
+                prompt: "Audit the result",
                 system_prompt: None,
-                emitter:       &emitter,
-                stage_scope:   &stage_scope,
-                sandbox:       &sandbox,
-                cancel_token:  CancellationToken::new(),
+                emitter: &emitter,
+                stage_scope: &stage_scope,
+                sandbox: &sandbox,
+                cancel_token: CancellationToken::new(),
             })
             .await
             .unwrap();
@@ -2865,14 +2885,14 @@ reasoning = false
 
         let result = backend
             .run(CodergenRunRequest {
-                node:               &node,
-                prompt:             "Audit the result",
-                context:            &context,
-                thread_id:          None,
-                emitter:            &emitter,
-                sandbox:            &sandbox,
-                tool_hooks:         None,
-                cancel_token:       CancellationToken::new(),
+                node: &node,
+                prompt: "Audit the result",
+                context: &context,
+                thread_id: None,
+                emitter: &emitter,
+                sandbox: &sandbox,
+                tool_hooks: None,
+                cancel_token: CancellationToken::new(),
                 agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await
@@ -2932,10 +2952,10 @@ reasoning = false
         backend.shutdown(&emitter).await;
         backend.shutdown(&emitter).await;
 
-        assert_eq!(event_names.lock().unwrap().as_slice(), [
-            "agent.session.started",
-            "agent.session.ended"
-        ]);
+        assert_eq!(
+            event_names.lock().unwrap().as_slice(),
+            ["agent.session.started", "agent.session.ended"]
+        );
         assert!(backend.sessions.lock().unwrap().is_empty());
     }
 
@@ -2944,34 +2964,34 @@ reasoning = false
     fn failover_eligible_llm_error() -> LlmError {
         LlmError::Network {
             message: "boom".into(),
-            source:  None,
+            source: None,
         }
     }
 
     fn non_failover_llm_error() -> LlmError {
         LlmError::Provider {
-            kind:   ProviderErrorKind::Authentication,
+            kind: ProviderErrorKind::Authentication,
             detail: Box::new(ProviderErrorDetail {
-                message:     "bad key".into(),
-                provider:    "openai".into(),
+                message: "bad key".into(),
+                provider: "openai".into(),
                 status_code: Some(401),
-                error_code:  None,
+                error_code: None,
                 retry_after: None,
-                raw:         None,
+                raw: None,
             }),
         }
     }
 
     fn refusal_llm_error() -> LlmError {
         LlmError::Provider {
-            kind:   ProviderErrorKind::ContentFilter,
+            kind: ProviderErrorKind::ContentFilter,
             detail: Box::new(ProviderErrorDetail {
-                message:     "claude-fable-5 refused the request".into(),
-                provider:    "anthropic".into(),
+                message: "claude-fable-5 refused the request".into(),
+                provider: "anthropic".into(),
                 status_code: None,
-                error_code:  Some("refusal".into()),
+                error_code: Some("refusal".into()),
                 retry_after: None,
-                raw:         Some(serde_json::json!({
+                raw: Some(serde_json::json!({
                     "stop_reason": "refusal",
                     "stop_details": {
                         "type": "refusal",

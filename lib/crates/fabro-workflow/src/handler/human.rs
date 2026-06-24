@@ -18,21 +18,21 @@ use crate::outcome::{Outcome, OutcomeExt};
 
 /// A choice derived from an outgoing edge.
 struct Choice {
-    key:   String,
+    key: String,
     label: String,
-    to:    String,
+    to: String,
 }
 
 struct ChoiceMatch<'a> {
-    route:          &'a Choice,
-    selected_key:   String,
+    route: &'a Choice,
+    selected_key: String,
     selected_label: String,
 }
 
 struct HumanGateQuestion {
-    choices:         Vec<Choice>,
+    choices: Vec<Choice>,
     freeform_target: Option<String>,
-    question:        Question,
+    question: Question,
 }
 
 /// Parse an accelerator key from a label.
@@ -111,10 +111,10 @@ fn build_human_gate_question(
     question.options = choices
         .iter()
         .map(|choice| InterviewOption {
-            key:         choice.key.clone(),
-            label:       choice.label.clone(),
+            key: choice.key.clone(),
+            label: choice.label.clone(),
             description: None,
-            preview:     None,
+            preview: None,
         })
         .collect();
     question.allow_freeform = freeform_target.is_some();
@@ -142,7 +142,7 @@ fn build_human_gate_question(
 /// Blocks until a human selects an option derived from outgoing edges.
 pub struct HumanHandler {
     interviewer: Arc<dyn Interviewer>,
-    emitter:     Option<Arc<Emitter>>,
+    emitter: Option<Arc<Emitter>>,
 }
 
 impl HumanHandler {
@@ -236,21 +236,21 @@ impl Handler for HumanHandler {
         self.emit(
             &services.run.emitter,
             &Event::InterviewStarted {
-                question_id:     question_id.clone(),
-                question:        question_text.clone(),
-                stage:           node.id.clone(),
-                question_type:   question.question_type.to_string(),
-                options:         question
+                question_id: question_id.clone(),
+                question: question_text.clone(),
+                stage: node.id.clone(),
+                question_type: question.question_type.to_string(),
+                options: question
                     .options
                     .iter()
                     .map(|option| InterviewOption {
-                        key:         option.key.clone(),
-                        label:       option.label.clone(),
+                        key: option.key.clone(),
+                        label: option.label.clone(),
                         description: option.description.clone(),
-                        preview:     option.preview.clone(),
+                        preview: option.preview.clone(),
                     })
                     .collect(),
-                allow_freeform:  question.allow_freeform,
+                allow_freeform: question.allow_freeform,
                 timeout_seconds: question.timeout_seconds,
                 context_display: question.context_display.clone(),
             },
@@ -270,12 +270,12 @@ impl Handler for HumanHandler {
             self.emit(
                 &services.run.emitter,
                 &Event::InterviewTimeout {
-                    actor:       Some(Principal::System {
+                    actor: Some(Principal::System {
                         system_kind: SystemActorKind::Timeout,
                     }),
                     question_id: question_id.clone(),
-                    question:    question_text.clone(),
-                    stage:       node.id.clone(),
+                    question: question_text.clone(),
+                    stage: node.id.clone(),
                     duration_ms: millis_u64(interview_start.elapsed()),
                 },
                 &stage_scope,
@@ -312,13 +312,13 @@ impl Handler for HumanHandler {
             self.emit(
                 &services.run.emitter,
                 &Event::InterviewInterrupted {
-                    actor:       Some(Principal::System {
+                    actor: Some(Principal::System {
                         system_kind: SystemActorKind::Engine,
                     }),
                     question_id: question_id.clone(),
-                    question:    question_text.clone(),
-                    stage:       node.id.clone(),
-                    reason:      "interrupted".to_string(),
+                    question: question_text.clone(),
+                    stage: node.id.clone(),
+                    reason: "interrupted".to_string(),
                     duration_ms: millis_u64(interview_start.elapsed()),
                 },
                 &stage_scope,
@@ -463,8 +463,8 @@ fn find_choice_match<'a>(answer: &Answer, choices: &'a [Choice]) -> Option<Choic
                 .iter()
                 .find(|choice| choice.key == *key)
                 .map(|choice| ChoiceMatch {
-                    route:          choice,
-                    selected_key:   choice.key.clone(),
+                    route: choice,
+                    selected_key: choice.key.clone(),
                     selected_label: choice.label.clone(),
                 })
         }
@@ -474,8 +474,8 @@ fn find_choice_match<'a>(answer: &Answer, choices: &'a [Choice]) -> Option<Choic
                 .filter_map(|key| choices.iter().find(|choice| choice.key == *key))
                 .collect();
             selected.first().map(|first| ChoiceMatch {
-                route:          first,
-                selected_key:   selected
+                route: first,
+                selected_key: selected
                     .iter()
                     .map(|choice| choice.key.as_str())
                     .collect::<Vec<_>>()
@@ -488,13 +488,13 @@ fn find_choice_match<'a>(answer: &Answer, choices: &'a [Choice]) -> Option<Choic
             })
         }
         AnswerValue::Yes => find_yes_no_choice(choices, true).map(|choice| ChoiceMatch {
-            route:          choice,
-            selected_key:   choice.key.clone(),
+            route: choice,
+            selected_key: choice.key.clone(),
             selected_label: choice.label.clone(),
         }),
         AnswerValue::No => find_yes_no_choice(choices, false).map(|choice| ChoiceMatch {
-            route:          choice,
-            selected_key:   choice.key.clone(),
+            route: choice,
+            selected_key: choice.key.clone(),
             selected_label: choice.label.clone(),
         }),
         AnswerValue::Text(text) => {
@@ -503,8 +503,8 @@ fn find_choice_match<'a>(answer: &Answer, choices: &'a [Choice]) -> Option<Choic
                 .iter()
                 .find(|c| c.key.eq_ignore_ascii_case(text) || c.label.eq_ignore_ascii_case(text))
                 .map(|choice| ChoiceMatch {
-                    route:          choice,
-                    selected_key:   choice.key.clone(),
+                    route: choice,
+                    selected_key: choice.key.clone(),
                     selected_label: choice.label.clone(),
                 })
         }
@@ -702,9 +702,12 @@ mod tests {
             .execute(node, &context, &graph, run_dir, &make_services())
             .await
             .unwrap();
-        assert_eq!(outcome.status, crate::outcome::StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            crate::outcome::StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
     }
 
     #[tokio::test]
@@ -721,9 +724,12 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(outcome.status, crate::outcome::StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            crate::outcome::StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert!(outcome.preferred_label.is_none());
         assert!(outcome.suggested_next_ids.is_empty());
         assert_eq!(
@@ -763,9 +769,12 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(outcome.status, crate::outcome::StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            crate::outcome::StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert!(outcome.preferred_label.is_none());
         assert!(outcome.suggested_next_ids.is_empty());
         assert_eq!(outcome.failure_reason(), Some("human skipped interaction"));
@@ -842,12 +851,15 @@ mod tests {
     #[tokio::test]
     async fn wait_human_emits_blocked_then_unblocked_around_interview() {
         let interviewer = Arc::new(CallbackInterviewer::new(|_| {
-            Answer::selected("A", InterviewOption {
-                key:         "A".to_string(),
-                label:       "Approve".to_string(),
-                description: None,
-                preview:     None,
-            })
+            Answer::selected(
+                "A",
+                InterviewOption {
+                    key: "A".to_string(),
+                    label: "Approve".to_string(),
+                    description: None,
+                    preview: None,
+                },
+            )
         }));
         let handler = HumanHandler::new(interviewer);
         let graph = build_graph_with_human_gate();
@@ -874,12 +886,15 @@ mod tests {
             .map(|event| event.event_name().to_string())
             .collect::<Vec<_>>();
 
-        assert_eq!(event_names, vec![
-            "interview.started",
-            "run.blocked",
-            "interview.completed",
-            "run.unblocked",
-        ]);
+        assert_eq!(
+            event_names,
+            vec![
+                "interview.started",
+                "run.blocked",
+                "interview.completed",
+                "run.unblocked",
+            ]
+        );
     }
 
     #[tokio::test]
@@ -1119,9 +1134,9 @@ mod tests {
             }
         });
 
-        assert_eq!(event_names.lock().unwrap().as_slice(), [
-            "run.blocked",
-            "run.unblocked"
-        ],);
+        assert_eq!(
+            event_names.lock().unwrap().as_slice(),
+            ["run.blocked", "run.unblocked"],
+        );
     }
 }

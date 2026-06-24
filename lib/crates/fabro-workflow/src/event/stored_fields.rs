@@ -6,15 +6,15 @@ use crate::stage_scope::StageScope;
 
 #[derive(Debug, Default)]
 pub(super) struct StoredEventFields {
-    pub(super) session_id:         Option<String>,
-    pub(super) parent_session_id:  Option<String>,
-    pub(super) node_id:            Option<String>,
-    pub(super) node_label:         Option<String>,
-    pub(super) stage_id:           Option<StageId>,
-    pub(super) parallel_group_id:  Option<StageId>,
+    pub(super) session_id: Option<String>,
+    pub(super) parent_session_id: Option<String>,
+    pub(super) node_id: Option<String>,
+    pub(super) node_label: Option<String>,
+    pub(super) stage_id: Option<StageId>,
+    pub(super) parallel_group_id: Option<StageId>,
     pub(super) parallel_branch_id: Option<ParallelBranchId>,
-    pub(super) tool_call_id:       Option<String>,
-    pub(super) actor:              Option<Principal>,
+    pub(super) tool_call_id: Option<String>,
+    pub(super) actor: Option<Principal>,
 }
 
 fn default_node_label(node_id: Option<&String>, node_label: Option<String>) -> Option<String> {
@@ -353,16 +353,16 @@ fn agent_actor_for_event(
 ) -> Option<Principal> {
     match event {
         AgentEvent::AssistantMessage { model, .. } => Some(Principal::Agent {
-            session_id:        session_id.map(str::to_string),
+            session_id: session_id.map(str::to_string),
             parent_session_id: parent_session_id.map(str::to_string),
-            model:             Some(model.model_id.clone()),
+            model: Some(model.model_id.clone()),
         }),
         AgentEvent::ToolCallStarted { .. }
         | AgentEvent::ToolCallOutputDelta { .. }
         | AgentEvent::ToolCallCompleted { .. } => Some(Principal::Agent {
-            session_id:        session_id.map(str::to_string),
+            session_id: session_id.map(str::to_string),
             parent_session_id: parent_session_id.map(str::to_string),
-            model:             None,
+            model: None,
         }),
         AgentEvent::SteeringInjected { actor, .. } => actor.clone(),
         _ => None,

@@ -9,25 +9,25 @@ use crate::event::{Emitter, Event};
 use crate::steering_hub::{ActiveControlHandle, SteeringHub};
 
 pub struct ActivationLease {
-    stage_id:   StageId,
+    stage_id: StageId,
     session_id: String,
-    hub:        Arc<SteeringHub>,
-    emitter:    Arc<Emitter>,
-    released:   AtomicBool,
+    hub: Arc<SteeringHub>,
+    emitter: Arc<Emitter>,
+    released: AtomicBool,
 }
 
 pub struct ActivationLeaseOptions {
-    pub stage_id:         StageId,
-    pub session_id:       String,
-    pub thread_id:        Option<String>,
-    pub provider:         Option<String>,
-    pub model:            Option<String>,
+    pub stage_id: StageId,
+    pub session_id: String,
+    pub thread_id: Option<String>,
+    pub provider: Option<String>,
+    pub model: Option<String>,
     pub reasoning_effort: Option<ReasoningEffort>,
-    pub speed:            Option<Speed>,
+    pub speed: Option<Speed>,
     pub permission_level: Option<PermissionLevel>,
-    pub capabilities:     Vec<SessionCapability>,
-    pub hub:              Arc<SteeringHub>,
-    pub emitter:          Arc<Emitter>,
+    pub capabilities: Vec<SessionCapability>,
+    pub hub: Arc<SteeringHub>,
+    pub emitter: Arc<Emitter>,
 }
 
 impl ActivationLease {
@@ -52,27 +52,27 @@ impl ActivationLease {
         }
 
         options.emitter.emit(&Event::AgentSessionActivated {
-            node_id:          options.stage_id.node_id().to_string(),
-            visit:            options.stage_id.visit(),
-            session_id:       options.session_id.clone(),
-            thread_id:        options.thread_id,
-            provider:         options.provider,
-            model:            options.model,
+            node_id: options.stage_id.node_id().to_string(),
+            visit: options.stage_id.visit(),
+            session_id: options.session_id.clone(),
+            thread_id: options.thread_id,
+            provider: options.provider,
+            model: options.model,
             reasoning_effort: options.reasoning_effort,
-            speed:            options.speed,
+            speed: options.speed,
             permission_level: options.permission_level,
-            capabilities:     options.capabilities,
+            capabilities: options.capabilities,
         });
         options
             .hub
             .drain_pending_into(&options.stage_id, handle.as_ref());
 
         Ok(Arc::new(Self {
-            stage_id:   options.stage_id,
+            stage_id: options.stage_id,
             session_id: options.session_id,
-            hub:        options.hub,
-            emitter:    options.emitter,
-            released:   AtomicBool::new(false),
+            hub: options.hub,
+            emitter: options.emitter,
+            released: AtomicBool::new(false),
         }))
     }
 
@@ -113,8 +113,8 @@ impl ActivationLease {
             return false;
         }
         self.emitter.emit(&Event::AgentSessionDeactivated {
-            node_id:    self.stage_id.node_id().to_string(),
-            visit:      self.stage_id.visit(),
+            node_id: self.stage_id.node_id().to_string(),
+            visit: self.stage_id.visit(),
             session_id: self.session_id.clone(),
         });
         true
@@ -194,11 +194,14 @@ mod tests {
         .unwrap();
 
         assert_eq!(handle.queue_len(), 1);
-        assert_eq!(names.lock().unwrap().as_slice(), [
-            "run.steer",
-            "agent.steer.buffered",
-            "agent.session.activated"
-        ]);
+        assert_eq!(
+            names.lock().unwrap().as_slice(),
+            [
+                "run.steer",
+                "agent.steer.buffered",
+                "agent.session.activated"
+            ]
+        );
     }
 
     #[test]

@@ -368,9 +368,9 @@ async fn daytona_snapshot_sandbox() {
     let config = DaytonaConfig {
         auto_stop_interval: Some(60),
         snapshot: Some(DaytonaSnapshotConfig {
-            cpu:        Some(2),
-            memory:     Some(4),
-            disk:       Some(10),
+            cpu: Some(2),
+            memory: Some(4),
+            disk: Some(10),
             dockerfile: Some(fabro_sandbox::daytona::DockerfileSource::Inline(
                 "FROM ubuntu:22.04\nRUN apt-get update && apt-get install -y ripgrep".to_string(),
             )),
@@ -517,18 +517,18 @@ async fn daytona_pipeline_artifact_offload_and_sync() {
 
     let engine = WorkflowRunner::new(registry, Arc::new(Emitter::default()), env.clone());
     let run_options = RunOptions {
-        settings:         WorkflowSettings::default(),
-        run_dir:          dir.path().to_path_buf(),
-        cancel_token:     CancellationToken::new(),
-        run_id:           test_run_id("test-run"),
-        labels:           std::collections::HashMap::new(),
-        workflow_slug:    None,
-        github_app:       None,
-        base_branch:      None,
+        settings: WorkflowSettings::default(),
+        run_dir: dir.path().to_path_buf(),
+        cancel_token: CancellationToken::new(),
+        run_id: test_run_id("test-run"),
+        labels: std::collections::HashMap::new(),
+        workflow_slug: None,
+        github_app: None,
+        base_branch: None,
         display_base_sha: None,
-        pre_run_git:      None,
-        fork_source_ref:  None,
-        git:              None,
+        pre_run_git: None,
+        fork_source_ref: None,
+        git: None,
     };
     let outcome = engine
         .run(&graph, &run_options)
@@ -702,20 +702,20 @@ async fn daytona_git_checkpoint_remote_emits_events() {
 
     let engine = WorkflowRunner::new(registry, Arc::new(emitter), env.clone());
     let run_options = RunOptions {
-        settings:         WorkflowSettings::default(),
-        run_dir:          dir.path().to_path_buf(),
-        cancel_token:     CancellationToken::new(),
-        run_id:           test_run_id("git-cp-test"),
-        labels:           std::collections::HashMap::new(),
-        workflow_slug:    None,
-        github_app:       None,
-        base_branch:      None,
+        settings: WorkflowSettings::default(),
+        run_dir: dir.path().to_path_buf(),
+        cancel_token: CancellationToken::new(),
+        run_id: test_run_id("git-cp-test"),
+        labels: std::collections::HashMap::new(),
+        workflow_slug: None,
+        github_app: None,
+        base_branch: None,
         display_base_sha: None,
-        pre_run_git:      None,
-        fork_source_ref:  None,
-        git:              Some(GitCheckpointOptions {
-            base_sha:    Some(base_sha),
-            run_branch:  Some(branch_name),
+        pre_run_git: None,
+        fork_source_ref: None,
+        git: Some(GitCheckpointOptions {
+            base_sha: Some(base_sha),
+            run_branch: Some(branch_name),
             meta_branch: None,
         }),
     };
@@ -887,8 +887,8 @@ async fn daytona_parallel_git_branching_e2e() {
         pre_run_git: None,
         fork_source_ref: None,
         git: Some(GitCheckpointOptions {
-            base_sha:    Some(base_sha),
-            run_branch:  Some(branch_name),
+            base_sha: Some(base_sha),
+            run_branch: Some(branch_name),
             meta_branch: None,
         }),
     };
@@ -1086,8 +1086,8 @@ async fn daytona_git_checkpoint_with_shadow_branch() {
         pre_run_git: None,
         fork_source_ref: None,
         git: Some(GitCheckpointOptions {
-            base_sha:    Some(base_sha),
-            run_branch:  Some(branch_name),
+            base_sha: Some(base_sha),
+            run_branch: Some(branch_name),
             meta_branch: Some(meta_branch.clone()),
         }),
     };
@@ -1224,7 +1224,7 @@ async fn daytona_asset_collection() {
     graph.edges.push(Edge::new("create_assets", "exit"));
 
     let run_options = RunOptions {
-        settings:         WorkflowSettings {
+        settings: WorkflowSettings {
             run: fabro_types::settings::RunNamespace {
                 artifacts: fabro_types::settings::run::ArtifactsSettings {
                     include: vec!["test-results/**".to_string()],
@@ -1233,17 +1233,17 @@ async fn daytona_asset_collection() {
             },
             ..WorkflowSettings::default()
         },
-        run_dir:          dir.path().to_path_buf(),
-        cancel_token:     CancellationToken::new(),
-        run_id:           test_run_id("artifact-test-daytona"),
-        labels:           std::collections::HashMap::new(),
-        workflow_slug:    None,
-        github_app:       None,
-        base_branch:      None,
+        run_dir: dir.path().to_path_buf(),
+        cancel_token: CancellationToken::new(),
+        run_id: test_run_id("artifact-test-daytona"),
+        labels: std::collections::HashMap::new(),
+        workflow_slug: None,
+        github_app: None,
+        base_branch: None,
         display_base_sha: None,
-        pre_run_git:      None,
-        fork_source_ref:  None,
-        git:              None,
+        pre_run_git: None,
+        fork_source_ref: None,
+        git: None,
     };
     let outcome = engine
         .run(&graph, &run_options)
@@ -1364,8 +1364,8 @@ async fn daytona_clone_private_repo_with_github_app_iat() {
         .unwrap();
     assert_eq!(result.exit_code, Some(0));
     assert!(
-        result.stdout.contains("fabro-sh/fabro"),
-        "origin should point to fabro-sh/fabro, got: {}",
+        result.stdout.contains("in-parallel-oy/fabro"),
+        "origin should point to in-parallel-oy/fabro, got: {}",
         result.stdout.trim()
     );
 
@@ -1512,8 +1512,8 @@ async fn daytona_git_push_run_branch_to_origin() {
         pre_run_git: None,
         fork_source_ref: None,
         git: Some(GitCheckpointOptions {
-            base_sha:    Some(base_sha),
-            run_branch:  Some(branch_name.clone()),
+            base_sha: Some(base_sha),
+            run_branch: Some(branch_name.clone()),
             meta_branch: None,
         }),
     };
@@ -1718,16 +1718,16 @@ async fn daytona_cp_upload_download_round_trip() {
     // 2. Build initialized sandbox metadata (same as `fabro run` would persist)
     let record = RunSandboxInstance {
         provider: SandboxProviderKind::Daytona,
-        image:    None,
+        image: None,
         snapshot: None,
-        runtime:  fabro_types::RunSandboxRuntime {
-            id:                sandbox_name.clone(),
+        runtime: fabro_types::RunSandboxRuntime {
+            id: sandbox_name.clone(),
             working_directory: env.working_directory().to_string(),
-            repo_cloned:       Some(false),
-            clone_origin_url:  None,
-            clone_branch:      None,
-            workspace_root:    Some("/home/daytona/workspace".to_string()),
-            repos_root:        Some("/home/daytona/repos".to_string()),
+            repo_cloned: Some(false),
+            clone_origin_url: None,
+            clone_branch: None,
+            workspace_root: Some("/home/daytona/workspace".to_string()),
+            repos_root: Some("/home/daytona/repos".to_string()),
             primary_repo_path: None,
             primary_repo_link: None,
         },
@@ -1991,10 +1991,10 @@ async fn daytona_playwright_mcp_sandbox_transport() {
     // 2. Start the Playwright MCP server via the sandbox transport resolution path
     let mcp_port = 3100u16;
     let mcp_config = fabro_mcp::config::McpServerSettings {
-        name:                 "playwright".into(),
-        transport:            fabro_mcp::config::McpTransport::Sandbox {
+        name: "playwright".into(),
+        transport: fabro_mcp::config::McpTransport::Sandbox {
             protocol: fabro_mcp::config::McpHttpProtocol::Sse,
-            command:  vec![
+            command: vec![
                 "npx".into(),
                 "@playwright/mcp@latest".into(),
                 "--port".into(),
@@ -2003,13 +2003,13 @@ async fn daytona_playwright_mcp_sandbox_transport() {
                 "--browser".into(),
                 "chromium".into(),
             ],
-            port:     mcp_port,
-            env:      std::collections::HashMap::new(),
+            port: mcp_port,
+            env: std::collections::HashMap::new(),
         },
-        current_dir:          None,
-        clear_env:            false,
+        current_dir: None,
+        clear_env: false,
         startup_timeout_secs: 30,
-        tool_timeout_secs:    120,
+        tool_timeout_secs: 120,
     };
 
     // Resolve the sandbox transport: start the server, get preview URL, rewrite to
@@ -2069,16 +2069,16 @@ async fn daytona_playwright_mcp_sandbox_transport() {
             let url = fabro_mcp::http_transport::sandbox_mcp_http_url(*protocol, &url).unwrap();
 
             fabro_mcp::config::McpServerSettings {
-                name:                 mcp_config.name.clone(),
-                transport:            fabro_mcp::config::McpTransport::Http {
+                name: mcp_config.name.clone(),
+                transport: fabro_mcp::config::McpTransport::Http {
                     protocol: *protocol,
                     url,
                     headers,
                 },
-                current_dir:          mcp_config.current_dir.clone(),
-                clear_env:            mcp_config.clear_env,
+                current_dir: mcp_config.current_dir.clone(),
+                clear_env: mcp_config.clear_env,
                 startup_timeout_secs: mcp_config.startup_timeout_secs,
-                tool_timeout_secs:    mcp_config.tool_timeout_secs,
+                tool_timeout_secs: mcp_config.tool_timeout_secs,
             }
         }
         _ => unreachable!(),

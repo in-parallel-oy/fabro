@@ -109,7 +109,7 @@ pub async fn dispatch_handler(
 
 /// Maps handler type strings to handler implementations.
 pub struct HandlerRegistry {
-    handlers:        HashMap<String, Box<dyn Handler>>,
+    handlers: HashMap<String, Box<dyn Handler>>,
     default_handler: Box<dyn Handler>,
 }
 

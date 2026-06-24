@@ -56,25 +56,25 @@ pub struct CreateRunInput {
 #[derive(Debug)]
 pub struct CreatedRun {
     pub persisted: Persisted,
-    pub run_id:    RunId,
-    pub run_dir:   PathBuf,
-    pub dot_path:  Option<PathBuf>,
+    pub run_id: RunId,
+    pub run_dir: PathBuf,
+    pub dot_path: Option<PathBuf>,
 }
 
 struct PersistCreateOptions {
-    settings:             WorkflowSettings,
-    run_id:               Option<RunId>,
-    run_dir:              Option<PathBuf>,
-    workflow_slug:        Option<String>,
-    source_name:          Option<String>,
-    labels:               HashMap<String, String>,
-    source_directory:     Option<String>,
-    automation:           Option<AutomationRef>,
-    git:                  Option<GitContext>,
-    fork_source_ref:      Option<ForkSourceRef>,
-    provenance:           RunProvenance,
+    settings: WorkflowSettings,
+    run_id: Option<RunId>,
+    run_dir: Option<PathBuf>,
+    workflow_slug: Option<String>,
+    source_name: Option<String>,
+    labels: HashMap<String, String>,
+    source_directory: Option<String>,
+    automation: Option<AutomationRef>,
+    git: Option<GitContext>,
+    fork_source_ref: Option<ForkSourceRef>,
+    provenance: RunProvenance,
     configured_providers: Vec<ProviderId>,
-    catalog:              Arc<Catalog>,
+    catalog: Arc<Catalog>,
 }
 
 /// Resolve workflow inputs, normalize settings using the caller-provided
@@ -88,7 +88,7 @@ pub async fn create(
     let resolved = resolve_workflow(ResolveWorkflowInput {
         workflow: request.workflow,
         settings: request.settings,
-        cwd:      request.cwd,
+        cwd: request.cwd,
     })
     .map_err(|err| Error::Parse(err.to_string()))?;
     let labels = resolved.settings.combined_labels();
@@ -267,9 +267,11 @@ async fn persist_created_run(
         .await
         .map(|_| ())
         .map_err(store_error)?;
-    append_event(&run_store, &record.run_id, &Event::RunSubmitted {
-        definition_blob,
-    })
+    append_event(
+        &run_store,
+        &record.run_id,
+        &Event::RunSubmitted { definition_blob },
+    )
     .await
     .map_err(store_error)
 }
@@ -322,15 +324,18 @@ pub(super) fn preprocess_and_validate(
     let mut parsed = pipeline::parse(dot_source)?;
     apply_goal_override(&mut parsed.graph, goal_override);
 
-    let transformed = pipeline::transform(parsed, &TransformOptions {
-        current_dir,
-        file_resolver,
-        inputs,
-        source_name,
-        render_mode,
-        custom_transforms,
-        catalog: Arc::clone(catalog),
-    })?;
+    let transformed = pipeline::transform(
+        parsed,
+        &TransformOptions {
+            current_dir,
+            file_resolver,
+            inputs,
+            source_name,
+            render_mode,
+            custom_transforms,
+            catalog: Arc::clone(catalog),
+        },
+    )?;
     Ok(pipeline::validate(transformed, catalog.as_ref(), &[]))
 }
 
@@ -469,7 +474,7 @@ mod tests {
     fn validate_dot(dot_source: &str, settings: WorkflowSettings) -> Validated {
         validate(ValidateInput {
             workflow: WorkflowInput::DotSource {
-                source:   dot_source.to_string(),
+                source: dot_source.to_string(),
                 base_dir: None,
             },
             settings,
@@ -672,11 +677,11 @@ mod tests {
         }"#;
 
         let result = validate(ValidateInput {
-            workflow:          WorkflowInput::DotSource {
-                source:   dot.to_string(),
+            workflow: WorkflowInput::DotSource {
+                source: dot.to_string(),
                 base_dir: None,
             },
-            settings:          settings_from_run_layer({
+            settings: settings_from_run_layer({
                 let mut inputs = std::collections::HashMap::new();
                 inputs.insert("step".to_string(), toml::Value::String("work".to_string()));
                 RunLayer {
@@ -684,9 +689,9 @@ mod tests {
                     ..RunLayer::default()
                 }
             }),
-            cwd:               PathBuf::from("."),
+            cwd: PathBuf::from("."),
             custom_transforms: Vec::new(),
-            catalog:           test_catalog(),
+            catalog: test_catalog(),
         });
 
         assert!(result.is_err());
@@ -720,8 +725,8 @@ mod tests {
         std::fs::write(dir.path().join("goal.md"), "Goal: {{ goal }}").unwrap();
 
         let inline_missing = validate(ValidateInput {
-            workflow:          WorkflowInput::DotSource {
-                source:   r#"digraph Test {
+            workflow: WorkflowInput::DotSource {
+                source: r#"digraph Test {
                     graph [goal="Demo"]
                     start [shape=Mdiamond]
                     work [prompt="Work in {{ inputs.app_dir }}"]
@@ -731,15 +736,15 @@ mod tests {
                 .to_string(),
                 base_dir: Some(dir.path().to_path_buf()),
             },
-            settings:          WorkflowSettings::default(),
-            cwd:               dir.path().to_path_buf(),
+            settings: WorkflowSettings::default(),
+            cwd: dir.path().to_path_buf(),
             custom_transforms: Vec::new(),
-            catalog:           test_catalog(),
+            catalog: test_catalog(),
         })
         .unwrap();
         let file_missing = validate(ValidateInput {
-            workflow:          WorkflowInput::DotSource {
-                source:   r#"digraph Test {
+            workflow: WorkflowInput::DotSource {
+                source: r#"digraph Test {
                     graph [goal="Demo"]
                     start [shape=Mdiamond]
                     work [prompt="@missing.md"]
@@ -749,10 +754,10 @@ mod tests {
                 .to_string(),
                 base_dir: Some(dir.path().to_path_buf()),
             },
-            settings:          WorkflowSettings::default(),
-            cwd:               dir.path().to_path_buf(),
+            settings: WorkflowSettings::default(),
+            cwd: dir.path().to_path_buf(),
             custom_transforms: Vec::new(),
-            catalog:           test_catalog(),
+            catalog: test_catalog(),
         })
         .unwrap();
         assert_eq!(
@@ -761,8 +766,8 @@ mod tests {
         );
 
         let inline_goal = validate(ValidateInput {
-            workflow:          WorkflowInput::DotSource {
-                source:   r#"digraph Test {
+            workflow: WorkflowInput::DotSource {
+                source: r#"digraph Test {
                     graph [goal="Ship"]
                     start [shape=Mdiamond]
                     work [prompt="Goal: {{ goal }}"]
@@ -772,15 +777,15 @@ mod tests {
                 .to_string(),
                 base_dir: Some(dir.path().to_path_buf()),
             },
-            settings:          WorkflowSettings::default(),
-            cwd:               dir.path().to_path_buf(),
+            settings: WorkflowSettings::default(),
+            cwd: dir.path().to_path_buf(),
             custom_transforms: Vec::new(),
-            catalog:           test_catalog(),
+            catalog: test_catalog(),
         })
         .unwrap();
         let file_goal = validate(ValidateInput {
-            workflow:          WorkflowInput::DotSource {
-                source:   r#"digraph Test {
+            workflow: WorkflowInput::DotSource {
+                source: r#"digraph Test {
                     graph [goal="Ship"]
                     start [shape=Mdiamond]
                     work [prompt="@goal.md"]
@@ -790,10 +795,10 @@ mod tests {
                 .to_string(),
                 base_dir: Some(dir.path().to_path_buf()),
             },
-            settings:          WorkflowSettings::default(),
-            cwd:               dir.path().to_path_buf(),
+            settings: WorkflowSettings::default(),
+            cwd: dir.path().to_path_buf(),
             custom_transforms: Vec::new(),
-            catalog:           test_catalog(),
+            catalog: test_catalog(),
         })
         .unwrap();
         assert_eq!(
@@ -877,14 +882,14 @@ mod tests {
     #[test]
     fn validate_returns_error_on_invalid_dot() {
         let result = validate(ValidateInput {
-            workflow:          WorkflowInput::DotSource {
-                source:   "not a graph".to_string(),
+            workflow: WorkflowInput::DotSource {
+                source: "not a graph".to_string(),
                 base_dir: None,
             },
-            settings:          WorkflowSettings::default(),
-            cwd:               PathBuf::from("."),
+            settings: WorkflowSettings::default(),
+            cwd: PathBuf::from("."),
             custom_transforms: Vec::new(),
-            catalog:           test_catalog(),
+            catalog: test_catalog(),
         });
         assert!(result.is_err());
     }
@@ -921,14 +926,14 @@ mod tests {
         }
 
         let validated = validate(ValidateInput {
-            workflow:          WorkflowInput::DotSource {
-                source:   MINIMAL_DOT.to_string(),
+            workflow: WorkflowInput::DotSource {
+                source: MINIMAL_DOT.to_string(),
                 base_dir: None,
             },
-            settings:          WorkflowSettings::default(),
-            cwd:               PathBuf::from("."),
+            settings: WorkflowSettings::default(),
+            cwd: PathBuf::from("."),
             custom_transforms: vec![Box::new(TagTransform)],
-            catalog:           test_catalog(),
+            catalog: test_catalog(),
         })
         .unwrap();
         validated.raise_on_errors().unwrap();
@@ -958,11 +963,11 @@ mod tests {
         .unwrap();
 
         let validated = validate(ValidateInput {
-            workflow:          WorkflowInput::Path(dot_path),
-            settings:          WorkflowSettings::default(),
-            cwd:               dir.path().to_path_buf(),
+            workflow: WorkflowInput::Path(dot_path),
+            settings: WorkflowSettings::default(),
+            cwd: dir.path().to_path_buf(),
             custom_transforms: Vec::new(),
-            catalog:           test_catalog(),
+            catalog: test_catalog(),
         })
         .unwrap();
         validated.raise_on_errors().unwrap();
@@ -999,11 +1004,11 @@ mod tests {
         .unwrap();
 
         let validated = validate(ValidateInput {
-            workflow:          WorkflowInput::Path(dot_path),
-            settings:          WorkflowSettings::default(),
-            cwd:               dir.path().to_path_buf(),
+            workflow: WorkflowInput::Path(dot_path),
+            settings: WorkflowSettings::default(),
+            cwd: dir.path().to_path_buf(),
             custom_transforms: Vec::new(),
-            catalog:           test_catalog(),
+            catalog: test_catalog(),
         })
         .unwrap();
 
@@ -1021,8 +1026,8 @@ mod tests {
     #[test]
     fn validate_from_bundle_resolves_nested_import_files_relative_to_imported_graph() {
         let validated = validate(ValidateInput {
-            workflow:          WorkflowInput::Bundled(BundledWorkflow {
-                path:   ManifestPath::from_wire("workflow.fabro").unwrap(),
+            workflow: WorkflowInput::Bundled(BundledWorkflow {
+                path: ManifestPath::from_wire("workflow.fabro").unwrap(),
                 source: r#"digraph Test {
                     graph [goal="Ship"]
                     start [shape=Mdiamond]
@@ -1032,7 +1037,7 @@ mod tests {
                 }"#
                 .to_string(),
                 config: None,
-                files:  HashMap::from([
+                files: HashMap::from([
                     (
                         ManifestPath::from_wire("child/validate.fabro").unwrap(),
                         r#"digraph Validate {
@@ -1049,10 +1054,10 @@ mod tests {
                     ),
                 ]),
             }),
-            settings:          WorkflowSettings::default(),
-            cwd:               PathBuf::from("."),
+            settings: WorkflowSettings::default(),
+            cwd: PathBuf::from("."),
             custom_transforms: Vec::new(),
-            catalog:           test_catalog(),
+            catalog: test_catalog(),
         })
         .unwrap();
 
@@ -1069,8 +1074,8 @@ mod tests {
     #[test]
     fn validate_from_bundle_resolves_minijinja_includes_in_prompt_and_goal_files() {
         let validated = validate(ValidateInput {
-            workflow:          WorkflowInput::Bundled(BundledWorkflow {
-                path:   ManifestPath::from_wire("workflow.fabro").unwrap(),
+            workflow: WorkflowInput::Bundled(BundledWorkflow {
+                path: ManifestPath::from_wire("workflow.fabro").unwrap(),
                 source: r#"digraph Test {
                     graph [goal="@goals/goal.md"]
                     start [shape=Mdiamond]
@@ -1080,7 +1085,7 @@ mod tests {
                 }"#
                 .to_string(),
                 config: None,
-                files:  HashMap::from([
+                files: HashMap::from([
                     (
                         ManifestPath::from_wire("goals/goal.md").unwrap(),
                         r#"{% include "goal.tpl.md" %}"#.to_string(),
@@ -1099,10 +1104,10 @@ mod tests {
                     ),
                 ]),
             }),
-            settings:          WorkflowSettings::default(),
-            cwd:               PathBuf::from("."),
+            settings: WorkflowSettings::default(),
+            cwd: PathBuf::from("."),
             custom_transforms: Vec::new(),
-            catalog:           test_catalog(),
+            catalog: test_catalog(),
         })
         .unwrap();
 
@@ -1130,7 +1135,7 @@ mod tests {
             &store,
             CreateRunInput {
                 workflow: WorkflowInput::DotSource {
-                    source:   dot.to_string(),
+                    source: dot.to_string(),
                     base_dir: None,
                 },
                 settings: test_default_settings(),
@@ -1176,7 +1181,7 @@ mod tests {
             &store,
             CreateRunInput {
                 workflow: WorkflowInput::DotSource {
-                    source:   MINIMAL_DOT.to_string(),
+                    source: MINIMAL_DOT.to_string(),
                     base_dir: None,
                 },
                 settings: settings_from_run_layer({
@@ -1209,10 +1214,10 @@ mod tests {
                 title: None,
                 automation: None,
                 git: Some(fabro_types::GitContext {
-                    origin_url:   String::new(),
-                    branch:       "main".to_string(),
-                    sha:          None,
-                    dirty:        fabro_types::DirtyStatus::Clean,
+                    origin_url: String::new(),
+                    branch: "main".to_string(),
+                    sha: None,
+                    dirty: fabro_types::DirtyStatus::Clean,
                     push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
                 }),
                 fork_source_ref: None,
@@ -1301,7 +1306,7 @@ mod tests {
             &store,
             CreateRunInput {
                 workflow: WorkflowInput::DotSource {
-                    source:   MINIMAL_DOT.to_string(),
+                    source: MINIMAL_DOT.to_string(),
                     base_dir: None,
                 },
                 settings: settings_from_run_layer({
@@ -1350,7 +1355,7 @@ mod tests {
             &store,
             CreateRunInput {
                 workflow: WorkflowInput::DotSource {
-                    source:   MINIMAL_DOT.to_string(),
+                    source: MINIMAL_DOT.to_string(),
                     base_dir: None,
                 },
                 settings: dry_run_only_settings(),
@@ -1363,10 +1368,10 @@ mod tests {
                 title: None,
                 automation: None,
                 git: Some(fabro_types::GitContext {
-                    origin_url:   "https://github.com/acme/widgets".to_string(),
-                    branch:       String::new(),
-                    sha:          None,
-                    dirty:        fabro_types::DirtyStatus::Clean,
+                    origin_url: "https://github.com/acme/widgets".to_string(),
+                    branch: String::new(),
+                    sha: None,
+                    dirty: fabro_types::DirtyStatus::Clean,
                     push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
                 }),
                 fork_source_ref: None,
@@ -1421,15 +1426,15 @@ mod tests {
             None,
         ));
         let automation = fabro_types::AutomationRef {
-            id:         "nightly".to_string(),
-            name:       Some("Nightly".to_string()),
+            id: "nightly".to_string(),
+            name: Some("Nightly".to_string()),
             trigger_id: Some("schedule_1".to_string()),
         };
         let created = create(
             store.as_ref(),
             CreateRunInput {
                 workflow: WorkflowInput::DotSource {
-                    source:   MINIMAL_DOT.to_string(),
+                    source: MINIMAL_DOT.to_string(),
                     base_dir: None,
                 },
                 settings: dry_run_with_storage(&storage_dir),
@@ -1482,7 +1487,7 @@ mod tests {
             store.as_ref(),
             CreateRunInput {
                 workflow: WorkflowInput::DotSource {
-                    source:   MINIMAL_DOT.to_string(),
+                    source: MINIMAL_DOT.to_string(),
                     base_dir: None,
                 },
                 settings: dry_run_with_storage(&storage_dir),
@@ -1498,13 +1503,13 @@ mod tests {
                 fork_source_ref: None,
                 parent_id: None,
                 provenance: fabro_types::RunProvenance {
-                    server:  Some(fabro_types::RunServerProvenance {
+                    server: Some(fabro_types::RunServerProvenance {
                         version: "0.9.0".to_string(),
                     }),
-                    client:  Some(fabro_types::RunClientProvenance {
+                    client: Some(fabro_types::RunClientProvenance {
                         user_agent: Some("fabro-cli/0.9.0".to_string()),
-                        name:       Some("fabro-cli".to_string()),
-                        version:    Some("0.9.0".to_string()),
+                        name: Some("fabro-cli".to_string()),
+                        version: Some("0.9.0".to_string()),
                     }),
                     subject: fabro_types::Principal::user(
                         fabro_types::IdpIdentity::new("https://github.com", "12345").unwrap(),

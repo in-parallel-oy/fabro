@@ -23,51 +23,51 @@ use crate::outcome::{BilledModelUsage, FailureDetail, Outcome};
 )]
 pub enum Event {
     RunCreated {
-        run_id:           RunId,
-        title:            Option<String>,
-        settings:         serde_json::Value,
-        graph:            serde_json::Value,
+        run_id: RunId,
+        title: Option<String>,
+        settings: serde_json::Value,
+        graph: serde_json::Value,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        workflow_source:  Option<String>,
+        workflow_source: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        workflow_config:  Option<String>,
-        labels:           BTreeMap<String, String>,
-        run_dir:          String,
+        workflow_config: Option<String>,
+        labels: BTreeMap<String, String>,
+        run_dir: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         source_directory: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        workflow_slug:    Option<String>,
+        workflow_slug: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        automation:       Option<AutomationRef>,
+        automation: Option<AutomationRef>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        db_prefix:        Option<String>,
-        provenance:       RunProvenance,
+        db_prefix: Option<String>,
+        provenance: RunProvenance,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        manifest_blob:    Option<RunBlobId>,
+        manifest_blob: Option<RunBlobId>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        git:              Option<GitContext>,
+        git: Option<GitContext>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        fork_source_ref:  Option<ForkSourceRef>,
+        fork_source_ref: Option<ForkSourceRef>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        retried_from:     Option<RunId>,
+        retried_from: Option<RunId>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        parent_id:        Option<RunId>,
+        parent_id: Option<RunId>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        web_url:          Option<String>,
+        web_url: Option<String>,
     },
     WorkflowRunStarted {
-        name:         String,
-        run_id:       RunId,
+        name: String,
+        run_id: RunId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        base_branch:  Option<String>,
+        base_branch: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        base_sha:     Option<String>,
+        base_sha: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        run_branch:   Option<String>,
+        run_branch: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         worktree_dir: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        goal:         Option<String>,
+        goal: Option<String>,
     },
     RunSubmitted {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -76,12 +76,12 @@ pub enum Event {
     RunStartRequested {
         resume: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:  Option<Principal>,
+        actor: Option<Principal>,
     },
     RunPending {
         reason: PendingReason,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:  Option<Principal>,
+        actor: Option<Principal>,
     },
     RunApproved {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -91,12 +91,12 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:  Option<Principal>,
+        actor: Option<Principal>,
     },
     RunRunnable {
         source: RunRunnableSource,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:  Option<Principal>,
+        actor: Option<Principal>,
     },
     RunStarting,
     RunRunning,
@@ -105,28 +105,28 @@ pub enum Event {
         actor: Option<Principal>,
     },
     RunSteer {
-        text:  String,
+        text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         actor: Option<Principal>,
     },
     RunPairStarted {
         pair_id: PairId,
-        target:  PairTarget,
+        target: PairTarget,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:   Option<Principal>,
+        actor: Option<Principal>,
     },
     RunPairEnded {
         pair_id: PairId,
-        reason:  RunPairEndedReason,
+        reason: RunPairEndedReason,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:   Option<Principal>,
+        actor: Option<Principal>,
     },
     RunPairFailed {
         pair_id: PairId,
-        reason:  RunPairFailedReason,
+        reason: RunPairFailedReason,
         message: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:   Option<Principal>,
+        actor: Option<Principal>,
     },
     RunBlocked {
         blocked_reason: BlockedReason,
@@ -148,10 +148,10 @@ pub enum Event {
     RunPaused,
     RunUnpaused,
     RunSupersededBy {
-        new_run_id:                RunId,
+        new_run_id: RunId,
         target_checkpoint_ordinal: usize,
-        target_node_id:            String,
-        target_visit:              usize,
+        target_node_id: String,
+        target_visit: usize,
     },
     RunArchived {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -169,86 +169,86 @@ pub enum Event {
     RunParentLinked {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         previous_parent_id: Option<RunId>,
-        parent_id:          RunId,
+        parent_id: RunId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:              Option<Principal>,
+        actor: Option<Principal>,
     },
     RunParentUnlinked {
         previous_parent_id: RunId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:              Option<Principal>,
+        actor: Option<Principal>,
     },
     WorkflowRunCompleted {
-        timing:               RunTiming,
-        artifact_count:       usize,
+        timing: RunTiming,
+        artifact_count: usize,
         #[serde(default)]
-        status:               String,
-        reason:               SuccessReason,
+        status: String,
+        reason: SuccessReason,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        total_usd_micros:     Option<i64>,
+        total_usd_micros: Option<i64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         final_git_commit_sha: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        final_patch:          Option<String>,
+        final_patch: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        diff_summary:         Option<DiffSummary>,
+        diff_summary: Option<DiffSummary>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        billing:              Option<BilledTokenCounts>,
+        billing: Option<BilledTokenCounts>,
     },
     WorkflowRunFailed {
-        failure:              RunFailure,
-        timing:               RunTiming,
+        failure: RunFailure,
+        timing: RunTiming,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         final_git_commit_sha: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        final_patch:          Option<String>,
+        final_patch: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        diff_summary:         Option<DiffSummary>,
+        diff_summary: Option<DiffSummary>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        billing:              Option<BilledTokenCounts>,
+        billing: Option<BilledTokenCounts>,
     },
     RunNotice {
-        level:            RunNoticeLevel,
-        code:             String,
-        message:          String,
+        level: RunNoticeLevel,
+        code: String,
+        message: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         exec_output_tail: Option<fabro_types::ExecOutputTail>,
     },
     MetadataSnapshotStarted {
-        phase:  fabro_types::MetadataSnapshotPhase,
+        phase: fabro_types::MetadataSnapshotPhase,
         branch: String,
     },
     MetadataSnapshotCompleted {
-        phase:       fabro_types::MetadataSnapshotPhase,
-        branch:      String,
+        phase: fabro_types::MetadataSnapshotPhase,
+        branch: String,
         duration_ms: u64,
         entry_count: usize,
-        bytes:       u64,
-        commit_sha:  String,
+        bytes: u64,
+        commit_sha: String,
     },
     MetadataSnapshotFailed {
-        phase:            fabro_types::MetadataSnapshotPhase,
-        branch:           String,
-        duration_ms:      u64,
-        failure_kind:     fabro_types::MetadataSnapshotFailureKind,
-        error:            String,
+        phase: fabro_types::MetadataSnapshotPhase,
+        branch: String,
+        duration_ms: u64,
+        failure_kind: fabro_types::MetadataSnapshotFailureKind,
+        error: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        causes:           Vec<String>,
+        causes: Vec<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        commit_sha:       Option<String>,
+        commit_sha: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        entry_count:      Option<usize>,
+        entry_count: Option<usize>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        bytes:            Option<u64>,
+        bytes: Option<u64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         exec_output_tail: Option<fabro_types::ExecOutputTail>,
     },
     StageStarted {
-        node_id:      String,
-        name:         String,
-        index:        usize,
+        node_id: String,
+        name: String,
+        index: usize,
         handler_type: String,
-        attempt:      usize,
+        attempt: usize,
         max_attempts: usize,
     },
     StageCompleted {
@@ -282,64 +282,64 @@ pub enum Event {
         max_attempts: usize,
     },
     StageFailed {
-        node_id:    String,
-        name:       String,
-        index:      usize,
-        failure:    FailureDetail,
+        node_id: String,
+        name: String,
+        index: usize,
+        failure: FailureDetail,
         will_retry: bool,
-        timing:     StageTiming,
-        billing:    Option<BilledModelUsage>,
+        timing: StageTiming,
+        billing: Option<BilledModelUsage>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:      Option<Principal>,
+        actor: Option<Principal>,
     },
     StageRetrying {
-        node_id:      String,
-        name:         String,
-        index:        usize,
-        attempt:      usize,
+        node_id: String,
+        name: String,
+        index: usize,
+        attempt: usize,
         max_attempts: usize,
-        delay_ms:     u64,
+        delay_ms: u64,
     },
     ParallelStarted {
-        node_id:      String,
-        visit:        u32,
+        node_id: String,
+        visit: u32,
         branch_count: usize,
-        join_policy:  String,
+        join_policy: String,
     },
     ParallelBranchStarted {
-        parallel_group_id:  StageId,
+        parallel_group_id: StageId,
         parallel_branch_id: ParallelBranchId,
-        branch:             String,
-        index:              usize,
+        branch: String,
+        index: usize,
     },
     ParallelBranchCompleted {
-        parallel_group_id:  StageId,
+        parallel_group_id: StageId,
         parallel_branch_id: ParallelBranchId,
-        branch:             String,
-        index:              usize,
-        duration_ms:        u64,
-        status:             String,
+        branch: String,
+        index: usize,
+        duration_ms: u64,
+        status: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        head_sha:           Option<String>,
+        head_sha: Option<String>,
     },
     ParallelCompleted {
-        node_id:       String,
-        visit:         u32,
-        duration_ms:   u64,
+        node_id: String,
+        visit: u32,
+        duration_ms: u64,
         success_count: usize,
         failure_count: usize,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        results:       Vec<serde_json::Value>,
+        results: Vec<serde_json::Value>,
     },
     InterviewStarted {
-        question_id:     String,
-        question:        String,
-        stage:           String,
-        question_type:   String,
+        question_id: String,
+        question: String,
+        stage: String,
+        question_type: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        options:         Vec<fabro_types::InterviewOption>,
+        options: Vec<fabro_types::InterviewOption>,
         #[serde(default)]
-        allow_freeform:  bool,
+        allow_freeform: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         timeout_seconds: Option<f64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -347,27 +347,27 @@ pub enum Event {
     },
     InterviewCompleted {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:       Option<Principal>,
+        actor: Option<Principal>,
         question_id: String,
-        question:    String,
-        answer:      String,
+        question: String,
+        answer: String,
         duration_ms: u64,
     },
     InterviewTimeout {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:       Option<Principal>,
+        actor: Option<Principal>,
         question_id: String,
-        question:    String,
-        stage:       String,
+        question: String,
+        stage: String,
         duration_ms: u64,
     },
     InterviewInterrupted {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:       Option<Principal>,
+        actor: Option<Principal>,
         question_id: String,
-        question:    String,
-        stage:       String,
-        reason:      String,
+        question: String,
+        stage: String,
+        reason: String,
         duration_ms: u64,
     },
     CheckpointCompleted {
@@ -398,107 +398,107 @@ pub enum Event {
         diff_summary: Option<DiffSummary>,
     },
     CheckpointFailed {
-        node_id:          String,
-        error:            String,
+        node_id: String,
+        error: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         exec_output_tail: Option<fabro_types::ExecOutputTail>,
     },
     GitCommit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         node_id: Option<String>,
-        sha:     String,
+        sha: String,
     },
     GitPush {
-        branch:           String,
-        success:          bool,
+        branch: String,
+        success: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         exec_output_tail: Option<fabro_types::ExecOutputTail>,
     },
     GitBranch {
         branch: String,
-        sha:    String,
+        sha: String,
     },
     GitWorktreeAdd {
-        path:   String,
+        path: String,
         branch: String,
     },
     GitWorktreeRemove {
         path: String,
     },
     GitFetch {
-        branch:  String,
+        branch: String,
         success: bool,
     },
     GitReset {
         sha: String,
     },
     EdgeSelected {
-        from_node:          String,
-        to_node:            String,
-        label:              Option<String>,
-        condition:          Option<String>,
+        from_node: String,
+        to_node: String,
+        label: Option<String>,
+        condition: Option<String>,
         /// Which selection step chose this edge (e.g. "condition",
         /// "preferred_label", "jump").
-        reason:             String,
+        reason: String,
         /// The stage's preferred label hint, if any.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        preferred_label:    Option<String>,
+        preferred_label: Option<String>,
         /// The stage's suggested next node IDs, if any.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         suggested_next_ids: Vec<String>,
         /// The stage outcome status that influenced routing.
-        stage_status:       String,
+        stage_status: String,
         /// Whether this was a direct jump (bypassing normal edge selection).
-        is_jump:            bool,
+        is_jump: bool,
     },
     LoopRestart {
         from_node: String,
-        to_node:   String,
+        to_node: String,
     },
     Prompt {
-        stage:            String,
-        visit:            u32,
-        text:             String,
+        stage: String,
+        visit: u32,
+        text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        mode:             Option<String>,
+        mode: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        provider:         Option<String>,
+        provider: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        model:            Option<String>,
+        model: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reasoning_effort: Option<ReasoningEffort>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        speed:            Option<Speed>,
+        speed: Option<Speed>,
     },
     PromptCompleted {
-        node_id:  String,
+        node_id: String,
         response: String,
-        model:    String,
+        model: String,
         provider: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        billing:  Option<BilledModelUsage>,
+        billing: Option<BilledModelUsage>,
     },
     /// Forwarded from an agent session, tagged with the workflow stage.
     Agent {
-        stage:             String,
-        visit:             u32,
-        event:             AgentEvent,
+        stage: String,
+        visit: u32,
+        event: AgentEvent,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        session_id:        Option<String>,
+        session_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent_session_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        tool_call_id:      Option<String>,
+        tool_call_id: Option<String>,
     },
     SubgraphStarted {
-        node_id:    String,
+        node_id: String,
         start_node: String,
     },
     SubgraphCompleted {
-        node_id:        String,
+        node_id: String,
         steps_executed: usize,
-        status:         String,
-        duration_ms:    u64,
+        status: String,
+        duration_ms: u64,
     },
     /// Forwarded from a sandbox lifecycle operation.
     Sandbox {
@@ -507,22 +507,22 @@ pub enum Event {
     /// Emitted after the sandbox has been initialized (by engine lifecycle).
     SandboxInitialized {
         working_directory: String,
-        provider:          SandboxProviderKind,
-        id:                String,
+        provider: SandboxProviderKind,
+        id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        image:             Option<String>,
+        image: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        snapshot:          Option<String>,
+        snapshot: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        repo_cloned:       Option<bool>,
+        repo_cloned: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        clone_origin_url:  Option<String>,
+        clone_origin_url: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        clone_branch:      Option<String>,
+        clone_branch: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        workspace_root:    Option<String>,
+        workspace_root: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        repos_root:        Option<String>,
+        repos_root: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         primary_repo_path: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -533,145 +533,145 @@ pub enum Event {
     },
     SetupCommandStarted {
         command: String,
-        index:   usize,
+        index: usize,
     },
     SetupCommandCompleted {
-        command:     String,
-        index:       usize,
-        exit_code:   i32,
+        command: String,
+        index: usize,
+        exit_code: i32,
         duration_ms: u64,
     },
     SetupCompleted {
         duration_ms: u64,
     },
     SetupFailed {
-        command:          String,
-        index:            usize,
-        exit_code:        i32,
-        stderr:           String,
+        command: String,
+        index: usize,
+        exit_code: i32,
+        stderr: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         exec_output_tail: Option<fabro_types::ExecOutputTail>,
     },
     StallWatchdogTimeout {
-        node:         String,
+        node: String,
         idle_seconds: u64,
     },
     ArtifactCaptured {
-        node_id:        String,
-        attempt:        u32,
-        node_slug:      String,
-        path:           String,
-        mime:           String,
-        content_md5:    String,
+        node_id: String,
+        attempt: u32,
+        node_slug: String,
+        path: String,
+        mime: String,
+        content_md5: String,
         content_sha256: String,
-        bytes:          u64,
+        bytes: u64,
     },
     SshAccessReady {
         ssh_command: String,
     },
     Failover {
-        stage:         String,
+        stage: String,
         from_provider: String,
-        from_model:    String,
-        to_provider:   String,
-        to_model:      String,
-        error:         String,
+        from_model: String,
+        to_provider: String,
+        to_model: String,
+        error: String,
     },
     CommandStarted {
-        node_id:    String,
-        script:     String,
-        command:    String,
-        language:   String,
+        node_id: String,
+        script: String,
+        command: String,
+        language: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         timeout_ms: Option<u64>,
     },
     CommandCompleted {
-        node_id:        String,
-        output:         String,
+        node_id: String,
+        output: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        exit_code:      Option<i32>,
-        duration_ms:    u64,
-        termination:    CommandTermination,
-        output_bytes:   u64,
+        exit_code: Option<i32>,
+        duration_ms: u64,
+        termination: CommandTermination,
+        output_bytes: u64,
         live_streaming: bool,
     },
     /// A top-level agent session object started its lifecycle.
     AgentSessionStarted {
-        session_id:        String,
+        session_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent_session_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        provider:          Option<String>,
+        provider: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        model:             Option<String>,
+        model: Option<String>,
     },
     /// A stage has a currently steerable live session binding.
     AgentSessionActivated {
-        node_id:          String,
-        visit:            u32,
-        session_id:       String,
+        node_id: String,
+        visit: u32,
+        session_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        thread_id:        Option<String>,
+        thread_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        provider:         Option<String>,
+        provider: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        model:            Option<String>,
+        model: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reasoning_effort: Option<ReasoningEffort>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        speed:            Option<Speed>,
+        speed: Option<Speed>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         permission_level: Option<PermissionLevel>,
-        capabilities:     Vec<fabro_types::SessionCapability>,
+        capabilities: Vec<fabro_types::SessionCapability>,
     },
     /// Effective model-callable tools for a stage session after profile setup,
     /// optional registrations, MCP integration, and access-policy filtering.
     AgentToolsAvailable {
-        node_id:    String,
-        visit:      u32,
+        node_id: String,
+        visit: u32,
         session_id: String,
-        tools:      Vec<fabro_types::AgentToolSummary>,
+        tools: Vec<fabro_types::AgentToolSummary>,
     },
     /// A stage's steerable live session binding ended.
     AgentSessionDeactivated {
-        node_id:    String,
-        visit:      u32,
+        node_id: String,
+        visit: u32,
         session_id: String,
     },
     /// A top-level agent session object ended its lifecycle.
     AgentSessionEnded {
-        session_id:        String,
+        session_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent_session_id: Option<String>,
     },
     /// A run-level interrupt was delivered to a concrete steerable agent
     /// session/stage.
     AgentInterruptInjected {
-        node_id:    String,
-        visit:      u32,
+        node_id: String,
+        visit: u32,
         session_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:      Option<Principal>,
+        actor: Option<Principal>,
     },
     AgentPairUserMessage {
-        node_id:           String,
-        visit:             u32,
-        session_id:        String,
-        pair_id:           PairId,
-        message_id:        PairMessageId,
+        node_id: String,
+        visit: u32,
+        session_id: String,
+        pair_id: PairId,
+        message_id: PairMessageId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         client_message_id: Option<String>,
-        text:              String,
+        text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:             Option<Principal>,
+        actor: Option<Principal>,
     },
     AgentPairSystemMessage {
-        node_id:    String,
-        visit:      u32,
+        node_id: String,
+        visit: u32,
         session_id: String,
-        pair_id:    PairId,
-        kind:       PairSystemMessageKind,
-        text:       String,
+        pair_id: PairId,
+        kind: PairSystemMessageKind,
+        text: String,
     },
     /// A steer arrived with no active session and was parked in the run-wide
     /// pending buffer. The actor (steer author) is lifted to top-level.
@@ -682,86 +682,86 @@ pub enum Event {
     /// One or more buffered/queued steers were dropped because a cap was
     /// reached or the run ended before they could be delivered.
     AgentSteerDropped {
-        reason:  fabro_types::AgentSteerDroppedReason,
-        count:   u32,
+        reason: fabro_types::AgentSteerDroppedReason,
+        count: u32,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        actor:   Option<Principal>,
+        actor: Option<Principal>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         node_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        visit:   Option<u32>,
+        visit: Option<u32>,
     },
     AgentAcpStarted {
-        node_id:     String,
-        visit:       u32,
-        command:     String,
+        node_id: String,
+        visit: u32,
+        command: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         config_name: Option<String>,
     },
     AgentAcpCompleted {
-        node_id:     String,
-        stdout:      String,
-        stderr:      String,
+        node_id: String,
+        stdout: String,
+        stderr: String,
         stop_reason: String,
         duration_ms: u64,
     },
     AgentAcpCancelled {
-        node_id:     String,
-        stdout:      String,
-        stderr:      String,
+        node_id: String,
+        stdout: String,
+        stderr: String,
         duration_ms: u64,
     },
     AgentAcpTimedOut {
-        node_id:     String,
-        stdout:      String,
-        stderr:      String,
+        node_id: String,
+        stdout: String,
+        stderr: String,
         duration_ms: u64,
     },
     AgentAcpToolCall {
-        node_id:      String,
+        node_id: String,
         tool_call_id: String,
-        visit:        u32,
-        call:         serde_json::Value,
+        visit: u32,
+        call: serde_json::Value,
     },
     AgentAcpToolCallUpdate {
-        node_id:      String,
+        node_id: String,
         tool_call_id: String,
-        visit:        u32,
-        fields:       serde_json::Value,
+        visit: u32,
+        fields: serde_json::Value,
     },
     AgentAcpMessage {
-        node_id:  String,
-        visit:    u32,
-        content:  serde_json::Value,
+        node_id: String,
+        visit: u32,
+        content: serde_json::Value,
         metadata: serde_json::Map<String, serde_json::Value>,
     },
     AgentAcpThought {
-        node_id:  String,
-        visit:    u32,
-        content:  serde_json::Value,
+        node_id: String,
+        visit: u32,
+        content: serde_json::Value,
         metadata: serde_json::Map<String, serde_json::Value>,
     },
     AgentAcpPlan {
-        node_id:  String,
-        visit:    u32,
-        entries:  serde_json::Value,
+        node_id: String,
+        visit: u32,
+        entries: serde_json::Value,
         metadata: serde_json::Map<String, serde_json::Value>,
     },
     AgentAcpUserMessage {
-        node_id:  String,
-        visit:    u32,
-        content:  serde_json::Value,
+        node_id: String,
+        visit: u32,
+        content: serde_json::Value,
         metadata: serde_json::Map<String, serde_json::Value>,
     },
     PullRequestCreated {
-        pr_url:      String,
-        pr_number:   u64,
-        owner:       String,
-        repo:        String,
+        pr_url: String,
+        pr_number: u64,
+        owner: String,
+        repo: String,
         base_branch: String,
         head_branch: String,
-        title:       String,
-        draft:       bool,
+        title: String,
+        draft: bool,
     },
     PullRequestLinked {
         pull_request: PullRequestLink,

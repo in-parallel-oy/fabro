@@ -26,28 +26,28 @@ use crate::handler::NodeTimeoutPolicy;
 use crate::steering_hub::{ActiveControlHandle, SteeringHub};
 
 pub struct AgentAcpBackend {
-    tool_env:                     Option<Arc<dyn ToolEnvProvider>>,
+    tool_env: Option<Arc<dyn ToolEnvProvider>>,
     github_token_refresh_managed: bool,
-    steering_hub:                 Option<Arc<SteeringHub>>,
+    steering_hub: Option<Arc<SteeringHub>>,
     /// Per-run ACP credential env (GOAL B). Merged into the ACP launch env only;
     /// never into the shared sandbox `base_env`. See [`AcpEnv`].
-    acp_credentials:              AcpEnv,
+    acp_credentials: AcpEnv,
     /// Per-run Codex `auth.json` (GOAL B). When set, materialized into
     /// `$CODEX_HOME/auth.json` inside the sandbox for the duration of the ACP
     /// turn and removed before the turn returns, so it never reaches artifact
     /// capture. Mutually exclusive with a Claude `acp_credentials` env.
-    codex_auth_json:              Option<String>,
+    codex_auth_json: Option<String>,
 }
 
 impl AgentAcpBackend {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            tool_env:                     None,
+            tool_env: None,
             github_token_refresh_managed: false,
-            steering_hub:                 None,
-            acp_credentials:              AcpEnv::default(),
-            codex_auth_json:              None,
+            steering_hub: None,
+            acp_credentials: AcpEnv::default(),
+            codex_auth_json: None,
         }
     }
 
@@ -123,9 +123,9 @@ impl AgentAcpBackend {
         let command_display = process_spec.to_string();
         emitter.emit_scoped(
             &Event::AgentAcpStarted {
-                node_id:     node.id.clone(),
-                visit:       stage_scope.visit,
-                command:     command_display,
+                node_id: node.id.clone(),
+                visit: stage_scope.visit,
+                command: command_display,
                 config_name: config_name.clone(),
             },
             stage_scope,
@@ -166,12 +166,12 @@ impl AgentAcpBackend {
             Arc::new(move |text: String, actor: Option<Principal>| {
                 emitter.emit_scoped(
                     &Event::Agent {
-                        stage:             node_id.clone(),
-                        visit:             stage_scope.visit,
-                        event:             AgentEvent::SteeringInjected { text, actor },
-                        session_id:        Some(session_id.clone()),
+                        stage: node_id.clone(),
+                        visit: stage_scope.visit,
+                        event: AgentEvent::SteeringInjected { text, actor },
+                        session_id: Some(session_id.clone()),
                         parent_session_id: None,
-                        tool_call_id:      None,
+                        tool_call_id: None,
                     },
                     &stage_scope,
                 );
@@ -227,9 +227,9 @@ impl AgentAcpBackend {
             Ok(result) => {
                 emitter.emit_scoped(
                     &Event::AgentAcpCompleted {
-                        node_id:     node.id.clone(),
-                        stdout:      result.text.clone(),
-                        stderr:      result.stderr.clone(),
+                        node_id: node.id.clone(),
+                        stdout: result.text.clone(),
+                        stderr: result.stderr.clone(),
                         stop_reason: render_stop_reason(&result.stop_reason),
                         duration_ms: result.duration_ms,
                     },
@@ -240,9 +240,9 @@ impl AgentAcpBackend {
             Err(AcpError::Cancelled) => {
                 emitter.emit_scoped(
                     &Event::AgentAcpCancelled {
-                        node_id:     node.id.clone(),
-                        stdout:      String::new(),
-                        stderr:      String::new(),
+                        node_id: node.id.clone(),
+                        stdout: String::new(),
+                        stderr: String::new(),
                         duration_ms: elapsed_ms(launch_start),
                     },
                     stage_scope,
@@ -256,9 +256,9 @@ impl AgentAcpBackend {
                     .unwrap_or_default();
                 emitter.emit_scoped(
                     &Event::AgentAcpTimedOut {
-                        node_id:     node.id.clone(),
-                        stdout:      String::new(),
-                        stderr:      stderr.clone(),
+                        node_id: node.id.clone(),
+                        stdout: String::new(),
+                        stderr: stderr.clone(),
                         duration_ms: elapsed_ms(launch_start),
                     },
                     stage_scope,
@@ -270,9 +270,9 @@ impl AgentAcpBackend {
             Err(AcpError::StopReason { stop_reason, text }) => {
                 emitter.emit_scoped(
                     &Event::AgentAcpCompleted {
-                        node_id:     node.id.clone(),
-                        stdout:      text.clone(),
-                        stderr:      String::new(),
+                        node_id: node.id.clone(),
+                        stdout: text.clone(),
+                        stderr: String::new(),
                         stop_reason: stop_reason.clone(),
                         duration_ms: elapsed_ms(launch_start),
                     },
@@ -347,17 +347,17 @@ impl AgentAcpBackend {
         };
         ActivationLease::activate(
             ActivationLeaseOptions {
-                stage_id:         StageId::new(node.id.clone(), stage_scope.visit),
-                session_id:       session_id.to_string(),
-                thread_id:        None,
-                provider:         Some(AgentBackend::Acp.to_string()),
-                model:            config_name.map(str::to_string),
+                stage_id: StageId::new(node.id.clone(), stage_scope.visit),
+                session_id: session_id.to_string(),
+                thread_id: None,
+                provider: Some(AgentBackend::Acp.to_string()),
+                model: config_name.map(str::to_string),
                 reasoning_effort: None,
-                speed:            None,
+                speed: None,
                 permission_level: None,
-                capabilities:     vec![SessionCapability::Steer],
-                hub:              Arc::clone(steering_hub),
-                emitter:          Arc::clone(emitter),
+                capabilities: vec![SessionCapability::Steer],
+                hub: Arc::clone(steering_hub),
+                emitter: Arc::clone(emitter),
             },
             &(Arc::new(handle.clone()) as Arc<dyn ActiveControlHandle>),
         )
@@ -681,14 +681,14 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:               &node,
-                prompt:             "write hello",
-                context:            &context,
-                thread_id:          None,
-                emitter:            &emitter,
-                sandbox:            &sandbox,
-                tool_hooks:         None,
-                cancel_token:       CancellationToken::new(),
+                node: &node,
+                prompt: "write hello",
+                context: &context,
+                thread_id: None,
+                emitter: &emitter,
+                sandbox: &sandbox,
+                tool_hooks: None,
+                cancel_token: CancellationToken::new(),
                 agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await
@@ -729,14 +729,14 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:               &node,
-                prompt:             "write hello",
-                context:            &context,
-                thread_id:          None,
-                emitter:            &emitter,
-                sandbox:            &sandbox,
-                tool_hooks:         None,
-                cancel_token:       CancellationToken::new(),
+                node: &node,
+                prompt: "write hello",
+                context: &context,
+                thread_id: None,
+                emitter: &emitter,
+                sandbox: &sandbox,
+                tool_hooks: None,
+                cancel_token: CancellationToken::new(),
                 agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await;
@@ -799,14 +799,14 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:               &node,
-                prompt:             "write hello",
-                context:            &context,
-                thread_id:          None,
-                emitter:            &emitter,
-                sandbox:            &sandbox,
-                tool_hooks:         None,
-                cancel_token:       CancellationToken::new(),
+                node: &node,
+                prompt: "write hello",
+                context: &context,
+                thread_id: None,
+                emitter: &emitter,
+                sandbox: &sandbox,
+                tool_hooks: None,
+                cancel_token: CancellationToken::new(),
                 agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await
@@ -847,14 +847,14 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:               &node,
-                prompt:             "write hello",
-                context:            &context,
-                thread_id:          None,
-                emitter:            &emitter,
-                sandbox:            &sandbox,
-                tool_hooks:         None,
-                cancel_token:       CancellationToken::new(),
+                node: &node,
+                prompt: "write hello",
+                context: &context,
+                thread_id: None,
+                emitter: &emitter,
+                sandbox: &sandbox,
+                tool_hooks: None,
+                cancel_token: CancellationToken::new(),
                 agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await
@@ -886,14 +886,14 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:               &node,
-                prompt:             "write hello",
-                context:            &context,
-                thread_id:          None,
-                emitter:            &emitter,
-                sandbox:            &sandbox_dyn,
-                tool_hooks:         None,
-                cancel_token:       CancellationToken::new(),
+                node: &node,
+                prompt: "write hello",
+                context: &context,
+                thread_id: None,
+                emitter: &emitter,
+                sandbox: &sandbox_dyn,
+                tool_hooks: None,
+                cancel_token: CancellationToken::new(),
                 agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await;
@@ -934,14 +934,10 @@ mod tests {
 
         // The shared base env (what exec_command descendants inherit) carries a
         // non-secret var but NOT the injected token.
-        let base_env =
-            StdHashMap::from([("WORKFLOW_ENV".to_string(), "base-value".to_string())]);
+        let base_env = StdHashMap::from([("WORKFLOW_ENV".to_string(), "base-value".to_string())]);
         let injected = InjectedAcpCredentials {
             engine: AcpEngine::Claude,
-            env:    StdHashMap::from([(
-                "CLAUDE_CODE_OAUTH_TOKEN".to_string(),
-                TOKEN.to_string(),
-            )]),
+            env: StdHashMap::from([("CLAUDE_CODE_OAUTH_TOKEN".to_string(), TOKEN.to_string())]),
         };
         let backend = AgentAcpBackend::new()
             .with_env(base_env.clone())
@@ -951,14 +947,14 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:               &node,
-                prompt:             "write hello",
-                context:            &context,
-                thread_id:          None,
-                emitter:            &emitter,
-                sandbox:            &sandbox_dyn,
-                tool_hooks:         None,
-                cancel_token:       CancellationToken::new(),
+                node: &node,
+                prompt: "write hello",
+                context: &context,
+                thread_id: None,
+                emitter: &emitter,
+                sandbox: &sandbox_dyn,
+                tool_hooks: None,
+                cancel_token: CancellationToken::new(),
                 agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await;
@@ -1025,7 +1021,7 @@ mod tests {
 
         let injected = InjectedAcpCredentials {
             engine: AcpEngine::Codex,
-            env:    StdHashMap::from([
+            env: StdHashMap::from([
                 ("OPENAI_API_KEY".to_string(), ACCESS.to_string()),
                 ("CHATGPT_ACCOUNT_ID".to_string(), "acct_codex".to_string()),
                 ("CODEX_ID_TOKEN".to_string(), ID_TOKEN.to_string()),
@@ -1038,14 +1034,14 @@ mod tests {
         let context = Context::new();
         let _ = backend
             .run(CodergenRunRequest {
-                node:               &node,
-                prompt:             "write hello",
-                context:            &context,
-                thread_id:          None,
-                emitter:            &emitter,
-                sandbox:            &sandbox_dyn,
-                tool_hooks:         None,
-                cancel_token:       CancellationToken::new(),
+                node: &node,
+                prompt: "write hello",
+                context: &context,
+                thread_id: None,
+                emitter: &emitter,
+                sandbox: &sandbox_dyn,
+                tool_hooks: None,
+                cancel_token: CancellationToken::new(),
                 agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await;
@@ -1105,14 +1101,14 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:               &node,
-                prompt:             "cancel",
-                context:            &context,
-                thread_id:          None,
-                emitter:            &emitter,
-                sandbox:            &sandbox,
-                tool_hooks:         None,
-                cancel_token:       CancellationToken::new(),
+                node: &node,
+                prompt: "cancel",
+                context: &context,
+                thread_id: None,
+                emitter: &emitter,
+                sandbox: &sandbox,
+                tool_hooks: None,
+                cancel_token: CancellationToken::new(),
                 agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await;
@@ -1159,14 +1155,14 @@ mod tests {
         let context = Context::new();
         backend
             .run(CodergenRunRequest {
-                node:               &node,
-                prompt:             "write hello",
-                context:            &context,
-                thread_id:          None,
-                emitter:            &emitter,
-                sandbox:            &sandbox,
-                tool_hooks:         None,
-                cancel_token:       CancellationToken::new(),
+                node: &node,
+                prompt: "write hello",
+                context: &context,
+                thread_id: None,
+                emitter: &emitter,
+                sandbox: &sandbox,
+                tool_hooks: None,
+                cancel_token: CancellationToken::new(),
                 agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await
@@ -1201,14 +1197,14 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:               &node,
-                prompt:             "write hello",
-                context:            &context,
-                thread_id:          None,
-                emitter:            &emitter,
-                sandbox:            &sandbox_dyn,
-                tool_hooks:         None,
-                cancel_token:       CancellationToken::new(),
+                node: &node,
+                prompt: "write hello",
+                context: &context,
+                thread_id: None,
+                emitter: &emitter,
+                sandbox: &sandbox_dyn,
+                tool_hooks: None,
+                cancel_token: CancellationToken::new(),
                 agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await;
@@ -1254,14 +1250,14 @@ mod tests {
         let context = Context::new();
         let result = backend
             .run(CodergenRunRequest {
-                node:               &node,
-                prompt:             "write hello",
-                context:            &context,
-                thread_id:          None,
-                emitter:            &emitter,
-                sandbox:            &sandbox_dyn,
-                tool_hooks:         None,
-                cancel_token:       CancellationToken::new(),
+                node: &node,
+                prompt: "write hello",
+                context: &context,
+                thread_id: None,
+                emitter: &emitter,
+                sandbox: &sandbox_dyn,
+                tool_hooks: None,
+                cancel_token: CancellationToken::new(),
                 agent_tool_runtime: fabro_agent::AgentToolRuntime::default(),
             })
             .await;
@@ -1289,8 +1285,8 @@ mod tests {
     #[test]
     fn acp_timeout_maps_stderr_to_exec_tail_not_message() {
         let tail = ExecOutputTail {
-            stdout:           None,
-            stderr:           Some("redacted stderr tail".to_string()),
+            stdout: None,
+            stderr: Some("redacted stderr tail".to_string()),
             stdout_truncated: false,
             stderr_truncated: true,
         };
@@ -1307,14 +1303,14 @@ mod tests {
     #[test]
     fn acp_process_exit_maps_stderr_to_exec_tail_not_cause_text() {
         let tail = ExecOutputTail {
-            stdout:           None,
-            stderr:           Some("early boom".to_string()),
+            stdout: None,
+            stderr: Some("early boom".to_string()),
             stdout_truncated: false,
             stderr_truncated: false,
         };
         let err = acp_error_to_workflow(AcpError::ProcessExited(AcpProcessExit {
-            termination:      CommandTermination::Exited,
-            exit_code:        Some(2),
+            termination: CommandTermination::Exited,
+            exit_code: Some(2),
             exec_output_tail: Some(tail.clone()),
         }));
 

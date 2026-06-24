@@ -29,7 +29,7 @@ use crate::{ManifestPath, pipeline};
 pub struct SubWorkflowHandler;
 
 struct ParsedChildWorkflow {
-    graph:         Graph,
+    graph: Graph,
     workflow_path: Option<ManifestPath>,
 }
 
@@ -67,14 +67,14 @@ fn parse_child_graph(node: &Node, services: &EngineServices) -> Result<ParsedChi
         .and_then(|v| v.as_str())
     {
         let mut validated = validate(ValidateInput {
-            workflow:          WorkflowInput::DotSource {
-                source:   dot.to_string(),
+            workflow: WorkflowInput::DotSource {
+                source: dot.to_string(),
                 base_dir: None,
             },
-            settings:          WorkflowSettings::default(),
-            cwd:               cwd.clone(),
+            settings: WorkflowSettings::default(),
+            cwd: cwd.clone(),
             custom_transforms: Vec::new(),
-            catalog:           Arc::clone(&services.run.catalog),
+            catalog: Arc::clone(&services.run.catalog),
         })?;
         validated.promote_template_undefined_variables_to_errors();
         validated.raise_on_errors()?;
@@ -203,19 +203,19 @@ impl Handler for SubWorkflowHandler {
         let child_run_token = services.run.cancel_token().child_token();
 
         let child_run_options = RunOptions {
-            settings:         WorkflowSettings::default(),
-            run_dir:          child_logs,
-            cancel_token:     child_run_token.clone(),
+            settings: WorkflowSettings::default(),
+            run_dir: child_logs,
+            cancel_token: child_run_token.clone(),
             // Child workflows are part of the parent run's event stream.
-            run_id:           services.run.emitter.run_id(),
-            labels:           HashMap::new(),
-            workflow_slug:    None,
-            github_app:       None,
-            pre_run_git:      None,
-            fork_source_ref:  None,
-            base_branch:      None,
+            run_id: services.run.emitter.run_id(),
+            labels: HashMap::new(),
+            workflow_slug: None,
+            github_app: None,
+            pre_run_git: None,
+            fork_source_ref: None,
+            base_branch: None,
             display_base_sha: None,
-            git:              None,
+            git: None,
         };
 
         // Clone parent context for child; inject parent preamble
@@ -259,15 +259,15 @@ impl Handler for SubWorkflowHandler {
                 .with_run_store(run_store.into())
                 .with_cancel_token(child_run_token_for_services);
             let initialized = Initialized {
-                graph:         child_graph,
-                source:        String::new(),
-                run_options:   child_run_options,
-                checkpoint:    None,
-                seed_context:  Some(child_context),
-                on_node:       None,
+                graph: child_graph,
+                source: String::new(),
+                run_options: child_run_options,
+                checkpoint: None,
+                seed_context: Some(child_context),
+                on_node: None,
                 artifact_sink: Some(ArtifactSink::Store(artifact_store)),
-                run_control:   None,
-                engine:        Arc::new(EngineServices {
+                run_control: None,
+                engine: Arc::new(EngineServices {
                     run: child_run,
                     registry,
                     interviewer,
@@ -279,7 +279,7 @@ impl Handler for SubWorkflowHandler {
                     workflow_path: child_workflow_path,
                     workflow_bundle,
                 }),
-                model:         String::new(),
+                model: String::new(),
             };
             let executed = pipeline::execute(initialized).await;
             Ok::<_, Error>((executed.outcome?, executed.final_context))
@@ -442,9 +442,12 @@ mod tests {
             .execute(&node, &context, &graph, dir.path(), &make_services())
             .await
             .unwrap();
-        assert_eq!(outcome.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert!(
             outcome
                 .failure_reason()
@@ -476,9 +479,12 @@ mod tests {
             .execute(&node, &context, &graph, dir.path(), &make_services())
             .await
             .unwrap();
-        assert_eq!(outcome.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert!(
             outcome
                 .failure_reason()
@@ -608,10 +614,10 @@ mod tests {
         services.workflow_bundle = Some(Arc::new(WorkflowBundle::new(HashMap::from([(
             ManifestPath::from_wire("children/review.fabro").unwrap(),
             BundledWorkflow {
-                path:   ManifestPath::from_wire("children/review.fabro").unwrap(),
+                path: ManifestPath::from_wire("children/review.fabro").unwrap(),
                 source: child_dot_succeeds().to_string(),
                 config: None,
-                files:  HashMap::new(),
+                files: HashMap::new(),
             },
         )]))));
 
@@ -656,9 +662,12 @@ mod tests {
             .execute(&node, &context, &graph, dir.path(), &services)
             .await
             .unwrap();
-        assert_eq!(outcome.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert!(
             outcome
                 .failure_reason()
@@ -725,9 +734,12 @@ mod tests {
             .execute(&node, &context, &graph, dir.path(), &services)
             .await
             .unwrap();
-        assert_eq!(outcome.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert!(outcome.failure_reason().unwrap().contains("Max cycles"));
     }
 

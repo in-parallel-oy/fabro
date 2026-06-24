@@ -32,7 +32,7 @@ use crate::workflow_bundle::WorkflowBundle;
 /// Output of the PARSE phase.
 #[non_exhaustive]
 pub struct Parsed {
-    pub graph:  Graph,
+    pub graph: Graph,
     pub source: String,
 }
 
@@ -40,8 +40,8 @@ pub struct Parsed {
 /// post-transform adjustments (e.g. goal override) before validation.
 #[non_exhaustive]
 pub struct Transformed {
-    pub graph:       Graph,
-    pub source:      String,
+    pub graph: Graph,
+    pub source: String,
     /// Diagnostics produced during the transform pass. Prepended to the
     /// validation diagnostics so users see them before lint output.
     pub diagnostics: Vec<Diagnostic>,
@@ -58,8 +58,8 @@ pub(crate) const GOAL_SELF_REFERENCE_RULE: &str = "goal_self_reference";
 /// Graph is read-only — use accessors, not direct field access.
 #[non_exhaustive]
 pub struct Validated {
-    graph:       Graph,
-    source:      String,
+    graph: Graph,
+    source: String,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -133,7 +133,7 @@ impl Validated {
 
 /// Options for the PERSIST phase.
 pub(crate) struct PersistOptions {
-    pub run_dir:  PathBuf,
+    pub run_dir: PathBuf,
     pub run_spec: RunSpec,
 }
 
@@ -142,11 +142,11 @@ pub(crate) struct PersistOptions {
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct Persisted {
-    graph:       Graph,
-    source:      String,
+    graph: Graph,
+    source: String,
     diagnostics: Vec<Diagnostic>,
-    run_dir:     PathBuf,
-    run_spec:    RunSpec,
+    run_dir: PathBuf,
+    run_spec: RunSpec,
 }
 
 impl Persisted {
@@ -232,124 +232,124 @@ impl Persisted {
 
 #[derive(Clone)]
 pub struct LlmSpec {
-    pub model:            String,
-    pub provider_id:      ProviderId,
-    pub fallback_chain:   Vec<FallbackTarget>,
-    pub mcp_servers:      Vec<McpServerSettings>,
-    pub model_controls:   RunModelControls,
-    pub dry_run:          bool,
+    pub model: String,
+    pub provider_id: ProviderId,
+    pub fallback_chain: Vec<FallbackTarget>,
+    pub mcp_servers: Vec<McpServerSettings>,
+    pub model_controls: RunModelControls,
+    pub dry_run: bool,
     /// ponytail: rebase anchor — tmux backend. Run-level `--backend` override.
     pub backend_override: Option<fabro_types::AgentBackend>,
 }
 
 #[derive(Clone)]
 pub struct SandboxEnvSpec {
-    pub toml_env:           HashMap<String, String>,
+    pub toml_env: HashMap<String, String>,
     pub github_permissions: Option<HashMap<String, String>>,
-    pub origin_url:         Option<String>,
+    pub origin_url: Option<String>,
 }
 
 pub struct InitOptions {
-    pub run_id:            RunId,
-    pub run_store:         RunStoreHandle,
-    pub dry_run:           bool,
-    pub emitter:           Arc<Emitter>,
-    pub sandbox:           SandboxSpec,
-    pub llm:               LlmSpec,
-    pub interviewer:       Arc<dyn Interviewer>,
-    pub steering_hub:      Arc<SteeringHub>,
-    pub catalog:           Arc<Catalog>,
-    pub lifecycle:         LifecycleOptions,
-    pub run_options:       RunOptions,
-    pub workflow_path:     Option<ManifestPath>,
-    pub workflow_bundle:   Option<Arc<WorkflowBundle>>,
-    pub hooks:             fabro_hooks::HookSettings,
-    pub sandbox_env:       SandboxEnvSpec,
-    pub vault:             Option<Arc<AsyncRwLock<Vault>>>,
-    pub git:               Option<GitCheckpointOptions>,
+    pub run_id: RunId,
+    pub run_store: RunStoreHandle,
+    pub dry_run: bool,
+    pub emitter: Arc<Emitter>,
+    pub sandbox: SandboxSpec,
+    pub llm: LlmSpec,
+    pub interviewer: Arc<dyn Interviewer>,
+    pub steering_hub: Arc<SteeringHub>,
+    pub catalog: Arc<Catalog>,
+    pub lifecycle: LifecycleOptions,
+    pub run_options: RunOptions,
+    pub workflow_path: Option<ManifestPath>,
+    pub workflow_bundle: Option<Arc<WorkflowBundle>>,
+    pub hooks: fabro_hooks::HookSettings,
+    pub sandbox_env: SandboxEnvSpec,
+    pub vault: Option<Arc<AsyncRwLock<Vault>>>,
+    pub git: Option<GitCheckpointOptions>,
     pub registry_override: Option<Arc<HandlerRegistry>>,
-    pub artifact_sink:     Option<ArtifactSink>,
-    pub run_control:       Option<Arc<RunControlState>>,
-    pub checkpoint:        Option<Checkpoint>,
-    pub seed_context:      Option<Context>,
-    pub fabro_run_tools:   Option<FabroRunToolServices>,
+    pub artifact_sink: Option<ArtifactSink>,
+    pub run_control: Option<Arc<RunControlState>>,
+    pub checkpoint: Option<Checkpoint>,
+    pub seed_context: Option<Context>,
+    pub fabro_run_tools: Option<FabroRunToolServices>,
     /// Per-run ACP credential injection (GOAL B), threaded to the ACP backend.
-    pub acp_credentials:   crate::handler::llm::AcpCredentials,
+    pub acp_credentials: crate::handler::llm::AcpCredentials,
 }
 
 /// Output of the INITIALIZE phase.
 #[non_exhaustive]
 pub struct Initialized {
-    pub graph:               Graph,
-    pub source:              String,
-    pub run_options:         RunOptions,
-    pub(crate) checkpoint:   Option<Checkpoint>,
+    pub graph: Graph,
+    pub source: String,
+    pub run_options: RunOptions,
+    pub(crate) checkpoint: Option<Checkpoint>,
     pub(crate) seed_context: Option<Context>,
-    pub on_node:             crate::OnNodeCallback,
-    pub artifact_sink:       Option<ArtifactSink>,
-    pub run_control:         Option<Arc<RunControlState>>,
-    pub engine:              Arc<EngineServices>,
-    pub model:               String,
+    pub on_node: crate::OnNodeCallback,
+    pub artifact_sink: Option<ArtifactSink>,
+    pub run_control: Option<Arc<RunControlState>>,
+    pub engine: Arc<EngineServices>,
+    pub model: String,
 }
 
 /// Output of the EXECUTE phase.
 #[non_exhaustive]
 pub struct Executed {
-    pub graph:         Graph,
-    pub outcome:       Result<Outcome, Error>,
-    pub run_options:   RunOptions,
+    pub graph: Graph,
+    pub outcome: Result<Outcome, Error>,
+    pub run_options: RunOptions,
     /// Run wall-clock time in milliseconds from EXECUTE start to outcome.
-    pub wall_time_ms:  u64,
+    pub wall_time_ms: u64,
     pub final_context: Context,
-    pub engine:        Arc<EngineServices>,
-    pub model:         String,
+    pub engine: Arc<EngineServices>,
+    pub model: String,
 }
 
 /// Output of the FINALIZE phase.
 #[non_exhaustive]
 pub struct Concluded {
-    pub outcome:     Result<Outcome, Error>,
-    pub conclusion:  Conclusion,
-    pub graph:       Graph,
+    pub outcome: Result<Outcome, Error>,
+    pub conclusion: Conclusion,
+    pub graph: Graph,
     pub run_options: RunOptions,
-    pub services:    Arc<RunServices>,
+    pub services: Arc<RunServices>,
 }
 
 /// Output of the PULL_REQUEST phase.
 #[non_exhaustive]
 pub struct Finalized {
-    pub run_id:        RunId,
-    pub outcome:       Result<Outcome, Error>,
-    pub conclusion:    Conclusion,
+    pub run_id: RunId,
+    pub outcome: Result<Outcome, Error>,
+    pub conclusion: Conclusion,
     pub pushed_branch: Option<String>,
-    pub pr_url:        Option<String>,
+    pub pr_url: Option<String>,
 }
 
 /// Options for the TRANSFORM phase.
 pub struct TransformOptions {
-    pub current_dir:       Option<PathBuf>,
-    pub file_resolver:     Option<Arc<dyn FileResolver>>,
-    pub inputs:            HashMap<String, toml::Value>,
-    pub source_name:       Option<String>,
-    pub render_mode:       RenderMode,
+    pub current_dir: Option<PathBuf>,
+    pub file_resolver: Option<Arc<dyn FileResolver>>,
+    pub inputs: HashMap<String, toml::Value>,
+    pub source_name: Option<String>,
+    pub render_mode: RenderMode,
     pub custom_transforms: Vec<Box<dyn Transform>>,
-    pub catalog:           Arc<fabro_model::Catalog>,
+    pub catalog: Arc<fabro_model::Catalog>,
 }
 
 /// Options for the FINALIZE phase.
 pub struct FinalizeOptions {
-    pub run_dir:          PathBuf,
-    pub run_id:           RunId,
-    pub workflow_name:    String,
+    pub run_dir: PathBuf,
+    pub run_id: RunId,
+    pub workflow_name: String,
     pub preserve_sandbox: bool,
     pub stop_on_terminal: bool,
-    pub last_git_sha:     Option<String>,
+    pub last_git_sha: Option<String>,
 }
 
 /// Options for the PULL_REQUEST phase.
 pub struct PullRequestOptions {
-    pub pr_config:  Option<PullRequestSettings>,
+    pub pr_config: Option<PullRequestSettings>,
     pub github_app: Option<fabro_github::GitHubCredentials>,
     pub origin_url: Option<String>,
-    pub model:      String,
+    pub model: String,
 }

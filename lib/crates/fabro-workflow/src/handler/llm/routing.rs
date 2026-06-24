@@ -44,7 +44,7 @@ pub(crate) fn node_needs_api_backend(node: &Node) -> bool {
 
 #[derive(Clone)]
 pub(crate) struct ProviderContext {
-    pub(crate) provider_id:  ProviderId,
+    pub(crate) provider_id: ProviderId,
     pub(crate) profile_kind: AgentProfileKind,
 }
 

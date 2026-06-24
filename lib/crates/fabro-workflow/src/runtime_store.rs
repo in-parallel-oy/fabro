@@ -139,45 +139,49 @@ mod tests {
 
     fn test_run_spec() -> RunSpec {
         RunSpec {
-            run_id:           fixtures::RUN_1,
-            settings:         WorkflowSettings::default(),
-            graph:            Graph::new("test"),
-            graph_source:     None,
-            workflow_slug:    Some("test".to_string()),
-            automation:       None,
+            run_id: fixtures::RUN_1,
+            settings: WorkflowSettings::default(),
+            graph: Graph::new("test"),
+            graph_source: None,
+            workflow_slug: Some("test".to_string()),
+            automation: None,
             source_directory: Some("/tmp/test".to_string()),
-            git:              None,
-            labels:           HashMap::new(),
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            definition_blob:  None,
-            fork_source_ref:  None,
+            git: None,
+            labels: HashMap::new(),
+            provenance: test_support::test_run_provenance(),
+            manifest_blob: None,
+            definition_blob: None,
+            fork_source_ref: None,
         }
     }
 
     async fn append_created_event(run_store: &fabro_store::RunDatabase) {
         let record = test_run_spec();
-        append_event(run_store, &fixtures::RUN_1, &Event::RunCreated {
-            run_id:           fixtures::RUN_1,
-            title:            None,
-            settings:         serde_json::to_value(&record.settings).unwrap(),
-            graph:            serde_json::to_value(&record.graph).unwrap(),
-            workflow_source:  Some("digraph test {}".to_string()),
-            workflow_config:  None,
-            labels:           std::collections::BTreeMap::new(),
-            run_dir:          "/tmp/test".to_string(),
-            source_directory: Some("/tmp/test".to_string()),
-            workflow_slug:    Some("test".to_string()),
-            automation:       None,
-            db_prefix:        None,
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            git:              None,
-            fork_source_ref:  None,
-            retried_from:     None,
-            parent_id:        None,
-            web_url:          None,
-        })
+        append_event(
+            run_store,
+            &fixtures::RUN_1,
+            &Event::RunCreated {
+                run_id: fixtures::RUN_1,
+                title: None,
+                settings: serde_json::to_value(&record.settings).unwrap(),
+                graph: serde_json::to_value(&record.graph).unwrap(),
+                workflow_source: Some("digraph test {}".to_string()),
+                workflow_config: None,
+                labels: std::collections::BTreeMap::new(),
+                run_dir: "/tmp/test".to_string(),
+                source_directory: Some("/tmp/test".to_string()),
+                workflow_slug: Some("test".to_string()),
+                automation: None,
+                db_prefix: None,
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                git: None,
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
+            },
+        )
         .await
         .unwrap();
     }
@@ -202,19 +206,19 @@ mod tests {
         let handle = RunStoreHandle::local(run_store);
 
         let event = RunEvent {
-            id:                 "evt-run-submitted".to_string(),
-            ts:                 Utc::now(),
-            run_id:             fixtures::RUN_1,
-            node_id:            None,
-            node_label:         None,
-            stage_id:           None,
-            parallel_group_id:  None,
+            id: "evt-run-submitted".to_string(),
+            ts: Utc::now(),
+            run_id: fixtures::RUN_1,
+            node_id: None,
+            node_label: None,
+            stage_id: None,
+            parallel_group_id: None,
             parallel_branch_id: None,
-            session_id:         None,
-            parent_session_id:  None,
-            tool_call_id:       None,
-            actor:              None,
-            body:               EventBody::RunSubmitted(RunSubmittedProps {
+            session_id: None,
+            parent_session_id: None,
+            tool_call_id: None,
+            actor: None,
+            body: EventBody::RunSubmitted(RunSubmittedProps {
                 definition_blob: None,
             }),
         };

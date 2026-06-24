@@ -50,9 +50,9 @@ fn parse_join_policy(raw: &str) -> JoinPolicy {
 }
 
 struct BranchResult {
-    id:            String,
-    outcome:       Outcome,
-    head_sha:      Option<String>,
+    id: String,
+    outcome: Outcome,
+    head_sha: Option<String>,
     worktree_path: Option<PathBuf>,
 }
 
@@ -130,12 +130,12 @@ impl Handler for ParallelHandler {
     ) -> Result<Outcome, Error> {
         // Build per-branch sandboxes (sequentially for git setup)
         struct BranchSetup {
-            target_id:          String,
-            branch_index:       usize,
+            target_id: String,
+            branch_index: usize,
             parallel_branch_id: ParallelBranchId,
-            branch_context:     Context,
-            sandbox:            Arc<dyn Sandbox>,
-            worktree_path:      Option<PathBuf>,
+            branch_context: Context,
+            sandbox: Arc<dyn Sandbox>,
+            worktree_path: Option<PathBuf>,
         }
 
         let parallel_start = Instant::now();
@@ -156,10 +156,10 @@ impl Handler for ParallelHandler {
 
         services.run.emitter.emit_scoped(
             &Event::ParallelStarted {
-                node_id:      node.id.clone(),
-                visit:        parallel_stage_scope.visit,
+                node_id: node.id.clone(),
+                visit: parallel_stage_scope.visit,
                 branch_count: branches.len(),
-                join_policy:  join_policy.to_string(),
+                join_policy: join_policy.to_string(),
             },
             &parallel_stage_scope,
         );
@@ -265,11 +265,11 @@ impl Handler for ParallelHandler {
 
                 // Set up worktree via WorktreeSandbox
                 let wt_config = WorktreeOptions {
-                    branch_name:          branch_name.clone(),
-                    base_sha:             bsha.clone(),
-                    worktree_path:        wt_path_str.clone(),
+                    branch_name: branch_name.clone(),
+                    base_sha: bsha.clone(),
+                    worktree_path: wt_path_str.clone(),
                     skip_branch_creation: false,
-                    setup_intent:         None,
+                    setup_intent: None,
                 };
                 let mut wt_sandbox =
                     WorktreeSandbox::new(Arc::clone(&services.run.sandbox), wt_config);
@@ -339,10 +339,10 @@ impl Handler for ParallelHandler {
 
                 parent_run.emitter.emit_scoped(
                     &Event::ParallelBranchStarted {
-                        parallel_group_id:  group_id.clone(),
+                        parallel_group_id: group_id.clone(),
                         parallel_branch_id: setup.parallel_branch_id.clone(),
-                        branch:             setup.target_id.clone(),
-                        index:              setup.branch_index,
+                        branch: setup.target_id.clone(),
+                        index: setup.branch_index,
                     },
                     &branch_scope,
                 );
@@ -355,13 +355,13 @@ impl Handler for ParallelHandler {
                     ));
                     parent_run.emitter.emit_scoped(
                         &Event::ParallelBranchCompleted {
-                            parallel_group_id:  group_id.clone(),
+                            parallel_group_id: group_id.clone(),
                             parallel_branch_id: setup.parallel_branch_id.clone(),
-                            branch:             setup.target_id.clone(),
-                            index:              setup.branch_index,
-                            duration_ms:        millis_u64(branch_start.elapsed()),
-                            status:             "failed".to_string(),
-                            head_sha:           None,
+                            branch: setup.target_id.clone(),
+                            index: setup.branch_index,
+                            duration_ms: millis_u64(branch_start.elapsed()),
+                            status: "failed".to_string(),
+                            head_sha: None,
                         },
                         &branch_scope,
                     );
@@ -437,7 +437,7 @@ impl Handler for ParallelHandler {
                             parent_run.emitter.emit_scoped(
                                 &Event::GitCommit {
                                     node_id: Some(setup.target_id.clone()),
-                                    sha:     sha.clone(),
+                                    sha: sha.clone(),
                                 },
                                 &branch_scope,
                             );
@@ -451,13 +451,13 @@ impl Handler for ParallelHandler {
 
                 parent_run.emitter.emit_scoped(
                     &Event::ParallelBranchCompleted {
-                        parallel_group_id:  group_id.clone(),
+                        parallel_group_id: group_id.clone(),
                         parallel_branch_id: setup.parallel_branch_id.clone(),
-                        branch:             setup.target_id.clone(),
-                        index:              setup.branch_index,
-                        duration_ms:        millis_u64(branch_start.elapsed()),
-                        status:             outcome.status.to_string(),
-                        head_sha:           head_sha.clone(),
+                        branch: setup.target_id.clone(),
+                        index: setup.branch_index,
+                        duration_ms: millis_u64(branch_start.elapsed()),
+                        status: outcome.status.to_string(),
+                        head_sha: head_sha.clone(),
                     },
                     &branch_scope,
                 );
@@ -488,19 +488,17 @@ impl Handler for ParallelHandler {
                 }
                 Ok(Err(e)) => {
                     results.push(BranchResult {
-                        id:            String::new(),
-                        outcome:       e.to_fail_outcome(),
-                        head_sha:      None,
+                        id: String::new(),
+                        outcome: e.to_fail_outcome(),
+                        head_sha: None,
                         worktree_path: None,
                     });
                 }
                 Err(join_err) => {
                     results.push(BranchResult {
-                        id:            String::new(),
-                        outcome:       Outcome::fail_classify(format!(
-                            "task join error: {join_err}"
-                        )),
-                        head_sha:      None,
+                        id: String::new(),
+                        outcome: Outcome::fail_classify(format!("task join error: {join_err}")),
+                        head_sha: None,
                         worktree_path: None,
                     });
                 }
@@ -715,26 +713,25 @@ mod tests {
             run_store,
             &fixtures::RUN_1,
             &crate::event::Event::RunCreated {
-                run_id:           fixtures::RUN_1,
-                title:            None,
-                settings:         serde_json::to_value(fabro_types::WorkflowSettings::default())
-                    .unwrap(),
-                graph:            serde_json::to_value(fabro_types::Graph::new("test")).unwrap(),
-                workflow_source:  None,
-                workflow_config:  None,
-                labels:           std::collections::BTreeMap::default(),
-                run_dir:          "/tmp".to_string(),
+                run_id: fixtures::RUN_1,
+                title: None,
+                settings: serde_json::to_value(fabro_types::WorkflowSettings::default()).unwrap(),
+                graph: serde_json::to_value(fabro_types::Graph::new("test")).unwrap(),
+                workflow_source: None,
+                workflow_config: None,
+                labels: std::collections::BTreeMap::default(),
+                run_dir: "/tmp".to_string(),
                 source_directory: None,
-                workflow_slug:    None,
-                automation:       None,
-                db_prefix:        None,
-                provenance:       test_support::test_run_provenance(),
-                manifest_blob:    None,
-                git:              None,
-                fork_source_ref:  None,
-                retried_from:     None,
-                parent_id:        None,
-                web_url:          None,
+                workflow_slug: None,
+                automation: None,
+                db_prefix: None,
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                git: None,
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
             },
         )
         .await
@@ -762,9 +759,12 @@ mod tests {
             .execute(&node, &context, &graph, run_dir, &services)
             .await
             .unwrap();
-        assert_eq!(outcome.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
     }
 
     #[tokio::test]

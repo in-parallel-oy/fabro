@@ -68,46 +68,46 @@ fn overseer_worktree() -> Option<String> {
 
 #[derive(Clone)]
 struct NodeProgress {
-    label:   String,
+    label: String,
     outcome: &'static str,
     /// Visit count for back-edge loops (verify→fix→verify); 0 until first entry.
-    visits:  u32,
+    visits: u32,
 }
 
 struct Inner {
-    current_node:     Option<String>,
-    pending_gate:     bool,
+    current_node: Option<String>,
+    pending_gate: bool,
     terminal_reached: bool,
-    nodes:            BTreeMap<String, NodeProgress>,
+    nodes: BTreeMap<String, NodeProgress>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RunStateDoc<'a> {
-    run_id:           String,
-    current_node:     Option<&'a str>,
-    nodes:            Vec<NodeEntry<'a>>,
-    edges:            Vec<[&'a str; 2]>,
-    pending_gate:     bool,
+    run_id: String,
+    current_node: Option<&'a str>,
+    nodes: Vec<NodeEntry<'a>>,
+    edges: Vec<[&'a str; 2]>,
+    pending_gate: bool,
     terminal_reached: bool,
 }
 
 #[derive(Serialize)]
 struct NodeEntry<'a> {
-    id:      &'a str,
-    label:   &'a str,
+    id: &'a str,
+    label: &'a str,
     outcome: &'static str,
-    visits:  u32,
+    visits: u32,
 }
 
 /// Sub-lifecycle that publishes `<worktree>/.overseer/run.json` at each node
 /// boundary. No-op when `OVERSEER_WORKTREE` is unset.
 pub(crate) struct RunStatePublisher {
-    sandbox:  Arc<dyn Sandbox>,
-    graph:    Arc<GvGraph>,
-    run_id:   RunId,
+    sandbox: Arc<dyn Sandbox>,
+    graph: Arc<GvGraph>,
+    run_id: RunId,
     worktree: Option<String>,
-    inner:    Mutex<Inner>,
+    inner: Mutex<Inner>,
 }
 
 impl RunStatePublisher {
@@ -116,11 +116,14 @@ impl RunStatePublisher {
             .nodes
             .values()
             .map(|n| {
-                (n.id.clone(), NodeProgress {
-                    label:   n.label().to_string(),
-                    outcome: OUTCOME_PENDING,
-                    visits:  0,
-                })
+                (
+                    n.id.clone(),
+                    NodeProgress {
+                        label: n.label().to_string(),
+                        outcome: OUTCOME_PENDING,
+                        visits: 0,
+                    },
+                )
             })
             .collect();
         Self {
@@ -170,11 +173,11 @@ impl RunStatePublisher {
                 .map(|e| [e.from.as_str(), e.to.as_str()])
                 .collect();
             let doc = RunStateDoc {
-                run_id:           self.run_id.to_string(),
-                current_node:     inner.current_node.as_deref(),
+                run_id: self.run_id.to_string(),
+                current_node: inner.current_node.as_deref(),
                 nodes,
                 edges,
-                pending_gate:     inner.pending_gate,
+                pending_gate: inner.pending_gate,
                 terminal_reached: inner.terminal_reached,
             };
             match serde_json::to_string(&doc) {
@@ -188,7 +191,13 @@ impl RunStatePublisher {
         let final_path = format!("{dir}/run.json");
         let _ = self
             .sandbox
-            .exec_command(&format!("mkdir -p {}", shell_quote(&dir)), 5_000, None, None, None)
+            .exec_command(
+                &format!("mkdir -p {}", shell_quote(&dir)),
+                5_000,
+                None,
+                None,
+                None,
+            )
             .await;
         if self.sandbox.write_file(&tmp, &json).await.is_ok() {
             let _ = self

@@ -176,34 +176,34 @@ mod tests {
     fn event_name_matches_new_dot_notation() {
         assert_eq!(
             event_name(&Event::ParallelBranchStarted {
-                parallel_group_id:  StageId::new("plan", 1),
+                parallel_group_id: StageId::new("plan", 1),
                 parallel_branch_id: ParallelBranchId::new(StageId::new("plan", 1), 0),
-                branch:             "fork".to_string(),
-                index:              0,
+                branch: "fork".to_string(),
+                index: 0,
             }),
             "parallel.branch.started"
         );
         assert_eq!(
             event_name(&Event::Agent {
-                stage:             "code".to_string(),
-                visit:             1,
-                event:             AgentEvent::SubAgentSpawned {
+                stage: "code".to_string(),
+                visit: 1,
+                event: AgentEvent::SubAgentSpawned {
                     agent_id: "a1".to_string(),
-                    depth:    1,
-                    task:     "do it".to_string(),
+                    depth: 1,
+                    task: "do it".to_string(),
                 },
-                session_id:        None,
+                session_id: None,
                 parent_session_id: None,
-                tool_call_id:      None,
+                tool_call_id: None,
             }),
             "agent.sub.spawned"
         );
         assert_eq!(
             event_name(&Event::AgentToolsAvailable {
-                node_id:    "code".to_string(),
-                visit:      1,
+                node_id: "code".to_string(),
+                visit: 1,
                 session_id: "session-1".to_string(),
-                tools:      Vec::new(),
+                tools: Vec::new(),
             }),
             "agent.tools.available"
         );

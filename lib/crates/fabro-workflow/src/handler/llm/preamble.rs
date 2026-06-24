@@ -598,7 +598,7 @@ mod tests {
             &ModelRef {
                 provider: ProviderId::anthropic(),
                 model_id: model.to_string(),
-                speed:    None,
+                speed: None,
             },
             &TokenCounts {
                 input_tokens,

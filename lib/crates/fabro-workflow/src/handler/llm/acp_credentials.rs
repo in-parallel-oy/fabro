@@ -245,8 +245,8 @@ pub fn split_acp_credentials(
     // Reject at the edge (400) rather than persisting a run that can never
     // authenticate — e.g. a Codex block missing its required id_token.
     injected.validate()?;
-    let remainder = serde_json::to_vec(&serde_json::Value::Object(map))
-        .map_err(|_| MalformedAcpCredentials)?;
+    let remainder =
+        serde_json::to_vec(&serde_json::Value::Object(map)).map_err(|_| MalformedAcpCredentials)?;
     Ok((remainder, Some(injected)))
 }
 
@@ -286,7 +286,10 @@ mod tests {
         let injected = injected.expect("credentials present");
         assert_eq!(injected.engine, AcpEngine::Claude);
         assert_eq!(
-            injected.env.get("CLAUDE_CODE_OAUTH_TOKEN").map(String::as_str),
+            injected
+                .env
+                .get("CLAUDE_CODE_OAUTH_TOKEN")
+                .map(String::as_str),
             Some(CLAUDE_TOKEN)
         );
 
@@ -330,9 +333,10 @@ mod tests {
     fn codex_conversion_builds_auth_json_with_blank_refresh() {
         let injected = InjectedAcpCredentials {
             engine: AcpEngine::Codex,
-            env:    codex_env(),
+            env: codex_env(),
         };
-        let AcpCredentials::CodexAuthJson(json) = AcpCredentials::try_from(injected).unwrap() else {
+        let AcpCredentials::CodexAuthJson(json) = AcpCredentials::try_from(injected).unwrap()
+        else {
             panic!("codex engine should convert to auth.json");
         };
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -351,7 +355,7 @@ mod tests {
         // resulting auth.json, so the conversion must fail rather than write null.
         let injected = InjectedAcpCredentials {
             engine: AcpEngine::Codex,
-            env:    HashMap::from([
+            env: HashMap::from([
                 ("OPENAI_API_KEY".to_string(), CODEX_ACCESS.to_string()),
                 ("CHATGPT_ACCOUNT_ID".to_string(), "acct_xyz".to_string()),
             ]),
@@ -364,10 +368,7 @@ mod tests {
     fn codex_conversion_rejects_non_jwt_id_token() {
         let injected = InjectedAcpCredentials {
             engine: AcpEngine::Codex,
-            env:    HashMap::from([(
-                "CODEX_ID_TOKEN".to_string(),
-                "not-a-jwt".to_string(),
-            )]),
+            env: HashMap::from([("CODEX_ID_TOKEN".to_string(), "not-a-jwt".to_string())]),
         };
         assert!(AcpCredentials::try_from(injected).is_err());
     }
@@ -390,7 +391,7 @@ mod tests {
     fn debug_redacts_injected_and_converted_secrets() {
         let injected = InjectedAcpCredentials {
             engine: AcpEngine::Codex,
-            env:    codex_env(),
+            env: codex_env(),
         };
         // InjectedAcpCredentials Debug shows engine + key names, never values.
         let injected_dbg = format!("{injected:?}");
@@ -411,7 +412,7 @@ mod tests {
     fn claude_conversion_carries_env() {
         let injected = InjectedAcpCredentials {
             engine: AcpEngine::Claude,
-            env:    HashMap::from([(
+            env: HashMap::from([(
                 "CLAUDE_CODE_OAUTH_TOKEN".to_string(),
                 CLAUDE_TOKEN.to_string(),
             )]),

@@ -52,8 +52,8 @@ async fn run_hooks(
 fn git_setup_intent(run_options: &RunOptions) -> GitSetupIntent {
     if let Some(source) = run_options.fork_source_ref.as_ref() {
         GitSetupIntent::ForkFromCheckpoint {
-            new_run_id:     run_options.run_id.to_string(),
-            source_run_id:  source.source_run_id.to_string(),
+            new_run_id: run_options.run_id.to_string(),
+            source_run_id: source.source_run_id.to_string(),
             checkpoint_sha: source.checkpoint_sha.clone(),
         }
     } else {
@@ -528,15 +528,15 @@ pub async fn initialize(
         let runtime = &run_sandbox.runtime;
         options.emitter.emit(&Event::SandboxInitialized {
             working_directory: runtime.working_directory.clone(),
-            provider:          run_sandbox.provider,
-            id:                runtime.id.clone(),
-            image:             run_sandbox.image.clone(),
-            snapshot:          run_sandbox.snapshot.clone(),
-            repo_cloned:       runtime.repo_cloned,
-            clone_origin_url:  runtime.clone_origin_url.clone(),
-            clone_branch:      runtime.clone_branch.clone(),
-            workspace_root:    runtime.workspace_root.clone(),
-            repos_root:        runtime.repos_root.clone(),
+            provider: run_sandbox.provider,
+            id: runtime.id.clone(),
+            image: run_sandbox.image.clone(),
+            snapshot: run_sandbox.snapshot.clone(),
+            repo_cloned: runtime.repo_cloned,
+            clone_origin_url: runtime.clone_origin_url.clone(),
+            clone_branch: runtime.clone_branch.clone(),
+            workspace_root: runtime.workspace_root.clone(),
+            repos_root: runtime.repos_root.clone(),
             primary_repo_path: runtime.primary_repo_path.clone(),
             primary_repo_link: runtime.primary_repo_link.clone(),
         });
@@ -579,7 +579,7 @@ pub async fn initialize(
         }
     }
     let tool_env_provider = Arc::new(WorkflowToolEnvProvider {
-        base_env:     base_env.clone(),
+        base_env: base_env.clone(),
         github_token: github_token.clone(),
     });
     let github_token_refresh_managed = github_token
@@ -901,18 +901,18 @@ mod tests {
 
     fn test_settings(run_dir: &std::path::Path) -> RunOptions {
         RunOptions {
-            settings:         WorkflowSettings::default(),
-            run_dir:          run_dir.to_path_buf(),
-            cancel_token:     tokio_util::sync::CancellationToken::new(),
-            run_id:           test_run_id(),
-            labels:           HashMap::new(),
-            workflow_slug:    None,
-            github_app:       None,
-            pre_run_git:      None,
-            fork_source_ref:  None,
-            base_branch:      None,
+            settings: WorkflowSettings::default(),
+            run_dir: run_dir.to_path_buf(),
+            cancel_token: tokio_util::sync::CancellationToken::new(),
+            run_id: test_run_id(),
+            labels: HashMap::new(),
+            workflow_slug: None,
+            github_app: None,
+            pre_run_git: None,
+            fork_source_ref: None,
+            base_branch: None,
             display_base_sha: None,
-            git:              None,
+            git: None,
         }
     }
 
@@ -931,10 +931,10 @@ mod tests {
                 automation: None,
                 source_directory: Some(std::env::current_dir().unwrap().display().to_string()),
                 git: Some(fabro_types::GitContext {
-                    origin_url:   String::new(),
-                    branch:       "main".to_string(),
-                    sha:          None,
-                    dirty:        fabro_types::DirtyStatus::Clean,
+                    origin_url: String::new(),
+                    branch: "main".to_string(),
+                    sha: None,
+                    dirty: fabro_types::DirtyStatus::Clean,
                     push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
                 }),
                 labels: HashMap::new(),
@@ -961,53 +961,56 @@ mod tests {
             move |event| seen.lock().unwrap().push(event.clone())
         });
 
-        let result = initialize(persisted, InitOptions {
-            run_id:            test_run_id(),
-            run_store:         {
-                let store = memory_store();
-                let inner = store.create_run(&test_run_id()).await.unwrap();
-                inner.into()
+        let result = initialize(
+            persisted,
+            InitOptions {
+                run_id: test_run_id(),
+                run_store: {
+                    let store = memory_store();
+                    let inner = store.create_run(&test_run_id()).await.unwrap();
+                    inner.into()
+                },
+                dry_run: false,
+                emitter: emitter.clone(),
+                sandbox: SandboxSpec::Local {
+                    working_directory: std::env::current_dir().unwrap(),
+                },
+                llm: LlmSpec {
+                    backend_override: None, // ponytail: rebase anchor — tmux backend
+                    model: "test-model".to_string(),
+                    provider_id: fabro_model::ProviderId::anthropic(),
+                    fallback_chain: Vec::new(),
+                    mcp_servers: Vec::new(),
+                    model_controls: RunModelControls::default(),
+                    dry_run: true,
+                },
+                interviewer: Arc::new(AutoApproveInterviewer::engine()),
+                steering_hub: Arc::new(crate::steering_hub::SteeringHub::new(emitter.clone())),
+                catalog: test_catalog(),
+                lifecycle: crate::run_options::LifecycleOptions {
+                    setup_commands: vec![command.to_string()],
+                    setup_command_timeout_ms: 1_000,
+                },
+                run_options: test_settings(&run_dir),
+                workflow_path: None,
+                workflow_bundle: None,
+                hooks: fabro_hooks::HookSettings { hooks: vec![] },
+                sandbox_env: SandboxEnvSpec {
+                    toml_env: HashMap::new(),
+                    github_permissions: None,
+                    origin_url: None,
+                },
+                vault: None,
+                git: None,
+                run_control: None,
+                registry_override: None,
+                artifact_sink: None,
+                checkpoint: None,
+                seed_context: None,
+                fabro_run_tools: None,
+                acp_credentials: crate::handler::llm::AcpCredentials::default(),
             },
-            dry_run:           false,
-            emitter:           emitter.clone(),
-            sandbox:           SandboxSpec::Local {
-                working_directory: std::env::current_dir().unwrap(),
-            },
-            llm:               LlmSpec {
-                backend_override: None, // ponytail: rebase anchor — tmux backend
-                model:          "test-model".to_string(),
-                provider_id:    fabro_model::ProviderId::anthropic(),
-                fallback_chain: Vec::new(),
-                mcp_servers:    Vec::new(),
-                model_controls: RunModelControls::default(),
-                dry_run:        true,
-            },
-            interviewer:       Arc::new(AutoApproveInterviewer::engine()),
-            steering_hub:      Arc::new(crate::steering_hub::SteeringHub::new(emitter.clone())),
-            catalog:           test_catalog(),
-            lifecycle:         crate::run_options::LifecycleOptions {
-                setup_commands:           vec![command.to_string()],
-                setup_command_timeout_ms: 1_000,
-            },
-            run_options:       test_settings(&run_dir),
-            workflow_path:     None,
-            workflow_bundle:   None,
-            hooks:             fabro_hooks::HookSettings { hooks: vec![] },
-            sandbox_env:       SandboxEnvSpec {
-                toml_env:           HashMap::new(),
-                github_permissions: None,
-                origin_url:         None,
-            },
-            vault:             None,
-            git:               None,
-            run_control:       None,
-            registry_override: None,
-            artifact_sink:     None,
-            checkpoint:        None,
-            seed_context:      None,
-            fabro_run_tools:   None,
-            acp_credentials:   crate::handler::llm::AcpCredentials::default(),
-        })
+        )
         .await;
         let events = seen.lock().unwrap().clone();
         (result, events)
@@ -1030,10 +1033,13 @@ mod tests {
             .lock()
             .expect("captured_commands lock poisoned")
             .clone();
-        assert_eq!(commands, vec![
-            "git config --local user.name 'Fabro Bot' && git config --local user.email \
+        assert_eq!(
+            commands,
+            vec![
+                "git config --local user.name 'Fabro Bot' && git config --local user.email \
              fabro-bot@example.com"
-        ]);
+            ]
+        );
     }
 
     #[tokio::test]
@@ -1045,53 +1051,56 @@ mod tests {
         let persisted = test_persisted(graph, source.clone(), &run_dir);
         let emitter = Arc::new(crate::event::Emitter::new(test_run_id()));
 
-        let initialized = initialize(persisted, InitOptions {
-            run_id:            test_run_id(),
-            run_store:         {
-                let store = memory_store();
-                let inner = store.create_run(&test_run_id()).await.unwrap();
-                inner.into()
+        let initialized = initialize(
+            persisted,
+            InitOptions {
+                run_id: test_run_id(),
+                run_store: {
+                    let store = memory_store();
+                    let inner = store.create_run(&test_run_id()).await.unwrap();
+                    inner.into()
+                },
+                dry_run: false,
+                emitter: emitter.clone(),
+                sandbox: SandboxSpec::Local {
+                    working_directory: std::env::current_dir().unwrap(),
+                },
+                llm: LlmSpec {
+                    backend_override: None, // ponytail: rebase anchor — tmux backend
+                    model: "test-model".to_string(),
+                    provider_id: fabro_model::ProviderId::anthropic(),
+                    fallback_chain: Vec::new(),
+                    mcp_servers: Vec::new(),
+                    model_controls: RunModelControls::default(),
+                    dry_run: true,
+                },
+                interviewer: Arc::new(AutoApproveInterviewer::engine()),
+                steering_hub: Arc::new(crate::steering_hub::SteeringHub::new(emitter.clone())),
+                catalog: test_catalog(),
+                lifecycle: crate::run_options::LifecycleOptions {
+                    setup_commands: vec![],
+                    setup_command_timeout_ms: 1_000,
+                },
+                run_options: test_settings(&run_dir),
+                workflow_path: None,
+                workflow_bundle: None,
+                hooks: fabro_hooks::HookSettings { hooks: vec![] },
+                sandbox_env: SandboxEnvSpec {
+                    toml_env: HashMap::from([("TEST_KEY".to_string(), "value".to_string())]),
+                    github_permissions: None,
+                    origin_url: None,
+                },
+                vault: None,
+                git: None,
+                run_control: None,
+                registry_override: None,
+                artifact_sink: None,
+                checkpoint: None,
+                seed_context: None,
+                fabro_run_tools: None,
+                acp_credentials: crate::handler::llm::AcpCredentials::default(),
             },
-            dry_run:           false,
-            emitter:           emitter.clone(),
-            sandbox:           SandboxSpec::Local {
-                working_directory: std::env::current_dir().unwrap(),
-            },
-            llm:               LlmSpec {
-                backend_override: None, // ponytail: rebase anchor — tmux backend
-                model:          "test-model".to_string(),
-                provider_id:    fabro_model::ProviderId::anthropic(),
-                fallback_chain: Vec::new(),
-                mcp_servers:    Vec::new(),
-                model_controls: RunModelControls::default(),
-                dry_run:        true,
-            },
-            interviewer:       Arc::new(AutoApproveInterviewer::engine()),
-            steering_hub:      Arc::new(crate::steering_hub::SteeringHub::new(emitter.clone())),
-            catalog:           test_catalog(),
-            lifecycle:         crate::run_options::LifecycleOptions {
-                setup_commands:           vec![],
-                setup_command_timeout_ms: 1_000,
-            },
-            run_options:       test_settings(&run_dir),
-            workflow_path:     None,
-            workflow_bundle:   None,
-            hooks:             fabro_hooks::HookSettings { hooks: vec![] },
-            sandbox_env:       SandboxEnvSpec {
-                toml_env:           HashMap::from([("TEST_KEY".to_string(), "value".to_string())]),
-                github_permissions: None,
-                origin_url:         None,
-            },
-            vault:             None,
-            git:               None,
-            run_control:       None,
-            registry_override: None,
-            artifact_sink:     None,
-            checkpoint:        None,
-            seed_context:      None,
-            fabro_run_tools:   None,
-            acp_credentials:   crate::handler::llm::AcpCredentials::default(),
-        })
+        )
         .await
         .unwrap();
 
@@ -1154,18 +1163,18 @@ mod tests {
 
         let test_emitter = Arc::new(crate::event::Emitter::new(test_run_id()));
         let tool_env_provider = Arc::new(WorkflowToolEnvProvider {
-            base_env:     HashMap::new(),
+            base_env: HashMap::new(),
             github_token: None,
         });
         let (_registry, effective_dry_run) = build_registry(
             &LlmSpec {
                 backend_override: None, // ponytail: rebase anchor — tmux backend
-                model:          "claude-opus-4-6".to_string(),
-                provider_id:    fabro_model::ProviderId::anthropic(),
+                model: "claude-opus-4-6".to_string(),
+                provider_id: fabro_model::ProviderId::anthropic(),
                 fallback_chain: Vec::new(),
-                mcp_servers:    Vec::new(),
+                mcp_servers: Vec::new(),
                 model_controls: RunModelControls::default(),
-                dry_run:        false,
+                dry_run: false,
             },
             Arc::new(AutoApproveInterviewer::engine()),
             Arc::new(crate::steering_hub::SteeringHub::new(test_emitter)),
@@ -1251,49 +1260,52 @@ mod tests {
         });
         let store = memory_store();
         let run_store = store.create_run(&test_run_id()).await.unwrap();
-        let initialized = initialize(test_persisted(graph, source, &run_dir), InitOptions {
-            run_id:            test_run_id(),
-            run_store:         run_store.into(),
-            dry_run:           false,
-            emitter:           emitter.clone(),
-            sandbox:           SandboxSpec::Local {
-                working_directory: temp.path().to_path_buf(),
+        let initialized = initialize(
+            test_persisted(graph, source, &run_dir),
+            InitOptions {
+                run_id: test_run_id(),
+                run_store: run_store.into(),
+                dry_run: false,
+                emitter: emitter.clone(),
+                sandbox: SandboxSpec::Local {
+                    working_directory: temp.path().to_path_buf(),
+                },
+                llm: LlmSpec {
+                    backend_override: None, // ponytail: rebase anchor — tmux backend
+                    model: "fake-acp".to_string(),
+                    provider_id: fabro_model::ProviderId::openai(),
+                    fallback_chain: Vec::new(),
+                    mcp_servers: Vec::new(),
+                    model_controls: RunModelControls::default(),
+                    dry_run: false,
+                },
+                interviewer: Arc::new(AutoApproveInterviewer::engine()),
+                steering_hub: Arc::new(crate::steering_hub::SteeringHub::new(emitter)),
+                catalog: test_catalog(),
+                lifecycle: crate::run_options::LifecycleOptions {
+                    setup_commands: Vec::new(),
+                    setup_command_timeout_ms: 1_000,
+                },
+                run_options: test_settings(&run_dir),
+                workflow_path: None,
+                workflow_bundle: None,
+                hooks: fabro_hooks::HookSettings { hooks: vec![] },
+                sandbox_env: SandboxEnvSpec {
+                    toml_env: HashMap::new(),
+                    github_permissions: None,
+                    origin_url: None,
+                },
+                vault: Some(vault),
+                git: None,
+                run_control: None,
+                registry_override: None,
+                artifact_sink: None,
+                checkpoint: None,
+                seed_context: None,
+                fabro_run_tools: None,
+                acp_credentials: crate::handler::llm::AcpCredentials::default(),
             },
-            llm:               LlmSpec {
-                backend_override: None, // ponytail: rebase anchor — tmux backend
-                model:          "fake-acp".to_string(),
-                provider_id:    fabro_model::ProviderId::openai(),
-                fallback_chain: Vec::new(),
-                mcp_servers:    Vec::new(),
-                model_controls: RunModelControls::default(),
-                dry_run:        false,
-            },
-            interviewer:       Arc::new(AutoApproveInterviewer::engine()),
-            steering_hub:      Arc::new(crate::steering_hub::SteeringHub::new(emitter)),
-            catalog:           test_catalog(),
-            lifecycle:         crate::run_options::LifecycleOptions {
-                setup_commands:           Vec::new(),
-                setup_command_timeout_ms: 1_000,
-            },
-            run_options:       test_settings(&run_dir),
-            workflow_path:     None,
-            workflow_bundle:   None,
-            hooks:             fabro_hooks::HookSettings { hooks: vec![] },
-            sandbox_env:       SandboxEnvSpec {
-                toml_env:           HashMap::new(),
-                github_permissions: None,
-                origin_url:         None,
-            },
-            vault:             Some(vault),
-            git:               None,
-            run_control:       None,
-            registry_override: None,
-            artifact_sink:     None,
-            checkpoint:        None,
-            seed_context:      None,
-            fabro_run_tools:   None,
-            acp_credentials:   crate::handler::llm::AcpCredentials::default(),
-        })
+        )
         .await
         .unwrap();
 
@@ -1349,49 +1361,52 @@ mod tests {
         });
         store_logger.register(&emitter);
 
-        let initialized = initialize(persisted, InitOptions {
-            run_id:            test_run_id(),
-            run_store:         run_store.into(),
-            dry_run:           false,
-            emitter:           emitter.clone(),
-            sandbox:           SandboxSpec::Local {
-                working_directory: std::env::current_dir().unwrap(),
+        let initialized = initialize(
+            persisted,
+            InitOptions {
+                run_id: test_run_id(),
+                run_store: run_store.into(),
+                dry_run: false,
+                emitter: emitter.clone(),
+                sandbox: SandboxSpec::Local {
+                    working_directory: std::env::current_dir().unwrap(),
+                },
+                llm: LlmSpec {
+                    backend_override: None, // ponytail: rebase anchor — tmux backend
+                    model: "test-model".to_string(),
+                    provider_id: fabro_model::ProviderId::anthropic(),
+                    fallback_chain: Vec::new(),
+                    mcp_servers: Vec::new(),
+                    model_controls: RunModelControls::default(),
+                    dry_run: true,
+                },
+                interviewer: Arc::new(AutoApproveInterviewer::engine()),
+                steering_hub: Arc::new(crate::steering_hub::SteeringHub::new(emitter.clone())),
+                catalog: test_catalog(),
+                lifecycle: crate::run_options::LifecycleOptions {
+                    setup_commands: vec!["true".to_string()],
+                    setup_command_timeout_ms: 1_000,
+                },
+                run_options: test_settings(&run_dir),
+                workflow_path: None,
+                workflow_bundle: None,
+                hooks: fabro_hooks::HookSettings { hooks: vec![] },
+                sandbox_env: SandboxEnvSpec {
+                    toml_env: HashMap::new(),
+                    github_permissions: None,
+                    origin_url: None,
+                },
+                vault: None,
+                git: None,
+                run_control: None,
+                registry_override: None,
+                artifact_sink: None,
+                checkpoint: None,
+                seed_context: None,
+                fabro_run_tools: None,
+                acp_credentials: crate::handler::llm::AcpCredentials::default(),
             },
-            llm:               LlmSpec {
-                backend_override: None, // ponytail: rebase anchor — tmux backend
-                model:          "test-model".to_string(),
-                provider_id:    fabro_model::ProviderId::anthropic(),
-                fallback_chain: Vec::new(),
-                mcp_servers:    Vec::new(),
-                model_controls: RunModelControls::default(),
-                dry_run:        true,
-            },
-            interviewer:       Arc::new(AutoApproveInterviewer::engine()),
-            steering_hub:      Arc::new(crate::steering_hub::SteeringHub::new(emitter.clone())),
-            catalog:           test_catalog(),
-            lifecycle:         crate::run_options::LifecycleOptions {
-                setup_commands:           vec!["true".to_string()],
-                setup_command_timeout_ms: 1_000,
-            },
-            run_options:       test_settings(&run_dir),
-            workflow_path:     None,
-            workflow_bundle:   None,
-            hooks:             fabro_hooks::HookSettings { hooks: vec![] },
-            sandbox_env:       SandboxEnvSpec {
-                toml_env:           HashMap::new(),
-                github_permissions: None,
-                origin_url:         None,
-            },
-            vault:             None,
-            git:               None,
-            run_control:       None,
-            registry_override: None,
-            artifact_sink:     None,
-            checkpoint:        None,
-            seed_context:      None,
-            fabro_run_tools:   None,
-            acp_credentials:   crate::handler::llm::AcpCredentials::default(),
-        })
+        )
         .await
         .unwrap();
         store_logger.flush().await;
@@ -1461,53 +1476,56 @@ mod tests {
         run_options.cancel_token = cancel_token;
 
         let emitter = Arc::new(crate::event::Emitter::new(test_run_id()));
-        let result = initialize(persisted, InitOptions {
-            run_id: test_run_id(),
-            run_store: {
-                let store = memory_store();
-                let inner = store.create_run(&test_run_id()).await.unwrap();
-                inner.into()
+        let result = initialize(
+            persisted,
+            InitOptions {
+                run_id: test_run_id(),
+                run_store: {
+                    let store = memory_store();
+                    let inner = store.create_run(&test_run_id()).await.unwrap();
+                    inner.into()
+                },
+                dry_run: false,
+                emitter: emitter.clone(),
+                sandbox: SandboxSpec::Local {
+                    working_directory: std::env::current_dir().unwrap(),
+                },
+                llm: LlmSpec {
+                    backend_override: None, // ponytail: rebase anchor — tmux backend
+                    model: "test-model".to_string(),
+                    provider_id: fabro_model::ProviderId::anthropic(),
+                    fallback_chain: Vec::new(),
+                    mcp_servers: Vec::new(),
+                    model_controls: RunModelControls::default(),
+                    dry_run: true,
+                },
+                interviewer: Arc::new(AutoApproveInterviewer::engine()),
+                steering_hub: Arc::new(crate::steering_hub::SteeringHub::new(emitter.clone())),
+                catalog: test_catalog(),
+                lifecycle: crate::run_options::LifecycleOptions {
+                    setup_commands: vec!["sleep 5".to_string()],
+                    setup_command_timeout_ms: 5_000,
+                },
+                run_options,
+                workflow_path: None,
+                workflow_bundle: None,
+                hooks: fabro_hooks::HookSettings { hooks: vec![] },
+                sandbox_env: SandboxEnvSpec {
+                    toml_env: HashMap::new(),
+                    github_permissions: None,
+                    origin_url: None,
+                },
+                vault: None,
+                git: None,
+                run_control: None,
+                registry_override: None,
+                artifact_sink: None,
+                checkpoint: None,
+                seed_context: None,
+                fabro_run_tools: None,
+                acp_credentials: crate::handler::llm::AcpCredentials::default(),
             },
-            dry_run: false,
-            emitter: emitter.clone(),
-            sandbox: SandboxSpec::Local {
-                working_directory: std::env::current_dir().unwrap(),
-            },
-            llm: LlmSpec {
-                backend_override: None, // ponytail: rebase anchor — tmux backend
-                model:          "test-model".to_string(),
-                provider_id:    fabro_model::ProviderId::anthropic(),
-                fallback_chain: Vec::new(),
-                mcp_servers:    Vec::new(),
-                model_controls: RunModelControls::default(),
-                dry_run:        true,
-            },
-            interviewer: Arc::new(AutoApproveInterviewer::engine()),
-            steering_hub: Arc::new(crate::steering_hub::SteeringHub::new(emitter.clone())),
-            catalog: test_catalog(),
-            lifecycle: crate::run_options::LifecycleOptions {
-                setup_commands:           vec!["sleep 5".to_string()],
-                setup_command_timeout_ms: 5_000,
-            },
-            run_options,
-            workflow_path: None,
-            workflow_bundle: None,
-            hooks: fabro_hooks::HookSettings { hooks: vec![] },
-            sandbox_env: SandboxEnvSpec {
-                toml_env:           HashMap::new(),
-                github_permissions: None,
-                origin_url:         None,
-            },
-            vault: None,
-            git: None,
-            run_control: None,
-            registry_override: None,
-            artifact_sink: None,
-            checkpoint: None,
-            seed_context: None,
-            fabro_run_tools: None,
-            acp_credentials: crate::handler::llm::AcpCredentials::default(),
-        })
+        )
         .await;
 
         assert!(matches!(result, Err(Error::Cancelled)));

@@ -26,9 +26,9 @@ use crate::workflow_bundle::WorkflowBundle;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RunLocations {
-    pub host_source_dir:  Option<PathBuf>,
+    pub host_source_dir: Option<PathBuf>,
     pub sandbox_work_dir: Option<PathBuf>,
-    pub run_scratch_dir:  PathBuf,
+    pub run_scratch_dir: PathBuf,
 }
 
 impl RunLocations {
@@ -61,7 +61,7 @@ impl RunLocations {
     #[must_use]
     pub fn hook_execution_context(&self) -> HookExecutionContext {
         HookExecutionContext {
-            host_source_dir:  self.host_source_dir.clone(),
+            host_source_dir: self.host_source_dir.clone(),
             sandbox_work_dir: self.sandbox_work_dir.clone(),
         }
     }
@@ -77,9 +77,9 @@ impl RunLocations {
 
 #[derive(Clone)]
 pub struct FabroRunToolServices {
-    pub backend:            Arc<dyn fabro_tool::FabroToolBackend>,
-    pub current_run_id:     RunId,
-    pub base_cwd:           PathBuf,
+    pub backend: Arc<dyn fabro_tool::FabroToolBackend>,
+    pub current_run_id: RunId,
+    pub base_cwd: PathBuf,
     pub user_settings_path: PathBuf,
 }
 
@@ -93,19 +93,19 @@ pub struct FabroRunToolServices {
 /// does NOT count as cancellation.
 #[derive(Clone)]
 pub struct RunServices {
-    pub run_store:                RunStoreHandle,
-    pub emitter:                  Arc<Emitter>,
-    pub sandbox:                  Arc<dyn Sandbox>,
-    pub hook_runner:              Option<Arc<HookRunner>>,
-    pub locations:                RunLocations,
-    pub(crate) cancel_token:      CancellationToken,
-    pub provider_id:              ProviderId,
-    pub model:                    String,
-    pub llm_source:               Arc<dyn CredentialSource>,
-    pub catalog:                  Arc<Catalog>,
-    pub(crate) sandbox_git:       Arc<SandboxGitRuntime>,
-    pub(crate) metadata_runtime:  Arc<RunMetadataRuntime>,
-    pub(crate) metadata_writer:   Option<RunMetadataWriterHandle>,
+    pub run_store: RunStoreHandle,
+    pub emitter: Arc<Emitter>,
+    pub sandbox: Arc<dyn Sandbox>,
+    pub hook_runner: Option<Arc<HookRunner>>,
+    pub locations: RunLocations,
+    pub(crate) cancel_token: CancellationToken,
+    pub provider_id: ProviderId,
+    pub model: String,
+    pub llm_source: Arc<dyn CredentialSource>,
+    pub catalog: Arc<Catalog>,
+    pub(crate) sandbox_git: Arc<SandboxGitRuntime>,
+    pub(crate) metadata_runtime: Arc<RunMetadataRuntime>,
+    pub(crate) metadata_writer: Option<RunMetadataWriterHandle>,
     pub(crate) interview_blocker: Arc<RunInterviewBlocker>,
 }
 
@@ -226,25 +226,25 @@ impl RunServices {
 
 /// Services available only while executing workflow nodes.
 pub struct EngineServices {
-    pub run:              Arc<RunServices>,
-    pub registry:         Arc<HandlerRegistry>,
-    pub interviewer:      Arc<dyn Interviewer>,
+    pub run: Arc<RunServices>,
+    pub registry: Arc<HandlerRegistry>,
+    pub interviewer: Arc<dyn Interviewer>,
     /// Git state for the current run. Set via `set_git_state` at the start of
     /// `execute` and read by parallel/fan-in handlers.
     pub(crate) git_state: std::sync::RwLock<Option<Arc<GitState>>>,
     /// Environment variables from `[sandbox.env]` config.
-    pub base_env:         HashMap<String, String>,
+    pub base_env: HashMap<String, String>,
     /// GitHub token source used to inject `GITHUB_TOKEN` at the point of use.
-    pub github_token:     Option<Arc<GitHubTokenSource>>,
+    pub github_token: Option<Arc<GitHubTokenSource>>,
     /// Typed values from `[run.inputs]`, available to prompt templates.
-    pub inputs:           HashMap<String, toml::Value>,
+    pub inputs: HashMap<String, toml::Value>,
     /// When true, handlers should skip real execution and return simulated
     /// results.
-    pub dry_run:          bool,
+    pub dry_run: bool,
     /// Manifest path of the current workflow when running from a bundle.
-    pub workflow_path:    Option<ManifestPath>,
+    pub workflow_path: Option<ManifestPath>,
     /// Bundled workflows available for child-workflow resolution.
-    pub workflow_bundle:  Option<Arc<WorkflowBundle>>,
+    pub workflow_bundle: Option<Arc<WorkflowBundle>>,
 }
 
 impl EngineServices {
@@ -326,7 +326,7 @@ impl EngineServices {
         let locations = RunLocations::for_sandbox(None, sandbox.as_ref(), PathBuf::from("."));
 
         Self {
-            run:             RunServices::new(
+            run: RunServices::new(
                 run_store.into(),
                 Arc::new(Emitter::default()),
                 sandbox,
@@ -341,21 +341,21 @@ impl EngineServices {
                 Arc::new(RunMetadataRuntime::new()),
                 None,
             ),
-            registry:        Arc::new(HandlerRegistry::new(Box::new(start::StartHandler))),
-            interviewer:     Arc::new(fabro_interview::AutoApproveInterviewer::engine()),
-            git_state:       std::sync::RwLock::new(None),
-            base_env:        HashMap::new(),
-            github_token:    None,
-            inputs:          HashMap::new(),
-            dry_run:         false,
-            workflow_path:   None,
+            registry: Arc::new(HandlerRegistry::new(Box::new(start::StartHandler))),
+            interviewer: Arc::new(fabro_interview::AutoApproveInterviewer::engine()),
+            git_state: std::sync::RwLock::new(None),
+            base_env: HashMap::new(),
+            github_token: None,
+            inputs: HashMap::new(),
+            dry_run: false,
+            workflow_path: None,
             workflow_bundle: None,
         }
     }
 }
 
 pub struct WorkflowToolEnvProvider {
-    pub base_env:     HashMap<String, String>,
+    pub base_env: HashMap<String, String>,
     pub github_token: Option<Arc<GitHubTokenSource>>,
 }
 
@@ -406,7 +406,7 @@ mod tests {
     #[tokio::test]
     async fn workflow_tool_env_provider_returns_base_env_without_github_token() {
         let provider = WorkflowToolEnvProvider {
-            base_env:     HashMap::from([("FOO".to_string(), "bar".to_string())]),
+            base_env: HashMap::from([("FOO".to_string(), "bar".to_string())]),
             github_token: None,
         };
 
@@ -419,7 +419,7 @@ mod tests {
     #[tokio::test]
     async fn workflow_tool_env_provider_merges_current_github_token() {
         let provider = WorkflowToolEnvProvider {
-            base_env:     HashMap::from([("FOO".to_string(), "bar".to_string())]),
+            base_env: HashMap::from([("FOO".to_string(), "bar".to_string())]),
             github_token: Some(Arc::new(GitHubTokenSource::pat("ghp_pat".to_string()))),
         };
 
@@ -441,7 +441,7 @@ mod tests {
     #[tokio::test]
     async fn workflow_tool_env_provider_propagates_token_refresh_errors() {
         let provider = WorkflowToolEnvProvider {
-            base_env:     HashMap::new(),
+            base_env: HashMap::new(),
             github_token: Some(Arc::new(GitHubTokenSource::mintable(Arc::new(
                 FailingMinter,
             )))),

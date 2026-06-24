@@ -26,37 +26,37 @@ use crate::outcome::{BilledModelUsage, Outcome, OutcomeExt};
 )]
 pub enum CodergenResult {
     Text {
-        text:              String,
-        usage:             Option<BilledModelUsage>,
-        files_touched:     Vec<String>,
+        text: String,
+        usage: Option<BilledModelUsage>,
+        files_touched: Vec<String>,
         last_file_touched: Option<String>,
         /// Active timing observed by the backend. The wall field is ignored by
         /// the executor on this hop; executor wall time remains authoritative.
-        timing:            StageTiming,
+        timing: StageTiming,
     },
     Full(Box<Outcome>),
 }
 
 pub struct CodergenRunRequest<'a> {
-    pub node:               &'a Node,
-    pub prompt:             &'a str,
-    pub context:            &'a Context,
-    pub thread_id:          Option<&'a str>,
-    pub emitter:            &'a Arc<Emitter>,
-    pub sandbox:            &'a Arc<dyn Sandbox>,
-    pub tool_hooks:         Option<Arc<dyn fabro_agent::ToolHookCallback>>,
-    pub cancel_token:       CancellationToken,
+    pub node: &'a Node,
+    pub prompt: &'a str,
+    pub context: &'a Context,
+    pub thread_id: Option<&'a str>,
+    pub emitter: &'a Arc<Emitter>,
+    pub sandbox: &'a Arc<dyn Sandbox>,
+    pub tool_hooks: Option<Arc<dyn fabro_agent::ToolHookCallback>>,
+    pub cancel_token: CancellationToken,
     pub agent_tool_runtime: fabro_agent::AgentToolRuntime,
 }
 
 pub struct OneShotRequest<'a> {
-    pub node:          &'a Node,
-    pub prompt:        &'a str,
+    pub node: &'a Node,
+    pub prompt: &'a str,
     pub system_prompt: Option<&'a str>,
-    pub emitter:       &'a Arc<Emitter>,
-    pub stage_scope:   &'a StageScope,
-    pub sandbox:       &'a Arc<dyn Sandbox>,
-    pub cancel_token:  CancellationToken,
+    pub emitter: &'a Arc<Emitter>,
+    pub stage_scope: &'a StageScope,
+    pub sandbox: &'a Arc<dyn Sandbox>,
+    pub cancel_token: CancellationToken,
 }
 
 /// Emit the canonical `Event::Prompt` for a stage prompt and return the
@@ -91,14 +91,14 @@ pub(crate) fn emit_stage_prompt(
         .unwrap_or_default();
     services.run.emitter.emit_scoped(
         &Event::Prompt {
-            stage:            node.id.clone(),
-            visit:            stage_scope.visit,
-            text:             prompt.to_string(),
-            mode:             Some(mode.to_string()),
-            provider:         prompt_provider,
-            model:            prompt_model,
+            stage: node.id.clone(),
+            visit: stage_scope.visit,
+            text: prompt.to_string(),
+            mode: Some(mode.to_string()),
+            provider: prompt_provider,
+            model: prompt_model,
             reasoning_effort: request_controls.reasoning_effort,
-            speed:            request_controls.speed,
+            speed: request_controls.speed,
         },
         &stage_scope,
     );
@@ -337,11 +337,11 @@ impl Handler for AgentHandler {
             .unwrap_or_default();
         services.run.emitter.emit_scoped(
             &Event::PromptCompleted {
-                node_id:  node.id.clone(),
+                node_id: node.id.clone(),
                 response: response_text.clone(),
-                model:    response_model,
+                model: response_model,
                 provider: response_provider,
-                billing:  stage_usage.clone(),
+                billing: stage_usage.clone(),
             },
             &stage_scope,
         );
@@ -471,26 +471,25 @@ mod tests {
             run_store,
             &fixtures::RUN_1,
             &crate::event::Event::RunCreated {
-                run_id:           fixtures::RUN_1,
-                title:            None,
-                settings:         serde_json::to_value(fabro_types::WorkflowSettings::default())
-                    .unwrap(),
-                graph:            serde_json::to_value(fabro_types::Graph::new("test")).unwrap(),
-                workflow_source:  None,
-                workflow_config:  None,
-                labels:           std::collections::BTreeMap::default(),
-                run_dir:          "/tmp".to_string(),
+                run_id: fixtures::RUN_1,
+                title: None,
+                settings: serde_json::to_value(fabro_types::WorkflowSettings::default()).unwrap(),
+                graph: serde_json::to_value(fabro_types::Graph::new("test")).unwrap(),
+                workflow_source: None,
+                workflow_config: None,
+                labels: std::collections::BTreeMap::default(),
+                run_dir: "/tmp".to_string(),
                 source_directory: None,
-                workflow_slug:    None,
-                automation:       None,
-                db_prefix:        None,
-                provenance:       test_support::test_run_provenance(),
-                manifest_blob:    None,
-                git:              None,
-                fork_source_ref:  None,
-                retried_from:     None,
-                parent_id:        None,
-                web_url:          None,
+                workflow_slug: None,
+                automation: None,
+                db_prefix: None,
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                git: None,
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
             },
         )
         .await
@@ -640,9 +639,12 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(outcome.status, crate::outcome::StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            crate::outcome::StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert_eq!(outcome.failure_reason(), Some("tests failed"));
     }
 
@@ -656,13 +658,12 @@ mod tests {
         impl CodergenBackend for DirectiveBackend {
             async fn run(&self, _request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
                 Ok(CodergenResult::Text {
-                    text:
-                        r#"Done. {"outcome": "succeeded", "preferred_next_label": "approve"}"#
-                            .to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: r#"Done. {"outcome": "succeeded", "preferred_next_label": "approve"}"#
+                        .to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::default(),
+                    timing: StageTiming::default(),
                 })
             }
         }
@@ -706,11 +707,11 @@ mod tests {
         impl CodergenBackend for TimingBackend {
             async fn run(&self, _request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
                 Ok(CodergenResult::Text {
-                    text:              "done".to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: "done".to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::new(0, 200, 300),
+                    timing: StageTiming::new(0, 200, 300),
                 })
             }
         }
@@ -737,11 +738,11 @@ mod tests {
         impl CodergenBackend for LastFileBackend {
             async fn run(&self, _request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
                 Ok(CodergenResult::Text {
-                    text:              "Done writing results.".to_string(),
-                    usage:             None,
-                    files_touched:     vec!["results.md".to_string()],
+                    text: "Done writing results.".to_string(),
+                    usage: None,
+                    files_touched: vec!["results.md".to_string()],
                     last_file_touched: Some("results.md".to_string()),
-                    timing:            StageTiming::default(),
+                    timing: StageTiming::default(),
                 })
             }
         }
@@ -828,11 +829,11 @@ mod tests {
         impl CodergenBackend for BadRoutingBackend {
             async fn run(&self, _request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
                 Ok(CodergenResult::Text {
-                    text:              r#"{"suggested_next_ids": [1]}"#.to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: r#"{"suggested_next_ids": [1]}"#.to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::default(),
+                    timing: StageTiming::default(),
                 })
             }
         }
@@ -869,9 +870,12 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(outcome.status, crate::outcome::StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            crate::outcome::StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert_eq!(
             outcome.failure_reason(),
             Some("output schema validation failed after 0 repair attempt(s)")
@@ -887,11 +891,11 @@ mod tests {
         impl CodergenBackend for CustomOutputBackend {
             async fn run(&self, _request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
                 Ok(CodergenResult::Text {
-                    text:              r#"{"passed": true}"#.to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: r#"{"passed": true}"#.to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::default(),
+                    timing: StageTiming::default(),
                 })
             }
         }
@@ -930,25 +934,25 @@ mod tests {
                 let scope = StageScope::for_handler(request.context, &request.node.id);
                 request.emitter.emit_scoped(
                     &crate::event::Event::AgentSessionActivated {
-                        node_id:          request.node.id.clone(),
-                        visit:            scope.visit,
-                        session_id:       "session_123".to_string(),
-                        thread_id:        None,
-                        provider:         Some("openai".to_string()),
-                        model:            Some("gpt-5.4".to_string()),
+                        node_id: request.node.id.clone(),
+                        visit: scope.visit,
+                        session_id: "session_123".to_string(),
+                        thread_id: None,
+                        provider: Some("openai".to_string()),
+                        model: Some("gpt-5.4".to_string()),
                         reasoning_effort: Some(ReasoningEffort::High),
-                        speed:            Some(Speed::Fast),
+                        speed: Some(Speed::Fast),
                         permission_level: None,
-                        capabilities:     vec![fabro_types::SessionCapability::Steer],
+                        capabilities: vec![fabro_types::SessionCapability::Steer],
                     },
                     &scope,
                 );
                 Ok(CodergenResult::Text {
-                    text:              "done".to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: "done".to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::default(),
+                    timing: StageTiming::default(),
                 })
             }
         }
@@ -999,11 +1003,11 @@ mod tests {
                 *self.captured_thread_id.lock().unwrap() =
                     Some(request.thread_id.map(String::from));
                 Ok(CodergenResult::Text {
-                    text:              "ok".to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: "ok".to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::default(),
+                    timing: StageTiming::default(),
                 })
             }
         }
@@ -1044,11 +1048,11 @@ mod tests {
                 *self.captured_thread_id.lock().unwrap() =
                     Some(request.thread_id.map(String::from));
                 Ok(CodergenResult::Text {
-                    text:              "ok".to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: "ok".to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::default(),
+                    timing: StageTiming::default(),
                 })
             }
         }
@@ -1176,9 +1180,12 @@ That's it."#;
         let text = r#"{"outcome": "failed", "failure_reason": "tests failed"}"#;
         let mut outcome = Outcome::success();
         extract_status_fields(text, &mut outcome);
-        assert_eq!(outcome.status, crate::outcome::StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            crate::outcome::StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert_eq!(outcome.failure_reason(), Some("tests failed"));
     }
 
@@ -1196,9 +1203,12 @@ That's it."#;
         let text = r#"{"outcome": "failed"}"#;
         let mut outcome = Outcome::success();
         extract_status_fields(text, &mut outcome);
-        assert_eq!(outcome.status, crate::outcome::StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            crate::outcome::StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert!(outcome.failure.is_none());
     }
 
@@ -1233,9 +1243,12 @@ Some text in between.
             .execute(&node, &context, &graph, tmp.path(), &make_services())
             .await
             .unwrap();
-        assert_eq!(outcome.status, crate::outcome::StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            crate::outcome::StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert!(outcome.failure_reason().unwrap().contains("bad config"));
     }
 
@@ -1252,11 +1265,11 @@ Some text in between.
             async fn run(&self, request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
                 *self.captured_prompt.lock().unwrap() = Some(request.prompt.to_string());
                 Ok(CodergenResult::Text {
-                    text:              "ok".to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: "ok".to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::default(),
+                    timing: StageTiming::default(),
                 })
             }
         }
@@ -1313,11 +1326,11 @@ Some text in between.
             async fn run(&self, request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
                 *self.captured_prompt.lock().unwrap() = Some(request.prompt.to_string());
                 Ok(CodergenResult::Text {
-                    text:              "ok".to_string(),
-                    usage:             None,
-                    files_touched:     Vec::new(),
+                    text: "ok".to_string(),
+                    usage: None,
+                    files_touched: Vec::new(),
                     last_file_touched: None,
-                    timing:            StageTiming::default(),
+                    timing: StageTiming::default(),
                 })
             }
         }

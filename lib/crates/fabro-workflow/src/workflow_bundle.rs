@@ -9,16 +9,16 @@ use crate::file_resolver::{BundleFileResolver, FileResolver};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ParsedWorkflowConfig {
-    pub path:   ManifestPath,
+    pub path: ManifestPath,
     pub source: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct BundledWorkflow {
-    pub path:   ManifestPath,
+    pub path: ManifestPath,
     pub source: String,
     pub config: Option<ParsedWorkflowConfig>,
-    pub files:  HashMap<ManifestPath, String>,
+    pub files: HashMap<ManifestPath, String>,
 }
 
 impl BundledWorkflow {
@@ -66,7 +66,7 @@ impl WorkflowBundle {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RunDefinition {
     pub workflow_path: ManifestPath,
-    pub workflows:     HashMap<ManifestPath, BundledWorkflow>,
+    pub workflows: HashMap<ManifestPath, BundledWorkflow>,
 }
 
 impl RunDefinition {

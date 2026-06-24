@@ -154,18 +154,18 @@ fn make_registry() -> HandlerRegistry {
 
 fn test_run_options(run_dir: &Path) -> RunOptions {
     RunOptions {
-        run_dir:          run_dir.to_path_buf(),
-        cancel_token:     CancellationToken::new(),
-        run_id:           fixtures::RUN_2,
-        settings:         WorkflowSettings::default(),
-        git:              None,
-        pre_run_git:      None,
-        fork_source_ref:  None,
-        labels:           HashMap::new(),
-        github_app:       None,
-        base_branch:      None,
+        run_dir: run_dir.to_path_buf(),
+        cancel_token: CancellationToken::new(),
+        run_id: fixtures::RUN_2,
+        settings: WorkflowSettings::default(),
+        git: None,
+        pre_run_git: None,
+        fork_source_ref: None,
+        labels: HashMap::new(),
+        github_app: None,
+        base_branch: None,
         display_base_sha: None,
-        workflow_slug:    None,
+        workflow_slug: None,
     }
 }
 
@@ -285,8 +285,8 @@ async fn git_checkpoint_skips_start_node() {
 
     let mut run_options = test_run_options(run_tmp.path());
     run_options.git = Some(GitCheckpointOptions {
-        base_sha:    Some(base_sha),
-        run_branch:  None,
+        base_sha: Some(base_sha),
+        run_branch: None,
         meta_branch: Some(format!("fabro/meta/{}", fixtures::RUN_2)),
     });
 

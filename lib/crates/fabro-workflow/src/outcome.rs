@@ -43,13 +43,13 @@ pub fn billed_model_usage_from_llm(
 pub fn billed_token_counts_from_llm(usage: &LlmTokenCounts) -> BilledTokenCounts {
     let tokens = token_counts_from_llm_usage(usage);
     BilledTokenCounts {
-        input_tokens:       tokens.input_tokens,
-        output_tokens:      tokens.output_tokens,
-        total_tokens:       tokens.total_tokens(),
-        reasoning_tokens:   tokens.reasoning_tokens,
-        cache_read_tokens:  tokens.cache_read_tokens,
+        input_tokens: tokens.input_tokens,
+        output_tokens: tokens.output_tokens,
+        total_tokens: tokens.total_tokens(),
+        reasoning_tokens: tokens.reasoning_tokens,
+        cache_read_tokens: tokens.cache_read_tokens,
         cache_write_tokens: tokens.cache_write_tokens,
-        total_usd_micros:   None,
+        total_usd_micros: None,
     }
 }
 
@@ -186,19 +186,22 @@ mod tests {
     fn retry_classify_marks_failed_outcome_with_retry_request() {
         let outcome = crate::outcome::Outcome::retry_classify("timeout");
 
-        assert_eq!(outcome.status, crate::outcome::StageOutcome::Failed {
-            retry_requested: true,
-        });
+        assert_eq!(
+            outcome.status,
+            crate::outcome::StageOutcome::Failed {
+                retry_requested: true,
+            }
+        );
         assert!(outcome.status.retry_requested());
     }
 
     #[test]
     fn billed_model_usage_from_llm_bills_anthropic_fast_mode_cache_write_pricing() {
         let usage = TokenCounts {
-            input_tokens:       100_000,
-            output_tokens:      10_000,
-            reasoning_tokens:   5_000,
-            cache_read_tokens:  20_000,
+            input_tokens: 100_000,
+            output_tokens: 10_000,
+            reasoning_tokens: 5_000,
+            cache_read_tokens: 20_000,
             cache_write_tokens: 30_000,
         };
         let billed = billed_model_usage_from_llm(
@@ -318,10 +321,10 @@ output_cost_per_mtok = 2.0
     #[test]
     fn billed_model_usage_round_trips_dense_token_counts() {
         let usage = TokenCounts {
-            input_tokens:       100,
-            output_tokens:      40,
-            reasoning_tokens:   5,
-            cache_read_tokens:  20,
+            input_tokens: 100,
+            output_tokens: 40,
+            reasoning_tokens: 5,
+            cache_read_tokens: 20,
             cache_write_tokens: 10,
         };
         let billed = billed_model_usage_from_llm(

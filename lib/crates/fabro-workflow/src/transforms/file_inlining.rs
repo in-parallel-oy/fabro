@@ -124,13 +124,13 @@ fn manifest_path_is_within_root(path: &ManifestPath, root: &ManifestPath) -> boo
 
 /// Inlines `@file` references in node prompts and the graph-level goal.
 pub struct FileInliningTransform {
-    current_dir:   PathBuf,
-    resolver:      Arc<dyn FileResolver>,
-    inputs:        HashMap<String, toml::Value>,
-    source_name:   Option<String>,
-    source_text:   Option<String>,
+    current_dir: PathBuf,
+    resolver: Arc<dyn FileResolver>,
+    inputs: HashMap<String, toml::Value>,
+    source_name: Option<String>,
+    source_text: Option<String>,
     goal_override: Option<String>,
-    render_mode:   RenderMode,
+    render_mode: RenderMode,
 }
 
 impl FileInliningTransform {

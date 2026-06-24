@@ -32,7 +32,7 @@ const QUOTED_ROUTING_STATUS_FIELDS: &[&str] = &[
 pub(crate) enum OutputSchemaKind {
     Routing,
     JsonSchema {
-        schema:    Value,
+        schema: Value,
         validator: Arc<Validator>,
     },
 }
@@ -47,7 +47,7 @@ pub(crate) enum StructuredOutputErrorKind {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct StructuredOutputError {
-    kind:     StructuredOutputErrorKind,
+    kind: StructuredOutputErrorKind,
     messages: Vec<String>,
 }
 
@@ -185,14 +185,14 @@ pub(crate) fn parse_node_output_schema(node: &Node) -> Result<Option<OutputSchem
 pub(crate) fn prompt_response_format(schema: &OutputSchemaKind) -> ResponseFormat {
     match schema {
         OutputSchemaKind::Routing => ResponseFormat {
-            kind:        ResponseFormatType::JsonObject,
+            kind: ResponseFormatType::JsonObject,
             json_schema: None,
-            strict:      false,
+            strict: false,
         },
         OutputSchemaKind::JsonSchema { schema, .. } => ResponseFormat {
-            kind:        ResponseFormatType::JsonSchema,
+            kind: ResponseFormatType::JsonSchema,
             json_schema: Some(schema.clone()),
-            strict:      true,
+            strict: true,
         },
     }
 }
@@ -451,7 +451,7 @@ mod tests {
         let validator =
             jsonschema::validator_for(&value).expect("test schema should be a valid JSON Schema");
         OutputSchemaKind::JsonSchema {
-            schema:    value,
+            schema: value,
             validator: Arc::new(validator),
         }
     }
@@ -467,9 +467,12 @@ mod tests {
 
         apply_routing_fields(&validated.value, &mut outcome);
 
-        assert_eq!(outcome.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert_eq!(
             outcome.failure.as_ref().map(|f| f.message.as_str()),
             Some("tests failed")

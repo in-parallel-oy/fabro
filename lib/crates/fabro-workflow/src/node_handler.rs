@@ -27,8 +27,8 @@ use crate::retry::build_retry_policy;
 /// then diffs and applies changes back.
 pub(crate) struct WorkflowNodeHandler {
     pub services: Arc<EngineServices>,
-    pub run_dir:  PathBuf,
-    pub graph:    Arc<GvGraph>,
+    pub run_dir: PathBuf,
+    pub graph: Arc<GvGraph>,
 }
 
 #[async_trait]
@@ -52,7 +52,7 @@ impl NodeHandler<WorkflowGraph> for WorkflowNodeHandler {
         .map_err(|err| {
             CoreError::handler(HandlerErrorDetail {
                 retryable: true,
-                failure:   err.to_failure_detail(),
+                failure: err.to_failure_detail(),
             })
         })?;
         let execution_snapshot = wf_context.snapshot();
@@ -118,7 +118,7 @@ impl NodeHandler<WorkflowGraph> for WorkflowNodeHandler {
                 let msg = format_panic_message(&panic_payload);
                 Err(CoreError::handler(HandlerErrorDetail {
                     retryable: false,
-                    failure:   FailureDetail::new(msg, FailureCategory::Deterministic),
+                    failure: FailureDetail::new(msg, FailureCategory::Deterministic),
                 }))
             }
         }
@@ -134,7 +134,7 @@ impl NodeHandler<WorkflowGraph> for WorkflowNodeHandler {
             .map_err(|err| {
                 CoreError::handler(HandlerErrorDetail {
                     retryable: true,
-                    failure:   err.to_failure_detail(),
+                    failure: err.to_failure_detail(),
                 })
             })
     }

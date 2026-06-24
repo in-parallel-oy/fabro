@@ -41,15 +41,18 @@ mod tests {
     fn run_pipeline(dot: &str) -> Validated {
         let catalog = test_catalog();
         let parsed = parse(dot).unwrap();
-        let transformed = transform::transform(parsed, &TransformOptions {
-            current_dir:       None,
-            file_resolver:     None,
-            inputs:            std::collections::HashMap::new(),
-            source_name:       None,
-            render_mode:       crate::operations::RenderMode::Strict,
-            custom_transforms: vec![],
-            catalog:           std::sync::Arc::clone(&catalog),
-        })
+        let transformed = transform::transform(
+            parsed,
+            &TransformOptions {
+                current_dir: None,
+                file_resolver: None,
+                inputs: std::collections::HashMap::new(),
+                source_name: None,
+                render_mode: crate::operations::RenderMode::Strict,
+                custom_transforms: vec![],
+                catalog: std::sync::Arc::clone(&catalog),
+            },
+        )
         .unwrap();
         validate(transformed, catalog.as_ref(), &[])
     }

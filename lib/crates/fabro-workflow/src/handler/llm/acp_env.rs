@@ -100,7 +100,9 @@ mod tests {
         let mut launch_env = HashMap::from([("PATH".to_string(), "/usr/bin".to_string())]);
         creds.apply_to(&mut launch_env);
         assert_eq!(
-            launch_env.get("CLAUDE_CODE_OAUTH_TOKEN").map(String::as_str),
+            launch_env
+                .get("CLAUDE_CODE_OAUTH_TOKEN")
+                .map(String::as_str),
             Some("sk-ant-oat01-secret")
         );
         assert_eq!(launch_env.get("PATH").map(String::as_str), Some("/usr/bin"));

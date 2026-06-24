@@ -36,17 +36,17 @@ pub enum RenderMode {
 #[derive(Clone)]
 pub(crate) struct TemplateRenderTarget {
     pub source_name: Option<String>,
-    pub node_id:     Option<String>,
-    pub edge:        Option<(String, String)>,
-    pub owner:       String,
-    source_origin:   Option<TemplateSourceOrigin>,
-    template_store:  Option<TemplateRenderStore>,
+    pub node_id: Option<String>,
+    pub edge: Option<(String, String)>,
+    pub owner: String,
+    source_origin: Option<TemplateSourceOrigin>,
+    template_store: Option<TemplateRenderStore>,
 }
 
 #[derive(Clone)]
 pub(crate) struct TemplateRenderStore {
     source: TemplateSource,
-    store:  Arc<dyn TemplateStore>,
+    store: Arc<dyn TemplateStore>,
 }
 
 impl TemplateRenderStore {
@@ -291,7 +291,7 @@ fn goal_self_reference_diagnostic(
 
 /// Expands `{{ goal }}` / `{{ inputs.* }}` across all string attributes.
 pub struct TemplateTransform {
-    pub inputs:      HashMap<String, toml::Value>,
+    pub inputs: HashMap<String, toml::Value>,
     pub source_name: Option<String>,
     pub source_text: Option<String>,
     pub render_mode: RenderMode,
@@ -505,8 +505,8 @@ mod tests {
         graph.nodes.insert("plan".to_string(), node);
 
         graph.edges.push(Edge {
-            from:  "start".to_string(),
-            to:    "plan".to_string(),
+            from: "start".to_string(),
+            to: "plan".to_string(),
             attrs: HashMap::from([(
                 "label".to_string(),
                 AttrValue::String("{{ inputs.greeting }}".to_string()),
@@ -613,7 +613,7 @@ mod tests {
         graph.nodes.insert("plan".to_string(), node);
 
         let transform = TemplateTransform {
-            inputs:      HashMap::new(),
+            inputs: HashMap::new(),
             source_name: Some("workflow.fabro".to_string()),
             source_text: Some(source.to_string()),
             render_mode: RenderMode::Structural,
@@ -792,7 +792,7 @@ mod tests {
         graph.nodes.insert("plan".to_string(), node);
 
         let transform = TemplateTransform {
-            inputs:      HashMap::new(),
+            inputs: HashMap::new(),
             source_name: Some("workflow.fabro".to_string()),
             source_text: None,
             render_mode: RenderMode::Structural,

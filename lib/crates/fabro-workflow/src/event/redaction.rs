@@ -37,9 +37,12 @@ mod tests {
 
     #[test]
     fn build_redacted_event_payload_requires_id() {
-        let stored = to_run_event(&fixtures::RUN_8, &Event::RunSubmitted {
-            definition_blob: None,
-        });
+        let stored = to_run_event(
+            &fixtures::RUN_8,
+            &Event::RunSubmitted {
+                definition_blob: None,
+            },
+        );
         let payload = build_redacted_event_payload(&stored, &fixtures::RUN_8).unwrap();
         assert_eq!(payload.as_value()["id"], stored.id);
         assert_eq!(payload.as_value()["event"], "run.submitted");
@@ -48,18 +51,21 @@ mod tests {
     #[test]
     fn build_redacted_event_payload_redacts_exec_output_tail_values() {
         let secret = "sk-ant-api03-xK9mZ2vL8nQ5rT1wY4bC7dF0gH3jE6pA";
-        let stored = to_run_event(&fixtures::RUN_8, &Event::SetupFailed {
-            command:          "setup".to_string(),
-            index:            0,
-            exit_code:        1,
-            stderr:           "compat stderr".to_string(),
-            exec_output_tail: Some(fabro_types::ExecOutputTail {
-                stdout:           Some(format!("stdout {secret}")),
-                stderr:           Some("plain stderr".to_string()),
-                stdout_truncated: false,
-                stderr_truncated: false,
-            }),
-        });
+        let stored = to_run_event(
+            &fixtures::RUN_8,
+            &Event::SetupFailed {
+                command: "setup".to_string(),
+                index: 0,
+                exit_code: 1,
+                stderr: "compat stderr".to_string(),
+                exec_output_tail: Some(fabro_types::ExecOutputTail {
+                    stdout: Some(format!("stdout {secret}")),
+                    stderr: Some("plain stderr".to_string()),
+                    stdout_truncated: false,
+                    stderr_truncated: false,
+                }),
+            },
+        );
 
         let payload = build_redacted_event_payload(&stored, &fixtures::RUN_8).unwrap();
         let payload_text = serde_json::to_string(payload.as_value()).unwrap();

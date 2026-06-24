@@ -163,10 +163,7 @@ mod tests {
         prompt
             .attrs
             .insert("type".to_string(), AttrValue::String("prompt".to_string()));
-        assert_eq!(
-            router.select_backend(&prompt).unwrap(),
-            AgentBackend::Api
-        );
+        assert_eq!(router.select_backend(&prompt).unwrap(), AgentBackend::Api);
     }
 
     #[tokio::test]
@@ -182,13 +179,13 @@ mod tests {
 
         let result = router
             .one_shot(OneShotRequest {
-                node:          &node,
-                prompt:        "prompt",
+                node: &node,
+                prompt: "prompt",
                 system_prompt: None,
-                emitter:       &emitter,
-                stage_scope:   &stage_scope,
-                sandbox:       &sandbox,
-                cancel_token:  CancellationToken::new(),
+                emitter: &emitter,
+                stage_scope: &stage_scope,
+                sandbox: &sandbox,
+                cancel_token: CancellationToken::new(),
             })
             .await
             .unwrap();
@@ -215,21 +212,21 @@ mod tests {
     impl CodergenBackend for StubBackend {
         async fn run(&self, _request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
             Ok(CodergenResult::Text {
-                text:              "api run".to_string(),
-                usage:             None,
-                files_touched:     Vec::new(),
+                text: "api run".to_string(),
+                usage: None,
+                files_touched: Vec::new(),
                 last_file_touched: None,
-                timing:            fabro_types::StageTiming::default(),
+                timing: fabro_types::StageTiming::default(),
             })
         }
 
         async fn one_shot(&self, _request: OneShotRequest<'_>) -> Result<CodergenResult, Error> {
             Ok(CodergenResult::Text {
-                text:              "api one-shot".to_string(),
-                usage:             None,
-                files_touched:     Vec::new(),
+                text: "api one-shot".to_string(),
+                usage: None,
+                files_touched: Vec::new(),
                 last_file_touched: None,
-                timing:            fabro_types::StageTiming::default(),
+                timing: fabro_types::StageTiming::default(),
             })
         }
 
@@ -239,7 +236,7 @@ mod tests {
         ) -> Result<EffectiveRequestControls, Error> {
             Ok(EffectiveRequestControls {
                 reasoning_effort: Some(ReasoningEffort::High),
-                speed:            Some(Speed::Fast),
+                speed: Some(Speed::Fast),
             })
         }
     }

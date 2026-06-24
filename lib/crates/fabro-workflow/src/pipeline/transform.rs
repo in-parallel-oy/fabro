@@ -55,7 +55,7 @@ pub fn transform(parsed: Parsed, options: &TransformOptions) -> Result<Transform
     };
 
     let (graph, transform_diagnostics) = TemplateTransform {
-        inputs:      options.inputs.clone(),
+        inputs: options.inputs.clone(),
         source_name: options.source_name.clone(),
         source_text: Some(source.clone()),
         render_mode: options.render_mode,
@@ -106,13 +106,13 @@ mod tests {
 
     fn transform_options() -> TransformOptions {
         TransformOptions {
-            current_dir:       None,
-            file_resolver:     None,
-            inputs:            HashMap::new(),
-            source_name:       None,
-            render_mode:       crate::operations::RenderMode::Strict,
+            current_dir: None,
+            file_resolver: None,
+            inputs: HashMap::new(),
+            source_name: None,
+            render_mode: crate::operations::RenderMode::Strict,
             custom_transforms: vec![],
-            catalog:           test_catalog(),
+            catalog: test_catalog(),
         }
     }
 
@@ -167,15 +167,18 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let transformed = transform(parsed, &TransformOptions {
-            current_dir:       Some(dir.path().to_path_buf()),
-            file_resolver:     Some(Arc::new(FilesystemFileResolver::new(None))),
-            inputs:            HashMap::new(),
-            source_name:       None,
-            render_mode:       crate::operations::RenderMode::Strict,
-            custom_transforms: vec![],
-            catalog:           test_catalog(),
-        })
+        let transformed = transform(
+            parsed,
+            &TransformOptions {
+                current_dir: Some(dir.path().to_path_buf()),
+                file_resolver: Some(Arc::new(FilesystemFileResolver::new(None))),
+                inputs: HashMap::new(),
+                source_name: None,
+                render_mode: crate::operations::RenderMode::Strict,
+                custom_transforms: vec![],
+                catalog: test_catalog(),
+            },
+        )
         .unwrap();
 
         assert_eq!(
@@ -214,18 +217,21 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let transformed = transform(parsed, &TransformOptions {
-            current_dir:       Some(dir.path().to_path_buf()),
-            file_resolver:     Some(Arc::new(FilesystemFileResolver::new(None))),
-            inputs:            HashMap::from([(
-                "task".to_string(),
-                toml::Value::String("Launch".to_string()),
-            )]),
-            source_name:       None,
-            render_mode:       crate::operations::RenderMode::Strict,
-            custom_transforms: vec![],
-            catalog:           test_catalog(),
-        })
+        let transformed = transform(
+            parsed,
+            &TransformOptions {
+                current_dir: Some(dir.path().to_path_buf()),
+                file_resolver: Some(Arc::new(FilesystemFileResolver::new(None))),
+                inputs: HashMap::from([(
+                    "task".to_string(),
+                    toml::Value::String("Launch".to_string()),
+                )]),
+                source_name: None,
+                render_mode: crate::operations::RenderMode::Strict,
+                custom_transforms: vec![],
+                catalog: test_catalog(),
+            },
+        )
         .unwrap();
 
         let lint = &transformed.graph.nodes["validate.lint"];
@@ -254,15 +260,18 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let transformed = transform(parsed, &TransformOptions {
-            current_dir:       Some(dir.path().to_path_buf()),
-            file_resolver:     Some(Arc::new(FilesystemFileResolver::new(None))),
-            inputs:            HashMap::new(),
-            source_name:       None,
-            render_mode:       crate::operations::RenderMode::Structural,
-            custom_transforms: vec![],
-            catalog:           test_catalog(),
-        })
+        let transformed = transform(
+            parsed,
+            &TransformOptions {
+                current_dir: Some(dir.path().to_path_buf()),
+                file_resolver: Some(Arc::new(FilesystemFileResolver::new(None))),
+                inputs: HashMap::new(),
+                source_name: None,
+                render_mode: crate::operations::RenderMode::Structural,
+                custom_transforms: vec![],
+                catalog: test_catalog(),
+            },
+        )
         .unwrap();
 
         let self_ref = transformed

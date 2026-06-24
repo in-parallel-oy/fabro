@@ -21,11 +21,11 @@ type WfNodeDecision = NodeDecision<Option<BilledModelUsage>>;
 
 /// Sub-lifecycle responsible for running workflow hooks.
 pub(crate) struct HookLifecycle {
-    pub hook_runner:            Option<Arc<HookRunner>>,
-    pub sandbox:                Arc<dyn Sandbox>,
+    pub hook_runner: Option<Arc<HookRunner>>,
+    pub sandbox: Arc<dyn Sandbox>,
     pub hook_execution_context: HookExecutionContext,
-    pub run_id:                 RunId,
-    pub graph_name:             String,
+    pub run_id: RunId,
+    pub graph_name: String,
 }
 
 impl HookLifecycle {

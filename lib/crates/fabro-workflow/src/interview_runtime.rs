@@ -68,8 +68,8 @@ impl RunInterviewBlocker {
 }
 
 pub(crate) struct RunInterviewGuard {
-    blocker:  Arc<RunInterviewBlocker>,
-    emitter:  Arc<Emitter>,
+    blocker: Arc<RunInterviewBlocker>,
+    emitter: Arc<Emitter>,
     resolved: bool,
 }
 
@@ -94,10 +94,10 @@ impl Drop for RunInterviewGuard {
 
 pub(crate) struct WorkflowAgentQuestionRuntime {
     interviewer: Arc<dyn Interviewer>,
-    emitter:     Arc<Emitter>,
+    emitter: Arc<Emitter>,
     stage_scope: StageScope,
-    stage_id:    String,
-    blocker:     Arc<RunInterviewBlocker>,
+    stage_id: String,
+    blocker: Arc<RunInterviewBlocker>,
 }
 
 impl WorkflowAgentQuestionRuntime {
@@ -121,16 +121,16 @@ impl WorkflowAgentQuestionRuntime {
 
 struct PreparedQuestion {
     agent_question: AgentQuestion,
-    question:       Question,
+    question: Question,
 }
 
 struct PendingAgentQuestionBatch {
-    emitter:     Arc<Emitter>,
+    emitter: Arc<Emitter>,
     stage_scope: StageScope,
-    stage_id:    String,
-    questions:   Vec<(String, String)>,
-    started_at:  Instant,
-    guard:       Option<RunInterviewGuard>,
+    stage_id: String,
+    questions: Vec<(String, String)>,
+    started_at: Instant,
+    guard: Option<RunInterviewGuard>,
 }
 
 impl PendingAgentQuestionBatch {
@@ -216,12 +216,12 @@ impl AgentQuestionRuntime for WorkflowAgentQuestionRuntime {
             let question = &prepared_question.question;
             self.emitter.emit_scoped(
                 &Event::InterviewStarted {
-                    question_id:     question.id.clone(),
-                    question:        question.text.clone(),
-                    stage:           self.stage_id.clone(),
-                    question_type:   question.question_type.to_string(),
-                    options:         question.options.clone(),
-                    allow_freeform:  question.allow_freeform,
+                    question_id: question.id.clone(),
+                    question: question.text.clone(),
+                    stage: self.stage_id.clone(),
+                    question_type: question.question_type.to_string(),
+                    options: question.options.clone(),
+                    allow_freeform: question.allow_freeform,
                     timeout_seconds: None,
                     context_display: question.context_display.clone(),
                 },
@@ -275,13 +275,13 @@ impl AgentQuestionRuntime for WorkflowAgentQuestionRuntime {
                         millis_u64(interview_start.elapsed()),
                     );
                     AgentQuestionAnswer {
-                        original_id:       prepared_question.agent_question.original_id.clone(),
+                        original_id: prepared_question.agent_question.original_id.clone(),
                         original_question: prepared_question
                             .agent_question
                             .original_question
                             .clone(),
-                        answers:           Vec::new(),
-                        status:            AgentQuestionAnswerStatus::Interrupted,
+                        answers: Vec::new(),
+                        status: AgentQuestionAnswerStatus::Interrupted,
                     }
                 })
                 .collect::<Vec<_>>(),
@@ -502,9 +502,9 @@ mod tests {
     #[test]
     fn internal_question_id_includes_stage_visit_and_tool_call_context() {
         let scope = StageScope {
-            node_id:            "Review Changes".to_string(),
-            visit:              3,
-            parallel_group_id:  None,
+            node_id: "Review Changes".to_string(),
+            visit: 3,
+            parallel_group_id: None,
             parallel_branch_id: None,
         };
 
@@ -531,19 +531,19 @@ mod tests {
             interviewer.clone(),
             Arc::clone(&emitter),
             StageScope {
-                node_id:            "ask".to_string(),
-                visit:              1,
-                parallel_group_id:  None,
+                node_id: "ask".to_string(),
+                visit: 1,
+                parallel_group_id: None,
                 parallel_branch_id: None,
             },
             "ask",
             Arc::new(RunInterviewBlocker::new()),
         );
         let option = InterviewOption {
-            key:         "ship".to_string(),
-            label:       "Ship it".to_string(),
+            key: "ship".to_string(),
+            label: "Ship it".to_string(),
             description: Some("Deploy".to_string()),
-            preview:     Some("preview".to_string()),
+            preview: Some("preview".to_string()),
         };
 
         let ask = tokio::spawn(async move {
@@ -552,22 +552,22 @@ mod tests {
                     "call_1",
                     vec![
                         AgentQuestion {
-                            original_id:       Some("q1".to_string()),
+                            original_id: Some("q1".to_string()),
                             original_question: "First?".to_string(),
-                            header:            None,
-                            text:              "First?".to_string(),
-                            question_type:     fabro_types::QuestionType::MultipleChoice,
-                            options:           vec![option.clone()],
-                            allow_freeform:    true,
+                            header: None,
+                            text: "First?".to_string(),
+                            question_type: fabro_types::QuestionType::MultipleChoice,
+                            options: vec![option.clone()],
+                            allow_freeform: true,
                         },
                         AgentQuestion {
-                            original_id:       Some("q2".to_string()),
+                            original_id: Some("q2".to_string()),
                             original_question: "Second?".to_string(),
-                            header:            None,
-                            text:              "Second?".to_string(),
-                            question_type:     fabro_types::QuestionType::MultipleChoice,
-                            options:           vec![option.clone()],
-                            allow_freeform:    true,
+                            header: None,
+                            text: "Second?".to_string(),
+                            question_type: fabro_types::QuestionType::MultipleChoice,
+                            options: vec![option.clone()],
+                            allow_freeform: true,
                         },
                     ],
                     CancellationToken::new(),

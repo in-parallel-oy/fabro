@@ -27,16 +27,16 @@ const DOCKER_CP_IMAGE: &str = "buildpack-deps:noble";
 fn local_record(working_directory: &std::path::Path) -> RunSandboxInstance {
     RunSandboxInstance {
         provider: SandboxProviderKind::Local,
-        image:    None,
+        image: None,
         snapshot: None,
-        runtime:  RunSandboxRuntime {
-            id:                "local:test".to_string(),
+        runtime: RunSandboxRuntime {
+            id: "local:test".to_string(),
             working_directory: working_directory.to_string_lossy().to_string(),
-            repo_cloned:       None,
-            clone_origin_url:  None,
-            clone_branch:      None,
-            workspace_root:    None,
-            repos_root:        None,
+            repo_cloned: None,
+            clone_origin_url: None,
+            clone_branch: None,
+            workspace_root: None,
+            repos_root: None,
             primary_repo_path: None,
             primary_repo_link: None,
         },
@@ -138,16 +138,16 @@ async fn local_cp_creates_parent_dirs() {
 fn docker_record(container_id: &str) -> RunSandboxInstance {
     RunSandboxInstance {
         provider: SandboxProviderKind::Docker,
-        image:    None,
+        image: None,
         snapshot: None,
-        runtime:  RunSandboxRuntime {
-            id:                container_id.to_string(),
+        runtime: RunSandboxRuntime {
+            id: container_id.to_string(),
             working_directory: "/workspace".to_string(),
-            repo_cloned:       Some(false),
-            clone_origin_url:  None,
-            clone_branch:      None,
-            workspace_root:    Some("/workspace".to_string()),
-            repos_root:        Some("/repos".to_string()),
+            repo_cloned: Some(false),
+            clone_origin_url: None,
+            clone_branch: None,
+            workspace_root: Some("/workspace".to_string()),
+            repos_root: Some("/repos".to_string()),
             primary_repo_path: None,
             primary_repo_link: None,
         },
@@ -155,7 +155,7 @@ fn docker_record(container_id: &str) -> RunSandboxInstance {
 }
 
 struct DockerCpContainer {
-    id:      String,
+    id: String,
     cleanup: bool,
 }
 

@@ -35,25 +35,25 @@ pub struct ProjectionBillingStage {
     /// Per-node timing summed across every visit of that node within this
     /// projection. `wall_time_ms`, `inference_time_ms`, `tool_time_ms`, and
     /// `active_time_ms` are all summed in lockstep.
-    pub timing:  StageTiming,
-    pub model:   Option<ModelRef>,
+    pub timing: StageTiming,
+    pub model: Option<ModelRef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectionBillingByModel {
-    pub model:   ModelRef,
-    pub stages:  i64,
+    pub model: ModelRef,
+    pub stages: i64,
     pub billing: BilledTokenCounts,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ProjectionBillingRollup {
-    pub stages:             Vec<ProjectionBillingStage>,
-    pub totals:             BilledTokenCounts,
-    pub by_model:           Vec<ProjectionBillingByModel>,
+    pub stages: Vec<ProjectionBillingStage>,
+    pub totals: BilledTokenCounts,
+    pub by_model: Vec<ProjectionBillingByModel>,
     /// Run-level timing summed across every stage visit. `wall_time_ms` is
     /// the sum of stage visit wall times (not the run clock duration).
-    pub timing:             RunTiming,
+    pub timing: RunTiming,
     pub billed_visit_count: usize,
 }
 
@@ -92,8 +92,8 @@ pub fn billing_rollup_from_projection(
             stages.push(ProjectionBillingStage {
                 node_id: node_id.to_string(),
                 billing: BilledTokenCounts::default(),
-                timing:  StageTiming::default(),
-                model:   None,
+                timing: StageTiming::default(),
+                model: None,
             });
             index
         });
@@ -115,8 +115,8 @@ pub fn billing_rollup_from_projection(
                     by_model
                         .entry(model.clone())
                         .or_insert_with(|| ProjectionBillingByModel {
-                            model:   model.clone(),
-                            stages:  0,
+                            model: model.clone(),
+                            stages: 0,
                             billing: BilledTokenCounts::default(),
                         });
                 model_entry.stages += 1;
@@ -189,22 +189,22 @@ mod tests {
         first.usage = BilledTokenCounts::from_billed_usage(std::slice::from_ref(&failed_usage));
         first.model = Some(failed_usage.model().clone());
         first.completion = Some(StageCompletion {
-            outcome:        StageOutcome::Failed {
+            outcome: StageOutcome::Failed {
                 retry_requested: true,
             },
-            notes:          None,
+            notes: None,
             failure_reason: Some("try again".to_string()),
-            timestamp:      chrono::Utc::now(),
+            timestamp: chrono::Utc::now(),
         });
         let second = projection.stage_entry("verify", 2, first_event_seq(2));
         second.timing = Some(fabro_types::StageTiming::wall_only(800));
         second.usage = BilledTokenCounts::from_billed_usage(std::slice::from_ref(&success_usage));
         second.model = Some(success_usage.model().clone());
         second.completion = Some(StageCompletion {
-            outcome:        StageOutcome::Succeeded,
-            notes:          None,
+            outcome: StageOutcome::Succeeded,
+            notes: None,
             failure_reason: None,
-            timestamp:      chrono::Utc::now(),
+            timestamp: chrono::Utc::now(),
         });
 
         let rollup = billing_rollup_from_projection(&projection, None);
@@ -244,10 +244,10 @@ mod tests {
         let stage = projection.stage_entry("build", 1, first_event_seq(1));
         stage.timing = Some(fabro_types::StageTiming::wall_only(25));
         stage.completion = Some(StageCompletion {
-            outcome:        StageOutcome::Succeeded,
-            notes:          None,
+            outcome: StageOutcome::Succeeded,
+            notes: None,
             failure_reason: None,
-            timestamp:      chrono::Utc::now(),
+            timestamp: chrono::Utc::now(),
         });
 
         let rollup = billing_rollup_from_projection(&projection, None);
@@ -269,18 +269,18 @@ mod tests {
         let start = projection.stage_entry("start", 1, first_event_seq(1));
         start.timing = Some(fabro_types::StageTiming::wall_only(25));
         start.completion = Some(StageCompletion {
-            outcome:        StageOutcome::Succeeded,
-            notes:          None,
+            outcome: StageOutcome::Succeeded,
+            notes: None,
             failure_reason: None,
-            timestamp:      chrono::Utc::now(),
+            timestamp: chrono::Utc::now(),
         });
         let exit = projection.stage_entry("exit", 1, first_event_seq(2));
         exit.timing = Some(fabro_types::StageTiming::wall_only(7));
         exit.completion = Some(StageCompletion {
-            outcome:        StageOutcome::Succeeded,
-            notes:          None,
+            outcome: StageOutcome::Succeeded,
+            notes: None,
             failure_reason: None,
-            timestamp:      chrono::Utc::now(),
+            timestamp: chrono::Utc::now(),
         });
 
         let rollup = billing_rollup_from_projection(&projection, None);
@@ -295,7 +295,7 @@ mod tests {
         let model = ModelRef {
             provider: ProviderId::openai(),
             model_id: "gpt-5.4".to_string(),
-            speed:    None,
+            speed: None,
         };
         let stage = projection.stage_entry("agent", 1, first_event_seq(1));
         stage.started_at = Some(chrono::Utc::now());

@@ -670,26 +670,26 @@ mod tests {
 
     fn test_run_options(run_dir: &std::path::Path) -> RunOptions {
         RunOptions {
-            settings:         WorkflowSettings::default(),
-            run_dir:          run_dir.to_path_buf(),
-            cancel_token:     tokio_util::sync::CancellationToken::new(),
-            run_id:           test_run_id(),
-            labels:           HashMap::new(),
-            workflow_slug:    None,
-            github_app:       None,
-            pre_run_git:      None,
-            fork_source_ref:  None,
-            base_branch:      None,
+            settings: WorkflowSettings::default(),
+            run_dir: run_dir.to_path_buf(),
+            cancel_token: tokio_util::sync::CancellationToken::new(),
+            run_id: test_run_id(),
+            labels: HashMap::new(),
+            workflow_slug: None,
+            github_app: None,
+            pre_run_git: None,
+            fork_source_ref: None,
+            base_branch: None,
             display_base_sha: None,
-            git:              None,
+            git: None,
         }
     }
 
     fn test_git_run_options(run_dir: &std::path::Path, meta_branch: &str) -> RunOptions {
         let mut options = test_run_options(run_dir);
         options.git = Some(GitCheckpointOptions {
-            base_sha:    None,
-            run_branch:  None,
+            base_sha: None,
+            run_branch: None,
             meta_branch: Some(meta_branch.to_string()),
         });
         options
@@ -726,27 +726,31 @@ mod tests {
 
     async fn seeded_run_store() -> RunDatabase {
         let run_store = test_store().create_run(&test_run_id()).await.unwrap();
-        append_event(&run_store, &test_run_id(), &Event::RunCreated {
-            run_id:           test_run_id(),
-            title:            None,
-            settings:         serde_json::to_value(WorkflowSettings::default()).unwrap(),
-            graph:            serde_json::to_value(fabro_types::Graph::new("metadata")).unwrap(),
-            workflow_source:  None,
-            workflow_config:  None,
-            labels:           std::collections::BTreeMap::new(),
-            run_dir:          "/tmp/run".to_string(),
-            source_directory: Some("/tmp/project".to_string()),
-            workflow_slug:    Some("metadata".to_string()),
-            automation:       None,
-            db_prefix:        None,
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            git:              None,
-            fork_source_ref:  None,
-            retried_from:     None,
-            parent_id:        None,
-            web_url:          None,
-        })
+        append_event(
+            &run_store,
+            &test_run_id(),
+            &Event::RunCreated {
+                run_id: test_run_id(),
+                title: None,
+                settings: serde_json::to_value(WorkflowSettings::default()).unwrap(),
+                graph: serde_json::to_value(fabro_types::Graph::new("metadata")).unwrap(),
+                workflow_source: None,
+                workflow_config: None,
+                labels: std::collections::BTreeMap::new(),
+                run_dir: "/tmp/run".to_string(),
+                source_directory: Some("/tmp/project".to_string()),
+                workflow_slug: Some("metadata".to_string()),
+                automation: None,
+                db_prefix: None,
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                git: None,
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
+            },
+        )
         .await
         .unwrap();
         run_store
@@ -848,19 +852,19 @@ mod tests {
         RunProjection::new(
             "Test run".to_string(),
             RunSpec {
-                run_id:           test_run_id(),
-                settings:         WorkflowSettings::default(),
-                graph:            Graph::new("test"),
-                graph_source:     None,
-                workflow_slug:    None,
-                automation:       None,
+                run_id: test_run_id(),
+                settings: WorkflowSettings::default(),
+                graph: Graph::new("test"),
+                graph_source: None,
+                workflow_slug: None,
+                automation: None,
                 source_directory: None,
-                labels:           HashMap::new(),
-                provenance:       test_support::test_run_provenance(),
-                manifest_blob:    None,
-                definition_blob:  None,
-                git:              None,
-                fork_source_ref:  None,
+                labels: HashMap::new(),
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                definition_blob: None,
+                git: None,
+                fork_source_ref: None,
             },
             chrono::Utc::now(),
         )
@@ -945,12 +949,12 @@ mod tests {
         failed.usage = BilledTokenCounts::from_billed_usage(std::slice::from_ref(&failed_usage));
         failed.model = Some(failed_usage.model().clone());
         failed.completion = Some(StageCompletion {
-            outcome:        StageOutcome::Failed {
+            outcome: StageOutcome::Failed {
                 retry_requested: true,
             },
-            notes:          None,
+            notes: None,
             failure_reason: Some("try again".to_string()),
-            timestamp:      chrono::Utc::now(),
+            timestamp: chrono::Utc::now(),
         });
         let succeeded = projection.stage_entry("verify", 2, first_event_seq(2));
         succeeded.timing = Some(fabro_types::StageTiming::wall_only(800));
@@ -958,10 +962,10 @@ mod tests {
             BilledTokenCounts::from_billed_usage(std::slice::from_ref(&success_usage));
         succeeded.model = Some(success_usage.model().clone());
         succeeded.completion = Some(StageCompletion {
-            outcome:        StageOutcome::Succeeded,
-            notes:          None,
+            outcome: StageOutcome::Succeeded,
+            notes: None,
             failure_reason: None,
-            timestamp:      chrono::Utc::now(),
+            timestamp: chrono::Utc::now(),
         });
 
         let projection_order = stage_projection_order(&projection);
@@ -1065,14 +1069,17 @@ mod tests {
             services,
         );
 
-        let concluded = finalize(executed, &FinalizeOptions {
-            run_dir:          run_dir.clone(),
-            run_id:           test_run_id(),
-            workflow_name:    "test".to_string(),
-            preserve_sandbox: true,
-            stop_on_terminal: true,
-            last_git_sha:     None,
-        })
+        let concluded = finalize(
+            executed,
+            &FinalizeOptions {
+                run_dir: run_dir.clone(),
+                run_id: test_run_id(),
+                workflow_name: "test".to_string(),
+                preserve_sandbox: true,
+                stop_on_terminal: true,
+                last_git_sha: None,
+            },
+        )
         .await
         .unwrap();
         store_logger.flush().await;
@@ -1088,15 +1095,15 @@ mod tests {
         let run_store = seeded_run_store().await;
         let handle = RunStoreHandle::local(run_store.clone());
         let conclusion = Conclusion {
-            timestamp:            chrono::Utc::now(),
-            status:               StageOutcome::Succeeded,
-            timing:               fabro_types::RunTiming::wall_only(10),
-            failure:              None,
+            timestamp: chrono::Utc::now(),
+            status: StageOutcome::Succeeded,
+            timing: fabro_types::RunTiming::wall_only(10),
+            failure: None,
             final_git_commit_sha: None,
-            stages:               Vec::new(),
-            billing:              None,
-            total_retries:        0,
-            diff:                 fabro_types::RunDiff::default(),
+            stages: Vec::new(),
+            billing: None,
+            total_retries: 0,
+            diff: fabro_types::RunDiff::default(),
         };
         let emitter = Arc::new(Emitter::new(test_run_id()));
         let events = record_events(&emitter);
@@ -1151,26 +1158,29 @@ mod tests {
         );
         let run_options = test_git_run_options(repo_dir.path(), "fabro/metadata/run");
         let conclusion = Conclusion {
-            timestamp:            chrono::Utc::now(),
-            status:               StageOutcome::Succeeded,
-            timing:               fabro_types::RunTiming::wall_only(10),
-            failure:              None,
+            timestamp: chrono::Utc::now(),
+            status: StageOutcome::Succeeded,
+            timing: fabro_types::RunTiming::wall_only(10),
+            failure: None,
             final_git_commit_sha: None,
-            stages:               Vec::new(),
-            billing:              None,
-            total_retries:        0,
-            diff:                 fabro_types::RunDiff::default(),
+            stages: Vec::new(),
+            billing: None,
+            total_retries: 0,
+            diff: fabro_types::RunDiff::default(),
         };
 
         write_finalize_commit(&run_options, &services, &conclusion).await;
 
         let events = events.lock().unwrap();
         let names = events.iter().map(RunEvent::event_name).collect::<Vec<_>>();
-        assert_eq!(names, vec![
-            "metadata.snapshot.started",
-            "metadata.snapshot.failed",
-            "run.notice",
-        ]);
+        assert_eq!(
+            names,
+            vec![
+                "metadata.snapshot.started",
+                "metadata.snapshot.failed",
+                "run.notice",
+            ]
+        );
         match &events[1].body {
             EventBody::MetadataSnapshotFailed(props) => {
                 assert_eq!(props.phase, MetadataSnapshotPhase::Finalize);
@@ -1203,15 +1213,15 @@ mod tests {
         );
         let run_options = test_git_run_options(repo_dir.path(), "fabro/metadata/run");
         let conclusion = Conclusion {
-            timestamp:            chrono::Utc::now(),
-            status:               StageOutcome::Succeeded,
-            timing:               fabro_types::RunTiming::wall_only(10),
-            failure:              None,
+            timestamp: chrono::Utc::now(),
+            status: StageOutcome::Succeeded,
+            timing: fabro_types::RunTiming::wall_only(10),
+            failure: None,
             final_git_commit_sha: None,
-            stages:               Vec::new(),
-            billing:              None,
-            total_retries:        0,
-            diff:                 fabro_types::RunDiff::default(),
+            stages: Vec::new(),
+            billing: None,
+            total_retries: 0,
+            diff: fabro_types::RunDiff::default(),
         };
 
         write_finalize_commit(&run_options, &services, &conclusion).await;
@@ -1246,14 +1256,17 @@ mod tests {
             services,
         );
 
-        finalize(executed, &FinalizeOptions {
-            run_dir:          repo_dir.path().to_path_buf(),
-            run_id:           test_run_id(),
-            workflow_name:    "test".to_string(),
-            preserve_sandbox: false,
-            stop_on_terminal: true,
-            last_git_sha:     None,
-        })
+        finalize(
+            executed,
+            &FinalizeOptions {
+                run_dir: repo_dir.path().to_path_buf(),
+                run_id: test_run_id(),
+                workflow_name: "test".to_string(),
+                preserve_sandbox: false,
+                stop_on_terminal: true,
+                last_git_sha: None,
+            },
+        )
         .await
         .unwrap();
 
@@ -1263,11 +1276,14 @@ mod tests {
             .iter()
             .map(|event| event.event_name().to_string())
             .collect::<Vec<_>>();
-        assert_eq!(names, vec![
-            "metadata.snapshot.started",
-            "metadata.snapshot.completed",
-            "run.completed",
-        ]);
+        assert_eq!(
+            names,
+            vec![
+                "metadata.snapshot.started",
+                "metadata.snapshot.completed",
+                "run.completed",
+            ]
+        );
     }
 
     #[tokio::test]
@@ -1289,14 +1305,17 @@ mod tests {
             services,
         );
 
-        finalize(executed, &FinalizeOptions {
-            run_dir:          repo_dir.path().to_path_buf(),
-            run_id:           test_run_id(),
-            workflow_name:    "test".to_string(),
-            preserve_sandbox: false,
-            stop_on_terminal: true,
-            last_git_sha:     None,
-        })
+        finalize(
+            executed,
+            &FinalizeOptions {
+                run_dir: repo_dir.path().to_path_buf(),
+                run_id: test_run_id(),
+                workflow_name: "test".to_string(),
+                preserve_sandbox: false,
+                stop_on_terminal: true,
+                last_git_sha: None,
+            },
+        )
         .await
         .unwrap();
 
@@ -1323,14 +1342,17 @@ mod tests {
             services,
         );
 
-        finalize(executed, &FinalizeOptions {
-            run_dir:          repo_dir.path().to_path_buf(),
-            run_id:           test_run_id(),
-            workflow_name:    "test".to_string(),
-            preserve_sandbox: false,
-            stop_on_terminal: false,
-            last_git_sha:     None,
-        })
+        finalize(
+            executed,
+            &FinalizeOptions {
+                run_dir: repo_dir.path().to_path_buf(),
+                run_id: test_run_id(),
+                workflow_name: "test".to_string(),
+                preserve_sandbox: false,
+                stop_on_terminal: false,
+                last_git_sha: None,
+            },
+        )
         .await
         .unwrap();
 
@@ -1364,8 +1386,8 @@ mod tests {
         );
         let mut run_options = test_git_run_options(repo, "fabro/metadata/run");
         run_options.git = Some(GitCheckpointOptions {
-            base_sha:    Some(base),
-            run_branch:  None,
+            base_sha: Some(base),
+            run_branch: None,
             meta_branch: None,
         });
         let executed = test_executed(
@@ -1376,14 +1398,17 @@ mod tests {
             services,
         );
 
-        finalize(executed, &FinalizeOptions {
-            run_dir:          repo.to_path_buf(),
-            run_id:           test_run_id(),
-            workflow_name:    "test".to_string(),
-            preserve_sandbox: true,
-            stop_on_terminal: true,
-            last_git_sha:     Some(head),
-        })
+        finalize(
+            executed,
+            &FinalizeOptions {
+                run_dir: repo.to_path_buf(),
+                run_id: test_run_id(),
+                workflow_name: "test".to_string(),
+                preserve_sandbox: true,
+                stop_on_terminal: true,
+                last_git_sha: Some(head),
+            },
+        )
         .await
         .unwrap();
 

@@ -8,9 +8,9 @@ use crate::run_dir::visit_from_context;
 /// that happen inside a concrete stage execution.
 #[derive(Clone, Debug)]
 pub struct StageScope {
-    pub node_id:            String,
-    pub visit:              u32,
-    pub parallel_group_id:  Option<StageId>,
+    pub node_id: String,
+    pub visit: u32,
+    pub parallel_group_id: Option<StageId>,
     pub parallel_branch_id: Option<ParallelBranchId>,
 }
 
@@ -19,9 +19,9 @@ impl StageScope {
     /// ids from the current context.
     pub fn from_context(context: &WfContext, node_id: impl Into<String>) -> Self {
         Self {
-            node_id:            node_id.into(),
-            visit:              u32::try_from(visit_from_context(context)).unwrap_or(u32::MAX),
-            parallel_group_id:  context.parallel_group_id(),
+            node_id: node_id.into(),
+            visit: u32::try_from(visit_from_context(context)).unwrap_or(u32::MAX),
+            parallel_group_id: context.parallel_group_id(),
             parallel_branch_id: context.parallel_branch_id(),
         }
     }
@@ -53,9 +53,9 @@ impl StageScope {
         parallel_branch_id: ParallelBranchId,
     ) -> Self {
         Self {
-            node_id:            target_node_id.into(),
-            visit:              target_visit,
-            parallel_group_id:  Some(parallel_group_id),
+            node_id: target_node_id.into(),
+            visit: target_visit,
+            parallel_group_id: Some(parallel_group_id),
             parallel_branch_id: Some(parallel_branch_id),
         }
     }
