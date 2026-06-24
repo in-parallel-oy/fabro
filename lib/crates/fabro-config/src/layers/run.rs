@@ -60,6 +60,9 @@ pub struct RunLayer {
     pub artifacts:     Option<RunArtifactsLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub integrations:  Option<RunIntegrationsLayer>,
+    /// ponytail: rebase anchor — tmux backend. Run-level `--backend` override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend:       Option<fabro_types::AgentBackend>,
 }
 
 /// `[run.integrations]` — run-level integration knobs.

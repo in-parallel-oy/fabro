@@ -25,7 +25,7 @@ use fabro_template::{
 use fabro_types::settings::interp::InterpString;
 use fabro_types::settings::run::{ApprovalMode, ResolvedGoalSource, ResolvedRunGoal, RunMode};
 use fabro_types::{
-    DirtyStatus, GitContext, ManifestPath, PreRunPushOutcome, RunId, WorkflowSettings,
+    AgentBackend, DirtyStatus, GitContext, ManifestPath, PreRunPushOutcome, RunId, WorkflowSettings,
 };
 use fabro_workflow::git::{
     GitSyncStatus, branch_needs_push, head_sha, push_branch_noninteractive, sync_status,
@@ -60,6 +60,8 @@ pub struct RunOverrideInput<'a> {
     pub goal:             Option<&'a str>,
     pub model:            Option<&'a str>,
     pub provider:         Option<&'a str>,
+    /// ponytail: rebase anchor — tmux backend. Pre-parsed `--backend` override.
+    pub backend:          Option<AgentBackend>,
     pub environment:      Option<&'a str>,
     pub docker_image:     Option<&'a str>,
     pub preserve_sandbox: Option<bool>,
@@ -120,6 +122,8 @@ pub fn build_run_overrides(input: RunOverrideInput<'_>) -> RunLayer {
         model,
         environment,
         execution,
+        // ponytail: rebase anchor — tmux backend.
+        backend: input.backend,
         ..RunLayer::default()
     }
 }
@@ -131,7 +135,8 @@ pub fn build_sparse_run_overrides(input: RunOverrideInput<'_>) -> Option<RunLaye
         || !run.metadata.is_empty()
         || run.model.is_some()
         || run.environment.is_some()
-        || run.execution.is_some())
+        || run.execution.is_some()
+        || run.backend.is_some()) // ponytail: rebase anchor — tmux backend
     .then_some(run)
 }
 
@@ -903,6 +908,7 @@ mod tests {
             goal:             Some("ship it"),
             model:            Some("gpt-5.4-mini"),
             provider:         Some("openai"),
+            backend:          None,
             environment:      Some("local"),
             docker_image:     None,
             preserve_sandbox: Some(true),

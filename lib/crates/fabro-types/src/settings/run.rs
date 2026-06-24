@@ -42,6 +42,10 @@ pub struct RunNamespace {
     pub pull_request:  Option<PullRequestSettings>,
     pub artifacts:     ArtifactsSettings,
     pub integrations:  RunIntegrationsSettings,
+    /// ponytail: rebase anchor — tmux backend. Run-level `--backend` override
+    /// applied at backend resolution; `None` defers to per-node `backend=`.
+    #[serde(default)]
+    pub backend_override: Option<crate::AgentBackend>,
 }
 
 #[expect(
@@ -72,6 +76,7 @@ impl Default for RunNamespace {
             pull_request:  None,
             artifacts:     ArtifactsSettings::default(),
             integrations:  RunIntegrationsSettings::default(),
+            backend_override: None, // ponytail: rebase anchor — tmux backend
         }
     }
 }

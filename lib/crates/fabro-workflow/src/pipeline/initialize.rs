@@ -25,7 +25,7 @@ use crate::error::Error;
 use crate::event::{Event, RunNoticeCode, RunNoticeLevel};
 use crate::git::GitAuthor;
 use crate::github_token_source::{AppIatMinter, GitHubTokenSource};
-use crate::handler::llm::{AgentAcpBackend, AgentApiBackend, BackendRouter, routing};
+use crate::handler::llm::{AgentAcpBackend, AgentApiBackend, BackendRouter, TmuxBackend, routing};
 use crate::handler::{HandlerRegistry, default_registry};
 use crate::run_metadata::{RunMetadataRuntime, build_metadata_writer, metadata_branch_name};
 use crate::run_options::{GitCheckpointOptions, RunOptions};
@@ -277,6 +277,10 @@ async fn build_registry(
         let tool_env_provider_for_backend = Arc::clone(&tool_env_provider);
         let fabro_run_tools_for_api = fabro_run_tools.clone();
         let acp_credentials_for_backend = acp_credentials.clone();
+        // ponytail: rebase anchor — tmux backend. CLI --backend override.
+        let backend_override = spec.backend_override;
+        let steering_hub_for_tmux = Arc::clone(&steering_hub);
+        let catalog_for_tmux = Arc::clone(&catalog);
         Arc::new(default_registry(interviewer, move || {
             let tool_env_provider = Arc::clone(&tool_env_provider_for_backend);
             let mut api = AgentApiBackend::new_with_catalog(
@@ -298,7 +302,17 @@ async fn build_registry(
                 .with_tool_env_provider(tool_env_provider.clone(), github_token_refresh_managed)
                 .with_steering_hub(Arc::clone(&steering_hub))
                 .with_injected_credentials(acp_credentials_for_backend.clone());
-            Some(Box::new(BackendRouter::new(Box::new(api), acp)))
+            // ponytail: rebase anchor — tmux backend.
+            let tmux = TmuxBackend::new()
+                .with_tool_env_provider(tool_env_provider.clone())
+                .with_steering_hub(Arc::clone(&steering_hub_for_tmux))
+                .with_catalog(Arc::clone(&catalog_for_tmux));
+            Some(Box::new(BackendRouter::new(
+                Box::new(api),
+                tmux,
+                acp,
+                backend_override,
+            )))
         }))
     };
 
@@ -960,6 +974,7 @@ mod tests {
                 working_directory: std::env::current_dir().unwrap(),
             },
             llm:               LlmSpec {
+                backend_override: None, // ponytail: rebase anchor — tmux backend
                 model:          "test-model".to_string(),
                 provider_id:    fabro_model::ProviderId::anthropic(),
                 fallback_chain: Vec::new(),
@@ -1043,6 +1058,7 @@ mod tests {
                 working_directory: std::env::current_dir().unwrap(),
             },
             llm:               LlmSpec {
+                backend_override: None, // ponytail: rebase anchor — tmux backend
                 model:          "test-model".to_string(),
                 provider_id:    fabro_model::ProviderId::anthropic(),
                 fallback_chain: Vec::new(),
@@ -1143,6 +1159,7 @@ mod tests {
         });
         let (_registry, effective_dry_run) = build_registry(
             &LlmSpec {
+                backend_override: None, // ponytail: rebase anchor — tmux backend
                 model:          "claude-opus-4-6".to_string(),
                 provider_id:    fabro_model::ProviderId::anthropic(),
                 fallback_chain: Vec::new(),
@@ -1243,6 +1260,7 @@ mod tests {
                 working_directory: temp.path().to_path_buf(),
             },
             llm:               LlmSpec {
+                backend_override: None, // ponytail: rebase anchor — tmux backend
                 model:          "fake-acp".to_string(),
                 provider_id:    fabro_model::ProviderId::openai(),
                 fallback_chain: Vec::new(),
@@ -1340,6 +1358,7 @@ mod tests {
                 working_directory: std::env::current_dir().unwrap(),
             },
             llm:               LlmSpec {
+                backend_override: None, // ponytail: rebase anchor — tmux backend
                 model:          "test-model".to_string(),
                 provider_id:    fabro_model::ProviderId::anthropic(),
                 fallback_chain: Vec::new(),
@@ -1455,6 +1474,7 @@ mod tests {
                 working_directory: std::env::current_dir().unwrap(),
             },
             llm: LlmSpec {
+                backend_override: None, // ponytail: rebase anchor — tmux backend
                 model:          "test-model".to_string(),
                 provider_id:    fabro_model::ProviderId::anthropic(),
                 fallback_chain: Vec::new(),

@@ -232,12 +232,14 @@ impl Persisted {
 
 #[derive(Clone)]
 pub struct LlmSpec {
-    pub model:          String,
-    pub provider_id:    ProviderId,
-    pub fallback_chain: Vec<FallbackTarget>,
-    pub mcp_servers:    Vec<McpServerSettings>,
-    pub model_controls: RunModelControls,
-    pub dry_run:        bool,
+    pub model:            String,
+    pub provider_id:      ProviderId,
+    pub fallback_chain:   Vec<FallbackTarget>,
+    pub mcp_servers:      Vec<McpServerSettings>,
+    pub model_controls:   RunModelControls,
+    pub dry_run:          bool,
+    /// ponytail: rebase anchor — tmux backend. Run-level `--backend` override.
+    pub backend_override: Option<fabro_types::AgentBackend>,
 }
 
 #[derive(Clone)]

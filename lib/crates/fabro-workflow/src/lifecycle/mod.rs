@@ -5,6 +5,7 @@ pub(crate) mod event;
 pub(crate) mod fidelity;
 pub(crate) mod git;
 pub(crate) mod hook;
+pub(crate) mod run_state; // ponytail: rebase anchor — tmux backend
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -32,6 +33,7 @@ use self::event::EventLifecycle;
 use self::fidelity::FidelityLifecycle;
 use self::git::{GitCheckpointResult, GitLifecycle};
 use self::hook::HookLifecycle;
+use self::run_state::RunStatePublisher; // ponytail: rebase anchor — tmux backend
 use crate::artifact_upload::ArtifactSink;
 use crate::context;
 use crate::error::{FailureSignature, FailureSignatureExt};
@@ -59,6 +61,7 @@ pub(crate) struct WorkflowLifecycle {
     circuit_breaker:       Arc<CircuitBreakerLifecycle>,
     git:                   GitLifecycle,
     artifact:              ArtifactLifecycle,
+    run_state:             RunStatePublisher, // ponytail: rebase anchor — tmux backend
     on_node:               crate::OnNodeCallback,
     emitter:               Arc<Emitter>,
     run_control:           Option<Arc<RunControlState>>,
@@ -175,6 +178,11 @@ impl WorkflowLifecycle {
             artifact_sink,
         );
 
+        // ponytail: rebase anchor — tmux backend. Publishes .overseer/run.json
+        // for Overseer; inert unless OVERSEER_WORKTREE is set.
+        let run_state =
+            RunStatePublisher::new(Arc::clone(sandbox), Arc::clone(&graph), run_options.run_id);
+
         Self {
             event,
             hook,
@@ -183,6 +191,7 @@ impl WorkflowLifecycle {
             circuit_breaker,
             git,
             artifact,
+            run_state,
             on_node,
             emitter: Arc::clone(emitter),
             run_control,
@@ -250,6 +259,7 @@ impl RunLifecycle<WorkflowGraph> for WorkflowLifecycle {
         self.event.on_run_start(graph, state).await?;
         self.hook.on_run_start(graph, state).await?;
         self.git.on_run_start(graph, state).await?;
+        self.run_state.on_run_start(graph, state).await?;
         Ok(())
     }
 
@@ -260,6 +270,9 @@ impl RunLifecycle<WorkflowGraph> for WorkflowLifecycle {
         state: &WfRunState,
     ) {
         self.event
+            .on_terminal_reached(node, goal_gates_passed, state)
+            .await;
+        self.run_state
             .on_terminal_reached(node, goal_gates_passed, state)
             .await;
     }
@@ -275,6 +288,7 @@ impl RunLifecycle<WorkflowGraph> for WorkflowLifecycle {
         if let Some(on_node) = &self.on_node {
             on_node(node.id());
         }
+        self.run_state.before_node(node, state).await?;
         self.fidelity.before_node(node, state).await
     }
 
@@ -319,6 +333,7 @@ impl RunLifecycle<WorkflowGraph> for WorkflowLifecycle {
         self.artifact.after_node(node, result, state).await?;
         self.event.after_node(node, result, state).await?;
         self.hook.after_node(node, result, state).await?;
+        self.run_state.after_node(node, result, state).await?;
         Ok(())
     }
 

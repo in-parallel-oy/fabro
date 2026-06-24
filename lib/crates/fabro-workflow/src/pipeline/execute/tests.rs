@@ -258,6 +258,7 @@ async fn execute_test_run_with_options(
                 working_directory: std::env::current_dir().unwrap(),
             },
             llm: LlmSpec {
+                backend_override: None, // ponytail: rebase anchor — tmux backend
                 model:          "test-model".to_string(),
                 provider_id:    fabro_model::ProviderId::anthropic(),
                 fallback_chain: Vec::new(),
@@ -320,6 +321,7 @@ async fn execute_runs_start_to_exit_and_returns_final_context() {
                 working_directory: std::env::current_dir().unwrap(),
             },
             llm: LlmSpec {
+                backend_override: None, // ponytail: rebase anchor — tmux backend
                 model:          "test-model".to_string(),
                 provider_id:    fabro_model::ProviderId::anthropic(),
                 fallback_chain: Vec::new(),
@@ -397,6 +399,7 @@ async fn run_with_lifecycle(
                 working_directory: PathBuf::from(sandbox.working_directory()),
             },
             llm: LlmSpec {
+                backend_override: None, // ponytail: rebase anchor — tmux backend
                 model:          "test-model".to_string(),
                 provider_id:    fabro_model::ProviderId::anthropic(),
                 fallback_chain: Vec::new(),

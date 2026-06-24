@@ -82,6 +82,9 @@ pub fn resolve_run(
         pull_request,
         artifacts: resolve_artifacts(layer.artifacts.as_ref()),
         integrations: resolve_integrations(layer.integrations.as_ref()),
+        // ponytail: rebase anchor — tmux backend. Layer precedence already
+        // favors the CLI override (combine keeps the higher layer's Some).
+        backend_override: layer.backend,
     }
 }
 

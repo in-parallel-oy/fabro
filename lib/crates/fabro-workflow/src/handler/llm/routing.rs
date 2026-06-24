@@ -19,6 +19,11 @@ pub(crate) fn select_one_shot_backend(node: &Node) -> Result<AgentBackend, Error
         Some(Ok(AgentBackend::Acp)) => Err(Error::Validation(
             "backend=\"acp\" is only valid on agent nodes; prompt nodes are API-only".to_string(),
         )),
+        // ponytail: rebase anchor — tmux backend. Interactive-only, never one-shot.
+        Some(Ok(AgentBackend::Tmux)) => Err(Error::Validation(
+            "backend=\"tmux\" is only valid for interactive agent runs; prompt nodes are API-only"
+                .to_string(),
+        )),
         Some(Ok(AgentBackend::Api)) | None => Ok(AgentBackend::Api),
         Some(Err(_)) => Err(unsupported_backend_error(
             node.backend().unwrap_or_default(),

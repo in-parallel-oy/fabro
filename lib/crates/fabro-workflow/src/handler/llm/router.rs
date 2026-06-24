@@ -8,26 +8,48 @@ use super::super::agent::{CodergenBackend, CodergenResult, CodergenRunRequest, O
 use super::acp::AgentAcpBackend;
 use super::api::EffectiveRequestControls;
 use super::routing;
+use super::tmux::TmuxBackend;
 use crate::error::Error;
 use crate::event::Emitter;
 use crate::handler::NodeTimeoutPolicy;
 
-/// Routes codergen invocations to API or ACP backends based on node attributes.
+/// Routes codergen invocations to API, ACP, or tmux backends based on node
+/// attributes and the optional run-level `--backend` override.
 pub struct BackendRouter {
     api: Box<dyn CodergenBackend>,
+    tmux: TmuxBackend, // ponytail: rebase anchor — tmux backend
     acp: AgentAcpBackend,
+    // ponytail: rebase anchor — tmux backend. CLI `--backend` override.
+    backend_override: Option<AgentBackend>,
 }
 
 impl BackendRouter {
     #[must_use]
-    pub fn new(api_backend: Box<dyn CodergenBackend>, acp_backend: AgentAcpBackend) -> Self {
+    pub fn new(
+        api_backend: Box<dyn CodergenBackend>,
+        tmux: TmuxBackend,
+        acp_backend: AgentAcpBackend,
+        backend_override: Option<AgentBackend>,
+    ) -> Self {
         Self {
             api: api_backend,
+            tmux,
             acp: acp_backend,
+            backend_override,
         }
     }
 
-    fn select_backend(node: &Node) -> Result<AgentBackend, Error> {
+    fn select_backend(&self, node: &Node) -> Result<AgentBackend, Error> {
+        // ponytail: rebase anchor — tmux backend; CLI --backend override.
+        // The override wins *before* the node's declared backend is parsed, so
+        // `--backend tmux` still rescues a node whose `backend=` is malformed
+        // (otherwise `select_run_backend`'s parse error would short-circuit the
+        // override). Prompt nodes are API-only and never overridden (D2).
+        if let Some(over) = self.backend_override {
+            if node.handler_type() != Some("prompt") {
+                return Ok(over);
+            }
+        }
         routing::select_run_backend(node)
     }
 
@@ -39,17 +61,18 @@ impl BackendRouter {
 #[async_trait]
 impl CodergenBackend for BackendRouter {
     async fn run(&self, request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
-        match Self::select_backend(request.node)? {
+        match self.select_backend(request.node)? {
             AgentBackend::Api => self.api.run(request).await,
             AgentBackend::Acp => self.acp.run(request).await,
+            AgentBackend::Tmux => self.tmux.run(request).await,
         }
     }
 
     async fn one_shot(&self, request: OneShotRequest<'_>) -> Result<CodergenResult, Error> {
         match Self::select_one_shot_backend(request.node)? {
             AgentBackend::Api => self.api.one_shot(request).await,
-            AgentBackend::Acp => {
-                unreachable!("ACP one-shot is rejected by select_one_shot_backend")
+            AgentBackend::Acp | AgentBackend::Tmux => {
+                unreachable!("ACP/tmux one-shot is rejected by select_one_shot_backend")
             }
         }
     }
@@ -59,16 +82,18 @@ impl CodergenBackend for BackendRouter {
     }
 
     fn effective_request_controls(&self, node: &Node) -> Result<EffectiveRequestControls, Error> {
-        match Self::select_backend(node)? {
+        match self.select_backend(node)? {
             AgentBackend::Api => self.api.effective_request_controls(node),
             AgentBackend::Acp => self.acp.effective_request_controls(node),
+            AgentBackend::Tmux => self.tmux.effective_request_controls(node),
         }
     }
 
     fn node_timeout_policy(&self, node: &Node) -> NodeTimeoutPolicy {
-        match Self::select_backend(node) {
+        match self.select_backend(node) {
             Ok(AgentBackend::Api) => self.api.node_timeout_policy(node),
             Ok(AgentBackend::Acp) => self.acp.node_timeout_policy(node),
+            Ok(AgentBackend::Tmux) => self.tmux.node_timeout_policy(node),
             Err(_) => NodeTimeoutPolicy::ExecutorEnforced,
         }
     }
@@ -88,12 +113,21 @@ mod tests {
     use crate::context::Context;
     use crate::event::{Emitter, StageScope};
 
+    fn test_router() -> BackendRouter {
+        BackendRouter::new(
+            Box::new(StubBackend),
+            TmuxBackend::new(),
+            AgentAcpBackend::new(),
+            None,
+        )
+    }
+
     #[test]
     fn router_uses_api_by_default() {
         let node = Node::new("test");
 
         assert_eq!(
-            BackendRouter::select_backend(&node).unwrap(),
+            test_router().select_backend(&node).unwrap(),
             AgentBackend::Api
         );
     }
@@ -104,10 +138,34 @@ mod tests {
         node.attrs
             .insert("backend".to_string(), AttrValue::String("cli".to_string()));
 
-        let err = BackendRouter::select_backend(&node).unwrap_err();
+        let err = test_router().select_backend(&node).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "Validation error: unsupported agent backend \"cli\"; expected one of: api, acp"
+            "Validation error: unsupported agent backend \"cli\"; expected one of: api, acp, tmux"
+        );
+    }
+
+    #[test]
+    fn router_override_routes_agent_nodes_to_tmux() {
+        let router = BackendRouter::new(
+            Box::new(StubBackend),
+            TmuxBackend::new(),
+            AgentAcpBackend::new(),
+            Some(AgentBackend::Tmux),
+        );
+        // Agent node: overridden to tmux.
+        assert_eq!(
+            router.select_backend(&Node::new("work")).unwrap(),
+            AgentBackend::Tmux
+        );
+        // Prompt node: stays API regardless of override (D2).
+        let mut prompt = Node::new("ask");
+        prompt
+            .attrs
+            .insert("type".to_string(), AttrValue::String("prompt".to_string()));
+        assert_eq!(
+            router.select_backend(&prompt).unwrap(),
+            AgentBackend::Api
         );
     }
 
@@ -118,7 +176,7 @@ mod tests {
             tempfile::tempdir().unwrap().path().to_path_buf(),
         ));
         let context = Context::new();
-        let router = BackendRouter::new(Box::new(StubBackend), AgentAcpBackend::new());
+        let router = test_router();
         let emitter = Arc::new(Emitter::default());
         let stage_scope = StageScope::for_handler(&context, "test");
 
@@ -144,7 +202,7 @@ mod tests {
     #[test]
     fn router_delegates_effective_request_controls_to_api_backend() {
         let node = Node::new("test");
-        let router = BackendRouter::new(Box::new(StubBackend), AgentAcpBackend::new());
+        let router = test_router();
 
         let controls = router.effective_request_controls(&node).unwrap();
         assert_eq!(controls.reasoning_effort, Some(ReasoningEffort::High));

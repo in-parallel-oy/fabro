@@ -10,6 +10,7 @@ use fabro_types::settings::server::{
     GithubIntegrationStrategy, LogDestination, ObjectStoreProvider, ServerAuthMethod,
     WebhookStrategy,
 };
+use fabro_types::AgentBackend; // ponytail: rebase anchor — tmux backend
 use fabro_types::settings::{Duration, InterpString, Size};
 
 use super::LogFilter;
@@ -90,6 +91,7 @@ impl_combine_or_option!(
     CodecKind,
     ProviderAuthConfig,
     ReasoningEffortFeature,
+    AgentBackend, // ponytail: rebase anchor — tmux backend
 );
 
 impl Combine for Option<Vec<String>> {

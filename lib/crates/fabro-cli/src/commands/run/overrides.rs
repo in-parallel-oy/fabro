@@ -6,6 +6,7 @@ use fabro_config::{
     CliLayer, CliOutputLayer, RunGoalLayer, RunLayer, parse_input_overrides, parse_labels,
 };
 use fabro_manifest::{RunOverrideInput, build_run_overrides};
+use fabro_types::AgentBackend;
 use fabro_types::settings::cli::OutputVerbosity;
 use fabro_types::settings::interp::InterpString;
 
@@ -67,6 +68,21 @@ fn current_dir_or_dot() -> PathBuf {
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
+/// Parse the `--backend` override, surfacing the same expected-values message
+/// the workflow router uses for an unknown value.
+// ponytail: rebase anchor — tmux backend.
+fn parse_backend_override(raw: Option<&str>) -> Result<Option<AgentBackend>> {
+    raw.map(|value| {
+        value.parse::<AgentBackend>().map_err(|_| {
+            anyhow!(
+                "unsupported agent backend \"{value}\"; expected one of: {}",
+                AgentBackend::expected_values()
+            )
+        })
+    })
+    .transpose()
+}
+
 pub(crate) fn run_args_overrides(args: &RunArgs) -> Result<ManifestSettingsOverrides> {
     let cwd = current_dir_or_dot();
     let goal = goal_layer_from_args(args.goal.as_deref(), args.goal_file.as_deref(), &cwd)?;
@@ -74,6 +90,7 @@ pub(crate) fn run_args_overrides(args: &RunArgs) -> Result<ManifestSettingsOverr
         goal:             None,
         model:            args.model.as_deref(),
         provider:         args.provider.as_deref(),
+        backend:          parse_backend_override(args.backend.as_deref())?,
         environment:      args.environment.as_deref(),
         docker_image:     None,
         preserve_sandbox: sparse_flag(args.preserve_sandbox),
@@ -97,6 +114,7 @@ pub(crate) fn preflight_args_overrides(args: &PreflightArgs) -> Result<ManifestS
         goal:             None,
         model:            args.model.as_deref(),
         provider:         args.provider.as_deref(),
+        backend:          None, // ponytail: rebase anchor — tmux backend (preflight has no --backend)
         environment:      args.environment.as_deref(),
         docker_image:     None,
         preserve_sandbox: None,

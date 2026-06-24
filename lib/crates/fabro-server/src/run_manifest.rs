@@ -353,6 +353,7 @@ fn manifest_args_overrides(
         goal:             None,
         model:            args.model.as_deref(),
         provider:         args.provider.as_deref(),
+        backend:          None, // ponytail: rebase anchor — tmux backend (server path unused)
         environment:      args.environment.as_deref(),
         docker_image:     args.docker_image.as_deref(),
         preserve_sandbox: args.preserve_sandbox,

@@ -74,6 +74,7 @@ pub fn run_tool_run_overrides(spec: &ValidatedCreateRunSpec) -> Option<RunLayer>
         goal:             spec.goal.as_deref(),
         model:            spec.model.as_deref(),
         provider:         spec.provider.as_deref(),
+        backend:          None, // ponytail: rebase anchor — tmux backend (server path unused)
         environment:      spec.environment.as_deref(),
         docker_image:     None,
         preserve_sandbox: spec.preserve_sandbox,

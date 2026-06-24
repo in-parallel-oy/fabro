@@ -254,6 +254,11 @@ pub(crate) struct RunArgs {
     #[arg(long)]
     pub(crate) provider: Option<String>,
 
+    /// Override the agent backend (api, acp, tmux)
+    // ponytail: rebase anchor — tmux backend.
+    #[arg(long = "backend")]
+    pub(crate) backend: Option<String>,
+
     /// Enable verbose output
     #[arg(short, long)]
     pub(crate) verbose: bool,

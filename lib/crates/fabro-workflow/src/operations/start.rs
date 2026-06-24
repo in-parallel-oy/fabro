@@ -479,6 +479,8 @@ impl RunSession {
                 mcp_servers,
                 model_controls: resolved.model.controls.clone(),
                 dry_run: resolved.execution.mode == RunMode::DryRun,
+                // ponytail: rebase anchor — tmux backend.
+                backend_override: resolved.backend_override,
             },
             interviewer,
             steering_hub: services.steering_hub,
