@@ -170,7 +170,7 @@ stop_on_terminal = true
 auto_stop = "30m"
 
 [environments.fabro-dev.labels]
-repo = "fabro-sh/fabro"
+repo = "in-parallel-oy/fabro"
 
 [environments.fabro-dev.env]
 NODE_ENV = "development"
@@ -208,7 +208,7 @@ NODE_ENV = "development"
     );
     assert_eq!(
         environment.labels.get("repo").map(String::as_str),
-        Some("fabro-sh/fabro")
+        Some("in-parallel-oy/fabro")
     );
     assert_eq!(
         environment

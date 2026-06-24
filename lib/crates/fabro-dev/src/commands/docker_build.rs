@@ -14,7 +14,7 @@ pub(crate) struct DockerBuildArgs {
     #[arg(long, value_enum)]
     arch:         Option<DockerArch>,
     /// Docker image tag to build.
-    #[arg(long, default_value = "fabro-sh/fabro")]
+    #[arg(long, default_value = "in-parallel-oy/fabro")]
     tag:          String,
     /// Stage the compiled binary without running docker build.
     #[arg(long)]

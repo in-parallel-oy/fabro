@@ -1566,7 +1566,7 @@ file = "prompts/goal.md"
     /// When `[run] working_dir` points to a nested git repo, the manifest's
     /// `git.branch` and `git.origin_url` must come from that target repo, not
     /// from an enclosing workspace repo that happens to be the CLI's cwd.
-    /// Regression test for https://github.com/fabro-sh/fabro/issues/159.
+    /// Regression test for https://github.com/in-parallel-oy/fabro/issues/159.
     #[test]
     fn build_manifest_git_follows_working_directory_into_nested_repo() {
         let temp = tempfile::tempdir().unwrap();

@@ -907,7 +907,7 @@ mod tests {
             pull_request:   Some(RunLifecyclePullRequest {
                 number: 42,
                 title:  Some("Ship <prod> & notify"),
-                url:    Some("https://github.com/fabro-sh/fabro/pull/42"),
+                url:    Some("https://github.com/in-parallel-oy/fabro/pull/42"),
             }),
         });
 
@@ -918,7 +918,7 @@ mod tests {
         assert!(text.contains("*Result*\ncompleted"));
         assert!(text.contains("*Duration*\n1m 5s"));
         assert!(text.contains("*Pull request*"));
-        assert!(text.contains("<https://github.com/fabro-sh/fabro/pull/42|#42>"));
+        assert!(text.contains("<https://github.com/in-parallel-oy/fabro/pull/42|#42>"));
         assert!(text.contains("Ship &lt;prod&gt; &amp; notify"));
     }
 
@@ -980,13 +980,13 @@ mod tests {
             pull_request:   Some(RunLifecyclePullRequest {
                 number: 7,
                 title:  None,
-                url:    Some("https://github.com/fabro-sh/fabro/pull/7"),
+                url:    Some("https://github.com/in-parallel-oy/fabro/pull/7"),
             }),
         });
 
         let text = lifecycle_text(&blocks);
         assert!(text.contains("*Pull request*"));
-        assert!(text.contains("<https://github.com/fabro-sh/fabro/pull/7|#7>"));
+        assert!(text.contains("<https://github.com/in-parallel-oy/fabro/pull/7|#7>"));
         assert!(!text.contains(" — "));
     }
 }

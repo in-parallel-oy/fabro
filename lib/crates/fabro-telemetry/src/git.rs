@@ -64,22 +64,22 @@ mod tests {
 
     #[test]
     fn https_and_ssh_normalize_to_same() {
-        let https = normalize_remote_url("https://github.com/fabro-sh/fabro.git");
-        let ssh = normalize_remote_url("git@github.com:fabro-sh/fabro.git");
+        let https = normalize_remote_url("https://github.com/in-parallel-oy/fabro.git");
+        let ssh = normalize_remote_url("git@github.com:in-parallel-oy/fabro.git");
         assert_eq!(https, ssh);
-        insta::assert_snapshot!(https, @"github.com/fabro-sh/fabro");
+        insta::assert_snapshot!(https, @"github.com/in-parallel-oy/fabro");
     }
 
     #[test]
     fn ssh_protocol_prefix() {
-        let result = normalize_remote_url("ssh://git@github.com/fabro-sh/fabro.git");
-        insta::assert_snapshot!(result, @"github.com/fabro-sh/fabro");
+        let result = normalize_remote_url("ssh://git@github.com/in-parallel-oy/fabro.git");
+        insta::assert_snapshot!(result, @"github.com/in-parallel-oy/fabro");
     }
 
     #[test]
     fn url_without_git_suffix() {
-        let result = normalize_remote_url("https://github.com/fabro-sh/fabro");
-        insta::assert_snapshot!(result, @"github.com/fabro-sh/fabro");
+        let result = normalize_remote_url("https://github.com/in-parallel-oy/fabro");
+        insta::assert_snapshot!(result, @"github.com/in-parallel-oy/fabro");
     }
 
     #[test]

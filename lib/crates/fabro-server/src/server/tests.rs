@@ -3701,7 +3701,7 @@ async fn fake_automation_materializer_injection_captures_input_and_returns_manif
     let user_settings_path = PathBuf::from("/tmp/fabro/settings.toml");
     let temp_root = PathBuf::from("/tmp/fabro/automation");
     let target = AutomationTarget {
-        repository:   "fabro-sh/fabro".to_string(),
+        repository:   "in-parallel-oy/fabro".to_string(),
         ref_selector: "main".to_string(),
         workflow:     "demo".to_string(),
     };
@@ -4660,7 +4660,7 @@ async fn slack_lifecycle_uses_prior_pull_request_created_details() {
         &server,
         vec![
             "Fabro run completed".to_string(),
-            "https://github.com/fabro-sh/fabro/pull/42".to_string(),
+            "https://github.com/in-parallel-oy/fabro/pull/42".to_string(),
             "#42".to_string(),
             "Ship &lt;prod&gt; &amp; notify".to_string(),
         ],
@@ -4699,7 +4699,7 @@ channel = "#deploys"
         &run_store,
         &run_id,
         &workflow_event::Event::PullRequestCreated {
-            pr_url:      "https://github.com/fabro-sh/fabro/pull/42".to_string(),
+            pr_url:      "https://github.com/in-parallel-oy/fabro/pull/42".to_string(),
             pr_number:   42,
             owner:       "fabro-sh".to_string(),
             repo:        "fabro".to_string(),

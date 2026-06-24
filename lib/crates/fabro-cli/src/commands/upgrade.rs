@@ -28,7 +28,7 @@ use crate::shared::print_json_pretty;
 
 // ── Download backend abstraction ───────────────────────────────────────────
 
-const GITHUB_REPO: &str = "fabro-sh/fabro";
+const GITHUB_REPO: &str = "in-parallel-oy/fabro";
 
 enum Backend {
     Gh,
@@ -100,7 +100,7 @@ fn detect_install_source(current_exe: &Path) -> InstallSource {
 // ── Homebrew tap manifest ──────────────────────────────────────────────────
 
 const TAP_VERSIONS_URL: &str =
-    "https://raw.githubusercontent.com/fabro-sh/homebrew-tap/main/versions.json";
+    "https://raw.githubusercontent.com/in-parallel-oy/homebrew-tap/main/versions.json";
 
 fn parse_tap_versions(body: &str, channel: BrewChannel) -> Result<String> {
     let v: serde_json::Value = serde_json::from_str(body).context("parsing tap versions.json")?;
@@ -295,52 +295,9 @@ async fn select_backend_for_gh_command(gh_command: &str) -> Result<Backend> {
 fn detect_target() -> Result<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
         ("macos", "aarch64") => Ok("aarch64-apple-darwin"),
-        ("linux", "x86_64") => Ok(match detect_linux_libc() {
-            Libc::Musl => "x86_64-unknown-linux-musl",
-            Libc::Gnu => "x86_64-unknown-linux-gnu",
-        }),
-        ("linux", "aarch64") => Ok(match detect_linux_libc() {
-            Libc::Musl => "aarch64-unknown-linux-musl",
-            Libc::Gnu => "aarch64-unknown-linux-gnu",
-        }),
+        ("linux", "x86_64") => Ok("x86_64-unknown-linux-gnu"),
         (os, arch) => bail!("unsupported platform: {os}/{arch}"),
     }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum Libc {
-    Gnu,
-    Musl,
-}
-
-/// Parse `ldd --version` output to determine the host libc flavor.
-///
-/// glibc's ldd writes to stdout ("ldd (Ubuntu GLIBC 2.35...)");
-/// musl's ldd writes to stderr ("musl libc (x86_64)\nVersion 1.2.4").
-/// Callers concatenate both streams before passing in.
-fn parse_ldd_libc(output: &str) -> Libc {
-    if output.to_ascii_lowercase().contains("musl") {
-        Libc::Musl
-    } else {
-        Libc::Gnu
-    }
-}
-
-fn detect_linux_libc() -> Libc {
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "one-shot libc detection at upgrade startup; async overhead is unwarranted"
-    )]
-    let result = std::process::Command::new("ldd").arg("--version").output();
-    let Ok(output) = result else {
-        return Libc::Gnu;
-    };
-    let combined = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
-    parse_ldd_libc(&combined)
 }
 
 // ── Version helpers ────────────────────────────────────────────────────────
@@ -748,47 +705,11 @@ mod tests {
         let result = detect_target();
         // We can only assert it succeeds on known CI platforms
         if cfg!(target_os = "linux") && cfg!(target_arch = "x86_64") {
-            let got = result.unwrap();
-            assert!(
-                got == "x86_64-unknown-linux-gnu" || got == "x86_64-unknown-linux-musl",
-                "got {got}"
-            );
+            assert_eq!(result.unwrap(), "x86_64-unknown-linux-gnu");
         } else if cfg!(target_os = "macos") && cfg!(target_arch = "aarch64") {
             assert_eq!(result.unwrap(), "aarch64-apple-darwin");
-        } else if cfg!(target_os = "linux") && cfg!(target_arch = "aarch64") {
-            let got = result.unwrap();
-            assert!(
-                got == "aarch64-unknown-linux-gnu" || got == "aarch64-unknown-linux-musl",
-                "got {got}"
-            );
         }
         // On other platforms it would return an error, which is fine
-    }
-
-    // -- Libc parsing --
-
-    #[test]
-    fn parse_ldd_libc_detects_glibc() {
-        assert_eq!(
-            parse_ldd_libc(
-                "ldd (Ubuntu GLIBC 2.35-0ubuntu3.4) 2.35\nCopyright (C) 2022 Free Software Foundation, Inc."
-            ),
-            Libc::Gnu,
-        );
-    }
-
-    #[test]
-    fn parse_ldd_libc_detects_musl() {
-        assert_eq!(
-            parse_ldd_libc("musl libc (x86_64)\nVersion 1.2.4\nDynamic Program Loader"),
-            Libc::Musl,
-        );
-    }
-
-    #[test]
-    fn parse_ldd_libc_defaults_to_gnu_on_unknown_output() {
-        assert_eq!(parse_ldd_libc(""), Libc::Gnu);
-        assert_eq!(parse_ldd_libc("some unrelated output"), Libc::Gnu);
     }
 
     // -- Version parsing --

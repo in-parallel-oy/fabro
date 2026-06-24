@@ -2562,7 +2562,7 @@ mod tests {
     #[test]
     fn daytona_symlink_command_links_workspace_repo_to_repos_checkout() {
         let layout = clone_source::github_repo_layout(
-            "https://github.com/fabro-sh/fabro",
+            "https://github.com/in-parallel-oy/fabro",
             WORKING_DIRECTORY,
             REPOS_ROOT,
         )
@@ -2570,7 +2570,7 @@ mod tests {
 
         assert_eq!(
             daytona_symlink_command(&layout),
-            "ln -s /home/daytona/repos/fabro-sh/fabro /home/daytona/workspace/fabro"
+            "ln -s /home/daytona/repos/in-parallel-oy/fabro /home/daytona/workspace/fabro"
         );
     }
 

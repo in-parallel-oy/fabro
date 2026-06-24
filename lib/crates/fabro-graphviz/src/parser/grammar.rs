@@ -195,7 +195,7 @@ mod tests {
         assert_eq!(rest, "");
     }
 
-    // Regression test for https://github.com/fabro-sh/fabro/issues/179.
+    // Regression test for https://github.com/in-parallel-oy/fabro/issues/179.
     // Standard DOT allows newline (or any whitespace) as an attribute separator
     // inside `[ ... ]`, with commas optional. The multi-line, comma-less form is
     // what most DOT editors and formatters produce for long attribute lists.

@@ -1152,7 +1152,7 @@ mod tests {
             exec_output_tail: None,
         });
         emit(&mut ui, Event::PullRequestCreated {
-            pr_url:      "https://github.com/fabro-sh/fabro/pull/42".into(),
+            pr_url:      "https://github.com/in-parallel-oy/fabro/pull/42".into(),
             pr_number:   42,
             owner:       "fabro-sh".into(),
             repo:        "fabro".into(),
@@ -1167,7 +1167,7 @@ mod tests {
 
         insta::assert_snapshot!(rendered(&buffer), @r"
             Warning: sandbox cleanup failed [sandbox_cleanup_failed]
-            Draft PR: https://github.com/fabro-sh/fabro/pull/42
+            Draft PR: https://github.com/in-parallel-oy/fabro/pull/42
             PR failed: auth token expired
         ");
     }

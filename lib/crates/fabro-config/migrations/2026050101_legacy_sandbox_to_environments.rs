@@ -393,7 +393,7 @@ NODE_ENV = "development"
 auto_stop_interval = 30
 
 [run.sandbox.daytona.labels]
-repo = "fabro-sh/fabro"
+repo = "in-parallel-oy/fabro"
 
 [run.sandbox.daytona.snapshot]
 name = "fabro-v11"
@@ -434,7 +434,7 @@ dockerfile = { path = "Dockerfile" }
         );
         assert_eq!(
             resolved.labels.get("repo").map(String::as_str),
-            Some("fabro-sh/fabro")
+            Some("in-parallel-oy/fabro")
         );
         assert_eq!(
             resolved.env.get("NODE_ENV").map(InterpString::as_source),

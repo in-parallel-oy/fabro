@@ -2024,30 +2024,30 @@ mod tests {
     #[test]
     fn clone_command_uses_depth_ten_without_tags_for_branch_clone() {
         let command = git_clone_command(
-            "https://github.com/fabro-sh/fabro",
+            "https://github.com/in-parallel-oy/fabro",
             Some("main"),
-            "/repos/fabro-sh/fabro",
+            "/repos/in-parallel-oy/fabro",
         );
         assert_eq!(
             command,
-            "git -c maintenance.auto=0 -c gc.auto=0 clone --branch main --single-branch --depth 10 --no-tags -- https://github.com/fabro-sh/fabro /repos/fabro-sh/fabro"
+            "git -c maintenance.auto=0 -c gc.auto=0 clone --branch main --single-branch --depth 10 --no-tags -- https://github.com/in-parallel-oy/fabro /repos/in-parallel-oy/fabro"
         );
     }
 
     #[test]
     fn clone_and_link_command_creates_workspace_symlink_to_repos_checkout() {
         let layout = clone_source::github_repo_layout(
-            "https://github.com/fabro-sh/fabro",
+            "https://github.com/in-parallel-oy/fabro",
             "/workspace",
             "/repos",
         )
         .unwrap();
         let command =
-            git_clone_and_link_command("https://github.com/fabro-sh/fabro", Some("main"), &layout);
+            git_clone_and_link_command("https://github.com/in-parallel-oy/fabro", Some("main"), &layout);
 
         assert_eq!(
             command,
-            "mkdir -p /workspace /repos/fabro-sh && git -c maintenance.auto=0 -c gc.auto=0 clone --branch main --single-branch --depth 10 --no-tags -- https://github.com/fabro-sh/fabro /repos/fabro-sh/fabro && ln -s /repos/fabro-sh/fabro /workspace/fabro"
+            "mkdir -p /workspace /repos/fabro-sh && git -c maintenance.auto=0 -c gc.auto=0 clone --branch main --single-branch --depth 10 --no-tags -- https://github.com/in-parallel-oy/fabro /repos/in-parallel-oy/fabro && ln -s /repos/in-parallel-oy/fabro /workspace/fabro"
         );
     }
 

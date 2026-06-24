@@ -410,7 +410,7 @@ mod tests {
 
     fn target() -> AutomationTarget {
         AutomationTarget {
-            repository:   "fabro-sh/fabro".to_string(),
+            repository:   "in-parallel-oy/fabro".to_string(),
             ref_selector: "main".to_string(),
             workflow:     ".fabro/workflows/test/workflow.toml".to_string(),
         }
@@ -441,7 +441,7 @@ mod tests {
 name = "Nightly"
 
 [target]
-repository = "fabro-sh/fabro"
+repository = "in-parallel-oy/fabro"
 ref = "main"
 workflow = "release"
 
@@ -477,7 +477,7 @@ name = "Legacy"
 enabled = false
 
 [target]
-repository = "fabro-sh/fabro"
+repository = "in-parallel-oy/fabro"
 ref = "main"
 workflow = "release"
 
@@ -538,7 +538,7 @@ enabled = true
                 name:        "Bad ref".to_string(),
                 description: None,
                 target:      AutomationTarget {
-                    repository:   "fabro-sh/fabro".to_string(),
+                    repository:   "in-parallel-oy/fabro".to_string(),
                     ref_selector: "main;rm".to_string(),
                     workflow:     "release".to_string(),
                 },
@@ -548,7 +548,7 @@ enabled = true
                 name:        "Bad workflow".to_string(),
                 description: None,
                 target:      AutomationTarget {
-                    repository:   "fabro-sh/fabro".to_string(),
+                    repository:   "in-parallel-oy/fabro".to_string(),
                     ref_selector: "main".to_string(),
                     workflow:     "../release".to_string(),
                 },

@@ -279,7 +279,7 @@ mod tests {
 
     fn target() -> AutomationTarget {
         AutomationTarget {
-            repository:   "fabro-sh/fabro".to_string(),
+            repository:   "in-parallel-oy/fabro".to_string(),
             ref_selector: "main".to_string(),
             workflow:     "release".to_string(),
         }
@@ -339,7 +339,7 @@ mod tests {
 name = "Valid"
 
 [target]
-repository = "fabro-sh/fabro"
+repository = "in-parallel-oy/fabro"
 ref = "main"
 workflow = "release"
 "#,

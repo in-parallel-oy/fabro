@@ -196,7 +196,7 @@ mod tests {
     #[test]
     fn github_layout_normalizes_https_origin_and_trims_roots() {
         let layout = github_repo_layout(
-            "https://github.com/fabro-sh/fabro.git/",
+            "https://github.com/in-parallel-oy/fabro.git/",
             "/workspace/",
             "/repos/",
         )
@@ -205,7 +205,7 @@ mod tests {
         assert_eq!(layout.owner, "fabro-sh");
         assert_eq!(layout.repo, "fabro");
         assert_eq!(layout.repos_owner_path, "/repos/fabro-sh");
-        assert_eq!(layout.primary_repo_path, "/repos/fabro-sh/fabro");
+        assert_eq!(layout.primary_repo_path, "/repos/in-parallel-oy/fabro");
         assert_eq!(layout.primary_repo_link, "/workspace/fabro");
         assert_eq!(layout.execution_directory, "/workspace/fabro");
     }

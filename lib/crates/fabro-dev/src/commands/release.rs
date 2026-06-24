@@ -113,7 +113,7 @@ pub(crate) fn release(args: ReleaseArgs) -> Result<()> {
 
     println!();
     println!("Released {tag}");
-    println!("Watch the build: https://github.com/fabro-sh/fabro/actions");
+    println!("Watch the build: https://github.com/in-parallel-oy/fabro/actions");
 
     Ok(())
 }

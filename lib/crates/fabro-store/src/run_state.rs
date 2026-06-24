@@ -1548,7 +1548,7 @@ mod tests {
                     "working_directory": "/workspace",
                     "image": "ubuntu:24.04",
                     "repo_cloned": true,
-                    "clone_origin_url": "https://github.com/fabro-sh/fabro.git",
+                    "clone_origin_url": "https://github.com/in-parallel-oy/fabro.git",
                     "clone_branch": "main"
                 }),
                 None,
@@ -3406,7 +3406,7 @@ mod tests {
             .apply_event(&test_event(
                 1,
                 EventBody::PullRequestCreated(PullRequestCreatedProps {
-                    pr_url:      "https://github.com/fabro-sh/fabro/pull/123".to_string(),
+                    pr_url:      "https://github.com/in-parallel-oy/fabro/pull/123".to_string(),
                     pr_number:   123,
                     owner:       "fabro-sh".to_string(),
                     repo:        "fabro".to_string(),
@@ -3425,7 +3425,7 @@ mod tests {
             .expect("projection should store pull request");
         assert_eq!(
             pull_request.html_url(),
-            "https://github.com/fabro-sh/fabro/pull/123"
+            "https://github.com/in-parallel-oy/fabro/pull/123"
         );
         assert_eq!(pull_request.number, 123);
 

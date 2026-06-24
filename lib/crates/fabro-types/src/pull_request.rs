@@ -283,7 +283,7 @@ mod tests {
                 "owner": "fabro-sh",
                 "repo": "fabro",
                 "number": 270,
-                "html_url": "https://github.com/fabro-sh/fabro/pull/270"
+                "html_url": "https://github.com/in-parallel-oy/fabro/pull/270"
             })
         );
     }
@@ -292,7 +292,7 @@ mod tests {
     fn pull_request_link_rejects_extra_legacy_record_fields() {
         let result = serde_json::from_value::<PullRequestLink>(json!({
             "provider": "github",
-            "html_url": "https://github.com/fabro-sh/fabro/pull/270",
+            "html_url": "https://github.com/in-parallel-oy/fabro/pull/270",
             "number": 270,
             "owner": "fabro-sh",
             "repo": "fabro",

@@ -744,17 +744,17 @@ mod tests {
 
     #[test]
     fn target_repository_urls_are_github_metadata_urls_without_credentials() {
-        let repo = parse_github_repository_slug("fabro-sh/fabro").expect("slug should parse");
+        let repo = parse_github_repository_slug("in-parallel-oy/fabro").expect("slug should parse");
 
         assert_eq!(repo.owner, "fabro-sh");
         assert_eq!(repo.name, "fabro");
         assert_eq!(
             github_clone_url(&repo),
-            "https://github.com/fabro-sh/fabro.git"
+            "https://github.com/in-parallel-oy/fabro.git"
         );
         assert_eq!(
             github_metadata_url(&repo),
-            "https://github.com/fabro-sh/fabro"
+            "https://github.com/in-parallel-oy/fabro"
         );
         assert!(!github_clone_url(&repo).contains('@'));
     }
@@ -763,8 +763,8 @@ mod tests {
     fn target_repository_validation_rejects_non_github_owner_repo_shapes() {
         for value in [
             "fabro-sh",
-            "https://github.com/fabro-sh/fabro",
-            "fabro-sh/fabro/extra",
+            "https://github.com/in-parallel-oy/fabro",
+            "in-parallel-oy/fabro/extra",
             "-owner/repo",
             "owner/.git",
         ] {
@@ -778,10 +778,10 @@ mod tests {
 
     #[test]
     fn bare_cache_command_plans_use_argv_prompt_disable_and_timeouts() {
-        let repo = parse_github_repository_slug("fabro-sh/fabro").unwrap();
+        let repo = parse_github_repository_slug("in-parallel-oy/fabro").unwrap();
         let clone_url = github_clone_url(&repo);
         let temp = TempDir::new().unwrap();
-        let bare_dir = temp.path().join("fabro-sh/fabro.git");
+        let bare_dir = temp.path().join("in-parallel-oy/fabro.git");
         let worktree_dir = temp.path().join("worktree/repo");
 
         let clone = build_bare_clone_plan(&clone_url, &bare_dir, None);
@@ -791,7 +791,7 @@ mod tests {
             "--bare",
             "--depth",
             "1",
-            "https://github.com/fabro-sh/fabro.git",
+            "https://github.com/in-parallel-oy/fabro.git",
             bare_dir.to_str().unwrap(),
         ]);
         assert_eq!(clone.timeout, Duration::from_mins(2));
@@ -839,7 +839,7 @@ mod tests {
         let secret = "ghu_materializer_secret";
         let basic = basic_auth_header("x-access-token", secret);
         let message = format!(
-            "fatal: could not read Username for https://github.com/fabro-sh/fabro.git; token={secret}; header={basic}"
+            "fatal: could not read Username for https://github.com/in-parallel-oy/fabro.git; token={secret}; header={basic}"
         );
 
         let redacted = redact_git_output(&message, &[secret.to_string(), basic.clone()]);
@@ -862,7 +862,7 @@ mod tests {
 
     #[test]
     fn credential_config_env_keeps_clone_url_uncredentialed() {
-        let repo = parse_github_repository_slug("fabro-sh/fabro").unwrap();
+        let repo = parse_github_repository_slug("in-parallel-oy/fabro").unwrap();
         let clone_url = github_clone_url(&repo);
         let auth = GitAuthConfig::new(
             Some("x-access-token".to_string()),
@@ -873,13 +873,13 @@ mod tests {
         assert!(
             plan.args
                 .iter()
-                .any(|arg| arg == "https://github.com/fabro-sh/fabro.git")
+                .any(|arg| arg == "https://github.com/in-parallel-oy/fabro.git")
         );
         assert!(plan.args.iter().all(|arg| !arg.contains("ghu_secret")));
         assert_eq!(plan.env_value("GIT_CONFIG_COUNT"), Some("1"));
         assert_eq!(
             plan.env_value("GIT_CONFIG_KEY_0"),
-            Some("http.https://github.com/fabro-sh/fabro.git.extraheader")
+            Some("http.https://github.com/in-parallel-oy/fabro.git.extraheader")
         );
         assert!(
             plan.env_value("GIT_CONFIG_VALUE_0")
@@ -907,13 +907,13 @@ mod tests {
         let user_settings_path = temp.path().join("settings.toml");
         fs::write(&user_settings_path, "_version = 1\n").unwrap();
         let run_id = RunId::new();
-        let repo = parse_github_repository_slug("fabro-sh/fabro").unwrap();
+        let repo = parse_github_repository_slug("in-parallel-oy/fabro").unwrap();
         let sha = "0123456789abcdef0123456789abcdef01234567".to_string();
 
         let materialized = build_manifest_from_checkout(ManifestFromCheckoutInput {
             input: AutomationRunMaterializeInput {
                 automation_id: AutomationId::new("nightly").unwrap(),
-                target: target("fabro-sh/fabro", "main", "demo"),
+                target: target("in-parallel-oy/fabro", "main", "demo"),
                 run_id,
                 user_settings_path: user_settings_path.clone(),
                 temp_root: temp.path().to_path_buf(),
@@ -946,7 +946,7 @@ mod tests {
             .git
             .as_ref()
             .expect("git context should be set");
-        assert_eq!(git.origin_url, "https://github.com/fabro-sh/fabro");
+        assert_eq!(git.origin_url, "https://github.com/in-parallel-oy/fabro");
         assert_eq!(git.branch, "main");
         assert_eq!(git.sha.as_deref(), Some(sha.as_str()));
         assert_eq!(git.dirty, DirtyStatus::Clean);
