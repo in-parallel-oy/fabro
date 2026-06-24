@@ -31,10 +31,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use fabro_agent::{Sandbox, ToolEnvProvider, shell_quote};
+use fabro_agent::{AgentEvent, Sandbox, ToolEnvProvider, shell_quote};
 use fabro_graphviz::graph::Node;
-use fabro_model::Catalog;
-use fabro_types::StageTiming;
+use fabro_model::{Catalog, ModelRef, ProviderId, TokenCounts};
+use fabro_types::{SessionCapability, StageTiming};
 use fabro_util::time::elapsed_ms;
 use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
@@ -44,7 +44,7 @@ use super::api::EffectiveRequestControls;
 use super::changed_files;
 use crate::context::{Context, WorkflowContext, keys};
 use crate::error::Error;
-use crate::event::Emitter;
+use crate::event::{Emitter, Event, StageScope};
 use crate::handler::NodeTimeoutPolicy;
 use crate::steering_hub::SteeringHub;
 
@@ -55,6 +55,28 @@ const POLL_INTERVAL: Duration = Duration::from_millis(500);
 /// paste when no marker exists yet (~30s at `POLL_INTERVAL`). A REPL that never
 /// quiesces still proceeds after this — a soft cap, not a hard gate.
 const SETTLE_MAX_POLLS: u32 = 60;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TmuxConversationReuseKey {
+    run_id: String,
+    thread_id: String,
+}
+
+impl TmuxConversationReuseKey {
+    fn from_request(request: &CodergenRunRequest<'_>) -> Option<Self> {
+        if request.context.fidelity() != keys::Fidelity::Full {
+            return None;
+        }
+        let thread_id = request.thread_id?.trim();
+        if thread_id.is_empty() {
+            return None;
+        }
+        Some(Self {
+            run_id: request.context.run_id(),
+            thread_id: thread_id.to_string(),
+        })
+    }
+}
 
 /// Per-session attention marker written by Overseer at
 /// `<worktree>/.overseer/<session>.json`. Only `state` and `seq` gate fabro;
@@ -169,18 +191,127 @@ fn deadline_passed(start: Instant, deadline: Option<Duration>) -> bool {
 }
 
 impl TmuxBackend {
-    fn reject_unsupported_threaded_turn(
+    fn require_supported_handle(
         &self,
-        request: &CodergenRunRequest<'_>,
+        conversation_key: Option<&TmuxConversationReuseKey>,
     ) -> Result<(), Error> {
-        if request.context.fidelity() == keys::Fidelity::Full {
-            if let Some(thread_id) = request.thread_id {
-                return Err(Error::handler(format!(
-                    "backend=\"tmux\" cannot safely run full-fidelity thread \"{thread_id}\" until workflow live-handle provisioning is available"
-                )));
-            }
+        if let Some(key) = conversation_key {
+            return Err(Error::handler(format!(
+                "backend=\"tmux\" cannot safely run full-fidelity thread \"{}\" for run \"{}\" until workflow live-handle provisioning is available",
+                key.thread_id, key.run_id
+            )));
         }
         Ok(())
+    }
+
+    fn tmux_model_ref(node: &Node) -> ModelRef {
+        ModelRef {
+            provider: ProviderId::from(node.provider().unwrap_or("tmux")),
+            model_id: node.model().unwrap_or("interactive-terminal").to_string(),
+            speed: None,
+        }
+    }
+
+    fn emit_session_started(emitter: &Arc<Emitter>, stage_scope: &StageScope, session_id: &str) {
+        emitter.emit_scoped(
+            &Event::AgentSessionStarted {
+                session_id: session_id.to_string(),
+                parent_session_id: None,
+                provider: Some("tmux".to_string()),
+                model: Some("interactive-terminal".to_string()),
+            },
+            stage_scope,
+        );
+    }
+
+    fn emit_session_activated(
+        emitter: &Arc<Emitter>,
+        stage_scope: &StageScope,
+        node: &Node,
+        session_id: &str,
+        thread_id: Option<&str>,
+    ) {
+        emitter.emit_scoped(
+            &Event::AgentSessionActivated {
+                node_id: node.id.clone(),
+                visit: stage_scope.visit,
+                session_id: session_id.to_string(),
+                thread_id: thread_id.map(str::to_string),
+                provider: Some("tmux".to_string()),
+                model: Some("interactive-terminal".to_string()),
+                reasoning_effort: None,
+                speed: None,
+                permission_level: None,
+                capabilities: vec![SessionCapability::Steer],
+            },
+            stage_scope,
+        );
+    }
+
+    fn emit_agent_event(
+        emitter: &Arc<Emitter>,
+        stage_scope: &StageScope,
+        node: &Node,
+        session_id: &str,
+        event: AgentEvent,
+    ) {
+        emitter.emit_scoped(
+            &Event::Agent {
+                stage: node.id.clone(),
+                visit: stage_scope.visit,
+                event,
+                session_id: Some(session_id.to_string()),
+                parent_session_id: None,
+                tool_call_id: None,
+            },
+            stage_scope,
+        );
+    }
+
+    fn emit_turn_failure(
+        emitter: &Arc<Emitter>,
+        stage_scope: &StageScope,
+        node: &Node,
+        session_id: &str,
+        error: &Error,
+    ) {
+        Self::emit_agent_event(
+            emitter,
+            stage_scope,
+            node,
+            session_id,
+            AgentEvent::Warning {
+                kind: "tmux_turn_failed".to_string(),
+                message: error.to_string(),
+                details: serde_json::json!({
+                    "backend": "tmux",
+                    "nodeId": node.id,
+                }),
+            },
+        );
+    }
+
+    fn emit_session_closed(
+        emitter: &Arc<Emitter>,
+        stage_scope: &StageScope,
+        node: &Node,
+        session_id: &str,
+    ) {
+        emitter.emit_scoped(
+            &Event::AgentSessionDeactivated {
+                node_id: node.id.clone(),
+                visit: stage_scope.visit,
+                session_id: session_id.to_string(),
+            },
+            stage_scope,
+        );
+        emitter.emit_scoped(
+            &Event::AgentSessionEnded {
+                session_id: session_id.to_string(),
+                parent_session_id: None,
+            },
+            stage_scope,
+        );
     }
 
     /// Block until the session marker reports `waiting` (ready for input). A
@@ -357,14 +488,24 @@ impl TmuxBackend {
 #[async_trait]
 impl CodergenBackend for TmuxBackend {
     async fn run(&self, request: CodergenRunRequest<'_>) -> Result<CodergenResult, Error> {
-        self.reject_unsupported_threaded_turn(&request)?;
-
         let node = request.node;
         let context = request.context;
         let emitter = request.emitter;
         let sandbox = request.sandbox;
-        let cancel_token = request.cancel_token;
         let launch_start = Instant::now();
+        let stage_scope = StageScope::for_handler(context, &node.id);
+        let session_id = format!("tmux-{}", uuid::Uuid::new_v4());
+        let conversation_key = TmuxConversationReuseKey::from_request(&request);
+        let cancel_token = request.cancel_token;
+
+        Self::emit_session_started(emitter, &stage_scope, &session_id);
+        Self::emit_session_activated(emitter, &stage_scope, node, &session_id, request.thread_id);
+
+        if let Err(err) = self.require_supported_handle(conversation_key.as_ref()) {
+            Self::emit_turn_failure(emitter, &stage_scope, node, &session_id, &err);
+            Self::emit_session_closed(emitter, &stage_scope, node, &session_id);
+            return Err(err);
+        }
 
         // 1. Snapshot git state before the turn.
         let files_before = changed_files::detect_changed_files(sandbox).await;
@@ -386,11 +527,28 @@ impl CodergenBackend for TmuxBackend {
                 &cancel_token,
                 deadline,
             )
-            .await?;
+            .await
+            .inspect_err(|err| {
+                Self::emit_turn_failure(emitter, &stage_scope, node, &session_id, err);
+                Self::emit_session_closed(emitter, &stage_scope, node, &session_id);
+            })?;
 
         // 6. Bracketed-paste + submit.
+        Self::emit_agent_event(
+            emitter,
+            &stage_scope,
+            node,
+            &session_id,
+            AgentEvent::UserInput {
+                text: request.prompt.to_string(),
+            },
+        );
         self.send_prompt(sandbox, &session, request.prompt, &cancel_token)
-            .await?;
+            .await
+            .inspect_err(|err| {
+                Self::emit_turn_failure(emitter, &stage_scope, node, &session_id, err);
+                Self::emit_session_closed(emitter, &stage_scope, node, &session_id);
+            })?;
 
         // 7. Await the marker advancing past seq_before.
         self.await_turn_complete(
@@ -401,10 +559,41 @@ impl CodergenBackend for TmuxBackend {
             &cancel_token,
             deadline,
         )
-        .await?;
+        .await
+        .inspect_err(|err| {
+            Self::emit_turn_failure(emitter, &stage_scope, node, &session_id, err);
+            Self::emit_session_closed(emitter, &stage_scope, node, &session_id);
+        })?;
 
         // 8. Capture pane output as the node response.
-        let text = self.capture_pane(sandbox, &session, &cancel_token).await?;
+        let text = self
+            .capture_pane(sandbox, &session, &cancel_token)
+            .await
+            .inspect_err(|err| {
+                Self::emit_turn_failure(emitter, &stage_scope, node, &session_id, err);
+                Self::emit_session_closed(emitter, &stage_scope, node, &session_id);
+            })?;
+        Self::emit_agent_event(
+            emitter,
+            &stage_scope,
+            node,
+            &session_id,
+            AgentEvent::AssistantMessage {
+                text: text.clone(),
+                model: Self::tmux_model_ref(node),
+                usage: TokenCounts::default(),
+                tool_call_count: 0,
+                context_window: None,
+            },
+        );
+        Self::emit_agent_event(
+            emitter,
+            &stage_scope,
+            node,
+            &session_id,
+            AgentEvent::ProcessingEnd,
+        );
+        Self::emit_session_closed(emitter, &stage_scope, node, &session_id);
 
         // Detect changed files for routing fallbacks.
         let (files_touched, last_file_touched) =
@@ -480,16 +669,24 @@ mod tests {
     }
 
     #[test]
-    fn threaded_full_fidelity_turn_fails_closed() {
+    fn full_fidelity_thread_computes_reuse_key_and_fails_closed() {
         let node = Node::new("work");
         let context = request_context(keys::Fidelity::Full);
+        context.set(keys::INTERNAL_RUN_ID, json!("run-123"));
         let emitter = Arc::new(Emitter::default());
         let dir = tempfile::tempdir().unwrap();
         let sandbox: Arc<dyn Sandbox> = Arc::new(LocalSandbox::new(dir.path().to_path_buf()));
         let request = request_for(&node, &context, &emitter, &sandbox, Some("shared"));
 
+        assert_eq!(
+            TmuxConversationReuseKey::from_request(&request),
+            Some(TmuxConversationReuseKey {
+                run_id: "run-123".to_string(),
+                thread_id: "shared".to_string(),
+            })
+        );
         let err = TmuxBackend::new()
-            .reject_unsupported_threaded_turn(&request)
+            .require_supported_handle(TmuxConversationReuseKey::from_request(&request).as_ref())
             .unwrap_err();
 
         assert!(
@@ -508,8 +705,21 @@ mod tests {
         let sandbox: Arc<dyn Sandbox> = Arc::new(LocalSandbox::new(dir.path().to_path_buf()));
         let request = request_for(&node, &context, &emitter, &sandbox, Some("shared"));
 
+        assert_eq!(TmuxConversationReuseKey::from_request(&request), None);
         TmuxBackend::new()
-            .reject_unsupported_threaded_turn(&request)
+            .require_supported_handle(TmuxConversationReuseKey::from_request(&request).as_ref())
             .expect("non-full fidelity does not require tmux thread reuse");
+    }
+
+    #[test]
+    fn full_fidelity_blank_thread_has_no_reuse_key() {
+        let node = Node::new("work");
+        let context = request_context(keys::Fidelity::Full);
+        let emitter = Arc::new(Emitter::default());
+        let dir = tempfile::tempdir().unwrap();
+        let sandbox: Arc<dyn Sandbox> = Arc::new(LocalSandbox::new(dir.path().to_path_buf()));
+        let request = request_for(&node, &context, &emitter, &sandbox, Some("  "));
+
+        assert_eq!(TmuxConversationReuseKey::from_request(&request), None);
     }
 }
