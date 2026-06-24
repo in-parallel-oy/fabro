@@ -350,11 +350,52 @@ pub fn build_insert_body(
     if let (Some(tag), Value::Object(map)) = (config.egress_tag.as_deref(), &mut instance) {
         map.insert("tags".to_string(), json!({ "items": [tag] }));
     }
+    // Scheduling block — only emitted for SPOT or when a max-run TTL is set, so
+    // plain STANDARD/no-TTL bodies are byte-for-byte unchanged.
+    if let (Some(sched), Value::Object(map)) = (build_scheduling(config), &mut instance) {
+        map.insert("scheduling".to_string(), sched);
+    }
     // `metadata_items` is moved into `instance` via the json! macro above; the
     // local binding is retained only for clarity. Silence unused-mut.
     let _ = &mut metadata_items;
 
     instance
+}
+
+/// Build the optional `scheduling` block for `instances.insert`.
+///
+/// Returns `None` for a plain STANDARD VM with no max-run TTL so the insert body
+/// is unchanged from today (and GCE doesn't reject `instanceTerminationAction`
+/// on a VM that has neither SPOT nor a TTL). When emitted, the block always
+/// carries `instanceTerminationAction: DELETE` — `STOP` is deliberately not
+/// exposed: `disks[].autoDelete` only fires on delete, so a stopped VM would
+/// orphan its boot disk and accrue cost until external reclamation, and the
+/// run lifecycle (host-key poll, SSH session, cleanup delete) assumes the VM is
+/// deleted, never stopped.
+///
+/// SPOT pairing fields (`automaticRestart: false`, `onHostMaintenance:
+/// TERMINATE`) are included unconditionally for SPOT because GCE 400s a SPOT
+/// insert that keeps the default `automaticRestart: true` / `MIGRATE`.
+fn build_scheduling(config: &GcloudConfig) -> Option<Value> {
+    let spot = config.provisioning_model == "SPOT";
+    let has_max = config.max_run_duration_secs.is_some();
+    if !spot && !has_max {
+        return None;
+    }
+
+    let mut map = serde_json::Map::new();
+    map.insert("provisioningModel".to_string(), json!(config.provisioning_model));
+    if spot {
+        map.insert("automaticRestart".to_string(), json!(false));
+        map.insert("onHostMaintenance".to_string(), json!("TERMINATE"));
+    }
+    map.insert("instanceTerminationAction".to_string(), json!("DELETE"));
+    if let Some(secs) = config.max_run_duration_secs {
+        // Compute's Duration is {seconds: string, nanos: int}, NOT the protobuf
+        // well-known "3600s" form — seconds MUST be serialized as a string.
+        map.insert("maxRunDuration".to_string(), json!({ "seconds": secs.to_string() }));
+    }
+    Some(Value::Object(map))
 }
 
 fn operation_name(op: Operation) -> crate::Result<String> {
@@ -459,6 +500,67 @@ mod tests {
         let items = body["metadata"]["items"].as_array().unwrap();
         assert!(items.iter().any(|i| i["key"] == "block-project-ssh-keys" && i["value"] == "TRUE"));
         assert!(items.iter().any(|i| i["key"] == "enable-guest-attributes" && i["value"] == "TRUE"));
+    }
+
+    fn config_with(provisioning_model: &str, max_run_duration_secs: Option<&str>) -> GcloudConfig {
+        let settings = GcloudSettings {
+            project:               Some("proj".to_string()),
+            zone:                  Some("us-central1-a".to_string()),
+            subnetwork:            Some("default".to_string()),
+            vm_image:              Some("projects/proj/global/images/fabro".to_string()),
+            machine_type:          Some("e2-standard-4".to_string()),
+            egress_tag:            Some("fabro-run".to_string()),
+            provisioning_model:    Some(provisioning_model.to_string()),
+            max_run_duration_secs: max_run_duration_secs.map(ToString::to_string),
+            ..Default::default()
+        };
+        GcloudConfig::resolve(&settings, EgressPolicy::Block).unwrap()
+    }
+
+    #[test]
+    fn standard_no_ttl_emits_no_scheduling_key() {
+        let body = build_insert_body(&config(), "fabro-run-x", "fabro:ssh-ed25519 AAAA", "#!/bin/sh", Some("01HY"));
+        // Conditional emit keeps the default body unperturbed.
+        assert_eq!(body.get("scheduling"), None);
+        // Existing security/identity assertions remain intact.
+        assert_eq!(body["serviceAccounts"], json!([]));
+        assert_eq!(body["labels"][MANAGED_LABEL_KEY], MANAGED_LABEL_VALUE);
+        assert_eq!(body["tags"]["items"][0], "fabro-run");
+    }
+
+    #[test]
+    fn spot_emits_spot_scheduling_block() {
+        let body = build_insert_body(&config_with("SPOT", None), "n", "k", "s", None);
+        let sched = &body["scheduling"];
+        assert_eq!(sched["provisioningModel"], "SPOT");
+        assert_eq!(sched["automaticRestart"], json!(false));
+        assert_eq!(sched["onHostMaintenance"], "TERMINATE");
+        assert_eq!(sched["instanceTerminationAction"], "DELETE");
+        assert_eq!(sched.get("maxRunDuration"), None);
+    }
+
+    #[test]
+    fn standard_with_max_run_duration_emits_string_seconds() {
+        let body = build_insert_body(&config_with("STANDARD", Some("3600")), "n", "k", "s", None);
+        let sched = &body["scheduling"];
+        assert_eq!(sched["provisioningModel"], "STANDARD");
+        // STANDARD keeps the default MIGRATE/automaticRestart behaviour.
+        assert_eq!(sched.get("onHostMaintenance"), None);
+        assert_eq!(sched.get("automaticRestart"), None);
+        assert_eq!(sched["instanceTerminationAction"], "DELETE");
+        // seconds MUST be a JSON string, not a number.
+        assert_eq!(sched["maxRunDuration"]["seconds"], json!("3600"));
+    }
+
+    #[test]
+    fn spot_with_max_run_duration_emits_both() {
+        let body = build_insert_body(&config_with("SPOT", Some("3600")), "n", "k", "s", None);
+        let sched = &body["scheduling"];
+        assert_eq!(sched["provisioningModel"], "SPOT");
+        assert_eq!(sched["automaticRestart"], json!(false));
+        assert_eq!(sched["onHostMaintenance"], "TERMINATE");
+        assert_eq!(sched["instanceTerminationAction"], "DELETE");
+        assert_eq!(sched["maxRunDuration"]["seconds"], json!("3600"));
     }
 
     #[test]

@@ -62,3 +62,24 @@ metadata server (and the VM has no attached SA token anyway).
 | `FABRO_GCLOUD_WORKING_DIR` | no | clone destination on the VM |
 | `FABRO_GCLOUD_EGRESS_TAG` | no | VPC firewall network tag |
 | `FABRO_GCLOUD_SA_KEY_JSON` | no | SA key JSON (off-GCP auth fallback) |
+| `FABRO_GCLOUD_PROVISIONING_MODEL` | no | `STANDARD` (default) or `SPOT` |
+| `FABRO_GCLOUD_MAX_RUN_DURATION_SECS` | no | GCE-side hard TTL in seconds (positive integer); unset = run until delete |
+
+### Scheduling (cost knobs)
+
+For `STANDARD` with no TTL, the instance carries no `scheduling` block — the
+insert body is identical to historical behaviour. A block is emitted only when
+`SPOT` is selected or a max-run TTL is set, and always pins
+`instanceTerminationAction: DELETE` (so the boot disk's `autoDelete` reclaims it;
+`STOP` is deliberately not exposed because a stopped VM orphans its disk).
+
+- **`SPOT`** instances are far cheaper but **can be preempted mid-run at any
+  time**. There is no graceful preemption handling: an in-flight run on a
+  preempted VM surfaces as an opaque SSH/IO error, not a clean run event. GCE
+  deletes the VM on preemption (`instanceTerminationAction: DELETE`), which the
+  orphan-delete compensation path tolerates. Enable only for workloads that can
+  absorb abrupt failure + retry.
+- **`FABRO_GCLOUD_MAX_RUN_DURATION_SECS`** applies a single fleet-wide GCE hard
+  TTL to **every** run. A legitimately long run hitting the TTL is force-killed
+  and surfaces the same opaque SSH/IO failure. This is unrelated to the in-VM
+  operation/host-key-poll timeouts. Size it above your worst-case run length.
