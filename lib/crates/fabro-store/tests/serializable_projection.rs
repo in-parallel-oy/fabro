@@ -26,7 +26,7 @@ fn sample_run_spec() -> RunSpec {
         manifest_blob:    None,
         definition_blob:  None,
         git:              Some(fabro_types::GitContext {
-            origin_url:   "https://github.com/fabro-sh/fabro.git".to_string(),
+            origin_url:   "https://github.com/in-parallel-oy/fabro.git".to_string(),
             branch:       "main".to_string(),
             sha:          None,
             dirty:        fabro_types::DirtyStatus::Clean,

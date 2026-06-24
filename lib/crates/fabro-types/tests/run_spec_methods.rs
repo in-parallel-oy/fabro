@@ -32,13 +32,13 @@ fn sample_run_spec() -> RunSpec {
         manifest_blob: None,
         definition_blob: None,
         git: Some(GitContext {
-            origin_url:   "https://github.com/fabro-sh/fabro.git".to_string(),
+            origin_url:   "https://github.com/in-parallel-oy/fabro.git".to_string(),
             branch:       "main".to_string(),
             sha:          Some("abc123".to_string()),
             dirty:        DirtyStatus::Dirty,
             push_outcome: PreRunPushOutcome::SkippedRemoteMismatch {
                 remote:          "https://github.com/user/fork.git".to_string(),
-                repo_origin_url: "https://github.com/fabro-sh/fabro.git".to_string(),
+                repo_origin_url: "https://github.com/in-parallel-oy/fabro.git".to_string(),
             },
         }),
         fork_source_ref: None,
@@ -66,7 +66,7 @@ fn run_spec_getters_return_declared_fields() {
     );
     assert_eq!(
         run_spec.repo_origin_url(),
-        Some("https://github.com/fabro-sh/fabro.git")
+        Some("https://github.com/in-parallel-oy/fabro.git")
     );
     assert_eq!(run_spec.base_branch(), Some("main"));
 }

@@ -49,7 +49,7 @@ fn pr_merge_uses_server_endpoint() {
             .body(
                 serde_json::json!({
                     "number": 123,
-                    "html_url": "https://github.com/fabro-sh/fabro/pull/123",
+                    "html_url": "https://github.com/in-parallel-oy/fabro/pull/123",
                     "method": "squash"
                 })
                 .to_string(),
@@ -69,7 +69,7 @@ fn pr_merge_uses_server_endpoint() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Merged #123 (https://github.com/fabro-sh/fabro/pull/123)
+    Merged #123 (https://github.com/in-parallel-oy/fabro/pull/123)
     ----- stderr -----
     ");
 

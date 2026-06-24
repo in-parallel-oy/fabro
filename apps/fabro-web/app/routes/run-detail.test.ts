@@ -958,14 +958,14 @@ describe("RunDetail full-height child routes", () => {
         owner: "fabro-sh",
         repo: "fabro",
         number: 123,
-        html_url: "https://github.com/fabro-sh/fabro/pull/123",
+        html_url: "https://github.com/in-parallel-oy/fabro/pull/123",
       },
     });
 
     const links = renderer.root.findAll(
       (node) =>
         node.type === "a" &&
-        node.props.href === "https://github.com/fabro-sh/fabro/pull/123",
+        node.props.href === "https://github.com/in-parallel-oy/fabro/pull/123",
     );
 
     expect(links).toHaveLength(1);

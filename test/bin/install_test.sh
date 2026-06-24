@@ -28,7 +28,6 @@ target_triple() {
     Linux)
       case "$arch" in
         x86_64) printf 'x86_64-unknown-linux-gnu\n' ;;
-        aarch64) printf 'aarch64-unknown-linux-gnu\n' ;;
         *) fail "unsupported Linux architecture in test: $arch" ;;
       esac
       ;;
@@ -55,7 +54,7 @@ case "$1" in
     echo "gh version 2.89.0"
     ;;
   api)
-    test "$2" = "repos/fabro-sh/fabro/releases/latest"
+    test "$2" = "repos/in-parallel-oy/fabro/releases/latest"
     test "$3" = "--jq"
     test "$4" = ".tag_name"
     echo "v9.9.9"
@@ -133,7 +132,7 @@ output="$(
 
 [[ -x "$install_dir/fabro" ]] || fail "install script should install fabro binary"
 [[ "$output" == *"Installed fabro 9.9.9"* ]] || fail "install script should report installed version"
-grep -Fqx "api repos/fabro-sh/fabro/releases/latest --jq .tag_name" "$gh_log" \
+grep -Fqx "api repos/in-parallel-oy/fabro/releases/latest --jq .tag_name" "$gh_log" \
   || fail "install script should resolve the stable release tag explicitly"
-grep -Fq "release download v9.9.9 --repo fabro-sh/fabro --pattern $asset" "$gh_log" \
+grep -Fq "release download v9.9.9 --repo in-parallel-oy/fabro --pattern $asset" "$gh_log" \
   || fail "install script should download the resolved stable tag explicitly"

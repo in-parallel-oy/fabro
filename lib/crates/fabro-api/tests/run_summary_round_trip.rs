@@ -221,7 +221,7 @@ fn run_summary_json_matches_openapi_shape() {
                 "owner": "fabro-sh",
                 "repo": "fabro",
                 "number": 123,
-                "html_url": "https://github.com/fabro-sh/fabro/pull/123"
+                "html_url": "https://github.com/in-parallel-oy/fabro/pull/123"
             },
             "current_question": null,
             "superseded_by": null,

@@ -27,7 +27,7 @@ fn automation_response_round_trips_public_json_shape() {
         "name": "Nightly dependency update",
         "description": null,
         "target": {
-            "repository": "fabro-sh/fabro",
+            "repository": "in-parallel-oy/fabro",
             "ref": "main",
             "workflow": "dependency-update"
         },
@@ -57,7 +57,7 @@ fn create_automation_request_round_trips_public_json_shape() {
         "name": "Nightly dependency update",
         "description": "Keep dependencies fresh",
         "target": {
-            "repository": "fabro-sh/fabro",
+            "repository": "in-parallel-oy/fabro",
             "ref": "main",
             "workflow": "dependency-update"
         },
@@ -80,7 +80,7 @@ fn replace_automation_request_round_trips_public_json_shape() {
         "name": "Nightly dependency update",
         "description": "Keep dependencies fresh",
         "target": {
-            "repository": "fabro-sh/fabro",
+            "repository": "in-parallel-oy/fabro",
             "ref": "main",
             "workflow": "dependency-update"
         },

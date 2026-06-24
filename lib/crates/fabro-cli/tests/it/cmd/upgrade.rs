@@ -142,7 +142,7 @@ case "$1" in
     test "$2" = "status"
     ;;
   api)
-    test "$2" = "repos/fabro-sh/fabro/releases/latest"
+    test "$2" = "repos/in-parallel-oy/fabro/releases/latest"
     test "$3" = "--jq"
     test "$4" = ".tag_name"
     echo "v999.0.0"
@@ -173,7 +173,7 @@ esac
         "[VERSION]".to_string(),
     ));
     filters.push((
-        "(aarch64-apple-darwin|x86_64-unknown-linux-gnu|aarch64-unknown-linux-gnu|x86_64-unknown-linux-musl|aarch64-unknown-linux-musl)".to_string(),
+        "(aarch64-apple-darwin|x86_64-unknown-linux-gnu)".to_string(),
         "[TARGET]".to_string(),
     ));
 

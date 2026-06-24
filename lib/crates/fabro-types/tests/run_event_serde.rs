@@ -36,7 +36,7 @@ fn run_created_props_round_trip_templated_settings() {
         provenance:       test_run_provenance(),
         manifest_blob:    None,
         git:              Some(GitContext {
-            origin_url:   "https://github.com/fabro-sh/fabro.git".to_string(),
+            origin_url:   "https://github.com/in-parallel-oy/fabro.git".to_string(),
             branch:       "main".to_string(),
             sha:          None,
             dirty:        DirtyStatus::Unknown,
@@ -57,7 +57,7 @@ fn run_created_props_round_trip_templated_settings() {
     assert_eq!(json["source_directory"], "/Users/client/project");
     assert_eq!(
         json["git"]["origin_url"],
-        "https://github.com/fabro-sh/fabro.git"
+        "https://github.com/in-parallel-oy/fabro.git"
     );
     assert_eq!(json["git"]["branch"], "main");
     assert_eq!(json["git"]["dirty"], "unknown");

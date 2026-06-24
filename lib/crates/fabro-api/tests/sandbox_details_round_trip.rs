@@ -44,7 +44,7 @@ fn sandbox_details_json_matches_openapi_shape() {
                 clone_branch:      None,
                 workspace_root:    Some("/workspace".to_string()),
                 repos_root:        Some("/repos".to_string()),
-                primary_repo_path: Some("/repos/fabro-sh/fabro".to_string()),
+                primary_repo_path: Some("/repos/in-parallel-oy/fabro".to_string()),
                 primary_repo_link: Some("/workspace/fabro".to_string()),
             },
         },
@@ -82,7 +82,7 @@ fn sandbox_details_json_matches_openapi_shape() {
                     "working_directory": "/workspace",
                     "workspace_root": "/workspace",
                     "repos_root": "/repos",
-                    "primary_repo_path": "/repos/fabro-sh/fabro",
+                    "primary_repo_path": "/repos/in-parallel-oy/fabro",
                     "primary_repo_link": "/workspace/fabro"
                 }
             },

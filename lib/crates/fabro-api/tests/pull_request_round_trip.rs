@@ -13,7 +13,7 @@ fn pull_request_response_reuses_domain_types() {
                 "owner": "fabro-sh",
                 "repo": "fabro",
                 "number": 123,
-                "html_url": "https://github.com/fabro-sh/fabro/pull/123"
+                "html_url": "https://github.com/in-parallel-oy/fabro/pull/123"
             },
             "details": null
         },
@@ -55,7 +55,7 @@ fn pull_request_link_json_matches_openapi_shape() {
         "owner": "fabro-sh",
         "repo": "fabro",
         "number": 123,
-        "html_url": "https://github.com/fabro-sh/fabro/pull/123"
+        "html_url": "https://github.com/in-parallel-oy/fabro/pull/123"
     });
 
     let domain_record: PullRequestLink =
@@ -72,7 +72,7 @@ fn pull_request_response_json_matches_openapi_shape() {
                 "owner": "fabro-sh",
                 "repo": "fabro",
                 "number": 123,
-                "html_url": "https://github.com/fabro-sh/fabro/pull/123"
+                "html_url": "https://github.com/in-parallel-oy/fabro/pull/123"
             },
             "details": {
                 "title": "Move PR commands server-side",

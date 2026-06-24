@@ -23,11 +23,11 @@ fn run_sandbox_serializes_canonical_identity_without_identifier() {
                 id:                "container-abc123".to_string(),
                 working_directory: "/workspace".to_string(),
                 repo_cloned:       Some(true),
-                clone_origin_url:  Some("https://github.com/fabro-sh/fabro.git".to_string()),
+                clone_origin_url:  Some("https://github.com/in-parallel-oy/fabro.git".to_string()),
                 clone_branch:      Some("main".to_string()),
                 workspace_root:    Some("/workspace".to_string()),
                 repos_root:        Some("/repos".to_string()),
-                primary_repo_path: Some("/repos/fabro-sh/fabro".to_string()),
+                primary_repo_path: Some("/repos/in-parallel-oy/fabro".to_string()),
                 primary_repo_link: Some("/workspace/fabro".to_string()),
             },
         },
@@ -48,11 +48,11 @@ fn run_sandbox_serializes_canonical_identity_without_identifier() {
                     "id": "container-abc123",
                     "working_directory": "/workspace",
                     "repo_cloned": true,
-                    "clone_origin_url": "https://github.com/fabro-sh/fabro.git",
+                    "clone_origin_url": "https://github.com/in-parallel-oy/fabro.git",
                     "clone_branch": "main",
                     "workspace_root": "/workspace",
                     "repos_root": "/repos",
-                    "primary_repo_path": "/repos/fabro-sh/fabro",
+                    "primary_repo_path": "/repos/in-parallel-oy/fabro",
                     "primary_repo_link": "/workspace/fabro"
                 }
             }

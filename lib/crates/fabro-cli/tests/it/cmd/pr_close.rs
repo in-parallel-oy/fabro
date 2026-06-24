@@ -47,7 +47,7 @@ fn pr_close_uses_server_endpoint() {
             .body(
                 serde_json::json!({
                     "number": 123,
-                    "html_url": "https://github.com/fabro-sh/fabro/pull/123"
+                    "html_url": "https://github.com/in-parallel-oy/fabro/pull/123"
                 })
                 .to_string(),
             );
@@ -66,7 +66,7 @@ fn pr_close_uses_server_endpoint() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Closed #123 (https://github.com/fabro-sh/fabro/pull/123)
+    Closed #123 (https://github.com/in-parallel-oy/fabro/pull/123)
     ----- stderr -----
     ");
 

@@ -79,7 +79,7 @@ fn pr_view_reads_pull_request_from_store_without_pull_request_json() {
             tool_call_id: None,
             actor: None,
             body: EventBody::PullRequestCreated(PullRequestCreatedProps {
-                pr_url:      "https://github.com/fabro-sh/fabro/pull/123".to_string(),
+                pr_url:      "https://github.com/in-parallel-oy/fabro/pull/123".to_string(),
                 pr_number:   123,
                 owner:       "fabro-sh".to_string(),
                 repo:        "fabro".to_string(),
@@ -107,7 +107,7 @@ fn pr_view_reads_pull_request_from_store_without_pull_request_json() {
     exit_code: 0
     ----- stdout -----
     #123 Pull request
-    URL:     https://github.com/fabro-sh/fabro/pull/123
+    URL:     https://github.com/in-parallel-oy/fabro/pull/123
     Details: unavailable (integration_unavailable)
     ----- stderr -----
     ");
@@ -132,7 +132,7 @@ fn pr_view_uses_server_pull_request_endpoint_and_renders_merged_state() {
                             "owner": "fabro-sh",
                             "repo": "fabro",
                             "number": 123,
-                            "html_url": "https://github.com/fabro-sh/fabro/pull/123"
+                            "html_url": "https://github.com/in-parallel-oy/fabro/pull/123"
                         },
                         "details": {
                             "title": "Map the constellations",
@@ -179,7 +179,7 @@ fn pr_view_uses_server_pull_request_endpoint_and_renders_merged_state() {
     ----- stdout -----
     #123 Map the constellations
     State:   merged
-    URL:     https://github.com/fabro-sh/fabro/pull/123
+    URL:     https://github.com/in-parallel-oy/fabro/pull/123
     Branch:  fabro/run/demo -> main
     Author:  testuser
     Changes: +10 -3 (2 files)

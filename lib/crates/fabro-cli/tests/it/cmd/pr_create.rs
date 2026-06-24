@@ -76,7 +76,7 @@ fn pr_create_uses_server_endpoint_and_prints_url() {
                 "owner": "fabro-sh",
                 "repo": "fabro",
                 "number": 123,
-                "html_url": "https://github.com/fabro-sh/fabro/pull/123"
+                "html_url": "https://github.com/in-parallel-oy/fabro/pull/123"
             }));
     });
 
@@ -93,7 +93,7 @@ fn pr_create_uses_server_endpoint_and_prints_url() {
     success: true
     exit_code: 0
     ----- stdout -----
-    https://github.com/fabro-sh/fabro/pull/123
+    https://github.com/in-parallel-oy/fabro/pull/123
     ----- stderr -----
     ");
 
@@ -122,7 +122,7 @@ fn pr_create_passes_force_and_model_to_server() {
                 "owner": "fabro-sh",
                 "repo": "fabro",
                 "number": 123,
-                "html_url": "https://github.com/fabro-sh/fabro/pull/123"
+                "html_url": "https://github.com/in-parallel-oy/fabro/pull/123"
             }));
     });
 
@@ -147,7 +147,7 @@ fn pr_create_passes_force_and_model_to_server() {
       "owner": "fabro-sh",
       "repo": "fabro",
       "number": 123,
-      "html_url": "https://github.com/fabro-sh/fabro/pull/123"
+      "html_url": "https://github.com/in-parallel-oy/fabro/pull/123"
     }
     ----- stderr -----
     "#);

@@ -20,7 +20,7 @@ fn automation_body(id: &str, name: &str) -> Value {
         "name": name,
         "description": "Runs on a schedule.",
         "target": {
-            "repository": "fabro-sh/fabro",
+            "repository": "in-parallel-oy/fabro",
             "ref": "main",
             "workflow": "release"
         },
@@ -45,7 +45,7 @@ fn replacement_body(name: &str) -> Value {
         "name": name,
         "description": null,
         "target": {
-            "repository": "fabro-sh/fabro",
+            "repository": "in-parallel-oy/fabro",
             "ref": "main",
             "workflow": "release"
         },

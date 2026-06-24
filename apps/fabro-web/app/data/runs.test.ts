@@ -80,7 +80,7 @@ describe("mapRunListItem", () => {
         owner: "fabro-sh",
         repo: "fabro",
         number: 123,
-        html_url: "https://github.com/fabro-sh/fabro/pull/123",
+        html_url: "https://github.com/in-parallel-oy/fabro/pull/123",
       },
     });
     const item = mapRunListItem(summary);
@@ -93,7 +93,7 @@ describe("mapRunListItem", () => {
     expect(item.column).toBe("running");
     expect(item.lifecycleStatus).toBe("paused");
     expect(item.number).toBe(123);
-    expect(item.pullRequestUrl).toBe("https://github.com/fabro-sh/fabro/pull/123");
+    expect(item.pullRequestUrl).toBe("https://github.com/in-parallel-oy/fabro/pull/123");
   });
 
   test("uses a fallback title when the server title is blank", () => {
@@ -110,7 +110,7 @@ describe("mapRunToRunItem", () => {
         owner: "fabro-sh",
         repo: "fabro",
         number: 456,
-        html_url: "https://github.com/fabro-sh/fabro/pull/456",
+        html_url: "https://github.com/in-parallel-oy/fabro/pull/456",
       },
     });
     const item = mapRunToRunItem(summary);
@@ -122,7 +122,7 @@ describe("mapRunToRunItem", () => {
     expect(item.elapsed).toBeDefined();
     expect(item.lifecycleStatus).toBe("running");
     expect(item.number).toBe(456);
-    expect(item.pullRequestUrl).toBe("https://github.com/fabro-sh/fabro/pull/456");
+    expect(item.pullRequestUrl).toBe("https://github.com/in-parallel-oy/fabro/pull/456");
   });
 
   test("handles missing optional fields", () => {

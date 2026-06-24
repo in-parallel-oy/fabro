@@ -168,7 +168,7 @@ fn bare_fabro_with_unbound_inputs_validates_structurally_with_warning() {
     ");
 }
 
-/// Regression: https://github.com/fabro-sh/fabro/issues/286
+/// Regression: https://github.com/in-parallel-oy/fabro/issues/286
 ///
 /// Undefined template variables in a prompt loaded via `@file` reference must
 /// surface as the same warning diagnostic as an inline prompt — not a hard
@@ -190,7 +190,7 @@ fn bare_fabro_with_unbound_inputs_in_imported_prompt_validates_structurally_with
     ");
 }
 
-/// Regression: https://github.com/fabro-sh/fabro/issues/330
+/// Regression: https://github.com/in-parallel-oy/fabro/issues/330
 ///
 /// Undefined template variables in partials included by an imported prompt must
 /// surface as structural validation warnings, matching direct `@file` prompts.

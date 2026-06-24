@@ -33,7 +33,7 @@ fn run_sandbox_json_matches_openapi_shape() {
                 id:                "container-abc123".to_string(),
                 working_directory: "/workspace".to_string(),
                 repo_cloned:       Some(false),
-                clone_origin_url:  Some("https://github.com/fabro-sh/fabro.git".to_string()),
+                clone_origin_url:  Some("https://github.com/in-parallel-oy/fabro.git".to_string()),
                 clone_branch:      Some("main".to_string()),
                 workspace_root:    Some("/workspace".to_string()),
                 repos_root:        Some("/repos".to_string()),
@@ -59,7 +59,7 @@ fn run_sandbox_json_matches_openapi_shape() {
                     "id": "container-abc123",
                     "working_directory": "/workspace",
                     "repo_cloned": false,
-                    "clone_origin_url": "https://github.com/fabro-sh/fabro.git",
+                    "clone_origin_url": "https://github.com/in-parallel-oy/fabro.git",
                     "clone_branch": "main",
                     "workspace_root": "/workspace",
                     "repos_root": "/repos"
