@@ -14,23 +14,23 @@ use crate::types::{
 
 /// Accumulated state while decoding the Chat Completions SSE stream.
 pub(super) struct StreamState {
-    provider_name:         String,
-    model:                 String,
-    response_id:           String,
-    response_model:        String,
-    accumulated_text:      String,
+    provider_name: String,
+    model: String,
+    response_id: String,
+    response_model: String,
+    accumulated_text: String,
     accumulated_reasoning: String,
-    tool_calls:            Vec<AccumulatedToolCall>,
-    usage:                 TokenCounts,
-    finish_reason:         FinishReason,
-    text_started:          bool,
-    custom_tool_names:     Vec<String>,
+    tool_calls: Vec<AccumulatedToolCall>,
+    usage: TokenCounts,
+    finish_reason: FinishReason,
+    text_started: bool,
+    custom_tool_names: Vec<String>,
     /// True after `finish_events()` has run (guards against duplicates).
-    finished:              bool,
-    rate_limit:            Option<RateLimitInfo>,
+    finished: bool,
+    rate_limit: Option<RateLimitInfo>,
     /// In-band USD cost from the usage chunk (OpenRouter), surfaced as
     /// authoritative on the final response.
-    cost_usd:              Option<f64>,
+    cost_usd: Option<f64>,
 }
 
 impl StreamState {
@@ -113,10 +113,10 @@ impl StreamState {
                 // Grow the accumulated tool calls vector if needed.
                 while self.tool_calls.len() <= index {
                     self.tool_calls.push(AccumulatedToolCall {
-                        id:        String::new(),
-                        name:      String::new(),
+                        id: String::new(),
+                        name: String::new(),
                         arguments: String::new(),
-                        started:   false,
+                        started: false,
                     });
                 }
 
@@ -173,9 +173,9 @@ impl StreamState {
         // Include reasoning/thinking content if present (Kimi, etc.).
         if !self.accumulated_reasoning.is_empty() {
             content_parts.push(ContentPart::Thinking(ThinkingData {
-                text:      std::mem::take(&mut self.accumulated_reasoning),
+                text: std::mem::take(&mut self.accumulated_reasoning),
                 signature: None,
-                redacted:  false,
+                redacted: false,
             }));
         }
 
@@ -210,22 +210,22 @@ impl StreamState {
         };
 
         let response = Response {
-            id:            self.response_id.clone(),
-            model:         response_model,
-            provider:      self.provider_name.clone(),
-            message:       Message {
-                role:         Role::Assistant,
-                content:      content_parts,
-                name:         None,
+            id: self.response_id.clone(),
+            model: response_model,
+            provider: self.provider_name.clone(),
+            message: Message {
+                role: Role::Assistant,
+                content: content_parts,
+                name: None,
                 tool_call_id: None,
             },
             finish_reason: self.finish_reason.clone(),
-            usage:         self.usage.clone(),
-            raw:           None,
-            warnings:      vec![],
-            rate_limit:    self.rate_limit.clone(),
-            cost_usd:      self.cost_usd,
-            cost_source:   super::translate::authoritative_cost_source(self.cost_usd),
+            usage: self.usage.clone(),
+            raw: None,
+            warnings: vec![],
+            rate_limit: self.rate_limit.clone(),
+            cost_usd: self.cost_usd,
+            cost_source: super::translate::authoritative_cost_source(self.cost_usd),
         };
 
         events.push(StreamEvent::finish(
@@ -273,28 +273,28 @@ mod tests {
     /// unit tests that drive `process_chunk` / `finish_events`.
     fn test_state(provider: &str, model: &str) -> StreamState {
         let request = Request {
-            model:            model.to_string(),
-            messages:         Vec::new(),
-            provider:         None,
-            tools:            None,
-            tool_choice:      None,
-            response_format:  None,
-            temperature:      None,
-            top_p:            None,
-            max_tokens:       None,
-            stop_sequences:   None,
+            model: model.to_string(),
+            messages: Vec::new(),
+            provider: None,
+            tools: None,
+            tool_choice: None,
+            response_format: None,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            stop_sequences: None,
             reasoning_effort: None,
-            speed:            None,
-            metadata:         None,
+            speed: None,
+            metadata: None,
             provider_options: None,
         };
         let params = CodecParams::default();
         let ctx = CodecCtx {
-            request:       &request,
+            request: &request,
             provider_name: provider,
             deployment_id: model,
-            model:         None,
-            params:        &params,
+            model: None,
+            params: &params,
         };
         StreamState::new(&ctx, None)
     }
@@ -434,10 +434,10 @@ mod tests {
         let mut state = test_state("test", "model");
         state.response_id = "resp-1".into();
         state.tool_calls.push(AccumulatedToolCall {
-            id:        "call_1".into(),
-            name:      "get_weather".into(),
+            id: "call_1".into(),
+            name: "get_weather".into(),
             arguments: r#"{"city":"SF"}"#.into(),
-            started:   true,
+            started: true,
         });
 
         let events = state.finish_events();

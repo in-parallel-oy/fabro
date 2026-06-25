@@ -18,37 +18,37 @@ fn templated_settings() -> WorkflowSettings {
 #[test]
 fn run_created_props_round_trip_templated_settings() {
     let props = RunCreatedProps {
-        title:            Some("Ship task".to_string()),
-        settings:         templated_settings(),
-        graph:            Graph::new("ship"),
-        workflow_source:  Some("digraph Ship { start -> exit }".to_string()),
-        workflow_config:  Some("[run]\ngoal = \"Ship {{ env.TASK }}\"".to_string()),
-        labels:           BTreeMap::from([("team".to_string(), "platform".to_string())]),
-        run_dir:          "/tmp/run".to_string(),
+        title: Some("Ship task".to_string()),
+        settings: templated_settings(),
+        graph: Graph::new("ship"),
+        workflow_source: Some("digraph Ship { start -> exit }".to_string()),
+        workflow_config: Some("[run]\ngoal = \"Ship {{ env.TASK }}\"".to_string()),
+        labels: BTreeMap::from([("team".to_string(), "platform".to_string())]),
+        run_dir: "/tmp/run".to_string(),
         source_directory: Some("/Users/client/project".to_string()),
-        workflow_slug:    Some("demo".to_string()),
-        automation:       Some(AutomationRef {
-            id:         "nightly".to_string(),
-            name:       Some("Nightly".to_string()),
+        workflow_slug: Some("demo".to_string()),
+        automation: Some(AutomationRef {
+            id: "nightly".to_string(),
+            name: Some("Nightly".to_string()),
             trigger_id: Some("schedule_1".to_string()),
         }),
-        db_prefix:        Some("run_".to_string()),
-        provenance:       test_run_provenance(),
-        manifest_blob:    None,
-        git:              Some(GitContext {
-            origin_url:   "https://github.com/in-parallel-oy/fabro.git".to_string(),
-            branch:       "main".to_string(),
-            sha:          None,
-            dirty:        DirtyStatus::Unknown,
+        db_prefix: Some("run_".to_string()),
+        provenance: test_run_provenance(),
+        manifest_blob: None,
+        git: Some(GitContext {
+            origin_url: "https://github.com/in-parallel-oy/fabro.git".to_string(),
+            branch: "main".to_string(),
+            sha: None,
+            dirty: DirtyStatus::Unknown,
             push_outcome: PreRunPushOutcome::SkippedNoRemote,
         }),
-        fork_source_ref:  Some(ForkSourceRef {
-            source_run_id:  fixtures::RUN_2,
+        fork_source_ref: Some(ForkSourceRef {
+            source_run_id: fixtures::RUN_2,
             checkpoint_sha: "def456".to_string(),
         }),
-        retried_from:     Some(fixtures::RUN_1),
-        parent_id:        Some(fixtures::RUN_2),
-        web_url:          Some("http://localhost:3000/runs/01JNQVR7M0EJ5GKAT2SC4ERS1Z".to_string()),
+        retried_from: Some(fixtures::RUN_1),
+        parent_id: Some(fixtures::RUN_2),
+        web_url: Some("http://localhost:3000/runs/01JNQVR7M0EJ5GKAT2SC4ERS1Z".to_string()),
     };
 
     let json = serde_json::to_value(&props).expect("props should serialize");
@@ -87,24 +87,24 @@ fn run_created_props_round_trip_templated_settings() {
 #[test]
 fn run_created_props_omits_web_url_when_absent() {
     let props = RunCreatedProps {
-        title:            None,
-        settings:         WorkflowSettings::default(),
-        graph:            Graph::new("ship"),
-        workflow_source:  None,
-        workflow_config:  None,
-        labels:           BTreeMap::new(),
-        run_dir:          "/tmp/run".to_string(),
+        title: None,
+        settings: WorkflowSettings::default(),
+        graph: Graph::new("ship"),
+        workflow_source: None,
+        workflow_config: None,
+        labels: BTreeMap::new(),
+        run_dir: "/tmp/run".to_string(),
         source_directory: None,
-        workflow_slug:    None,
-        automation:       None,
-        db_prefix:        None,
-        provenance:       test_run_provenance(),
-        manifest_blob:    None,
-        git:              None,
-        fork_source_ref:  None,
-        retried_from:     None,
-        parent_id:        None,
-        web_url:          None,
+        workflow_slug: None,
+        automation: None,
+        db_prefix: None,
+        provenance: test_run_provenance(),
+        manifest_blob: None,
+        git: None,
+        fork_source_ref: None,
+        retried_from: None,
+        parent_id: None,
+        web_url: None,
     };
 
     let json = serde_json::to_value(&props).expect("props should serialize");
@@ -149,7 +149,7 @@ fn run_created_props_defaults_additive_fields_for_legacy_events() {
 fn run_parent_events_round_trip_parent_ids() {
     let linked = EventBody::RunParentLinked(RunParentLinkedProps {
         previous_parent_id: None,
-        parent_id:          fixtures::RUN_2,
+        parent_id: fixtures::RUN_2,
     });
     let linked_json = serde_json::to_value(&linked).expect("linked event should serialize");
     assert_eq!(linked_json["event"], "run.parent.linked");

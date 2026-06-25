@@ -19,31 +19,31 @@ use crate::{
 // --- MockSandbox ---
 
 pub struct MockSandbox {
-    pub files:                 HashMap<String, String>,
-    pub exec_result:           ExecResult,
-    pub grep_results:          Vec<String>,
-    pub glob_results:          Vec<String>,
-    pub working_dir:           &'static str,
-    pub platform_str:          &'static str,
-    pub os_version_str:        String,
+    pub files: HashMap<String, String>,
+    pub exec_result: ExecResult,
+    pub grep_results: Vec<String>,
+    pub glob_results: Vec<String>,
+    pub working_dir: &'static str,
+    pub platform_str: &'static str,
+    pub os_version_str: String,
     /// Captures (path, content) pairs from `write_file` calls.
-    pub written_files:         Mutex<Vec<(String, String)>>,
+    pub written_files: Mutex<Vec<(String, String)>>,
     /// Captures the `timeout_ms` argument from `exec_command` calls.
-    pub captured_timeout:      Mutex<Option<u64>>,
+    pub captured_timeout: Mutex<Option<u64>>,
     /// Captures the `command` argument from `exec_command` calls (last only).
-    pub captured_command:      Mutex<Option<String>>,
+    pub captured_command: Mutex<Option<String>>,
     /// Captures all `command` arguments from `exec_command` calls in order.
-    pub captured_commands:     Mutex<Vec<String>>,
+    pub captured_commands: Mutex<Vec<String>>,
     /// Captures all `working_dir` arguments from `exec_command` calls in order.
     pub captured_working_dirs: Mutex<Vec<Option<String>>>,
     /// Captures the `env_vars` argument from `exec_command` calls.
-    pub captured_env_vars:     Mutex<Option<HashMap<String, String>>>,
-    pub start_calls:           Mutex<u32>,
-    pub stop_calls:            Mutex<u32>,
-    pub delete_calls:          Mutex<u32>,
-    pub event_callback:        Option<SandboxEventCallback>,
-    pub stdio_process_error:   Option<String>,
-    pub stdio_process:         Mutex<Option<MockStdioProcess>>,
+    pub captured_env_vars: Mutex<Option<HashMap<String, String>>>,
+    pub start_calls: Mutex<u32>,
+    pub stop_calls: Mutex<u32>,
+    pub delete_calls: Mutex<u32>,
+    pub event_callback: Option<SandboxEventCallback>,
+    pub stdio_process_error: Option<String>,
+    pub stdio_process: Mutex<Option<MockStdioProcess>>,
 }
 
 impl MockSandbox {
@@ -91,31 +91,31 @@ impl MockSandbox {
 impl Default for MockSandbox {
     fn default() -> Self {
         Self {
-            files:                 HashMap::new(),
-            exec_result:           ExecResult {
-                stdout:      "mock output".into(),
-                stderr:      String::new(),
-                exit_code:   Some(0),
+            files: HashMap::new(),
+            exec_result: ExecResult {
+                stdout: "mock output".into(),
+                stderr: String::new(),
+                exit_code: Some(0),
                 termination: CommandTermination::Exited,
                 duration_ms: 10,
             },
-            grep_results:          vec![],
-            glob_results:          vec![],
-            working_dir:           "/work",
-            platform_str:          "darwin",
-            os_version_str:        "Darwin 24.0.0".into(),
-            written_files:         Mutex::new(Vec::new()),
-            captured_timeout:      Mutex::new(None),
-            captured_command:      Mutex::new(None),
-            captured_commands:     Mutex::new(Vec::new()),
+            grep_results: vec![],
+            glob_results: vec![],
+            working_dir: "/work",
+            platform_str: "darwin",
+            os_version_str: "Darwin 24.0.0".into(),
+            written_files: Mutex::new(Vec::new()),
+            captured_timeout: Mutex::new(None),
+            captured_command: Mutex::new(None),
+            captured_commands: Mutex::new(Vec::new()),
             captured_working_dirs: Mutex::new(Vec::new()),
-            captured_env_vars:     Mutex::new(None),
-            start_calls:           Mutex::new(0),
-            stop_calls:            Mutex::new(0),
-            delete_calls:          Mutex::new(0),
-            event_callback:        None,
-            stdio_process_error:   None,
-            stdio_process:         Mutex::new(None),
+            captured_env_vars: Mutex::new(None),
+            start_calls: Mutex::new(0),
+            stop_calls: Mutex::new(0),
+            delete_calls: Mutex::new(0),
+            event_callback: None,
+            stdio_process_error: None,
+            stdio_process: Mutex::new(None),
         }
     }
 }
@@ -124,9 +124,9 @@ type StdioProcessDriver =
     Box<dyn FnOnce(DuplexStream, DuplexStream, StderrCollector) + Send + 'static>;
 
 pub struct MockStdioProcess {
-    exit_code:  Option<i32>,
+    exit_code: Option<i32>,
     wait_delay: Duration,
-    driver:     StdioProcessDriver,
+    driver: StdioProcessDriver,
 }
 
 impl MockStdioProcess {
@@ -134,9 +134,9 @@ impl MockStdioProcess {
         driver: impl FnOnce(DuplexStream, DuplexStream, StderrCollector) + Send + 'static,
     ) -> Self {
         Self {
-            exit_code:  Some(0),
+            exit_code: Some(0),
             wait_delay: Duration::ZERO,
-            driver:     Box::new(driver),
+            driver: Box::new(driver),
         }
     }
 
@@ -154,7 +154,7 @@ impl MockStdioProcess {
 }
 
 struct MockStdioProcessControl {
-    exit_code:  Option<i32>,
+    exit_code: Option<i32>,
     wait_delay: Duration,
 }
 
@@ -279,7 +279,7 @@ impl Sandbox for MockSandbox {
                 stdout: Box::pin(stdout),
                 stderr,
                 handle: StdioProcessHandle::new(MockStdioProcessControl {
-                    exit_code:  process.exit_code,
+                    exit_code: process.exit_code,
                     wait_delay: process.wait_delay,
                 }),
             });
@@ -288,11 +288,11 @@ impl Sandbox for MockSandbox {
         let (stdin, _stdin_read) = duplex(1024);
         let (_stdout_write, stdout) = duplex(1024);
         Ok(StdioProcess {
-            stdin:  Box::pin(stdin),
+            stdin: Box::pin(stdin),
             stdout: Box::pin(stdout),
             stderr: StderrCollector::new(DEFAULT_EXEC_OUTPUT_TAIL_BYTES),
             handle: StdioProcessHandle::new(MockStdioProcessControl {
-                exit_code:  Some(0),
+                exit_code: Some(0),
                 wait_delay: Duration::ZERO,
             }),
         })
@@ -352,12 +352,12 @@ impl Sandbox for MockSandbox {
             provider: "mock".into(),
         });
         self.emit(SandboxEvent::Ready {
-            provider:    "mock".into(),
+            provider: "mock".into(),
             duration_ms: 0,
-            name:        None,
-            cpu:         None,
-            memory:      None,
-            url:         None,
+            name: None,
+            cpu: None,
+            memory: None,
+            url: None,
         });
         Ok(())
     }
@@ -385,7 +385,7 @@ impl Sandbox for MockSandbox {
             provider: "mock".into(),
         });
         self.emit(SandboxEvent::CleanupCompleted {
-            provider:    "mock".into(),
+            provider: "mock".into(),
             duration_ms: 0,
         });
         Ok(())
@@ -470,9 +470,9 @@ impl Sandbox for MutableMockSandbox {
         _cancel_token: Option<CancellationToken>,
     ) -> crate::Result<ExecResult> {
         Ok(ExecResult {
-            stdout:      String::new(),
-            stderr:      String::new(),
-            exit_code:   Some(0),
+            stdout: String::new(),
+            stderr: String::new(),
+            exit_code: Some(0),
             termination: CommandTermination::Exited,
             duration_ms: 0,
         })
@@ -593,7 +593,7 @@ mod fake_provider {
     pub struct FakeSandboxProvider {
         kind: SandboxProviderKind,
         list: FakeList,
-        get:  FakeGet,
+        get: FakeGet,
     }
 
     impl FakeSandboxProvider {

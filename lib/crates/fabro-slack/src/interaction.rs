@@ -39,9 +39,9 @@ pub fn parse_interaction(payload: &Value) -> Option<SlackAnswerSubmission> {
             SlackActionPayload::Yes { .. } => Answer::yes(),
             SlackActionPayload::No { .. } => Answer::no(),
             SlackActionPayload::Selected { key, .. } => Answer {
-                value:           fabro_interview::AnswerValue::Selected(key),
+                value: fabro_interview::AnswerValue::Selected(key),
                 selected_option: None,
-                text:            None,
+                text: None,
             },
             SlackActionPayload::SubmitMulti { .. } => return None,
         },
@@ -103,11 +103,14 @@ mod tests {
         assert_eq!(result.run_id, "run-1");
         assert_eq!(result.qid, "q-1");
         assert_eq!(result.answer.value, AnswerValue::Yes);
-        assert_eq!(result.actor, fabro_types::Principal::Slack {
-            team_id:   "T123".to_string(),
-            user_id:   "U123".to_string(),
-            user_name: Some("ada".to_string()),
-        });
+        assert_eq!(
+            result.actor,
+            fabro_types::Principal::Slack {
+                team_id: "T123".to_string(),
+                user_id: "U123".to_string(),
+                user_name: Some("ada".to_string()),
+            }
+        );
     }
 
     #[test]

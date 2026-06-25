@@ -46,7 +46,7 @@ pub struct LlmLayer {
     pub providers: MergeMap<ProviderSettings>,
     /// Model definitions keyed by canonical model ID.
     #[serde(default, skip_serializing_if = "MergeMap::is_empty")]
-    pub models:    MergeMap<ModelSettings>,
+    pub models: MergeMap<ModelSettings>,
 }
 
 /// One entry in `[llm.providers.<id>]`.
@@ -54,38 +54,38 @@ pub struct LlmLayer {
 #[serde(deny_unknown_fields)]
 pub struct ProviderSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub display_name:   Option<String>,
+    pub display_name: Option<String>,
     /// Adapter registry key (e.g. `"openai_compatible"`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub adapter:        Option<String>,
+    pub adapter: Option<String>,
     /// Wire dialect for this provider's routes (e.g. `"anthropic_messages"`).
     /// Defaults to the adapter's codec; only the default pairing is accepted
     /// today — validated at catalog build.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub codec:          Option<CodecKind>,
+    pub codec: Option<CodecKind>,
     /// Agent profile used for routing/profile-specific behavior.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_profile:  Option<AgentProfileKind>,
+    pub agent_profile: Option<AgentProfileKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub auth:           Option<ProviderAuthConfig>,
+    pub auth: Option<ProviderAuthConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub billing_policy: Option<BillingPolicy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub api_key_url:    Option<String>,
+    pub api_key_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub base_url:       Option<String>,
+    pub base_url: Option<String>,
     /// Extra HTTP headers attached to every outgoing provider request after
     /// credential resolution. Header values are typed so secret-bearing values
     /// stay as references until a later resolution phase.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub extra_headers:  Option<HashMap<String, HeaderValueRef>>,
+    pub extra_headers: Option<HashMap<String, HeaderValueRef>>,
     /// Higher wins; missing → `0`; ties broken by canonical provider ID.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub priority:       Option<i32>,
+    pub priority: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub enabled:        Option<bool>,
+    pub enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub aliases:        Option<Vec<String>>,
+    pub aliases: Option<Vec<String>>,
 }
 
 /// One entry in `[llm.models.<id>]`.
@@ -94,32 +94,32 @@ pub struct ProviderSettings {
 pub struct ModelSettings {
     /// Provider ID this model belongs to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider:             Option<String>,
+    pub provider: Option<String>,
     /// Identifier sent to the provider API. Defaults to the catalog model ID
     /// when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub api_id:               Option<String>,
+    pub api_id: Option<String>,
     /// Wire dialect for this model's route, overriding the provider's codec.
     /// Only the adapter's default pairing is accepted today — validated at
     /// catalog build.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub codec:                Option<CodecKind>,
+    pub codec: Option<CodecKind>,
     /// Billing family for this model, overriding the provider's policy
     /// (e.g. Anthropic cache billing for a Claude model served through an
     /// aggregator).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub billing_policy:       Option<BillingPolicy>,
+    pub billing_policy: Option<BillingPolicy>,
     /// Agent profile used for routing/profile-specific behavior.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_profile:        Option<AgentProfileKind>,
+    pub agent_profile: Option<AgentProfileKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub display_name:         Option<String>,
+    pub display_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub family:               Option<String>,
+    pub family: Option<String>,
     /// Training data cutoff label. Built-ins keep the exact public string
     /// already exposed by the model API.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub training:             Option<String>,
+    pub training: Option<String>,
     /// Public knowledge cutoff label. Built-ins keep values such as
     /// `"May 2025"` exactly; bare TOML dates are normalized to `YYYY-MM-DD`.
     #[serde(
@@ -127,31 +127,31 @@ pub struct ModelSettings {
         deserialize_with = "deserialize_knowledge_cutoff",
         skip_serializing_if = "Option::is_none"
     )]
-    pub knowledge_cutoff:     Option<String>,
+    pub knowledge_cutoff: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default:              Option<bool>,
+    pub default: Option<bool>,
     /// Whether this model should be preferred for small/cheap utility tasks.
     /// Missing or false falls back to the provider default model.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub small_default:        Option<bool>,
+    pub small_default: Option<bool>,
     /// Whether this model should be preferred for provider connectivity
     /// probes. Missing or false falls back to the provider default model.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub probe:                Option<bool>,
+    pub probe: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub enabled:              Option<bool>,
+    pub enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub aliases:              Option<Vec<String>>,
+    pub aliases: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub estimated_output_tps: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limits:               Option<ModelLimits>,
+    pub limits: Option<ModelLimits>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub features:             Option<ModelFeatures>,
+    pub features: Option<ModelFeatures>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub controls:             Option<ModelControls>,
+    pub controls: Option<ModelControls>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub costs:                Option<ModelCostTable>,
+    pub costs: Option<ModelCostTable>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
@@ -160,24 +160,24 @@ pub struct ModelLimits {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub max_output:     Option<i64>,
+    pub max_output: Option<i64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
 #[serde(deny_unknown_fields)]
 pub struct ModelFeatures {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tools:            Option<bool>,
+    pub tools: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub vision:           Option<bool>,
+    pub vision: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reasoning:        Option<bool>,
+    pub reasoning: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<ReasoningEffortFeature>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prompt_cache:     Option<bool>,
+    pub prompt_cache: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sampling_params:  Option<bool>,
+    pub sampling_params: Option<bool>,
 }
 
 /// User-facing allow-list for native control values Fabro accepts on this
@@ -193,7 +193,7 @@ pub struct ModelControls {
     /// `Speed` at catalog build. `Speed::Standard` is implicit and must not
     /// appear here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub speed:            Option<Vec<String>>,
+    pub speed: Option<Vec<String>>,
 }
 
 /// Pricing table. Base [`CostRates`] always apply; per-speed overrides
@@ -202,7 +202,7 @@ pub struct ModelControls {
 #[serde(deny_unknown_fields)]
 pub struct ModelCostTable {
     #[serde(flatten)]
-    pub base:  CostRates,
+    pub base: CostRates,
     /// Per-speed cost overrides (e.g. `costs.speed.fast = { ... }`). Keys
     /// must reference a speed declared in `controls.speed`. `standard` is
     /// not a valid override key — base rates serve standard speed.
@@ -214,9 +214,9 @@ pub struct ModelCostTable {
 #[serde(deny_unknown_fields)]
 pub struct CostRates {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub input_cost_per_mtok:       Option<f64>,
+    pub input_cost_per_mtok: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub output_cost_per_mtok:      Option<f64>,
+    pub output_cost_per_mtok: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_input_cost_per_mtok: Option<f64>,
 }
@@ -557,10 +557,13 @@ credentials = ["env:KIMI_API_KEY", "vault:KIMI_API_KEY"]
         assert_eq!(kimi.agent_profile, Some(AgentProfileKind::OpenAi));
         let auth = kimi.auth.as_ref().expect("expected api_key auth");
         assert_eq!(auth.header, ApiKeyHeaderPolicy::Bearer);
-        assert_eq!(auth.credentials, vec![
-            CredentialRef::Env("KIMI_API_KEY".to_string()),
-            CredentialRef::Vault("KIMI_API_KEY".to_string()),
-        ]);
+        assert_eq!(
+            auth.credentials,
+            vec![
+                CredentialRef::Env("KIMI_API_KEY".to_string()),
+                CredentialRef::Vault("KIMI_API_KEY".to_string()),
+            ]
+        );
         assert_eq!(kimi.base_url.as_deref(), Some("https://api.moonshot.ai/v1"));
         assert_eq!(kimi.priority, Some(60));
         assert_eq!(kimi.enabled, Some(true));
@@ -815,7 +818,7 @@ mystery = 1
         let high = ProviderSettings {
             auth: Some(ProviderAuthConfig {
                 credentials: vec![CredentialRef::Env("FOO".to_string())],
-                header:      ApiKeyHeaderPolicy::Bearer,
+                header: ApiKeyHeaderPolicy::Bearer,
             }),
             ..ProviderSettings::default()
         };
@@ -825,7 +828,7 @@ mystery = 1
                     CredentialRef::Vault("bar".to_string()),
                     CredentialRef::Env("BAZ".to_string()),
                 ],
-                header:      ApiKeyHeaderPolicy::Custom {
+                header: ApiKeyHeaderPolicy::Custom {
                     name: "x-api-key".to_string(),
                 },
             }),
@@ -836,7 +839,7 @@ mystery = 1
             merged.auth,
             Some(ProviderAuthConfig {
                 credentials: vec![CredentialRef::Env("FOO".to_string())],
-                header:      ApiKeyHeaderPolicy::Bearer,
+                header: ApiKeyHeaderPolicy::Bearer,
             })
         );
     }
@@ -847,7 +850,7 @@ mystery = 1
         let low = ProviderSettings {
             auth: Some(ProviderAuthConfig {
                 credentials: vec![CredentialRef::Env("FOO".to_string())],
-                header:      ApiKeyHeaderPolicy::Bearer,
+                header: ApiKeyHeaderPolicy::Bearer,
             }),
             ..ProviderSettings::default()
         };
@@ -856,7 +859,7 @@ mystery = 1
             merged.auth,
             Some(ProviderAuthConfig {
                 credentials: vec![CredentialRef::Env("FOO".to_string())],
-                header:      ApiKeyHeaderPolicy::Bearer,
+                header: ApiKeyHeaderPolicy::Bearer,
             })
         );
     }
@@ -937,19 +940,25 @@ mystery = 1
     fn merge_map_field_merges_per_provider_id() {
         let mut high_map: std::collections::HashMap<String, ProviderSettings> =
             std::collections::HashMap::new();
-        high_map.insert("kimi".to_string(), ProviderSettings {
-            base_url: Some("https://override".to_string()),
-            ..ProviderSettings::default()
-        });
+        high_map.insert(
+            "kimi".to_string(),
+            ProviderSettings {
+                base_url: Some("https://override".to_string()),
+                ..ProviderSettings::default()
+            },
+        );
         let high: MergeMap<ProviderSettings> = MergeMap::from(high_map);
 
         let mut low_map: std::collections::HashMap<String, ProviderSettings> =
             std::collections::HashMap::new();
-        low_map.insert("kimi".to_string(), ProviderSettings {
-            adapter: Some("openai_compatible".to_string()),
-            base_url: Some("https://defaults".to_string()),
-            ..ProviderSettings::default()
-        });
+        low_map.insert(
+            "kimi".to_string(),
+            ProviderSettings {
+                adapter: Some("openai_compatible".to_string()),
+                base_url: Some("https://defaults".to_string()),
+                ..ProviderSettings::default()
+            },
+        );
         let low: MergeMap<ProviderSettings> = MergeMap::from(low_map);
 
         let merged = high.combine(low);
@@ -968,7 +977,7 @@ mystery = 1
         };
         let low = ModelControls {
             reasoning_effort: Some(vec!["low".to_string(), "high".to_string()]),
-            speed:            Some(vec!["fast".to_string()]),
+            speed: Some(vec!["fast".to_string()]),
         };
         let merged = high.combine(low);
         assert_eq!(

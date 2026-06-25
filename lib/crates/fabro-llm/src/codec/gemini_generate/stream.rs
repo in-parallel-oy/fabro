@@ -18,31 +18,31 @@ use crate::types::{
 /// Accumulated state across SSE chunks during streaming.
 pub(super) struct SseAccumulator {
     /// Requested model, stamped into the synthesized final `Response`.
-    model:                  String,
+    model: String,
     /// Configured provider name stamped into the final `Response.provider`.
-    provider:               String,
+    provider: String,
     /// Whether we have emitted a `StreamStart` event.
-    stream_started:         bool,
+    stream_started: bool,
     /// Whether we have emitted a `TextStart` event.
-    text_started:           bool,
+    text_started: bool,
     /// Whether we are currently inside a reasoning (thought) segment.
-    reasoning_started:      bool,
+    reasoning_started: bool,
     /// Accumulated thinking text across all chunks.
-    accumulated_thinking:   String,
+    accumulated_thinking: String,
     /// Accumulated text across all chunks.
-    accumulated_text:       String,
+    accumulated_text: String,
     /// Accumulated tool calls across all chunks.
     accumulated_tool_calls: Vec<ToolCall>,
     /// The `text_id` used for `TextStart`/`TextDelta`/`TextEnd`.
-    text_id:                String,
+    text_id: String,
     /// Latest usage metadata (updated per chunk; final chunk has totals).
-    usage:                  TokenCounts,
+    usage: TokenCounts,
     /// The finish reason string from the candidate, if received.
-    finish_reason_str:      Option<String>,
+    finish_reason_str: Option<String>,
     /// Whether we have emitted the `Finish` event.
-    finished:               bool,
+    finished: bool,
     /// Rate limit info parsed from HTTP response headers.
-    rate_limit:             Option<RateLimitInfo>,
+    rate_limit: Option<RateLimitInfo>,
 }
 
 impl SseAccumulator {
@@ -174,9 +174,9 @@ impl SseAccumulator {
         let mut content_parts: Vec<ContentPart> = Vec::new();
         if !self.accumulated_thinking.is_empty() {
             content_parts.push(ContentPart::Thinking(ThinkingData {
-                text:      self.accumulated_thinking.clone(),
+                text: self.accumulated_thinking.clone(),
                 signature: None,
-                redacted:  false,
+                redacted: false,
             }));
         }
         if !self.accumulated_text.is_empty() {
@@ -187,22 +187,22 @@ impl SseAccumulator {
         }
 
         let response = Response {
-            id:            uuid::Uuid::new_v4().to_string(),
-            model:         self.model.clone(),
-            provider:      self.provider.clone(),
-            message:       Message {
-                role:         Role::Assistant,
-                content:      content_parts,
-                name:         None,
+            id: uuid::Uuid::new_v4().to_string(),
+            model: self.model.clone(),
+            provider: self.provider.clone(),
+            message: Message {
+                role: Role::Assistant,
+                content: content_parts,
+                name: None,
                 tool_call_id: None,
             },
             finish_reason: finish_reason.clone(),
-            usage:         self.usage.clone(),
-            raw:           None,
-            warnings:      vec![],
-            rate_limit:    self.rate_limit.clone(),
-            cost_usd:      None,
-            cost_source:   None,
+            usage: self.usage.clone(),
+            raw: None,
+            warnings: vec![],
+            rate_limit: self.rate_limit.clone(),
+            cost_usd: None,
+            cost_source: None,
         };
 
         StreamEvent::finish(finish_reason, self.usage.clone(), response)
@@ -258,19 +258,19 @@ mod tests {
     /// initial `StreamStart`.
     fn empty_accumulator() -> SseAccumulator {
         SseAccumulator {
-            model:                  "gemini-2.0-flash".to_string(),
-            provider:               "gemini".to_string(),
-            stream_started:         true,
-            text_started:           false,
-            reasoning_started:      false,
-            accumulated_thinking:   String::new(),
-            accumulated_text:       String::new(),
+            model: "gemini-2.0-flash".to_string(),
+            provider: "gemini".to_string(),
+            stream_started: true,
+            text_started: false,
+            reasoning_started: false,
+            accumulated_thinking: String::new(),
+            accumulated_text: String::new(),
             accumulated_tool_calls: Vec::new(),
-            text_id:                "text-1".to_string(),
-            usage:                  TokenCounts::default(),
-            finish_reason_str:      None,
-            finished:               false,
-            rate_limit:             None,
+            text_id: "text-1".to_string(),
+            usage: TokenCounts::default(),
+            finish_reason_str: None,
+            finished: false,
+            rate_limit: None,
         }
     }
 

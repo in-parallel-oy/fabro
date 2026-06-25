@@ -127,7 +127,7 @@ async fn retrieve_run_sandbox(
 
 #[derive(serde::Deserialize)]
 struct SandboxFilesParams {
-    path:  String,
+    path: String,
     #[serde(default)]
     depth: Option<usize>,
 }
@@ -364,7 +364,7 @@ async fn generate_preview_url(
         {
             Ok(preview) => PreviewUrlResponse {
                 token: None,
-                url:   preview.url,
+                url: preview.url,
             },
             Err(err) => {
                 return ApiError::new(StatusCode::CONFLICT, err.display_with_causes())
@@ -375,7 +375,7 @@ async fn generate_preview_url(
         match sandbox.get_preview_link(port).await {
             Ok(preview) => PreviewUrlResponse {
                 token: Some(preview.token),
-                url:   preview.url,
+                url: preview.url,
             },
             Err(err) => {
                 return ApiError::new(StatusCode::CONFLICT, err.display_with_causes())
@@ -545,8 +545,8 @@ async fn list_sandbox_files(
                 .into_iter()
                 .map(|entry| SandboxFileEntry {
                     is_dir: entry.is_dir,
-                    name:   entry.name,
-                    size:   entry.size.map(u64::cast_signed),
+                    name: entry.name,
+                    size: entry.size.map(u64::cast_signed),
                 })
                 .collect(),
         })
@@ -620,7 +620,7 @@ fn sandbox_service_command_failure_detail(result: &fabro_sandbox::ExecResult) ->
 
 struct SandboxServiceDiscovery {
     services: Vec<SandboxService>,
-    source:   SandboxServiceDiscoverySource,
+    source: SandboxServiceDiscoverySource,
 }
 
 fn parse_sandbox_services(output: &str, provider: SandboxProviderKind) -> SandboxServiceDiscovery {
@@ -630,12 +630,12 @@ fn parse_sandbox_services(output: &str, provider: SandboxProviderKind) -> Sandbo
     {
         SandboxServiceDiscovery {
             services: parse_proc_net_listening_services(output, provider),
-            source:   SandboxServiceDiscoverySource::Procfs,
+            source: SandboxServiceDiscoverySource::Procfs,
         }
     } else {
         SandboxServiceDiscovery {
             services: parse_ss_listening_services(output, provider),
-            source:   SandboxServiceDiscoverySource::Ss,
+            source: SandboxServiceDiscoverySource::Ss,
         }
     }
 }
@@ -1048,9 +1048,10 @@ LISTEN 0 4096 [::1]:2500 [::]:* users:(("debug",pid=168,fd=7))
         assert_eq!(services.len(), 4);
         assert_eq!(services[0].port, 3000);
         assert_eq!(services[0].addresses, vec!["127.0.0.1:3000"]);
-        assert_eq!(services[0].processes, vec![
-            r#"users:(("node",pid=42,fd=23))"#
-        ]);
+        assert_eq!(
+            services[0].processes,
+            vec![r#"users:(("node",pid=42,fd=23))"#]
+        );
         assert!(services[0].preview_supported);
         assert_eq!(services[1].port, 5173);
         assert_eq!(services[1].addresses, vec!["0.0.0.0:5173"]);
@@ -1060,9 +1061,10 @@ LISTEN 0 4096 [::1]:2500 [::]:* users:(("debug",pid=168,fd=7))
         assert!(services[2].preview_supported);
         assert_eq!(services[3].port, 2500);
         assert_eq!(services[3].addresses, vec!["[::1]:2500"]);
-        assert_eq!(services[3].processes, vec![
-            r#"users:(("debug",pid=168,fd=7))"#
-        ]);
+        assert_eq!(
+            services[3].processes,
+            vec![r#"users:(("debug",pid=168,fd=7))"#]
+        );
         assert!(!services[3].preview_supported);
     }
 
@@ -1094,19 +1096,22 @@ LISTEN 0 4096 [::]:3000 [::]:* users:(("vite",pid=84,fd=19))
             SandboxProviderKind::Daytona,
         );
 
-        assert_eq!(services, vec![SandboxService {
-            port:              3000,
-            addresses:         vec![
-                "127.0.0.1:3000".to_string(),
-                "0.0.0.0:3000".to_string(),
-                "[::]:3000".to_string(),
-            ],
-            processes:         vec![
-                r#"users:(("node",pid=42,fd=23))"#.to_string(),
-                r#"users:(("vite",pid=84,fd=19))"#.to_string(),
-            ],
-            preview_supported: true,
-        }]);
+        assert_eq!(
+            services,
+            vec![SandboxService {
+                port: 3000,
+                addresses: vec![
+                    "127.0.0.1:3000".to_string(),
+                    "0.0.0.0:3000".to_string(),
+                    "[::]:3000".to_string(),
+                ],
+                processes: vec![
+                    r#"users:(("node",pid=42,fd=23))"#.to_string(),
+                    r#"users:(("vite",pid=84,fd=19))"#.to_string(),
+                ],
+                preview_supported: true,
+            }]
+        );
     }
 
     #[test]
@@ -1127,32 +1132,35 @@ FABRO_PROC_NET_TCP /proc/net/tcp6
         );
 
         assert_eq!(discovery.source, SandboxServiceDiscoverySource::Procfs);
-        assert_eq!(discovery.services, vec![
-            SandboxService {
-                port:              3000,
-                addresses:         vec!["127.0.0.1:3000".to_string()],
-                processes:         vec![],
-                preview_supported: true,
-            },
-            SandboxService {
-                port:              5173,
-                addresses:         vec!["0.0.0.0:5173".to_string()],
-                processes:         vec![],
-                preview_supported: true,
-            },
-            SandboxService {
-                port:              8080,
-                addresses:         vec!["[::]:8080".to_string()],
-                processes:         vec![],
-                preview_supported: true,
-            },
-            SandboxService {
-                port:              2500,
-                addresses:         vec!["[::1]:2500".to_string()],
-                processes:         vec![],
-                preview_supported: false,
-            },
-        ]);
+        assert_eq!(
+            discovery.services,
+            vec![
+                SandboxService {
+                    port: 3000,
+                    addresses: vec!["127.0.0.1:3000".to_string()],
+                    processes: vec![],
+                    preview_supported: true,
+                },
+                SandboxService {
+                    port: 5173,
+                    addresses: vec!["0.0.0.0:5173".to_string()],
+                    processes: vec![],
+                    preview_supported: true,
+                },
+                SandboxService {
+                    port: 8080,
+                    addresses: vec!["[::]:8080".to_string()],
+                    processes: vec![],
+                    preview_supported: true,
+                },
+                SandboxService {
+                    port: 2500,
+                    addresses: vec!["[::1]:2500".to_string()],
+                    processes: vec![],
+                    preview_supported: false,
+                },
+            ]
+        );
     }
 
     #[test]
@@ -1167,9 +1175,9 @@ FABRO_PROC_NET_TCP /proc/net/tcp6
     #[test]
     fn sandbox_service_command_failure_prefers_stderr_then_stdout() {
         let mut result = fabro_sandbox::ExecResult {
-            stdout:      "stdout detail".to_string(),
-            stderr:      "stderr detail".to_string(),
-            exit_code:   Some(127),
+            stdout: "stdout detail".to_string(),
+            stderr: "stderr detail".to_string(),
+            exit_code: Some(127),
             termination: fabro_types::CommandTermination::Exited,
             duration_ms: 10,
         };
@@ -1192,9 +1200,9 @@ FABRO_PROC_NET_TCP /proc/net/tcp6
     }
 
     struct FakeVncSandbox {
-        start_error:      Option<&'static str>,
+        start_error: Option<&'static str>,
         signed_url_error: Option<&'static str>,
-        signed_url:       &'static str,
+        signed_url: &'static str,
     }
 
     impl VncSandbox for FakeVncSandbox {
@@ -1230,9 +1238,9 @@ FABRO_PROC_NET_TCP /proc/net/tcp6
     #[tokio::test]
     async fn vnc_preview_response_uses_daytona_defaults() {
         let sandbox = FakeVncSandbox {
-            start_error:      None,
+            start_error: None,
             signed_url_error: None,
-            signed_url:       "https://preview.example.test/sandbox/6080",
+            signed_url: "https://preview.example.test/sandbox/6080",
         };
 
         let response = build_vnc_preview_response(&sandbox).await.unwrap();
@@ -1278,9 +1286,9 @@ FABRO_PROC_NET_TCP /proc/net/tcp6
     #[tokio::test]
     async fn vnc_preview_response_maps_computer_use_start_failure_to_conflict() {
         let sandbox = FakeVncSandbox {
-            start_error:      Some("computer use failed"),
+            start_error: Some("computer use failed"),
             signed_url_error: None,
-            signed_url:       "https://preview.example.test/sandbox/6080",
+            signed_url: "https://preview.example.test/sandbox/6080",
         };
 
         let response = build_vnc_preview_response(&sandbox).await.unwrap_err();
@@ -1291,9 +1299,9 @@ FABRO_PROC_NET_TCP /proc/net/tcp6
     #[tokio::test]
     async fn vnc_preview_response_maps_signed_preview_failure_to_conflict() {
         let sandbox = FakeVncSandbox {
-            start_error:      None,
+            start_error: None,
             signed_url_error: Some("preview failed"),
-            signed_url:       "https://preview.example.test/sandbox/6080",
+            signed_url: "https://preview.example.test/sandbox/6080",
         };
 
         let response = build_vnc_preview_response(&sandbox).await.unwrap_err();

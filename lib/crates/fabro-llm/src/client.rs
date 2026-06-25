@@ -20,21 +20,21 @@ use crate::types::{Request, Response, Speed, StreamEvent, Warning};
 /// The core client that routes requests to provider adapters (Section 2.2, 3).
 #[derive(Clone)]
 pub struct Client {
-    providers:        HashMap<String, Arc<dyn ProviderAdapter>>,
+    providers: HashMap<String, Arc<dyn ProviderAdapter>>,
     default_provider: Option<String>,
-    middleware:       Vec<Arc<dyn Middleware>>,
-    catalog:          Option<Arc<Catalog>>,
+    middleware: Vec<Arc<dyn Middleware>>,
+    catalog: Option<Arc<Catalog>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ProviderRegistrationIssue {
     pub provider: ProviderId,
-    pub error:    Error,
+    pub error: Error,
 }
 
 #[derive(Clone)]
 pub struct ClientRegistrationReport {
-    pub client:              Client,
+    pub client: Client,
     pub registration_issues: Vec<ProviderRegistrationIssue>,
 }
 
@@ -75,7 +75,7 @@ impl Client {
             .await
             .map_err(|err| Error::Configuration {
                 message: format!("Failed to resolve LLM credentials: {err}"),
-                source:  None,
+                source: None,
             })?;
         Self::from_credentials(resolved.credentials, catalog).await
     }
@@ -95,7 +95,7 @@ impl Client {
             .await
             .map_err(|err| Error::Configuration {
                 message: format!("Failed to resolve LLM credentials: {err}"),
-                source:  None,
+                source: None,
             })?;
         Ok(Self::from_credentials_report(resolved.credentials, catalog).await)
     }
@@ -138,10 +138,10 @@ impl Client {
         mode: RegistrationMode,
     ) -> (ClientRegistrationReport, Option<Error>) {
         let mut client = Self {
-            providers:        HashMap::new(),
+            providers: HashMap::new(),
             default_provider: None,
-            middleware:       Vec::new(),
-            catalog:          Some(Arc::clone(&catalog)),
+            middleware: Vec::new(),
+            catalog: Some(Arc::clone(&catalog)),
         };
         let mut registration_issues = Vec::new();
 
@@ -152,7 +152,7 @@ impl Client {
                 let kind_options = match provider.adapter {
                     AdapterKind::OpenAi => AdapterKindOptions::OpenAi(OpenAiAdapterOptions {
                         codex_mode: credential.codex_mode,
-                        org_id:     credential.org_id,
+                        org_id: credential.org_id,
                         project_id: credential.project_id,
                     }),
                     _ => AdapterKindOptions::None,
@@ -170,7 +170,7 @@ impl Client {
                     message: format!(
                         "Provider \"{provider_id}\" is not supported by credential-only registration"
                     ),
-                    source:  None,
+                    source: None,
                 })
             };
             match adapter {
@@ -274,7 +274,7 @@ impl Client {
             .or(self.default_provider.as_deref())
             .ok_or_else(|| Error::Configuration {
                 message: "No provider specified and no default provider set".into(),
-                source:  None,
+                source: None,
             })?;
         let provider_name = self.canonical_provider_name(provider_name);
 
@@ -283,7 +283,7 @@ impl Client {
             .cloned()
             .ok_or_else(|| Error::Configuration {
                 message: format!("Provider '{provider_name}' not registered"),
-                source:  None,
+                source: None,
             })
     }
 
@@ -305,7 +305,7 @@ impl Client {
                         "model '{model_id}' does not support reasoning_effort '{effort}'; allowed values: {}",
                         format_control_values(&settings.controls.reasoning_effort),
                     ),
-                    source:  None,
+                    source: None,
                 });
             }
         }
@@ -317,7 +317,7 @@ impl Client {
                         "model '{model_id}' does not support speed '{speed}'; allowed values: standard{}",
                         format_additional_speeds(&settings.controls.speed),
                     ),
-                    source:  None,
+                    source: None,
                 });
             }
         }
@@ -433,7 +433,7 @@ impl Client {
                     "provider '{}' does not support input token counting",
                     provider.name()
                 ),
-                source:  None,
+                source: None,
             }),
             Err(error)
                 if preference == InputTokenCountPreference::PreferProvider
@@ -569,7 +569,7 @@ fn fallback_estimate(
     {
         count.warnings.push(Warning {
             message: message.to_string(),
-            code:    Some(code.to_string()),
+            code: Some(code.to_string()),
         });
     }
     count
@@ -632,21 +632,21 @@ mod tests {
 
         async fn complete(&self, _request: &Request) -> Result<Response, Error> {
             Ok(Response {
-                id:            "resp_mock".into(),
-                model:         "mock-model".into(),
-                provider:      self.provider_name.clone(),
-                message:       Message::assistant(&self.response_text),
+                id: "resp_mock".into(),
+                model: "mock-model".into(),
+                provider: self.provider_name.clone(),
+                message: Message::assistant(&self.response_text),
                 finish_reason: FinishReason::Stop,
-                usage:         TokenCounts {
+                usage: TokenCounts {
                     input_tokens: 10,
                     output_tokens: 20,
                     ..Default::default()
                 },
-                raw:           None,
-                warnings:      vec![],
-                rate_limit:    None,
-                cost_usd:      None,
-                cost_source:   None,
+                raw: None,
+                warnings: vec![],
+                rate_limit: None,
+                cost_usd: None,
+                cost_source: None,
             })
         }
 
@@ -679,37 +679,37 @@ mod tests {
 
     fn test_request() -> Request {
         Request {
-            model:            "mock-model".into(),
-            messages:         vec![Message::user("Hello")],
-            provider:         None,
-            tools:            None,
-            tool_choice:      None,
-            response_format:  None,
-            temperature:      None,
-            top_p:            None,
-            max_tokens:       None,
-            stop_sequences:   None,
+            model: "mock-model".into(),
+            messages: vec![Message::user("Hello")],
+            provider: None,
+            tools: None,
+            tool_choice: None,
+            response_format: None,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            stop_sequences: None,
             reasoning_effort: None,
-            speed:            None,
-            metadata:         None,
+            speed: None,
+            metadata: None,
             provider_options: None,
         }
     }
 
     struct CountingProvider {
         provider_name: String,
-        count_result:  std::sync::Mutex<Result<Option<InputTokenCount>, Error>>,
-        count_calls:   Arc<AtomicUsize>,
-        reject_named:  bool,
+        count_result: std::sync::Mutex<Result<Option<InputTokenCount>, Error>>,
+        count_calls: Arc<AtomicUsize>,
+        reject_named: bool,
     }
 
     impl CountingProvider {
         fn new(result: Result<Option<InputTokenCount>, Error>) -> Self {
             Self {
                 provider_name: "counter".to_string(),
-                count_result:  std::sync::Mutex::new(result),
-                count_calls:   Arc::new(AtomicUsize::new(0)),
-                reject_named:  false,
+                count_result: std::sync::Mutex::new(result),
+                count_calls: Arc::new(AtomicUsize::new(0)),
+                reject_named: false,
             }
         }
 
@@ -758,10 +758,10 @@ mod tests {
     fn provider_count(tokens: i64) -> InputTokenCount {
         InputTokenCount {
             input_tokens: tokens,
-            method:       InputTokenCountMethod::ProviderApi,
-            provider:     "counter".to_string(),
-            model:        "mock-model".to_string(),
-            warnings:     vec![],
+            method: InputTokenCountMethod::ProviderApi,
+            provider: "counter".to_string(),
+            model: "mock-model".to_string(),
+            warnings: vec![],
         }
     }
 
@@ -1008,11 +1008,11 @@ output_cost_per_mtok = 2.0
         let errors = vec![
             Error::Network {
                 message: "network down".to_string(),
-                source:  None,
+                source: None,
             },
             Error::RequestTimeout {
                 message: "timed out".to_string(),
-                source:  None,
+                source: None,
             },
             provider_error(ProviderErrorKind::RateLimit),
             provider_error(ProviderErrorKind::Server),
@@ -1043,7 +1043,7 @@ output_cost_per_mtok = 2.0
             provider_error(ProviderErrorKind::QuotaExceeded),
             Error::Configuration {
                 message: "bad config".to_string(),
-                source:  None,
+                source: None,
             },
             Error::UnsupportedToolChoice {
                 message: "bad tool choice".to_string(),
@@ -1074,10 +1074,13 @@ output_cost_per_mtok = 2.0
             .await
             .unwrap_err();
 
-        assert!(matches!(err, Error::Provider {
-            kind: ProviderErrorKind::RateLimit,
-            ..
-        }));
+        assert!(matches!(
+            err,
+            Error::Provider {
+                kind: ProviderErrorKind::RateLimit,
+                ..
+            }
+        ));
     }
 
     #[tokio::test]
@@ -1303,25 +1306,25 @@ output_cost_per_mtok = 2.0
         let client = Client::from_credentials(
             vec![
                 ApiCredential {
-                    provider:      ProviderId::anthropic(),
-                    auth_header:   Some(ApiKeyHeader::Custom {
-                        name:  "x-api-key".to_string(),
+                    provider: ProviderId::anthropic(),
+                    auth_header: Some(ApiKeyHeader::Custom {
+                        name: "x-api-key".to_string(),
                         value: "anthropic-key".to_string(),
                     }),
                     extra_headers: HashMap::new(),
-                    base_url:      None,
-                    codex_mode:    false,
-                    org_id:        None,
-                    project_id:    None,
+                    base_url: None,
+                    codex_mode: false,
+                    org_id: None,
+                    project_id: None,
                 },
                 ApiCredential {
-                    provider:      ProviderId::openai(),
-                    auth_header:   Some(ApiKeyHeader::Bearer("openai-key".to_string())),
+                    provider: ProviderId::openai(),
+                    auth_header: Some(ApiKeyHeader::Bearer("openai-key".to_string())),
                     extra_headers: HashMap::new(),
-                    base_url:      None,
-                    codex_mode:    false,
-                    org_id:        None,
-                    project_id:    None,
+                    base_url: None,
+                    codex_mode: false,
+                    org_id: None,
+                    project_id: None,
                 },
             ],
             catalog,
@@ -1340,13 +1343,13 @@ output_cost_per_mtok = 2.0
         let catalog = catalog_with("");
         let client = Client::from_credentials(
             vec![ApiCredential {
-                provider:      ProviderId::new("kimi"),
-                auth_header:   Some(ApiKeyHeader::Bearer("kimi-key".to_string())),
+                provider: ProviderId::new("kimi"),
+                auth_header: Some(ApiKeyHeader::Bearer("kimi-key".to_string())),
                 extra_headers: HashMap::new(),
-                base_url:      None,
-                codex_mode:    false,
-                org_id:        None,
-                project_id:    None,
+                base_url: None,
+                codex_mode: false,
+                org_id: None,
+                project_id: None,
             }],
             catalog,
         )
@@ -1362,13 +1365,13 @@ output_cost_per_mtok = 2.0
         let catalog = catalog_with("");
         let result = Client::from_credentials(
             vec![ApiCredential {
-                provider:      fabro_model::ProviderId::new("custom"),
-                auth_header:   Some(ApiKeyHeader::Bearer("custom-key".to_string())),
+                provider: fabro_model::ProviderId::new("custom"),
+                auth_header: Some(ApiKeyHeader::Bearer("custom-key".to_string())),
                 extra_headers: HashMap::new(),
-                base_url:      None,
-                codex_mode:    false,
-                org_id:        None,
-                project_id:    None,
+                base_url: None,
+                codex_mode: false,
+                org_id: None,
+                project_id: None,
             }],
             catalog,
         )
@@ -1416,22 +1419,22 @@ reasoning = false
         let report = Client::from_credentials_report(
             vec![
                 ApiCredential {
-                    provider:      ProviderId::new("acme"),
-                    auth_header:   Some(ApiKeyHeader::Bearer("acme-key".to_string())),
+                    provider: ProviderId::new("acme"),
+                    auth_header: Some(ApiKeyHeader::Bearer("acme-key".to_string())),
                     extra_headers: HashMap::new(),
-                    base_url:      None,
-                    codex_mode:    false,
-                    org_id:        None,
-                    project_id:    None,
+                    base_url: None,
+                    codex_mode: false,
+                    org_id: None,
+                    project_id: None,
                 },
                 ApiCredential {
-                    provider:      ProviderId::openai(),
-                    auth_header:   Some(ApiKeyHeader::Bearer("openai-key".to_string())),
+                    provider: ProviderId::openai(),
+                    auth_header: Some(ApiKeyHeader::Bearer("openai-key".to_string())),
                     extra_headers: HashMap::new(),
-                    base_url:      None,
-                    codex_mode:    false,
-                    org_id:        None,
-                    project_id:    None,
+                    base_url: None,
+                    codex_mode: false,
+                    org_id: None,
+                    project_id: None,
                 },
             ],
             Arc::clone(&catalog),
@@ -1456,16 +1459,16 @@ reasoning = false
     async fn from_source_registers_provider_from_resolved_credentials() {
         let source = StubSource {
             credentials: vec![ApiCredential {
-                provider:      ProviderId::anthropic(),
-                auth_header:   Some(ApiKeyHeader::Custom {
-                    name:  "x-api-key".to_string(),
+                provider: ProviderId::anthropic(),
+                auth_header: Some(ApiKeyHeader::Custom {
+                    name: "x-api-key".to_string(),
                     value: "anthropic-key".to_string(),
                 }),
                 extra_headers: HashMap::new(),
-                base_url:      None,
-                codex_mode:    false,
-                org_id:        None,
-                project_id:    None,
+                base_url: None,
+                codex_mode: false,
+                org_id: None,
+                project_id: None,
             }],
         };
         let catalog = catalog_with("");
@@ -1507,13 +1510,13 @@ reasoning = false
 
         let client = Client::from_credentials(
             vec![ApiCredential {
-                provider:      fabro_model::ProviderId::new("acme"),
-                auth_header:   Some(ApiKeyHeader::Bearer("acme-key".to_string())),
+                provider: fabro_model::ProviderId::new("acme"),
+                auth_header: Some(ApiKeyHeader::Bearer("acme-key".to_string())),
                 extra_headers: HashMap::new(),
-                base_url:      None,
-                codex_mode:    false,
-                org_id:        None,
-                project_id:    None,
+                base_url: None,
+                codex_mode: false,
+                org_id: None,
+                project_id: None,
             }],
             Arc::clone(&catalog),
         )
@@ -1557,13 +1560,13 @@ reasoning = false
 
         let client = Client::from_credentials(
             vec![ApiCredential {
-                provider:      fabro_model::ProviderId::new("acme"),
-                auth_header:   Some(ApiKeyHeader::Bearer("acme-key".to_string())),
+                provider: fabro_model::ProviderId::new("acme"),
+                auth_header: Some(ApiKeyHeader::Bearer("acme-key".to_string())),
                 extra_headers: HashMap::new(),
-                base_url:      None,
-                codex_mode:    false,
-                org_id:        None,
-                project_id:    None,
+                base_url: None,
+                codex_mode: false,
+                org_id: None,
+                project_id: None,
             }],
             Arc::clone(&catalog),
         )
@@ -1671,16 +1674,16 @@ reasoning_effort = "levels"
 
         let client = Client::from_credentials(
             vec![ApiCredential {
-                provider:      fabro_model::ProviderId::new("portkey"),
-                auth_header:   None,
+                provider: fabro_model::ProviderId::new("portkey"),
+                auth_header: None,
                 extra_headers: HashMap::from([(
                     "x-portkey-api-key".to_string(),
                     "pk-live".to_string(),
                 )]),
-                base_url:      None,
-                codex_mode:    false,
-                org_id:        None,
-                project_id:    None,
+                base_url: None,
+                codex_mode: false,
+                org_id: None,
+                project_id: None,
             }],
             Arc::clone(&catalog),
         )

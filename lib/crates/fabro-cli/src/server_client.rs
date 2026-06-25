@@ -393,7 +393,7 @@ mod tests {
             .put(
                 &target,
                 AuthEntry::DevToken(DevTokenEntry {
-                    token:        token.to_string(),
+                    token: token.to_string(),
                     logged_in_at: Utc::now(),
                 }),
             )
@@ -624,11 +624,11 @@ mod tests {
             refresh_token: "refresh-token".to_string(),
             refresh_token_expires_at,
             subject: StoredSubject {
-                idp_issuer:  "https://github.com/login/oauth".to_string(),
+                idp_issuer: "https://github.com/login/oauth".to_string(),
                 idp_subject: "subject-123".to_string(),
-                login:       "octocat".to_string(),
-                name:        "Octo Cat".to_string(),
-                email:       "octocat@example.com".to_string(),
+                login: "octocat".to_string(),
+                name: "Octo Cat".to_string(),
+                email: "octocat@example.com".to_string(),
             },
             logged_in_at: Utc::now(),
         })

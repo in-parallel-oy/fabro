@@ -28,7 +28,7 @@ pub(crate) fn resolve_run_environment(
 
     let Some(base) = catalog.get(&id) else {
         errors.push(ResolveError::Invalid {
-            path:   "run.environment.id".to_string(),
+            path: "run.environment.id".to_string(),
             reason: format!("unknown environment: {id}"),
         });
         return RunEnvironmentSettings::from_environment(id, EnvironmentSettings::default());
@@ -90,14 +90,14 @@ fn resolve_cwd(raw: Option<&str>, path: &str, errors: &mut Vec<ResolveError>) ->
     let raw = raw?;
     if raw.trim().is_empty() {
         errors.push(ResolveError::Invalid {
-            path:   path.to_string(),
+            path: path.to_string(),
             reason: "cwd must not be empty".to_string(),
         });
         return None;
     }
     if !Path::new(raw).is_absolute() {
         errors.push(ResolveError::Invalid {
-            path:   path.to_string(),
+            path: path.to_string(),
             reason: "cwd must be an absolute path".to_string(),
         });
         return None;
@@ -110,7 +110,7 @@ fn parse_provider(raw: &str, path: &str, errors: &mut Vec<ResolveError>) -> Envi
         provider
     } else {
         errors.push(ResolveError::Invalid {
-            path:   path.to_string(),
+            path: path.to_string(),
             reason: format!("unknown environment provider: {raw}"),
         });
         EnvironmentProvider::Local
@@ -122,7 +122,7 @@ fn resolve_image(layer: Option<&EnvironmentImageLayer>) -> EnvironmentImageSetti
         return EnvironmentImageSettings::default();
     };
     EnvironmentImageSettings {
-        docker:     layer.docker.clone(),
+        docker: layer.docker.clone(),
         dockerfile: layer.dockerfile.as_ref().map(dockerfile_source),
     }
 }
@@ -132,9 +132,9 @@ fn resolve_resources(layer: Option<&EnvironmentResourcesLayer>) -> EnvironmentRe
         return EnvironmentResourcesSettings::default();
     };
     EnvironmentResourcesSettings {
-        cpu:    layer.cpu,
+        cpu: layer.cpu,
         memory: layer.memory,
-        disk:   layer.disk,
+        disk: layer.disk,
     }
 }
 
@@ -150,7 +150,7 @@ fn resolve_network(
     for (index, cidr) in layer.allow.iter().enumerate() {
         if cidr.parse::<ipnet::IpNet>().is_err() {
             errors.push(ResolveError::Invalid {
-                path:   format!("{path}.allow[{index}]"),
+                path: format!("{path}.allow[{index}]"),
                 reason: format!("invalid CIDR: {cidr}"),
             });
         }
@@ -177,7 +177,7 @@ fn parse_network_mode(
         mode
     } else {
         errors.push(ResolveError::Invalid {
-            path:   path.to_string(),
+            path: path.to_string(),
             reason: format!("unknown environment network mode: {raw}"),
         });
         EnvironmentNetworkMode::AllowAll
@@ -189,9 +189,9 @@ fn resolve_lifecycle(layer: Option<&EnvironmentLifecycleLayer>) -> EnvironmentLi
         return EnvironmentLifecycleSettings::default();
     };
     EnvironmentLifecycleSettings {
-        preserve:         layer.preserve.unwrap_or(false),
+        preserve: layer.preserve.unwrap_or(false),
         stop_on_terminal: layer.stop_on_terminal.unwrap_or(true),
-        auto_stop:        layer.auto_stop,
+        auto_stop: layer.auto_stop,
     }
 }
 
@@ -227,7 +227,7 @@ fn validate_provider_capabilities(
                 EnvironmentNetworkMode::Block | EnvironmentNetworkMode::CidrAllowList
             ) {
                 errors.push(ResolveError::Invalid {
-                    path:   format!("{path}.network.mode"),
+                    path: format!("{path}.network.mode"),
                     reason:
                         "local environments cannot enforce blocked or CIDR allow-list networking"
                             .to_string(),
@@ -237,7 +237,7 @@ fn validate_provider_capabilities(
         EnvironmentProvider::Docker => {
             if environment.network.mode == EnvironmentNetworkMode::CidrAllowList {
                 errors.push(ResolveError::Invalid {
-                    path:   format!("{path}.network.mode"),
+                    path: format!("{path}.network.mode"),
                     reason: "docker environments cannot enforce CIDR allow-list networking"
                         .to_string(),
                 });

@@ -26,7 +26,7 @@ use crate::{Error, EventEnvelope, Result};
 #[derive(Debug, Clone, Default)]
 pub(crate) struct EventProjectionCache {
     pub last_seq: u32,
-    pub state:    Option<RunProjection>,
+    pub state: Option<RunProjection>,
 }
 
 pub trait RunProjectionReducer {
@@ -67,7 +67,7 @@ impl RunProjectionReducer for RunProjection {
                 self.start = Some(StartRecord {
                     start_time: ts,
                     run_branch: props.run_branch.clone(),
-                    base_sha:   props.base_sha.clone(),
+                    base_sha: props.base_sha.clone(),
                 });
             }
             EventBody::RunSubmitted(props) => {
@@ -86,9 +86,9 @@ impl RunProjectionReducer for RunProjection {
                 )?;
                 if props.reason == PendingReason::ApprovalRequired {
                     self.approval = Some(RunApproval {
-                        state:         RunApprovalState::Pending,
-                        requested_at:  ts,
-                        decided_at:    None,
+                        state: RunApprovalState::Pending,
+                        requested_at: ts,
+                        decided_at: None,
                         denial_reason: None,
                     });
                 }
@@ -210,7 +210,7 @@ impl RunProjectionReducer for RunProjection {
                 if !self.status.is_terminal() {
                     return Err(fabro_types::InvalidTransition {
                         from: self.status,
-                        to:   self.status,
+                        to: self.status,
                     }
                     .into());
                 }
@@ -266,36 +266,42 @@ impl RunProjectionReducer for RunProjection {
             }
             EventBody::SandboxFailed(props) => {
                 let plan = sandbox_plan_from_projection_or_settings(self);
-                self.sandbox = Some(RunSandbox::failed(plan, RunSandboxFailure {
-                    provider:    props.provider.clone(),
-                    error:       props.error.clone(),
-                    causes:      props.causes.clone(),
-                    duration_ms: props.duration_ms,
-                }));
+                self.sandbox = Some(RunSandbox::failed(
+                    plan,
+                    RunSandboxFailure {
+                        provider: props.provider.clone(),
+                        error: props.error.clone(),
+                        causes: props.causes.clone(),
+                        duration_ms: props.duration_ms,
+                    },
+                ));
             }
             EventBody::SandboxInitialized(props) => {
                 let plan = sandbox_plan_from_projection_or_settings(self);
-                self.sandbox = Some(RunSandbox::ready(plan, RunSandboxInstance {
-                    provider: props.provider,
-                    image:    props.image.clone(),
-                    snapshot: props.snapshot.clone(),
-                    runtime:  RunSandboxRuntime {
-                        id:                props.id.clone(),
-                        working_directory: props.working_directory.clone(),
-                        repo_cloned:       props.repo_cloned,
-                        clone_origin_url:  props.clone_origin_url.clone(),
-                        clone_branch:      props.clone_branch.clone(),
-                        workspace_root:    props.workspace_root.clone(),
-                        repos_root:        props.repos_root.clone(),
-                        primary_repo_path: props.primary_repo_path.clone(),
-                        primary_repo_link: props.primary_repo_link.clone(),
+                self.sandbox = Some(RunSandbox::ready(
+                    plan,
+                    RunSandboxInstance {
+                        provider: props.provider,
+                        image: props.image.clone(),
+                        snapshot: props.snapshot.clone(),
+                        runtime: RunSandboxRuntime {
+                            id: props.id.clone(),
+                            working_directory: props.working_directory.clone(),
+                            repo_cloned: props.repo_cloned,
+                            clone_origin_url: props.clone_origin_url.clone(),
+                            clone_branch: props.clone_branch.clone(),
+                            workspace_root: props.workspace_root.clone(),
+                            repos_root: props.repos_root.clone(),
+                            primary_repo_path: props.primary_repo_path.clone(),
+                            primary_repo_link: props.primary_repo_link.clone(),
+                        },
                     },
-                }));
+                ));
             }
             EventBody::PullRequestCreated(props) => {
                 self.pull_request = Some(PullRequestLink {
-                    owner:  props.owner.clone(),
-                    repo:   props.repo.clone(),
+                    owner: props.owner.clone(),
+                    repo: props.repo.clone(),
                     number: props.pr_number,
                 });
             }
@@ -309,20 +315,22 @@ impl RunProjectionReducer for RunProjection {
                 if props.question_id.is_empty() {
                     return Ok(());
                 }
-                self.pending_interviews
-                    .insert(props.question_id.clone(), PendingInterviewRecord {
-                        question:   InterviewQuestionRecord {
-                            id:              props.question_id.clone(),
-                            text:            props.question.clone(),
-                            stage:           props.stage.clone(),
-                            question_type:   props.question_type.parse().unwrap_or_default(),
-                            options:         props.options.clone(),
-                            allow_freeform:  props.allow_freeform,
+                self.pending_interviews.insert(
+                    props.question_id.clone(),
+                    PendingInterviewRecord {
+                        question: InterviewQuestionRecord {
+                            id: props.question_id.clone(),
+                            text: props.question.clone(),
+                            stage: props.stage.clone(),
+                            question_type: props.question_type.parse().unwrap_or_default(),
+                            options: props.options.clone(),
+                            allow_freeform: props.allow_freeform,
                             timeout_seconds: props.timeout_seconds,
                             context_display: props.context_display.clone(),
                         },
                         started_at: ts,
-                    });
+                    },
+                );
             }
             EventBody::InterviewCompleted(props) if !props.question_id.is_empty() => {
                 self.pending_interviews.remove(&props.question_id);
@@ -538,9 +546,9 @@ impl RunProjectionReducer for RunProjection {
                 };
                 stage.subagents.push(SubAgentProjection {
                     agent_id: props.agent_id.clone(),
-                    depth:    props.depth,
-                    task:     props.task.clone(),
-                    status:   SubAgentStatus::Running,
+                    depth: props.depth,
+                    task: props.task.clone(),
+                    status: SubAgentStatus::Running,
                 });
             }
             EventBody::AgentSubCompleted(props) => {
@@ -550,7 +558,7 @@ impl RunProjectionReducer for RunProjection {
                 };
                 if let Some(subagent) = subagent_mut(stage, &props.agent_id) {
                     subagent.status = SubAgentStatus::Completed {
-                        success:    props.success,
+                        success: props.success,
                         turns_used: props.turns_used,
                     };
                 }
@@ -588,7 +596,7 @@ impl RunProjectionReducer for RunProjection {
                     return Ok(());
                 };
                 stage.skills.activated.push(ActivatedSkill {
-                    name:   props.skill_name.clone(),
+                    name: props.skill_name.clone(),
                     source: props.source,
                 });
             }
@@ -597,28 +605,34 @@ impl RunProjectionReducer for RunProjection {
                 else {
                     return Ok(());
                 };
-                upsert_mcp_server(stage, McpServerProjection {
-                    server_name: props.server_name.clone(),
-                    tool_count:  props.tool_count,
-                    status:      McpServerStatus::Ready {
-                        tools: props.tools.clone(),
+                upsert_mcp_server(
+                    stage,
+                    McpServerProjection {
+                        server_name: props.server_name.clone(),
+                        tool_count: props.tool_count,
+                        status: McpServerStatus::Ready {
+                            tools: props.tools.clone(),
+                        },
+                        invoked: false,
                     },
-                    invoked:     false,
-                });
+                );
             }
             EventBody::AgentMcpFailed(props) => {
                 let Some(stage) = stage_at_stored_or_visit(self, stored, props.visit, event.seq)
                 else {
                     return Ok(());
                 };
-                upsert_mcp_server(stage, McpServerProjection {
-                    server_name: props.server_name.clone(),
-                    tool_count:  0,
-                    status:      McpServerStatus::Failed {
-                        error: props.error.clone(),
+                upsert_mcp_server(
+                    stage,
+                    McpServerProjection {
+                        server_name: props.server_name.clone(),
+                        tool_count: 0,
+                        status: McpServerStatus::Failed {
+                            error: props.error.clone(),
+                        },
+                        invoked: false,
                     },
-                    invoked:     false,
-                });
+                );
             }
             EventBody::AgentToolStarted(props) => {
                 let Some(stage) = stage_at_stored_or_visit(self, stored, props.visit, event.seq)
@@ -680,16 +694,16 @@ fn apply_todo_created(
     }
     let list = stage.todos.as_mut().expect("todo list was just inserted");
     list.upsert(TodoProjection {
-        id:          props.todo_id.clone(),
-        status:      props.status,
-        order:       props.order,
-        subject:     props.subject.clone(),
+        id: props.todo_id.clone(),
+        status: props.status,
+        order: props.order,
+        subject: props.subject.clone(),
         description: props.description.clone(),
         active_form: props.active_form.clone(),
-        owner:       props.owner.clone(),
-        blocks:      props.blocks.clone(),
-        blocked_by:  props.blocked_by.clone(),
-        metadata:    props.metadata.clone(),
+        owner: props.owner.clone(),
+        blocks: props.blocks.clone(),
+        blocked_by: props.blocked_by.clone(),
+        metadata: props.metadata.clone(),
     });
 }
 
@@ -944,8 +958,8 @@ pub(crate) fn build_summary(state: &RunProjection, run_id: &RunId) -> Run {
         title: state.title().into_owned(),
         goal,
         workflow: WorkflowRef {
-            slug:       state.spec.workflow_slug.clone(),
-            name:       state.spec.workflow_name().map(ToOwned::to_owned),
+            slug: state.spec.workflow_slug.clone(),
+            name: state.spec.workflow_name().map(ToOwned::to_owned),
             graph_name: state.spec.graph_name().map(ToOwned::to_owned),
             node_count: i64::try_from(state.spec.graph.nodes.len())
                 .expect("graph node count should fit in i64"),
@@ -961,13 +975,13 @@ pub(crate) fn build_summary(state: &RunProjection, run_id: &RunId) -> Run {
         origin: RunOrigin::default(),
         labels: state.spec.labels.clone(),
         lifecycle: RunLifecycle {
-            status:          state.status,
-            approval:        state.approval.clone(),
+            status: state.status,
+            approval: state.approval.clone(),
             pending_control: state.pending_control,
-            queue_position:  None,
-            error:           None,
-            archived:        state.archived_at.is_some(),
-            archived_at:     state.archived_at,
+            queue_position: None,
+            error: None,
+            archived: state.archived_at.is_some(),
+            archived_at: state.archived_at,
         },
         sandbox: state.sandbox.clone(),
         models,
@@ -1035,7 +1049,7 @@ fn run_models(state: &RunProjection) -> Vec<RunModel> {
         .filter_map(|(_, stage)| stage.model.as_ref())
         .map(|model| RunModel {
             provider: Some(model.provider.to_string()),
-            name:     model.model_id.clone(),
+            name: model.model_id.clone(),
         })
         .collect::<Vec<_>>();
     models.sort_by(|left, right| {
@@ -1078,7 +1092,7 @@ fn checkpoint_from_props(props: &CheckpointCompletedProps, timestamp: DateTime<U
 
 fn diff_from_checkpoint_props(props: &CheckpointCompletedProps) -> RunDiff {
     RunDiff {
-        patch:   props.diff.clone(),
+        patch: props.diff.clone(),
         summary: props.diff_summary,
     }
 }
@@ -1098,7 +1112,7 @@ fn conclusion_from_completed(
         billing: props.billing.clone(),
         total_retries: 0,
         diff: RunDiff {
-            patch:   props.final_patch.clone(),
+            patch: props.final_patch.clone(),
             summary: props.diff_summary,
         },
     })
@@ -1117,7 +1131,7 @@ fn conclusion_from_failed(props: &RunFailedProps, timestamp: DateTime<Utc>) -> C
         billing: props.billing.clone(),
         total_retries: 0,
         diff: RunDiff {
-            patch:   props.final_patch.clone(),
+            patch: props.final_patch.clone(),
             summary: props.diff_summary,
         },
     }
@@ -1185,21 +1199,21 @@ fn stage_visit(
 
 fn stage_outcome_from_props(props: &StageCompletedProps) -> Outcome<Option<BilledModelUsage>> {
     Outcome {
-        status:             props.status,
-        preferred_label:    props.preferred_label.clone(),
+        status: props.status,
+        preferred_label: props.preferred_label.clone(),
         suggested_next_ids: props.suggested_next_ids.clone(),
-        context_updates:    props
+        context_updates: props
             .context_updates
             .clone()
             .unwrap_or_default()
             .into_iter()
             .collect(),
-        jump_to_node:       props.jump_to_node.clone(),
-        notes:              props.notes.clone(),
-        failure:            props.failure.clone(),
-        usage:              props.billing.clone(),
-        files_touched:      props.files_touched.clone(),
-        timing:             Some(props.timing),
+        jump_to_node: props.jump_to_node.clone(),
+        notes: props.notes.clone(),
+        failure: props.failure.clone(),
+        usage: props.billing.clone(),
+        files_touched: props.files_touched.clone(),
+        timing: Some(props.timing),
     }
 }
 
@@ -1346,19 +1360,19 @@ mod tests {
 
     fn test_run_spec() -> RunSpec {
         RunSpec {
-            run_id:           fixtures::RUN_1,
-            settings:         WorkflowSettings::default(),
-            graph:            Graph::new("test"),
-            graph_source:     Some("digraph test {}".to_string()),
-            workflow_slug:    None,
-            automation:       None,
+            run_id: fixtures::RUN_1,
+            settings: WorkflowSettings::default(),
+            graph: Graph::new("test"),
+            graph_source: Some("digraph test {}".to_string()),
+            workflow_slug: None,
+            automation: None,
             source_directory: None,
-            labels:           HashMap::new(),
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            definition_blob:  None,
-            git:              None,
-            fork_source_ref:  None,
+            labels: HashMap::new(),
+            provenance: test_support::test_run_provenance(),
+            manifest_blob: None,
+            definition_blob: None,
+            git: None,
+            fork_source_ref: None,
         }
     }
 
@@ -1460,8 +1474,8 @@ mod tests {
     #[test]
     fn run_created_projects_automation_into_spec_and_summary() {
         let automation = AutomationRef {
-            id:         "nightly".to_string(),
-            name:       Some("Nightly".to_string()),
+            id: "nightly".to_string(),
+            name: Some("Nightly".to_string()),
             trigger_id: Some("schedule_1".to_string()),
         };
         let event = test_raw_event(
@@ -1770,15 +1784,15 @@ mod tests {
         let mut completed = test_event(
             7,
             EventBody::RunCompleted(RunCompletedProps {
-                timing:               conclusion_timing,
-                artifact_count:       0,
-                status:               "succeeded".to_string(),
-                reason:               SuccessReason::Completed,
-                total_usd_micros:     None,
+                timing: conclusion_timing,
+                artifact_count: 0,
+                status: "succeeded".to_string(),
+                reason: SuccessReason::Completed,
+                total_usd_micros: None,
                 final_git_commit_sha: None,
-                final_patch:          None,
-                diff_summary:         None,
-                billing:              None,
+                final_patch: None,
+                diff_summary: None,
+                billing: None,
             }),
             None,
         );
@@ -1896,21 +1910,21 @@ mod tests {
         let mut state = running_projection();
         state.pending_control = Some(RunControlAction::Unpause);
         state.checkpoints = vec![CheckpointRecord {
-            seq:        7,
+            seq: 7,
             checkpoint: Checkpoint {
-                timestamp:                  "2026-04-07T12:00:00Z".parse().unwrap(),
-                current_node:               "build".to_string(),
-                completed_nodes:            vec!["build".to_string()],
-                node_retries:               HashMap::new(),
-                context_values:             HashMap::new(),
-                node_outcomes:              HashMap::new(),
-                next_node_id:               None,
-                git_commit_sha:             None,
-                loop_failure_signatures:    HashMap::new(),
+                timestamp: "2026-04-07T12:00:00Z".parse().unwrap(),
+                current_node: "build".to_string(),
+                completed_nodes: vec!["build".to_string()],
+                node_retries: HashMap::new(),
+                context_values: HashMap::new(),
+                node_outcomes: HashMap::new(),
+                next_node_id: None,
+                git_commit_sha: None,
+                loop_failure_signatures: HashMap::new(),
                 restart_failure_signatures: HashMap::new(),
-                node_visits:                HashMap::from([("build".to_string(), 2usize)]),
+                node_visits: HashMap::from([("build".to_string(), 2usize)]),
             },
-            diff:       RunDiff::default(),
+            diff: RunDiff::default(),
         }];
         state.stage_entry("build", 2, first_event_seq(7)).output = Some("done".to_string());
 
@@ -1941,9 +1955,9 @@ mod tests {
             .apply_event(&test_stage_event(
                 3,
                 EventBody::StageStarted(StageStartedProps {
-                    index:        0,
+                    index: 0,
                     handler_type: "agent".to_string(),
-                    attempt:      1,
+                    attempt: 1,
                     max_attempts: 1,
                 }),
                 stage_id.clone(),
@@ -1963,9 +1977,9 @@ mod tests {
             .apply_event(&test_stage_event(
                 3,
                 EventBody::StageStarted(StageStartedProps {
-                    index:        0,
+                    index: 0,
                     handler_type: "agent".to_string(),
-                    attempt:      1,
+                    attempt: 1,
                     max_attempts: 1,
                 }),
                 stage_id.clone(),
@@ -1975,13 +1989,13 @@ mod tests {
             .apply_event(&test_event(
                 4,
                 EventBody::StagePrompt(StagePromptProps {
-                    visit:            1,
-                    text:             "prompt".to_string(),
-                    mode:             None,
-                    provider:         None,
-                    model:            None,
+                    visit: 1,
+                    text: "prompt".to_string(),
+                    mode: None,
+                    provider: None,
+                    model: None,
                     reasoning_effort: None,
-                    speed:            None,
+                    speed: None,
                 }),
                 Some("build"),
             ))
@@ -1997,9 +2011,9 @@ mod tests {
             .apply_event(&test_stage_event(
                 3,
                 EventBody::StageStarted(StageStartedProps {
-                    index:        0,
+                    index: 0,
                     handler_type: "agent".to_string(),
-                    attempt:      1,
+                    attempt: 1,
                     max_attempts: 1,
                 }),
                 stage_id.clone(),
@@ -2017,14 +2031,14 @@ mod tests {
             .apply_event(&test_stage_event(
                 4,
                 EventBody::AgentSessionActivated(AgentSessionActivatedProps {
-                    thread_id:        Some("thread-1".to_string()),
-                    provider:         Some("openai".to_string()),
-                    model:            Some("gpt-5.4".to_string()),
+                    thread_id: Some("thread-1".to_string()),
+                    provider: Some("openai".to_string()),
+                    model: Some("gpt-5.4".to_string()),
                     reasoning_effort: Some(ReasoningEffort::High),
-                    speed:            Some(Speed::Fast),
+                    speed: Some(Speed::Fast),
                     permission_level: None,
-                    capabilities:     vec![fabro_types::SessionCapability::Steer],
-                    visit:            1,
+                    capabilities: vec![fabro_types::SessionCapability::Steer],
+                    visit: 1,
                 }),
                 stage_id.clone(),
             ))
@@ -2050,7 +2064,7 @@ mod tests {
                 4,
                 EventBody::AgentSessionStarted(AgentSessionStartedProps {
                     provider: Some("openai".to_string()),
-                    model:    Some("gpt-5.4".to_string()),
+                    model: Some("gpt-5.4".to_string()),
                 }),
                 None,
             ))
@@ -2081,8 +2095,8 @@ mod tests {
             .apply_event(&test_stage_event(
                 4,
                 EventBody::AgentAcpStarted(AgentAcpStartedProps {
-                    visit:       1,
-                    command:     "python fake_agent.py".to_string(),
+                    visit: 1,
+                    command: "python fake_agent.py".to_string(),
                     config_name: Some("fake".to_string()),
                 }),
                 stage_id.clone(),
@@ -2103,8 +2117,8 @@ mod tests {
             .apply_event(&test_stage_event(
                 4,
                 EventBody::AgentAcpStarted(AgentAcpStartedProps {
-                    visit:       1,
-                    command:     "python fake_agent.py".to_string(),
+                    visit: 1,
+                    command: "python fake_agent.py".to_string(),
                     config_name: Some("fake".to_string()),
                 }),
                 stage_id.clone(),
@@ -2114,14 +2128,14 @@ mod tests {
             .apply_event(&test_stage_event(
                 5,
                 EventBody::AgentSessionActivated(AgentSessionActivatedProps {
-                    thread_id:        None,
-                    provider:         Some(AgentBackend::Acp.to_string()),
-                    model:            Some("fake".to_string()),
+                    thread_id: None,
+                    provider: Some(AgentBackend::Acp.to_string()),
+                    model: Some("fake".to_string()),
                     reasoning_effort: None,
-                    speed:            None,
+                    speed: None,
                     permission_level: None,
-                    capabilities:     vec![fabro_types::SessionCapability::Steer],
-                    visit:            1,
+                    capabilities: vec![fabro_types::SessionCapability::Steer],
+                    visit: 1,
                 }),
                 stage_id.clone(),
             ))
@@ -2144,8 +2158,8 @@ mod tests {
             .apply_event(&test_stage_event(
                 4,
                 EventBody::AgentAcpCompleted(AgentAcpCompletedProps {
-                    stdout:      "done".to_string(),
-                    stderr:      "warn".to_string(),
+                    stdout: "done".to_string(),
+                    stderr: "warn".to_string(),
                     stop_reason: "end_turn".to_string(),
                     duration_ms: 42,
                 }),
@@ -2172,8 +2186,8 @@ mod tests {
             .apply_event(&test_stage_event(
                 4,
                 EventBody::AgentAcpCancelled(AgentAcpCancelledProps {
-                    stdout:      "partial".to_string(),
-                    stderr:      "cancelled".to_string(),
+                    stdout: "partial".to_string(),
+                    stderr: "cancelled".to_string(),
                     duration_ms: 7,
                 }),
                 cancelled_stage_id.clone(),
@@ -2192,8 +2206,8 @@ mod tests {
             .apply_event(&test_stage_event(
                 4,
                 EventBody::AgentAcpTimedOut(AgentAcpTimedOutProps {
-                    stdout:      "partial".to_string(),
-                    stderr:      "timeout".to_string(),
+                    stdout: "partial".to_string(),
+                    stderr: "timeout".to_string(),
                     duration_ms: 99,
                 }),
                 timed_out_stage_id.clone(),
@@ -2253,9 +2267,9 @@ mod tests {
             .apply_event(&test_stage_event(
                 2,
                 EventBody::StageStarted(StageStartedProps {
-                    index:        0,
+                    index: 0,
                     handler_type: "agent".to_string(),
-                    attempt:      1,
+                    attempt: 1,
                     max_attempts: 1,
                 }),
                 stage_id.clone(),
@@ -2387,14 +2401,14 @@ mod tests {
             .apply_event(&test_stage_event(
                 3,
                 EventBody::StageFailed(StageFailedProps {
-                    index:      0,
-                    failure:    Some(fabro_types::FailureDetail::new(
+                    index: 0,
+                    failure: Some(fabro_types::FailureDetail::new(
                         "try again",
                         fabro_types::FailureCategory::TransientInfra,
                     )),
                     will_retry: true,
-                    timing:     fabro_types::StageTiming::wall_only(444),
-                    billing:    Some(usage.clone()),
+                    timing: fabro_types::StageTiming::wall_only(444),
+                    billing: Some(usage.clone()),
                 }),
                 scoped_stage_id.clone(),
             ))
@@ -2409,9 +2423,12 @@ mod tests {
         assert_eq!(stage.usage, usage_counts(&usage));
         assert_eq!(stage.model.as_ref(), Some(usage.model()));
         let completion = stage.completion.as_ref().unwrap();
-        assert_eq!(completion.outcome, StageOutcome::Failed {
-            retry_requested: true,
-        });
+        assert_eq!(
+            completion.outcome,
+            StageOutcome::Failed {
+                retry_requested: true,
+            }
+        );
         assert_eq!(completion.failure_reason.as_deref(), Some("try again"));
     }
 
@@ -2459,25 +2476,25 @@ mod tests {
             .apply_event(&test_event(
                 1,
                 EventBody::InterviewStarted(InterviewStartedProps {
-                    question_id:     "q-1".to_string(),
-                    question:        "Approve deploy?".to_string(),
-                    stage:           "gate".to_string(),
-                    question_type:   "multiple_choice".to_string(),
-                    options:         vec![
+                    question_id: "q-1".to_string(),
+                    question: "Approve deploy?".to_string(),
+                    stage: "gate".to_string(),
+                    question_type: "multiple_choice".to_string(),
+                    options: vec![
                         InterviewOption {
-                            key:         "approve".to_string(),
-                            label:       "Approve".to_string(),
+                            key: "approve".to_string(),
+                            label: "Approve".to_string(),
                             description: Some("Ship it".to_string()),
-                            preview:     Some("deploy --prod".to_string()),
+                            preview: Some("deploy --prod".to_string()),
                         },
                         InterviewOption {
-                            key:         "revise".to_string(),
-                            label:       "Revise".to_string(),
+                            key: "revise".to_string(),
+                            label: "Revise".to_string(),
                             description: None,
-                            preview:     None,
+                            preview: None,
                         },
                     ],
-                    allow_freeform:  true,
+                    allow_freeform: true,
                     timeout_seconds: Some(30.0),
                     context_display: Some("Latest draft".to_string()),
                 }),
@@ -2513,8 +2530,8 @@ mod tests {
                 2,
                 EventBody::InterviewCompleted(InterviewCompletedProps {
                     question_id: "q-1".to_string(),
-                    question:    "Approve deploy?".to_string(),
-                    answer:      "approve".to_string(),
+                    question: "Approve deploy?".to_string(),
+                    answer: "approve".to_string(),
                     duration_ms: 42,
                 }),
                 Some("gate"),
@@ -2539,9 +2556,12 @@ mod tests {
                 None,
             ))
             .unwrap();
-        assert_eq!(state.status(), RunStatus::Pending {
-            reason: PendingReason::ApprovalRequired,
-        });
+        assert_eq!(
+            state.status(),
+            RunStatus::Pending {
+                reason: PendingReason::ApprovalRequired,
+            }
+        );
         assert_eq!(
             state.approval.as_ref().map(|approval| approval.state),
             Some(RunApprovalState::Pending)
@@ -2587,9 +2607,12 @@ mod tests {
             .unwrap();
 
         let status_json = serde_json::to_value(state.status()).unwrap();
-        assert_eq!(state.status(), RunStatus::Paused {
-            prior_block: Some(BlockedReason::HumanInputRequired),
-        });
+        assert_eq!(
+            state.status(),
+            RunStatus::Paused {
+                prior_block: Some(BlockedReason::HumanInputRequired),
+            }
+        );
         assert_eq!(
             status_json,
             json!({
@@ -2639,9 +2662,12 @@ mod tests {
             ))
             .unwrap();
         let approval = state.approval.as_ref().expect("approval should be pending");
-        assert_eq!(state.status(), RunStatus::Pending {
-            reason: PendingReason::ApprovalRequired,
-        });
+        assert_eq!(
+            state.status(),
+            RunStatus::Pending {
+                reason: PendingReason::ApprovalRequired,
+            }
+        );
         assert_eq!(approval.state, RunApprovalState::Pending);
         assert_eq!(
             approval.requested_at.to_rfc3339(),
@@ -2659,9 +2685,12 @@ mod tests {
             ))
             .unwrap();
         let approval = state.approval.as_ref().expect("approval should be denied");
-        assert_eq!(state.status(), RunStatus::Pending {
-            reason: PendingReason::ApprovalRequired,
-        });
+        assert_eq!(
+            state.status(),
+            RunStatus::Pending {
+                reason: PendingReason::ApprovalRequired,
+            }
+        );
         assert_eq!(approval.state, RunApprovalState::Denied);
         assert_eq!(
             approval.denial_reason.as_deref(),
@@ -2695,9 +2724,12 @@ mod tests {
             ))
             .unwrap();
 
-        assert_eq!(state.status(), RunStatus::Failed {
-            reason: FailureReason::ApprovalDenied,
-        });
+        assert_eq!(
+            state.status(),
+            RunStatus::Failed {
+                reason: FailureReason::ApprovalDenied,
+            }
+        );
         let summary_json = serde_json::to_value(build_summary(&state, &fixtures::RUN_1)).unwrap();
         assert_eq!(
             summary_json["lifecycle"]["approval"],
@@ -2826,9 +2858,12 @@ mod tests {
             ))
             .unwrap();
 
-        assert_eq!(state.status(), RunStatus::Blocked {
-            blocked_reason: BlockedReason::HumanInputRequired,
-        });
+        assert_eq!(
+            state.status(),
+            RunStatus::Blocked {
+                blocked_reason: BlockedReason::HumanInputRequired,
+            }
+        );
         let status_json = serde_json::to_value(state.status()).unwrap();
         assert_eq!(
             status_json,
@@ -2843,19 +2878,19 @@ mod tests {
     fn summary_synthesizes_submitted_when_run_exists_without_status() {
         let mut state = initialized_projection();
         state.spec = fabro_types::RunSpec {
-            run_id:           fixtures::RUN_1,
-            settings:         WorkflowSettings::default(),
-            graph:            fabro_types::Graph::new("test"),
-            graph_source:     None,
-            workflow_slug:    Some("test".to_string()),
-            automation:       None,
+            run_id: fixtures::RUN_1,
+            settings: WorkflowSettings::default(),
+            graph: fabro_types::Graph::new("test"),
+            graph_source: None,
+            workflow_slug: Some("test".to_string()),
+            automation: None,
             source_directory: Some("/tmp/repo".to_string()),
-            git:              None,
-            labels:           HashMap::new(),
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            definition_blob:  None,
-            fork_source_ref:  None,
+            git: None,
+            labels: HashMap::new(),
+            provenance: test_support::test_run_provenance(),
+            manifest_blob: None,
+            definition_blob: None,
+            fork_source_ref: None,
         };
 
         let summary_json = serde_json::to_value(build_summary(&state, &fixtures::RUN_1)).unwrap();
@@ -2869,19 +2904,19 @@ mod tests {
     fn summary_preserves_absent_workflow_name_and_reports_graph_name() {
         let mut state = initialized_projection();
         state.spec = fabro_types::RunSpec {
-            run_id:           fixtures::RUN_1,
-            settings:         WorkflowSettings::default(),
-            graph:            fabro_types::Graph::new("GraphName"),
-            graph_source:     None,
-            workflow_slug:    Some("release-flow".to_string()),
-            automation:       None,
+            run_id: fixtures::RUN_1,
+            settings: WorkflowSettings::default(),
+            graph: fabro_types::Graph::new("GraphName"),
+            graph_source: None,
+            workflow_slug: Some("release-flow".to_string()),
+            automation: None,
             source_directory: Some("/tmp/repo".to_string()),
-            git:              None,
-            labels:           HashMap::new(),
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            definition_blob:  None,
-            fork_source_ref:  None,
+            git: None,
+            labels: HashMap::new(),
+            provenance: test_support::test_run_provenance(),
+            manifest_blob: None,
+            definition_blob: None,
+            fork_source_ref: None,
         };
 
         let summary = build_summary(&state, &fixtures::RUN_1);
@@ -3003,7 +3038,7 @@ mod tests {
             RunBlobId::new(br#"{"version":1,"workflow_path":"workflow.fabro"}"#).to_string();
         let events = vec![
             EventEnvelope {
-                seq:   1,
+                seq: 1,
                 event: RunEvent::from_value(json!({
                     "id": "evt-run-created",
                     "ts": "2026-04-07T12:00:00Z",
@@ -3027,7 +3062,7 @@ mod tests {
                 .unwrap(),
             },
             EventEnvelope {
-                seq:   2,
+                seq: 2,
                 event: RunEvent::from_value(json!({
                     "id": "evt-run-submitted",
                     "ts": "2026-04-07T12:00:01Z",
@@ -3062,15 +3097,15 @@ mod tests {
             .apply_event(&test_event(
                 1,
                 EventBody::RunFailed(RunFailedProps {
-                    failure:              fabro_types::RunFailure {
+                    failure: fabro_types::RunFailure {
                         reason: FailureReason::WorkflowError,
                         detail: FailureDetail::new("boom", FailureCategory::Deterministic),
                     },
-                    timing:               fabro_types::RunTiming::wall_only(42),
+                    timing: fabro_types::RunTiming::wall_only(42),
                     final_git_commit_sha: Some("abc123".to_string()),
-                    final_patch:          Some(patch.to_string()),
-                    diff_summary:         None,
-                    billing:              None,
+                    final_patch: Some(patch.to_string()),
+                    diff_summary: None,
+                    billing: None,
                 }),
                 None,
             ))
@@ -3198,7 +3233,7 @@ mod tests {
             .apply_event(&test_event(
                 1,
                 EventBody::RunFailed(RunFailedProps {
-                    failure:              fabro_types::RunFailure {
+                    failure: fabro_types::RunFailure {
                         reason: FailureReason::WorkflowError,
                         detail: {
                             let mut detail = FailureDetail::new(
@@ -3212,11 +3247,11 @@ mod tests {
                             detail
                         },
                     },
-                    timing:               fabro_types::RunTiming::wall_only(42),
+                    timing: fabro_types::RunTiming::wall_only(42),
                     final_git_commit_sha: None,
-                    final_patch:          None,
-                    diff_summary:         None,
-                    billing:              None,
+                    final_patch: None,
+                    diff_summary: None,
+                    billing: None,
                 }),
                 None,
             ))
@@ -3224,10 +3259,13 @@ mod tests {
 
         let failure = state.conclusion.unwrap().failure.unwrap();
         assert_eq!(failure.detail.message, "Failed to initialize sandbox");
-        assert_eq!(failure.detail.causes, vec![
-            "Failed to pull Docker image buildpack-deps:noble".to_string(),
-            "connection refused".to_string(),
-        ]);
+        assert_eq!(
+            failure.detail.causes,
+            vec![
+                "Failed to pull Docker image buildpack-deps:noble".to_string(),
+                "connection refused".to_string(),
+            ]
+        );
     }
 
     #[test]
@@ -3252,20 +3290,23 @@ mod tests {
             .apply_event(&test_event(
                 1,
                 EventBody::RunFailed(RunFailedProps {
-                    failure:              failure.clone(),
-                    timing:               fabro_types::RunTiming::wall_only(42),
+                    failure: failure.clone(),
+                    timing: fabro_types::RunTiming::wall_only(42),
                     final_git_commit_sha: Some("abc123".to_string()),
-                    final_patch:          None,
-                    diff_summary:         None,
-                    billing:              None,
+                    final_patch: None,
+                    diff_summary: None,
+                    billing: None,
                 }),
                 None,
             ))
             .unwrap();
 
-        assert_eq!(state.status, RunStatus::Failed {
-            reason: FailureReason::SandboxInitFailed,
-        });
+        assert_eq!(
+            state.status,
+            RunStatus::Failed {
+                reason: FailureReason::SandboxInitFailed,
+            }
+        );
         let conclusion = state.conclusion.unwrap();
         assert_eq!(conclusion.failure, Some(failure));
         assert_eq!(conclusion.final_git_commit_sha.as_deref(), Some("abc123"));
@@ -3346,15 +3387,15 @@ mod tests {
             .apply_event(&test_event(
                 1,
                 EventBody::RunCompleted(RunCompletedProps {
-                    timing:               fabro_types::RunTiming::wall_only(10),
-                    artifact_count:       0,
-                    status:               "succeeded".to_string(),
-                    reason:               SuccessReason::Completed,
-                    total_usd_micros:     None,
+                    timing: fabro_types::RunTiming::wall_only(10),
+                    artifact_count: 0,
+                    status: "succeeded".to_string(),
+                    reason: SuccessReason::Completed,
+                    total_usd_micros: None,
                     final_git_commit_sha: None,
-                    final_patch:          None,
-                    diff_summary:         None,
-                    billing:              None,
+                    final_patch: None,
+                    diff_summary: None,
+                    billing: None,
                 }),
                 None,
             ))
@@ -3367,9 +3408,12 @@ mod tests {
             ))
             .unwrap();
 
-        assert_eq!(state.status(), RunStatus::Succeeded {
-            reason: SuccessReason::Completed,
-        });
+        assert_eq!(
+            state.status(),
+            RunStatus::Succeeded {
+                reason: SuccessReason::Completed,
+            }
+        );
         assert!(state.archived_at.is_some());
     }
 
@@ -3382,10 +3426,10 @@ mod tests {
             .apply_event(&test_event(
                 1,
                 EventBody::RunSupersededBy(RunSupersededByProps {
-                    new_run_id:                fixtures::RUN_2,
+                    new_run_id: fixtures::RUN_2,
                     target_checkpoint_ordinal: 2,
-                    target_node_id:            "build".to_string(),
-                    target_visit:              1,
+                    target_node_id: "build".to_string(),
+                    target_visit: 1,
                 }),
                 None,
             ))
@@ -3406,14 +3450,14 @@ mod tests {
             .apply_event(&test_event(
                 1,
                 EventBody::PullRequestCreated(PullRequestCreatedProps {
-                    pr_url:      "https://github.com/in-parallel-oy/fabro/pull/123".to_string(),
-                    pr_number:   123,
-                    owner:       "fabro-sh".to_string(),
-                    repo:        "fabro".to_string(),
+                    pr_url: "https://github.com/in-parallel-oy/fabro/pull/123".to_string(),
+                    pr_number: 123,
+                    owner: "fabro-sh".to_string(),
+                    repo: "fabro".to_string(),
                     base_branch: "main".to_string(),
                     head_branch: "fabro/run/demo".to_string(),
-                    title:       "Add run PR chip".to_string(),
-                    draft:       false,
+                    title: "Add run PR chip".to_string(),
+                    draft: false,
                 }),
                 None,
             ))
@@ -3441,13 +3485,13 @@ mod tests {
 
         let mut state = running_projection();
         let github_pull_request = PullRequestLink {
-            owner:  "fabro-sh".to_string(),
-            repo:   "fabro".to_string(),
+            owner: "fabro-sh".to_string(),
+            repo: "fabro".to_string(),
             number: 123,
         };
         let replacement_pull_request = PullRequestLink {
-            owner:  "acme".to_string(),
-            repo:   "widgets".to_string(),
+            owner: "acme".to_string(),
+            repo: "widgets".to_string(),
             number: 42,
         };
 
@@ -3455,14 +3499,14 @@ mod tests {
             .apply_event(&test_event(
                 1,
                 EventBody::PullRequestCreated(PullRequestCreatedProps {
-                    pr_url:      github_pull_request.html_url(),
-                    pr_number:   github_pull_request.number,
-                    owner:       github_pull_request.owner.clone(),
-                    repo:        github_pull_request.repo.clone(),
+                    pr_url: github_pull_request.html_url(),
+                    pr_number: github_pull_request.number,
+                    owner: github_pull_request.owner.clone(),
+                    repo: github_pull_request.repo.clone(),
                     base_branch: "main".to_string(),
                     head_branch: "fabro/run/demo".to_string(),
-                    title:       "Add run PR chip".to_string(),
-                    draft:       false,
+                    title: "Add run PR chip".to_string(),
+                    draft: false,
                 }),
                 None,
             ))
@@ -3512,15 +3556,15 @@ mod tests {
             .apply_event(&test_event(
                 1,
                 EventBody::RunCompleted(RunCompletedProps {
-                    timing:               fabro_types::RunTiming::wall_only(10),
-                    artifact_count:       0,
-                    status:               "succeeded".to_string(),
-                    reason:               SuccessReason::PartialSuccess,
-                    total_usd_micros:     None,
+                    timing: fabro_types::RunTiming::wall_only(10),
+                    artifact_count: 0,
+                    status: "succeeded".to_string(),
+                    reason: SuccessReason::PartialSuccess,
+                    total_usd_micros: None,
                     final_git_commit_sha: None,
-                    final_patch:          None,
-                    diff_summary:         None,
-                    billing:              None,
+                    final_patch: None,
+                    diff_summary: None,
+                    billing: None,
                 }),
                 None,
             ))
@@ -3540,9 +3584,12 @@ mod tests {
             ))
             .unwrap();
 
-        assert_eq!(state.status(), RunStatus::Succeeded {
-            reason: SuccessReason::PartialSuccess,
-        });
+        assert_eq!(
+            state.status(),
+            RunStatus::Succeeded {
+                reason: SuccessReason::PartialSuccess,
+            }
+        );
     }
 
     #[test]
@@ -3617,9 +3664,12 @@ mod tests {
             ))
             .unwrap();
 
-        assert_eq!(state.status(), RunStatus::Blocked {
-            blocked_reason: BlockedReason::HumanInputRequired,
-        });
+        assert_eq!(
+            state.status(),
+            RunStatus::Blocked {
+                blocked_reason: BlockedReason::HumanInputRequired,
+            }
+        );
     }
 
     #[test]
@@ -3649,15 +3699,15 @@ mod tests {
             .apply_event(&test_event(
                 1,
                 EventBody::RunCompleted(RunCompletedProps {
-                    timing:               fabro_types::RunTiming::wall_only(10),
-                    artifact_count:       0,
-                    status:               "succeeded".to_string(),
-                    reason:               SuccessReason::Completed,
-                    total_usd_micros:     None,
+                    timing: fabro_types::RunTiming::wall_only(10),
+                    artifact_count: 0,
+                    status: "succeeded".to_string(),
+                    reason: SuccessReason::Completed,
+                    total_usd_micros: None,
                     final_git_commit_sha: None,
-                    final_patch:          None,
-                    diff_summary:         None,
-                    billing:              None,
+                    final_patch: None,
+                    diff_summary: None,
+                    billing: None,
                 }),
                 None,
             ))
@@ -3672,17 +3722,20 @@ mod tests {
             ))
             .unwrap();
 
-        assert_eq!(state.status(), RunStatus::Succeeded {
-            reason: SuccessReason::Completed,
-        });
+        assert_eq!(
+            state.status(),
+            RunStatus::Succeeded {
+                reason: SuccessReason::Completed,
+            }
+        );
         assert_eq!(state.status_updated_at, updated_at);
     }
 
     fn started_props() -> StageStartedProps {
         StageStartedProps {
-            index:        0,
+            index: 0,
             handler_type: "agent".to_string(),
-            attempt:      1,
+            attempt: 1,
             max_attempts: 3,
         }
     }
@@ -3715,24 +3768,24 @@ mod tests {
         };
 
         RunFailedProps {
-            failure:              fabro_types::RunFailure {
+            failure: fabro_types::RunFailure {
                 reason,
                 detail: FailureDetail::new("run failed", category),
             },
-            timing:               fabro_types::RunTiming::wall_only(42),
+            timing: fabro_types::RunTiming::wall_only(42),
             final_git_commit_sha: None,
-            final_patch:          None,
-            diff_summary:         None,
-            billing:              None,
+            final_patch: None,
+            diff_summary: None,
+            billing: None,
         }
     }
 
     fn retrying_props() -> StageRetryingProps {
         StageRetryingProps {
-            index:        0,
-            attempt:      2,
+            index: 0,
+            attempt: 2,
             max_attempts: 3,
-            delay_ms:     0,
+            delay_ms: 0,
         }
     }
 
@@ -4119,11 +4172,11 @@ mod tests {
             .apply_event(&test_stage_event(
                 2,
                 EventBody::CommandCompleted(CommandCompletedProps {
-                    output:         "blob://sha256/test".to_string(),
-                    exit_code:      Some(100),
-                    duration_ms:    10,
-                    termination:    CommandTermination::Exited,
-                    output_bytes:   42,
+                    output: "blob://sha256/test".to_string(),
+                    exit_code: Some(100),
+                    duration_ms: 10,
+                    termination: CommandTermination::Exited,
+                    output_bytes: 42,
                     live_streaming: true,
                 }),
                 stage_id.clone(),
@@ -4133,14 +4186,14 @@ mod tests {
             .apply_event(&test_event(
                 3,
                 EventBody::StageFailed(StageFailedProps {
-                    index:      0,
-                    failure:    Some(FailureDetail::new(
+                    index: 0,
+                    failure: Some(FailureDetail::new(
                         "Script failed with exit code: 100\n\nCancelling due to test failure",
                         FailureCategory::Canceled,
                     )),
                     will_retry: false,
-                    timing:     fabro_types::StageTiming::wall_only(10),
-                    billing:    None,
+                    timing: fabro_types::StageTiming::wall_only(10),
+                    billing: None,
                 }),
                 Some("build"),
             ))
@@ -4701,16 +4754,16 @@ mod tests {
                 .apply_event(&test_stage_event(
                     2,
                     EventBody::TodoUpdated(TodoUpdatedProps {
-                        list_id:        list.to_string(),
-                        list_kind:      TodoListKind::AnthropicTasks,
-                        todo_id:        "1".to_string(),
-                        status:         None,
-                        order:          None,
-                        subject:        None,
-                        description:    None,
-                        active_form:    None,
-                        owner:          None,
-                        add_blocks:     None,
+                        list_id: list.to_string(),
+                        list_kind: TodoListKind::AnthropicTasks,
+                        todo_id: "1".to_string(),
+                        status: None,
+                        order: None,
+                        subject: None,
+                        description: None,
+                        active_form: None,
+                        owner: None,
+                        add_blocks: None,
                         add_blocked_by: None,
                         metadata_patch: meta,
                     }),
@@ -4723,16 +4776,16 @@ mod tests {
                 .apply_event(&test_stage_event(
                     3,
                     EventBody::TodoUpdated(TodoUpdatedProps {
-                        list_id:        list.to_string(),
-                        list_kind:      TodoListKind::AnthropicTasks,
-                        todo_id:        "1".to_string(),
-                        status:         None,
-                        order:          None,
-                        subject:        None,
-                        description:    None,
-                        active_form:    None,
-                        owner:          None,
-                        add_blocks:     None,
+                        list_id: list.to_string(),
+                        list_kind: TodoListKind::AnthropicTasks,
+                        todo_id: "1".to_string(),
+                        status: None,
+                        order: None,
+                        subject: None,
+                        description: None,
+                        active_form: None,
+                        owner: None,
+                        add_blocks: None,
                         add_blocked_by: None,
                         metadata_patch: delete,
                     }),
@@ -4763,9 +4816,9 @@ mod tests {
                     1,
                     EventBody::AgentSubSpawned(AgentSubSpawnedProps {
                         agent_id: "sub-1".to_string(),
-                        depth:    1,
-                        task:     "write tests".to_string(),
-                        visit:    1,
+                        depth: 1,
+                        task: "write tests".to_string(),
+                        visit: 1,
                     }),
                     stage_id.clone(),
                 ))
@@ -4781,29 +4834,32 @@ mod tests {
                 .apply_event(&test_stage_event(
                     2,
                     EventBody::AgentSubCompleted(AgentSubCompletedProps {
-                        agent_id:   "sub-1".to_string(),
-                        depth:      1,
-                        success:    true,
+                        agent_id: "sub-1".to_string(),
+                        depth: 1,
+                        success: true,
                         turns_used: 3,
-                        visit:      1,
+                        visit: 1,
                     }),
                     stage_id.clone(),
                 ))
                 .unwrap();
             let stage = state.stage(&stage_id).unwrap();
-            assert_eq!(stage.subagents[0].status, SubAgentStatus::Completed {
-                success:    true,
-                turns_used: 3,
-            });
+            assert_eq!(
+                stage.subagents[0].status,
+                SubAgentStatus::Completed {
+                    success: true,
+                    turns_used: 3,
+                }
+            );
 
             state
                 .apply_event(&test_stage_event(
                     3,
                     EventBody::AgentSubSpawned(AgentSubSpawnedProps {
                         agent_id: "sub-2".to_string(),
-                        depth:    2,
-                        task:     "debug failure".to_string(),
-                        visit:    1,
+                        depth: 2,
+                        task: "debug failure".to_string(),
+                        visit: 1,
                     }),
                     stage_id.clone(),
                 ))
@@ -4813,25 +4869,28 @@ mod tests {
                     4,
                     EventBody::AgentSubFailed(AgentSubFailedProps {
                         agent_id: "sub-2".to_string(),
-                        depth:    2,
-                        error:    json!({ "message": "boom" }),
-                        visit:    1,
+                        depth: 2,
+                        error: json!({ "message": "boom" }),
+                        visit: 1,
                     }),
                     stage_id.clone(),
                 ))
                 .unwrap();
             let stage = state.stage(&stage_id).unwrap();
-            assert_eq!(stage.subagents[1].status, SubAgentStatus::Failed {
-                error: json!({ "message": "boom" }),
-            });
+            assert_eq!(
+                stage.subagents[1].status,
+                SubAgentStatus::Failed {
+                    error: json!({ "message": "boom" }),
+                }
+            );
 
             state
                 .apply_event(&test_stage_event(
                     5,
                     EventBody::AgentSubClosed(AgentSubClosedProps {
                         agent_id: "sub-2".to_string(),
-                        depth:    2,
-                        visit:    1,
+                        depth: 2,
+                        visit: 1,
                     }),
                     stage_id.clone(),
                 ))
@@ -4850,18 +4909,18 @@ mod tests {
                     1,
                     EventBody::AgentSkillsDiscovered(AgentSkillsDiscoveredProps {
                         provider_profile: "claude".to_string(),
-                        source_dirs:      vec![".claude/skills".to_string()],
-                        skills:           vec![
+                        source_dirs: vec![".claude/skills".to_string()],
+                        skills: vec![
                             AgentSkillSummary {
-                                name:        "rust".to_string(),
+                                name: "rust".to_string(),
                                 description: "Rust help".to_string(),
                             },
                             AgentSkillSummary {
-                                name:        "docs".to_string(),
+                                name: "docs".to_string(),
                                 description: "Docs help".to_string(),
                             },
                         ],
-                        visit:            1,
+                        visit: 1,
                     }),
                     stage_id.clone(),
                 ))
@@ -4871,8 +4930,8 @@ mod tests {
                     2,
                     EventBody::AgentSkillActivated(AgentSkillActivatedProps {
                         skill_name: "rust".to_string(),
-                        source:     AgentSkillActivationSource::Slash,
-                        visit:      1,
+                        source: AgentSkillActivationSource::Slash,
+                        visit: 1,
                     }),
                     stage_id.clone(),
                 ))
@@ -4882,8 +4941,8 @@ mod tests {
                     3,
                     EventBody::AgentSkillActivated(AgentSkillActivatedProps {
                         skill_name: "rust".to_string(),
-                        source:     AgentSkillActivationSource::Tool,
-                        visit:      1,
+                        source: AgentSkillActivationSource::Tool,
+                        visit: 1,
                     }),
                     stage_id.clone(),
                 ))
@@ -4990,11 +5049,10 @@ mod tests {
                 .unwrap();
 
             let stage = state.stage(&stage_id).unwrap();
-            assert_eq!(stage.agent_tools, vec![agent_tool(
-                "grep",
-                AgentToolCategory::Read,
-                false
-            )]);
+            assert_eq!(
+                stage.agent_tools,
+                vec![agent_tool("grep", AgentToolCategory::Read, false)]
+            );
         }
 
         #[test]
@@ -5019,12 +5077,12 @@ mod tests {
                 .apply_event(&test_stage_event(
                     2,
                     EventBody::AgentToolStarted(AgentToolStartedProps {
-                        tool_name:         "apply_patch".to_string(),
-                        tool_call_id:      "call_patch".to_string(),
-                        arguments:         serde_json::json!({}),
-                        visit:             1,
-                        tool_call:         None,
-                        turn_id:           None,
+                        tool_name: "apply_patch".to_string(),
+                        tool_call_id: "call_patch".to_string(),
+                        arguments: serde_json::json!({}),
+                        visit: 1,
+                        tool_call: None,
+                        turn_id: None,
                         parent_message_id: None,
                     }),
                     stage_id.clone(),
@@ -5045,12 +5103,12 @@ mod tests {
                 .apply_event(&test_stage_event(
                     1,
                     EventBody::AgentToolStarted(AgentToolStartedProps {
-                        tool_name:         "apply_patch".to_string(),
-                        tool_call_id:      "call_patch".to_string(),
-                        arguments:         serde_json::json!({}),
-                        visit:             1,
-                        tool_call:         None,
-                        turn_id:           None,
+                        tool_name: "apply_patch".to_string(),
+                        tool_call_id: "call_patch".to_string(),
+                        arguments: serde_json::json!({}),
+                        visit: 1,
+                        tool_call: None,
+                        turn_id: None,
                         parent_message_id: None,
                     }),
                     stage_id.clone(),
@@ -5071,18 +5129,18 @@ mod tests {
                     1,
                     EventBody::AgentMcpReady(AgentMcpReadyProps {
                         server_name: "filesystem".to_string(),
-                        tool_count:  2,
-                        tools:       vec![
+                        tool_count: 2,
+                        tools: vec![
                             AgentMcpToolSummary {
-                                name:          "read_file".to_string(),
+                                name: "read_file".to_string(),
                                 original_name: "read_file".to_string(),
                             },
                             AgentMcpToolSummary {
-                                name:          "write_file".to_string(),
+                                name: "write_file".to_string(),
                                 original_name: "write_file".to_string(),
                             },
                         ],
-                        visit:       1,
+                        visit: 1,
                     }),
                     stage_id.clone(),
                 ))
@@ -5092,8 +5150,8 @@ mod tests {
                     2,
                     EventBody::AgentMcpFailed(AgentMcpFailedProps {
                         server_name: "github".to_string(),
-                        error:       "missing token".to_string(),
-                        visit:       1,
+                        error: "missing token".to_string(),
+                        visit: 1,
                     }),
                     stage_id.clone(),
                 ))
@@ -5103,12 +5161,12 @@ mod tests {
                     3,
                     EventBody::AgentMcpReady(AgentMcpReadyProps {
                         server_name: "filesystem".to_string(),
-                        tool_count:  1,
-                        tools:       vec![AgentMcpToolSummary {
-                            name:          "read_file".to_string(),
+                        tool_count: 1,
+                        tools: vec![AgentMcpToolSummary {
+                            name: "read_file".to_string(),
                             original_name: "read_file".to_string(),
                         }],
-                        visit:       1,
+                        visit: 1,
                     }),
                     stage_id.clone(),
                 ))
@@ -5118,18 +5176,24 @@ mod tests {
             assert_eq!(stage.mcp_servers.len(), 2);
             assert_eq!(stage.mcp_servers[0].server_name, "filesystem");
             assert_eq!(stage.mcp_servers[0].tool_count, 1);
-            assert_eq!(stage.mcp_servers[0].status, McpServerStatus::Ready {
-                tools: vec![AgentMcpToolSummary {
-                    name:          "read_file".to_string(),
-                    original_name: "read_file".to_string(),
-                }],
-            });
+            assert_eq!(
+                stage.mcp_servers[0].status,
+                McpServerStatus::Ready {
+                    tools: vec![AgentMcpToolSummary {
+                        name: "read_file".to_string(),
+                        original_name: "read_file".to_string(),
+                    }],
+                }
+            );
             assert!(!stage.mcp_servers[0].invoked);
             assert_eq!(stage.mcp_servers[1].server_name, "github");
             assert_eq!(stage.mcp_servers[1].tool_count, 0);
-            assert_eq!(stage.mcp_servers[1].status, McpServerStatus::Failed {
-                error: "missing token".to_string(),
-            });
+            assert_eq!(
+                stage.mcp_servers[1].status,
+                McpServerStatus::Failed {
+                    error: "missing token".to_string(),
+                }
+            );
             assert!(!stage.mcp_servers[1].invoked);
         }
 
@@ -5143,12 +5207,12 @@ mod tests {
                     1,
                     EventBody::AgentMcpReady(AgentMcpReadyProps {
                         server_name: "filesystem".to_string(),
-                        tool_count:  1,
-                        tools:       vec![AgentMcpToolSummary {
-                            name:          "read_file".to_string(),
+                        tool_count: 1,
+                        tools: vec![AgentMcpToolSummary {
+                            name: "read_file".to_string(),
                             original_name: "read_file".to_string(),
                         }],
-                        visit:       1,
+                        visit: 1,
                     }),
                     stage_id.clone(),
                 ))
@@ -5158,9 +5222,9 @@ mod tests {
                     2,
                     EventBody::AgentMcpReady(AgentMcpReadyProps {
                         server_name: "other".to_string(),
-                        tool_count:  0,
-                        tools:       vec![],
-                        visit:       1,
+                        tool_count: 0,
+                        tools: vec![],
+                        visit: 1,
                     }),
                     stage_id.clone(),
                 ))
@@ -5170,12 +5234,12 @@ mod tests {
                 .apply_event(&test_stage_event(
                     3,
                     EventBody::AgentToolStarted(AgentToolStartedProps {
-                        tool_name:         "Bash".to_string(),
-                        tool_call_id:      "call_bash".to_string(),
-                        arguments:         serde_json::json!({}),
-                        visit:             1,
-                        tool_call:         None,
-                        turn_id:           None,
+                        tool_name: "Bash".to_string(),
+                        tool_call_id: "call_bash".to_string(),
+                        arguments: serde_json::json!({}),
+                        visit: 1,
+                        tool_call: None,
+                        turn_id: None,
                         parent_message_id: None,
                     }),
                     stage_id.clone(),
@@ -5186,12 +5250,12 @@ mod tests {
                 .apply_event(&test_stage_event(
                     4,
                     EventBody::AgentToolStarted(AgentToolStartedProps {
-                        tool_name:         "mcp__filesystem__read_file".to_string(),
-                        tool_call_id:      "call_fs".to_string(),
-                        arguments:         serde_json::json!({}),
-                        visit:             1,
-                        tool_call:         None,
-                        turn_id:           None,
+                        tool_name: "mcp__filesystem__read_file".to_string(),
+                        tool_call_id: "call_fs".to_string(),
+                        arguments: serde_json::json!({}),
+                        visit: 1,
+                        tool_call: None,
+                        turn_id: None,
                         parent_message_id: None,
                     }),
                     stage_id.clone(),
@@ -5223,12 +5287,12 @@ mod tests {
                     1,
                     EventBody::AgentMcpReady(AgentMcpReadyProps {
                         server_name: "filesystem".to_string(),
-                        tool_count:  1,
-                        tools:       vec![AgentMcpToolSummary {
-                            name:          "read_file".to_string(),
+                        tool_count: 1,
+                        tools: vec![AgentMcpToolSummary {
+                            name: "read_file".to_string(),
                             original_name: "read_file".to_string(),
                         }],
-                        visit:       1,
+                        visit: 1,
                     }),
                     stage_id.clone(),
                 ))
@@ -5237,12 +5301,12 @@ mod tests {
                 .apply_event(&test_stage_event(
                     2,
                     EventBody::AgentToolStarted(AgentToolStartedProps {
-                        tool_name:         "mcp__filesystem__read_file".to_string(),
-                        tool_call_id:      "call_fs".to_string(),
-                        arguments:         serde_json::json!({}),
-                        visit:             1,
-                        tool_call:         None,
-                        turn_id:           None,
+                        tool_name: "mcp__filesystem__read_file".to_string(),
+                        tool_call_id: "call_fs".to_string(),
+                        arguments: serde_json::json!({}),
+                        visit: 1,
+                        tool_call: None,
+                        turn_id: None,
                         parent_message_id: None,
                     }),
                     stage_id.clone(),
@@ -5255,18 +5319,18 @@ mod tests {
                     3,
                     EventBody::AgentMcpReady(AgentMcpReadyProps {
                         server_name: "filesystem".to_string(),
-                        tool_count:  2,
-                        tools:       vec![
+                        tool_count: 2,
+                        tools: vec![
                             AgentMcpToolSummary {
-                                name:          "read_file".to_string(),
+                                name: "read_file".to_string(),
                                 original_name: "read_file".to_string(),
                             },
                             AgentMcpToolSummary {
-                                name:          "stat".to_string(),
+                                name: "stat".to_string(),
                                 original_name: "stat".to_string(),
                             },
                         ],
-                        visit:       1,
+                        visit: 1,
                     }),
                     stage_id.clone(),
                 ))
@@ -5358,12 +5422,12 @@ mod tests {
                 generated_at: Utc::now(),
                 event_seq: None,
                 breakdown: vec![StageContextWindowBreakdownItem {
-                    category:      StageContextWindowCategory::Conversation,
-                    tokens:        input_tokens,
+                    category: StageContextWindowCategory::Conversation,
+                    tokens: input_tokens,
                     usage_percent: input_tokens as f64 * 100.0 / 400_000.0,
                 }],
                 warnings: vec![StageContextWindowWarning {
-                    code:    "local_token_estimate".to_string(),
+                    code: "local_token_estimate".to_string(),
                     message: "input token count is a local estimate".to_string(),
                 }],
             }

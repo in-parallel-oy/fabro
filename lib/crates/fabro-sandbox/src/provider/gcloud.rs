@@ -11,9 +11,9 @@ use async_trait::async_trait;
 use fabro_types::{SandboxInfo, SandboxProviderKind};
 
 use super::{SandboxCreateSpec, SandboxProvider};
+use crate::Sandbox;
 use crate::gcloud::compute::ComputeClient;
 use crate::gcloud::config::{GcloudConfig, GcloudSettings};
-use crate::Sandbox;
 use crate::gcloud::{GcloudSandbox, auth::GcpAuth};
 
 /// GCE-per-run provider. Stateless beyond the resolved operator settings, a
@@ -21,12 +21,12 @@ use crate::gcloud::{GcloudSandbox, auth::GcpAuth};
 #[derive(Clone)]
 pub struct GcloudSandboxProvider {
     settings: GcloudSettings,
-    http:     reqwest::Client,
+    http: reqwest::Client,
     /// One shared [`GcpAuth`] so the access-token cache is process-wide: every
     /// `compute()` and each created [`GcloudSandbox`] reuse a single minted
     /// token across operations instead of re-minting (and re-signing an SA JWT /
     /// re-round-tripping the token endpoint) per list/get/create/delete.
-    auth:     Arc<GcpAuth>,
+    auth: Arc<GcpAuth>,
 }
 
 impl GcloudSandboxProvider {
@@ -69,9 +69,9 @@ impl SandboxProvider for GcloudSandboxProvider {
     async fn get(&self, id: &str) -> crate::Result<Option<SandboxInfo>> {
         let config = self.read_config()?;
         match self.compute().get_instance(&config, id).await {
-            Ok(instance) if instance.is_managed() => {
-                Ok(Some(crate::details::gcloud::gcloud_info_from_instance(&instance, &config)))
-            }
+            Ok(instance) if instance.is_managed() => Ok(Some(
+                crate::details::gcloud::gcloud_info_from_instance(&instance, &config),
+            )),
             Ok(_) => Ok(None),
             Err(err) if is_not_found(&err) => Ok(None),
             Err(err) => Err(err),
@@ -102,11 +102,14 @@ impl SandboxProvider for GcloudSandboxProvider {
         )?;
         sandbox.initialize().await?;
 
-        let name = sandbox
-            .instance_name()
-            .ok_or_else(|| crate::Error::message("gcloud sandbox initialized without an instance name"))?;
+        let name = sandbox.instance_name().ok_or_else(|| {
+            crate::Error::message("gcloud sandbox initialized without an instance name")
+        })?;
         let instance = self.compute().get_instance(&read_config, name).await?;
-        Ok(crate::details::gcloud::gcloud_info_from_instance(&instance, &read_config))
+        Ok(crate::details::gcloud::gcloud_info_from_instance(
+            &instance,
+            &read_config,
+        ))
     }
 
     async fn delete(&self, id: &str) -> crate::Result<()> {
@@ -130,4 +133,3 @@ impl SandboxProvider for GcloudSandboxProvider {
 fn is_not_found(err: &crate::Error) -> bool {
     err.to_string().contains("returned 404")
 }
-

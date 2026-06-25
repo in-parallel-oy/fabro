@@ -11,27 +11,27 @@ use crate::ids::ProviderId;
 /// `agent_profile`) so credential material never reaches the wire.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Provider {
-    pub id:                   ProviderId,
-    pub display_name:         String,
-    pub adapter:              AdapterKind,
+    pub id: ProviderId,
+    pub display_name: String,
+    pub adapter: AdapterKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub base_url:             Option<String>,
+    pub base_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub api_key_url:          Option<String>,
-    pub priority:             i32,
+    pub api_key_url: Option<String>,
+    pub priority: i32,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub aliases:              Vec<String>,
+    pub aliases: Vec<String>,
     /// Number of catalog models for this provider. Stamped by the handler.
-    pub model_count:          u32,
+    pub model_count: u32,
     /// Catalog default model ID for this provider, if any. Stamped by the
     /// handler.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default_model:        Option<String>,
+    pub default_model: Option<String>,
     /// True if the server has credential material configured for this provider
     /// when the response is produced. Always `false` in static catalog data;
     /// stamped by `GET /providers` per request.
     #[serde(default)]
-    pub configured:           bool,
+    pub configured: bool,
     /// Suggested vault secret name for configuring this provider, derived
     /// from the first vault credential in the catalog. `None` when the
     /// provider has no vault credential (e.g. Ollama, env-only providers).

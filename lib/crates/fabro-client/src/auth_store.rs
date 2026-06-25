@@ -23,11 +23,11 @@ use crate::target::ServerTarget;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredSubject {
-    pub idp_issuer:  String,
+    pub idp_issuer: String,
     pub idp_subject: String,
-    pub login:       String,
-    pub name:        String,
-    pub email:       String,
+    pub login: String,
+    pub name: String,
+    pub email: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,17 +41,17 @@ pub enum AuthEntry {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OAuthEntry {
-    pub access_token:             String,
-    pub access_token_expires_at:  DateTime<Utc>,
-    pub refresh_token:            String,
+    pub access_token: String,
+    pub access_token_expires_at: DateTime<Utc>,
+    pub refresh_token: String,
     pub refresh_token_expires_at: DateTime<Utc>,
-    pub subject:                  StoredSubject,
-    pub logged_in_at:             DateTime<Utc>,
+    pub subject: StoredSubject,
+    pub logged_in_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DevTokenEntry {
-    pub token:        String,
+    pub token: String,
     pub logged_in_at: DateTime<Utc>,
 }
 
@@ -69,27 +69,27 @@ pub enum AuthStoreError {
     Lock(#[from] LockError),
     #[error("failed to read auth store at {path}: {source}")]
     Read {
-        path:   PathBuf,
+        path: PathBuf,
         source: std::io::Error,
     },
     #[error("failed to parse auth store at {path}: {source}")]
     Corrupt {
-        path:   PathBuf,
+        path: PathBuf,
         source: serde_json::Error,
     },
     #[error("failed to create auth store directory {path}: {source}")]
     CreateDir {
-        path:   PathBuf,
+        path: PathBuf,
         source: std::io::Error,
     },
     #[error("failed to write auth store at {path}: {source}")]
     Write {
-        path:   PathBuf,
+        path: PathBuf,
         source: std::io::Error,
     },
     #[error("failed to serialize auth store at {path}: {source}")]
     Serialize {
-        path:   PathBuf,
+        path: PathBuf,
         source: serde_json::Error,
     },
 }
@@ -103,7 +103,7 @@ pub enum LockError {
     FilesystemDoesNotSupportLocking { path: PathBuf },
     #[error("failed to lock auth store at {path}: {source}")]
     Io {
-        path:   PathBuf,
+        path: PathBuf,
         source: std::io::Error,
     },
 }
@@ -391,18 +391,18 @@ mod tests {
     fn oauth_entry(login: &str) -> OAuthEntry {
         let now = chrono::Utc::now();
         OAuthEntry {
-            access_token:             format!("access-{login}"),
-            access_token_expires_at:  now + Duration::minutes(10),
-            refresh_token:            format!("refresh-{login}"),
+            access_token: format!("access-{login}"),
+            access_token_expires_at: now + Duration::minutes(10),
+            refresh_token: format!("refresh-{login}"),
             refresh_token_expires_at: now + Duration::days(30),
-            subject:                  StoredSubject {
-                idp_issuer:  "https://github.com".to_string(),
+            subject: StoredSubject {
+                idp_issuer: "https://github.com".to_string(),
                 idp_subject: "12345".to_string(),
-                login:       login.to_string(),
-                name:        format!("Name {login}"),
-                email:       format!("{login}@example.com"),
+                login: login.to_string(),
+                name: format!("Name {login}"),
+                email: format!("{login}@example.com"),
             },
-            logged_in_at:             now,
+            logged_in_at: now,
         }
     }
 
@@ -463,9 +463,8 @@ mod tests {
         assert_eq!(oauth["kind"], "oauth");
 
         let dev_token = serde_json::to_value(AuthEntry::DevToken(DevTokenEntry {
-            token:
-                "fabro_dev_abababababababababababababababababababababababababababababababab"
-                    .to_string(),
+            token: "fabro_dev_abababababababababababababababababababababababababababababababab"
+                .to_string(),
             logged_in_at: chrono::Utc::now(),
         }))
         .unwrap();

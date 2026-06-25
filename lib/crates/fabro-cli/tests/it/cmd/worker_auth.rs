@@ -33,12 +33,12 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const TEST_GITHUB_CLIENT_SECRET: &str = "github-client-secret";
 
 struct RunningGithubOnlyServer {
-    child:         Option<Child>,
-    home_root:     tempfile::TempDir,
-    worker_home:   PathBuf,
+    child: Option<Child>,
+    home_root: tempfile::TempDir,
+    worker_home: PathBuf,
     _storage_root: tempfile::TempDir,
-    storage_dir:   PathBuf,
-    api_base_url:  String,
+    storage_dir: PathBuf,
+    api_base_url: String,
 }
 
 impl RunningGithubOnlyServer {
@@ -176,18 +176,18 @@ fn write_submitter_auth(home_dir: &Path, target: &str, access_token: &str) {
         .put(
             &target,
             AuthEntry::OAuth(OAuthEntry {
-                access_token:             access_token.to_string(),
-                access_token_expires_at:  now + ChronoDuration::minutes(10),
-                refresh_token:            "refresh-unused".to_string(),
+                access_token: access_token.to_string(),
+                access_token_expires_at: now + ChronoDuration::minutes(10),
+                refresh_token: "refresh-unused".to_string(),
                 refresh_token_expires_at: now + ChronoDuration::days(30),
-                subject:                  StoredSubject {
-                    idp_issuer:  "https://github.com".to_string(),
+                subject: StoredSubject {
+                    idp_issuer: "https://github.com".to_string(),
                     idp_subject: "12345".to_string(),
-                    login:       "octocat".to_string(),
-                    name:        "The Octocat".to_string(),
-                    email:       "octocat@example.com".to_string(),
+                    login: "octocat".to_string(),
+                    name: "The Octocat".to_string(),
+                    email: "octocat@example.com".to_string(),
                 },
-                logged_in_at:             now,
+                logged_in_at: now,
             }),
         )
         .unwrap();

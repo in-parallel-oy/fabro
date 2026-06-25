@@ -33,9 +33,12 @@ pub(crate) async fn run(
         .clone()
         .expect("rewind target should be present unless listing");
     let result = client
-        .rewind_run(&run_id, RewindRequest {
-            target: Some(target),
-        })
+        .rewind_run(
+            &run_id,
+            RewindRequest {
+                target: Some(target),
+            },
+        )
         .await?;
     let response = result.response;
 

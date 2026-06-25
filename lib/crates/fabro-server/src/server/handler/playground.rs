@@ -75,13 +75,13 @@ fn build_system_prompt(workflow_fabro: &str) -> String {
 /// canvas.
 fn playground_tools() -> Vec<ToolDefinition> {
     vec![ToolDefinition {
-        name:        "write_workflow_file".into(),
+        name: "write_workflow_file".into(),
         description: "Write the full new contents of a workflow file. For the playground, only \
                       `workflow.fabro` is meaningful — the model emits the complete DOT for the \
                       current desired state of the workflow. The previous file is replaced \
                       atomically; always include every node and edge, not just changes."
             .into(),
-        parameters:  json!({
+        parameters: json!({
             "type": "object",
             "required": ["file_name", "content"],
             "properties": {
@@ -228,9 +228,9 @@ mod tests {
     fn make_request(messages_len: usize, workflow_fabro: String) -> CreatePlaygroundChatRequest {
         let messages = (0..messages_len)
             .map(|_| fabro_types::Message {
-                role:         fabro_types::Role::User,
-                content:      Vec::new(),
-                name:         None,
+                role: fabro_types::Role::User,
+                content: Vec::new(),
+                name: None,
                 tool_call_id: None,
             })
             .collect();

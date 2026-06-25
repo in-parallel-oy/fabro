@@ -35,7 +35,7 @@ pub(super) fn short_run_id(id: &str) -> &str {
 
 #[derive(Clone, Copy)]
 pub(super) struct RunBatchAction {
-    pub(super) past:     &'static str,
+    pub(super) past: &'static str,
     pub(super) json_key: &'static str,
 }
 

@@ -16,16 +16,16 @@ const DEFAULT_PAYLOAD_BUDGET_BYTES: u64 = 5 * 1024 * 1024;
 pub(crate) struct SpaCheckArgs {
     /// Repository root containing lib/crates/fabro-spa/assets.
     #[arg(long, hide = true)]
-    root:                 Option<PathBuf>,
+    root: Option<PathBuf>,
     /// Override the raw asset budget.
     #[arg(long, hide = true, default_value_t = DEFAULT_ASSET_BUDGET_BYTES)]
-    asset_budget_bytes:   u64,
+    asset_budget_bytes: u64,
     /// Override the estimated gzip payload budget.
     #[arg(long, hide = true, default_value_t = DEFAULT_PAYLOAD_BUDGET_BYTES)]
     payload_budget_bytes: u64,
     /// Skip bun run build and compare an existing dist directory.
     #[arg(long, hide = true)]
-    skip_build:           bool,
+    skip_build: bool,
 }
 
 #[expect(
@@ -97,7 +97,7 @@ pub(super) fn check_spa_asset_budgets(
 }
 
 struct BudgetReport {
-    asset_bytes:              u64,
+    asset_bytes: u64,
     compressed_payload_bytes: u64,
 }
 

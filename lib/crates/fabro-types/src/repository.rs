@@ -2,10 +2,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RepositoryRef {
-    pub name:       String,
+    pub name: String,
     #[serde(default)]
     pub origin_url: Option<String>,
-    pub provider:   RepositoryProvider,
+    pub provider: RepositoryProvider,
 }
 
 impl RepositoryRef {

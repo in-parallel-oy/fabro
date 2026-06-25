@@ -4,7 +4,7 @@ use std::process::Command;
 #[derive(Debug, Eq, PartialEq)]
 pub struct BuildGitMetadata {
     pub rerun_paths: Vec<PathBuf>,
-    pub short_sha:   String,
+    pub short_sha: String,
 }
 
 pub fn collect_from(package_dir: &Path) -> BuildGitMetadata {

@@ -28,12 +28,12 @@ const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
 /// server-side state.
 pub struct Adapter {
     pub(crate) http: HttpTransport,
-    org_id:          Option<String>,
-    project_id:      Option<String>,
-    provider_name:   String,
-    catalog:         Option<Arc<Catalog>>,
+    org_id: Option<String>,
+    project_id: Option<String>,
+    provider_name: String,
+    catalog: Option<Arc<Catalog>>,
     /// When true, always use streaming (required by the Codex endpoint).
-    codex_mode:      bool,
+    codex_mode: bool,
 }
 
 impl Adapter {
@@ -45,12 +45,12 @@ impl Adapter {
     #[must_use]
     pub fn new_optional_auth(api_key: Option<String>) -> Self {
         Self {
-            http:          HttpTransport::new_optional(api_key, DEFAULT_BASE_URL),
-            org_id:        None,
-            project_id:    None,
+            http: HttpTransport::new_optional(api_key, DEFAULT_BASE_URL),
+            org_id: None,
+            project_id: None,
             provider_name: "openai".to_string(),
-            catalog:       None,
-            codex_mode:    false,
+            catalog: None,
+            codex_mode: false,
         }
     }
 
@@ -142,9 +142,9 @@ impl Adapter {
         // OpenAI loads images inline; audio and documents render as text
         // placeholders in the codec, so they are not loaded here.
         let policy = AttachmentPolicy {
-            images:    true,
+            images: true,
             documents: false,
-            audio:     false,
+            audio: false,
         };
         attachments::resolve(request, policy).await
     }
@@ -187,7 +187,7 @@ impl Adapter {
         }
         last_response.ok_or_else(|| Error::Network {
             message: "Stream ended without a finish event".into(),
-            source:  None,
+            source: None,
         })
     }
 }
@@ -300,19 +300,19 @@ mod tests {
 
     fn minimal_request() -> Request {
         Request {
-            model:            "gpt-4o".to_string(),
-            messages:         vec![Message::user("Hello")],
-            provider:         None,
-            tools:            None,
-            tool_choice:      None,
-            response_format:  None,
-            temperature:      None,
-            top_p:            None,
-            max_tokens:       None,
-            stop_sequences:   None,
+            model: "gpt-4o".to_string(),
+            messages: vec![Message::user("Hello")],
+            provider: None,
+            tools: None,
+            tool_choice: None,
+            response_format: None,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            stop_sequences: None,
             reasoning_effort: None,
-            speed:            None,
-            metadata:         None,
+            speed: None,
+            metadata: None,
             provider_options: None,
         }
     }
@@ -323,7 +323,7 @@ mod tests {
     #[derive(Clone, Debug, Default)]
     struct CapturedLogEvent {
         message: Option<String>,
-        fields:  HashMap<String, String>,
+        fields: HashMap<String, String>,
     }
 
     struct CaptureLayer {
@@ -339,7 +339,7 @@ mod tests {
             event.record(&mut visitor);
             self.events.0.lock().unwrap().push(CapturedLogEvent {
                 message: visitor.message,
-                fields:  visitor.fields,
+                fields: visitor.fields,
             });
         }
     }
@@ -347,7 +347,7 @@ mod tests {
     #[derive(Default)]
     struct LogFieldVisitor {
         message: Option<String>,
-        fields:  HashMap<String, String>,
+        fields: HashMap<String, String>,
     }
 
     impl LogFieldVisitor {
@@ -466,10 +466,13 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert!(matches!(err, Error::Provider {
-            kind: ProviderErrorKind::AccessDenied,
-            ..
-        }));
+        assert!(matches!(
+            err,
+            Error::Provider {
+                kind: ProviderErrorKind::AccessDenied,
+                ..
+            }
+        ));
 
         let captured = events.0.lock().unwrap();
         let event = captured

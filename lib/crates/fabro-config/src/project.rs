@@ -30,14 +30,14 @@ const CONFIG_FILENAME: &str = ".fabro/project.toml";
 pub struct WorkflowLocation {
     /// Directory containing the workflow's files. Always the parent of
     /// `graph`. Used as the anchor for project-config discovery.
-    pub dir:   PathBuf,
+    pub dir: PathBuf,
     /// The `.fabro` (or other graph) file to parse and validate.
     pub graph: PathBuf,
     /// `workflow.toml` providing `[run.*]` settings, when present.
-    pub toml:  Option<PathBuf>,
+    pub toml: Option<PathBuf>,
     /// Display name for the workflow (e.g. `"hello"` for
     /// `.fabro/workflows/hello/workflow.fabro`).
-    pub slug:  Option<String>,
+    pub slug: Option<String>,
 }
 
 impl WorkflowLocation {
@@ -249,8 +249,8 @@ fn user_workflows_dir() -> PathBuf {
 /// Metadata about a discovered workflow.
 #[derive(Clone, Debug, Serialize)]
 pub struct WorkflowInfo {
-    pub name:   String,
-    pub goal:   Option<String>,
+    pub name: String,
+    pub goal: Option<String>,
     pub source: WorkflowSource,
 }
 

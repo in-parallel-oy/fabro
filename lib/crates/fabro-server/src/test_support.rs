@@ -61,43 +61,43 @@ methods = ["dev-token"]
 
 #[must_use]
 pub struct TestAppStateBuilder {
-    server_settings:           ServerSettings,
-    manifest_run_defaults:     RunLayer,
-    max_concurrent_runs:       usize,
+    server_settings: ServerSettings,
+    manifest_run_defaults: RunLayer,
+    max_concurrent_runs: usize,
     registry_factory_override: Option<Box<RegistryFactoryOverride>>,
     sandbox_provider_registry: Option<SandboxProviderRegistry>,
-    store_bundle:              Option<(Arc<Database>, ArtifactStore)>,
-    vault_path:                Option<PathBuf>,
-    vault_entries:             Vec<(String, String)>,
-    server_env_path:           Option<PathBuf>,
-    active_config_path:        Option<PathBuf>,
-    server_secret_env:         HashMap<String, String>,
-    env_lookup:                EnvLookup,
-    llm_catalog_settings:      LlmCatalogSettings,
-    automation_materializer:   Option<Arc<dyn AutomationRunMaterializer>>,
+    store_bundle: Option<(Arc<Database>, ArtifactStore)>,
+    vault_path: Option<PathBuf>,
+    vault_entries: Vec<(String, String)>,
+    server_env_path: Option<PathBuf>,
+    active_config_path: Option<PathBuf>,
+    server_secret_env: HashMap<String, String>,
+    env_lookup: EnvLookup,
+    llm_catalog_settings: LlmCatalogSettings,
+    automation_materializer: Option<Arc<dyn AutomationRunMaterializer>>,
     #[cfg(test)]
-    worker_runtime:            Option<Arc<dyn WorkerRuntime>>,
+    worker_runtime: Option<Arc<dyn WorkerRuntime>>,
 }
 
 impl Default for TestAppStateBuilder {
     fn default() -> Self {
         Self {
-            server_settings:             default_test_server_settings(),
-            manifest_run_defaults:       RunLayer::default(),
-            max_concurrent_runs:         5,
-            registry_factory_override:   None,
-            sandbox_provider_registry:   None,
-            store_bundle:                None,
-            vault_path:                  None,
-            vault_entries:               Vec::new(),
-            server_env_path:             None,
-            active_config_path:          None,
-            server_secret_env:           HashMap::new(),
-            env_lookup:                  default_env_lookup(),
-            llm_catalog_settings:        LlmCatalogSettings::default(),
-            automation_materializer:     None,
+            server_settings: default_test_server_settings(),
+            manifest_run_defaults: RunLayer::default(),
+            max_concurrent_runs: 5,
+            registry_factory_override: None,
+            sandbox_provider_registry: None,
+            store_bundle: None,
+            vault_path: None,
+            vault_entries: Vec::new(),
+            server_env_path: None,
+            active_config_path: None,
+            server_secret_env: HashMap::new(),
+            env_lookup: default_env_lookup(),
+            llm_catalog_settings: LlmCatalogSettings::default(),
+            automation_materializer: None,
             #[cfg(test)]
-            worker_runtime:              None,
+            worker_runtime: None,
         }
     }
 }
@@ -170,12 +170,13 @@ impl TestAppStateBuilder {
         provider: impl Into<String>,
         base_url: impl Into<String>,
     ) -> Self {
-        self.llm_catalog_settings
-            .providers
-            .insert(provider.into(), ProviderCatalogSettings {
+        self.llm_catalog_settings.providers.insert(
+            provider.into(),
+            ProviderCatalogSettings {
                 base_url: Some(base_url.into()),
                 ..ProviderCatalogSettings::default()
-            });
+            },
+        );
         self
     }
 
@@ -283,12 +284,13 @@ pub fn llm_catalog_settings_with_provider_base_url(
     base_url: impl Into<String>,
 ) -> LlmCatalogSettings {
     let mut settings = LlmCatalogSettings::default();
-    settings
-        .providers
-        .insert(provider.into(), ProviderCatalogSettings {
+    settings.providers.insert(
+        provider.into(),
+        ProviderCatalogSettings {
             base_url: Some(base_url.into()),
             ..ProviderCatalogSettings::default()
-        });
+        },
+    );
     settings
 }
 
@@ -537,9 +539,9 @@ pub fn test_secret_store_path() -> PathBuf {
 #[must_use]
 pub fn test_auth_mode() -> AuthMode {
     AuthMode::Enabled(ConfiguredAuth {
-        methods:    vec![ServerAuthMethod::DevToken, ServerAuthMethod::Github],
-        dev_token:  Some(TEST_DEV_TOKEN.to_string()),
-        jwt_key:    Some(
+        methods: vec![ServerAuthMethod::DevToken, ServerAuthMethod::Github],
+        dev_token: Some(TEST_DEV_TOKEN.to_string()),
+        jwt_key: Some(
             auth::derive_jwt_key(TEST_SESSION_SECRET.as_bytes())
                 .expect("test jwt signing key should derive"),
         ),
@@ -583,13 +585,12 @@ fn issue_test_user_token() -> String {
         &key,
         "https://fabro.test",
         &auth::JwtSubject {
-            identity:    IdpIdentity::new("fabro:dev", "dev")
-                .expect("test identity should be valid"),
-            login:       "dev".to_string(),
-            name:        "Dev Token".to_string(),
-            email:       "dev@fabro.local".to_string(),
-            avatar_url:  String::new(),
-            user_url:    String::new(),
+            identity: IdpIdentity::new("fabro:dev", "dev").expect("test identity should be valid"),
+            login: "dev".to_string(),
+            name: "Dev Token".to_string(),
+            email: "dev@fabro.local".to_string(),
+            avatar_url: String::new(),
+            user_url: String::new(),
             auth_method: AuthMethod::DevToken,
         },
         ChronoDuration::days(3650),

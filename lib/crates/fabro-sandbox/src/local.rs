@@ -21,8 +21,8 @@ use crate::{
 
 pub struct LocalSandbox {
     working_directory: PathBuf,
-    event_callback:    Option<SandboxEventCallback>,
-    rg_available:      std::sync::OnceLock<bool>,
+    event_callback: Option<SandboxEventCallback>,
+    rg_available: std::sync::OnceLock<bool>,
 }
 
 impl LocalSandbox {
@@ -182,7 +182,7 @@ where
 type LocalStdioOutcome = Result<StdioProcessTermination, String>;
 
 struct LocalStdioProcessControl {
-    terminate_tx:   watch::Sender<bool>,
+    terminate_tx: watch::Sender<bool>,
     termination_rx: watch::Receiver<Option<LocalStdioOutcome>>,
 }
 
@@ -492,7 +492,7 @@ impl Sandbox for LocalSandbox {
             .map_err(|e| crate::Error::context("stderr stream task failed", e))??;
 
         Ok(ExecStreamingResult {
-            result:            ExecResult {
+            result: ExecResult {
                 stdout: String::from_utf8_lossy(&stdout_bytes).into_owned(),
                 stderr: String::from_utf8_lossy(&stderr_bytes).into_owned(),
                 exit_code,
@@ -500,7 +500,7 @@ impl Sandbox for LocalSandbox {
                 duration_ms,
             },
             streams_separated: true,
-            live_streaming:    true,
+            live_streaming: true,
         })
     }
 
@@ -1321,10 +1321,14 @@ mod tests {
 
         let env = LocalSandbox::new(dir.clone());
         let results = env
-            .grep("hello", "test.txt", &GrepOptions {
-                case_insensitive: true,
-                ..Default::default()
-            })
+            .grep(
+                "hello",
+                "test.txt",
+                &GrepOptions {
+                    case_insensitive: true,
+                    ..Default::default()
+                },
+            )
             .await
             .unwrap();
 
@@ -1339,10 +1343,14 @@ mod tests {
 
         let env = LocalSandbox::new(dir.clone());
         let results = env
-            .grep("match", "test.txt", &GrepOptions {
-                max_results: Some(2),
-                ..Default::default()
-            })
+            .grep(
+                "match",
+                "test.txt",
+                &GrepOptions {
+                    max_results: Some(2),
+                    ..Default::default()
+                },
+            )
             .await
             .unwrap();
 

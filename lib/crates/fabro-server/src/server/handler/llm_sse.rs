@@ -80,7 +80,7 @@ mod tests {
         let stream = futures_util::stream::iter(vec![
             Ok(StreamEvent::StreamStart),
             Ok(StreamEvent::TextDelta {
-                delta:   "hi".to_string(),
+                delta: "hi".to_string(),
                 text_id: None,
             }),
         ]);

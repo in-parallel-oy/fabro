@@ -64,7 +64,7 @@ pub enum ResolveRunGoalError {
         var: String,
     },
     Io {
-        path:   PathBuf,
+        path: PathBuf,
         source: std::io::Error,
     },
 }
@@ -151,7 +151,7 @@ fn resolve_layer_goal(
 ) -> std::result::Result<ResolvedRunGoal, ResolveRunGoalError> {
     match goal {
         RunGoalLayer::Inline(text) => Ok(ResolvedRunGoal {
-            text:   text.as_source(),
+            text: text.as_source(),
             source: ResolvedGoalSource::Inline,
         }),
         RunGoalLayer::File { file } => resolve_goal_file(file, base_dir),
@@ -169,7 +169,7 @@ fn resolve_goal(
 ) -> std::result::Result<ResolvedRunGoal, ResolveRunGoalError> {
     match goal {
         RunGoal::Inline(text) => Ok(ResolvedRunGoal {
-            text:   text.as_source(),
+            text: text.as_source(),
             source: ResolvedGoalSource::Inline,
         }),
         RunGoal::File(file) => resolve_goal_file(file, base_dir),
@@ -255,8 +255,9 @@ file = "/etc/fabro/goal.md"
         .expect("goal should resolve");
 
         assert_eq!(resolved.text, "ship from namespace");
-        assert_eq!(resolved.source, ResolvedGoalSource::File {
-            path: goal_path,
-        });
+        assert_eq!(
+            resolved.source,
+            ResolvedGoalSource::File { path: goal_path }
+        );
     }
 }

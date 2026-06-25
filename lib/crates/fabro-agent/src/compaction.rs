@@ -45,16 +45,19 @@ pub(crate) fn check_context_usage(
     if estimate.tokens > threshold {
         let usage_percent = estimate.tokens.saturating_mul(100) / context_window;
         let method: &'static str = estimate.method.into();
-        emitter.emit(session_id.to_owned(), AgentEvent::Warning {
-            kind:    "context_window".into(),
-            message: format!("Context window usage: {usage_percent}%"),
-            details: serde_json::json!({
-                "estimated_tokens": estimate.tokens,
-                "context_window_size": context_window,
-                "usage_percent": usage_percent,
-                "estimate_method": method,
-            }),
-        });
+        emitter.emit(
+            session_id.to_owned(),
+            AgentEvent::Warning {
+                kind: "context_window".into(),
+                message: format!("Context window usage: {usage_percent}%"),
+                details: serde_json::json!({
+                    "estimated_tokens": estimate.tokens,
+                    "context_window_size": context_window,
+                    "usage_percent": usage_percent,
+                    "estimate_method": method,
+                }),
+            },
+        );
         Some(estimate)
     } else {
         None
@@ -88,10 +91,13 @@ pub(crate) async fn compact_context(
     }
     let preserved_turn_count = original_turn_count - preserve_start;
 
-    emitter.emit(session_id.to_owned(), AgentEvent::CompactionStarted {
-        estimated_tokens:    estimate.tokens,
-        context_window_size: provider_profile.context_window_size(),
-    });
+    emitter.emit(
+        session_id.to_owned(),
+        AgentEvent::CompactionStarted {
+            estimated_tokens: estimate.tokens,
+            context_window_size: provider_profile.context_window_size(),
+        },
+    );
 
     let turns_to_summarize = &history.turns()[..preserve_start];
     let rendered = render_turns_for_summary(turns_to_summarize);
@@ -123,24 +129,24 @@ function names, error messages, and exact values. Omit pleasantries and conversa
     );
 
     let summary_request = Request {
-        model:            provider_profile.model().to_string(),
-        messages:         vec![
+        model: provider_profile.model().to_string(),
+        messages: vec![
             LlmMessage::system(summarization_prompt),
             LlmMessage::user(format!(
                 "Here is the conversation to summarize:\n\n{rendered}"
             )),
         ],
-        provider:         Some(provider_profile.provider_id().to_string()),
-        tools:            None,
-        tool_choice:      None,
-        response_format:  None,
-        temperature:      None,
-        top_p:            None,
-        max_tokens:       Some(4096),
-        stop_sequences:   None,
+        provider: Some(provider_profile.provider_id().to_string()),
+        tools: None,
+        tool_choice: None,
+        response_format: None,
+        temperature: None,
+        top_p: None,
+        max_tokens: Some(4096),
+        stop_sequences: None,
         reasoning_effort: None,
-        speed:            None,
-        metadata:         None,
+        speed: None,
+        metadata: None,
         provider_options: None,
     };
 
@@ -162,12 +168,15 @@ Build on their progress — do not repeat completed steps.\n\n{summary_text}"
 
     history.compact_from(preserve_start, summary_content);
 
-    emitter.emit(session_id.to_owned(), AgentEvent::CompactionCompleted {
-        original_turn_count,
-        preserved_turn_count,
-        summary_token_estimate,
-        tracked_file_count: file_tracker.file_count(),
-    });
+    emitter.emit(
+        session_id.to_owned(),
+        AgentEvent::CompactionCompleted {
+            original_turn_count,
+            preserved_turn_count,
+            summary_token_estimate,
+            tracked_file_count: file_tracker.file_count(),
+        },
+    );
 
     Ok(())
 }
@@ -313,27 +322,27 @@ mod tests {
     fn render_turns_produces_labeled_text() {
         let turns = vec![
             Message::User {
-                content:   "Hello".into(),
+                content: "Hello".into(),
                 timestamp: SystemTime::now(),
             },
             Message::Assistant {
-                content:        "Let me check".into(),
-                tool_calls:     vec![ToolCall::new(
+                content: "Let me check".into(),
+                tool_calls: vec![ToolCall::new(
                     "c1",
                     "read_file",
                     serde_json::json!({"path": "foo.rs"}),
                 )],
                 provider_parts: vec![],
-                usage:          Box::new(TokenCounts::default()),
-                response_id:    "resp_1".into(),
-                timestamp:      SystemTime::now(),
+                usage: Box::new(TokenCounts::default()),
+                response_id: "resp_1".into(),
+                timestamp: SystemTime::now(),
             },
             Message::ToolResults {
-                results:   vec![ToolResult {
-                    tool_call_id:     "c1".into(),
-                    content:          serde_json::json!("file contents here"),
-                    is_error:         false,
-                    image_data:       None,
+                results: vec![ToolResult {
+                    tool_call_id: "c1".into(),
+                    content: serde_json::json!("file contents here"),
+                    is_error: false,
+                    image_data: None,
                     image_media_type: None,
                 }],
                 timestamp: SystemTime::now(),
@@ -352,11 +361,11 @@ mod tests {
     fn render_turns_truncates_long_tool_output() {
         let long_output = "x".repeat(1000);
         let turns = vec![Message::ToolResults {
-            results:   vec![ToolResult {
-                tool_call_id:     "c1".into(),
-                content:          serde_json::json!(long_output),
-                is_error:         false,
-                image_data:       None,
+            results: vec![ToolResult {
+                tool_call_id: "c1".into(),
+                content: serde_json::json!(long_output),
+                is_error: false,
+                image_data: None,
                 image_media_type: None,
             }],
             timestamp: SystemTime::now(),
@@ -371,7 +380,7 @@ mod tests {
     fn estimate_local_token_count_basic() {
         let mut history = History::default();
         history.push(Message::User {
-            content:   "Hello world".into(), // 11 chars
+            content: "Hello world".into(), // 11 chars
             timestamp: SystemTime::now(),
         });
         // system_prompt = "test" (4/4 = 1 token) + 11 chars / 4 = 2 tokens = 3 tokens
@@ -384,25 +393,25 @@ mod tests {
     fn active_context_estimate_without_assistant_usage_uses_local_estimate() {
         let mut history = History::default();
         history.push(Message::User {
-            content:   "Hello world".into(), // 11 chars => 2 tokens
+            content: "Hello world".into(), // 11 chars => 2 tokens
             timestamp: SystemTime::now(),
         });
         history.push(Message::Assistant {
             // 18 chars content + tool call name (9) + args (16) = 43 chars => 10 tokens
-            content:        "No usage available".into(),
-            tool_calls:     vec![ToolCall::new(
+            content: "No usage available".into(),
+            tool_calls: vec![ToolCall::new(
                 "call_1",
                 "read_file",
                 serde_json::json!({"path": "foo.rs"}),
             )],
             provider_parts: vec![],
-            usage:          Box::new(TokenCounts::default()),
-            response_id:    "resp_1".into(),
-            timestamp:      SystemTime::now(),
+            usage: Box::new(TokenCounts::default()),
+            response_id: "resp_1".into(),
+            timestamp: SystemTime::now(),
         });
         history.push(Message::ToolResults {
             // 4 chars => 1 token
-            results:   vec![ToolResult::success("call_1", serde_json::json!(1234))],
+            results: vec![ToolResult::success("call_1", serde_json::json!(1234))],
             timestamp: SystemTime::now(),
         });
 
@@ -417,7 +426,7 @@ mod tests {
     fn active_context_local_estimate_matches_whole_history_rounding() {
         let mut history = History::default();
         history.push(Message::User {
-            content:   "abc".into(),
+            content: "abc".into(),
             timestamp: SystemTime::now(),
         });
 
@@ -431,33 +440,33 @@ mod tests {
     fn active_context_estimate_uses_latest_assistant_usage_plus_later_turns() {
         let mut history = History::default();
         history.push(Message::User {
-            content:   "ignored before baseline".repeat(100),
+            content: "ignored before baseline".repeat(100),
             timestamp: SystemTime::now(),
         });
         history.push(Message::Assistant {
-            content:        "baseline response".into(),
-            tool_calls:     vec![],
+            content: "baseline response".into(),
+            tool_calls: vec![],
             provider_parts: vec![],
-            usage:          Box::new(TokenCounts {
+            usage: Box::new(TokenCounts {
                 input_tokens: 50,
                 ..TokenCounts::default()
             }),
-            response_id:    "resp_1".into(),
-            timestamp:      SystemTime::now(),
+            response_id: "resp_1".into(),
+            timestamp: SystemTime::now(),
         });
         history.push(Message::ToolResults {
             // JSON number renders as 4 chars => 1 local token.
-            results:   vec![ToolResult::success("call_1", serde_json::json!(1234))],
+            results: vec![ToolResult::success("call_1", serde_json::json!(1234))],
             timestamp: SystemTime::now(),
         });
         history.push(Message::User {
             // 16 chars => 4 local tokens.
-            content:   "u".repeat(16),
+            content: "u".repeat(16),
             timestamp: SystemTime::now(),
         });
         history.push(Message::Steering {
             // 8 chars => 2 local tokens.
-            content:   "s".repeat(8),
+            content: "s".repeat(8),
             timestamp: SystemTime::now(),
         });
 
@@ -474,18 +483,18 @@ mod tests {
     fn active_context_estimate_uses_total_tokens_including_cache_and_reasoning() {
         let mut history = History::default();
         history.push(Message::Assistant {
-            content:        "short".into(),
-            tool_calls:     vec![],
+            content: "short".into(),
+            tool_calls: vec![],
             provider_parts: vec![],
-            usage:          Box::new(TokenCounts {
-                input_tokens:       10,
-                output_tokens:      20,
-                reasoning_tokens:   30,
-                cache_read_tokens:  40,
+            usage: Box::new(TokenCounts {
+                input_tokens: 10,
+                output_tokens: 20,
+                reasoning_tokens: 30,
+                cache_read_tokens: 40,
                 cache_write_tokens: 50,
             }),
-            response_id:    "resp_1".into(),
-            timestamp:      SystemTime::now(),
+            response_id: "resp_1".into(),
+            timestamp: SystemTime::now(),
         });
 
         let estimate = estimate_active_context_usage("", &history);
@@ -501,33 +510,33 @@ mod tests {
     fn active_context_estimate_ignores_earlier_usage_when_later_usage_exists() {
         let mut history = History::default();
         history.push(Message::Assistant {
-            content:        "older response".into(),
-            tool_calls:     vec![],
+            content: "older response".into(),
+            tool_calls: vec![],
             provider_parts: vec![],
-            usage:          Box::new(TokenCounts {
+            usage: Box::new(TokenCounts {
                 input_tokens: 1_000,
                 ..TokenCounts::default()
             }),
-            response_id:    "resp_old".into(),
-            timestamp:      SystemTime::now(),
+            response_id: "resp_old".into(),
+            timestamp: SystemTime::now(),
         });
         history.push(Message::User {
-            content:   "ignored before latest baseline".repeat(100),
+            content: "ignored before latest baseline".repeat(100),
             timestamp: SystemTime::now(),
         });
         history.push(Message::Assistant {
-            content:        "latest response".into(),
-            tool_calls:     vec![],
+            content: "latest response".into(),
+            tool_calls: vec![],
             provider_parts: vec![],
-            usage:          Box::new(TokenCounts {
+            usage: Box::new(TokenCounts {
                 input_tokens: 20,
                 ..TokenCounts::default()
             }),
-            response_id:    "resp_new".into(),
-            timestamp:      SystemTime::now(),
+            response_id: "resp_new".into(),
+            timestamp: SystemTime::now(),
         });
         history.push(Message::User {
-            content:   "u".repeat(8),
+            content: "u".repeat(8),
             timestamp: SystemTime::now(),
         });
 
@@ -555,7 +564,7 @@ mod tests {
         let mut history = History::default();
         // Push enough content to exceed a tiny context window
         history.push(Message::User {
-            content:   "x".repeat(1000),
+            content: "x".repeat(1000),
             timestamp: SystemTime::now(),
         });
         let emitter = Emitter::new();

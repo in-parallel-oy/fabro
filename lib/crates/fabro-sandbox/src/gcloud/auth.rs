@@ -16,7 +16,8 @@ use std::time::{Duration, Instant};
 use serde::Deserialize;
 use tokio::sync::Mutex;
 
-const METADATA_TOKEN_URL: &str = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token";
+const METADATA_TOKEN_URL: &str =
+    "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token";
 const DEFAULT_TOKEN_URI: &str = "https://oauth2.googleapis.com/token";
 const SCOPE: &str = "https://www.googleapis.com/auth/cloud-platform";
 /// Refresh this far ahead of the reported expiry.
@@ -24,14 +25,14 @@ const EXPIRY_SKEW: Duration = Duration::from_secs(60);
 
 /// Resolves and caches GCP access tokens.
 pub struct GcpAuth {
-    http:        reqwest::Client,
+    http: reqwest::Client,
     sa_key_json: Option<String>,
-    cached:      Mutex<Option<CachedToken>>,
+    cached: Mutex<Option<CachedToken>>,
 }
 
 #[derive(Clone)]
 struct CachedToken {
-    value:      String,
+    value: String,
     expires_at: Instant,
 }
 
@@ -39,24 +40,24 @@ struct CachedToken {
 struct TokenResponse {
     access_token: String,
     #[serde(default)]
-    expires_in:   u64,
+    expires_in: u64,
 }
 
 #[derive(Deserialize)]
 struct ServiceAccountKey {
     client_email: String,
-    private_key:  String,
+    private_key: String,
     #[serde(default)]
-    token_uri:    Option<String>,
+    token_uri: Option<String>,
 }
 
 #[derive(serde::Serialize)]
 struct JwtClaims<'a> {
-    iss:   &'a str,
+    iss: &'a str,
     scope: &'a str,
-    aud:   &'a str,
-    iat:   u64,
-    exp:   u64,
+    aud: &'a str,
+    iat: u64,
+    exp: u64,
 }
 
 impl GcpAuth {
@@ -119,10 +120,9 @@ impl GcpAuth {
             )));
         }
 
-        let parsed: TokenResponse = response
-            .json()
-            .await
-            .map_err(|err| crate::Error::context("GCP metadata token response was not JSON", err))?;
+        let parsed: TokenResponse = response.json().await.map_err(|err| {
+            crate::Error::context("GCP metadata token response was not JSON", err)
+        })?;
         Ok((parsed.access_token, Duration::from_secs(parsed.expires_in)))
     }
 
@@ -133,11 +133,11 @@ impl GcpAuth {
 
         let now = unix_now();
         let claims = JwtClaims {
-            iss:   &key.client_email,
+            iss: &key.client_email,
             scope: SCOPE,
-            aud:   token_uri,
-            iat:   now,
-            exp:   now + 3600,
+            aud: token_uri,
+            iat: now,
+            exp: now + 3600,
         };
         let header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256);
         let encoding_key = jsonwebtoken::EncodingKey::from_rsa_pem(key.private_key.as_bytes())

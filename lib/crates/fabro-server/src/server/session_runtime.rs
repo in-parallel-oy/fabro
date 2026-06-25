@@ -87,7 +87,7 @@ impl SessionRuntimeManager {
 }
 
 pub(crate) struct SessionRuntimeEntry {
-    session:     AsyncMutex<Option<Session>>,
+    session: AsyncMutex<Option<Session>>,
     initialized: Mutex<bool>,
     active_turn: Mutex<Option<ActiveTurn>>,
 }
@@ -95,7 +95,7 @@ pub(crate) struct SessionRuntimeEntry {
 impl SessionRuntimeEntry {
     fn new() -> Self {
         Self {
-            session:     AsyncMutex::new(None),
+            session: AsyncMutex::new(None),
             initialized: Mutex::new(false),
             active_turn: Mutex::new(None),
         }
@@ -129,8 +129,8 @@ impl SessionRuntimeEntry {
 }
 
 struct ActiveTurn {
-    turn_id:             TurnId,
-    cancel_token:        Option<CancellationToken>,
+    turn_id: TurnId,
+    cancel_token: Option<CancellationToken>,
     interrupt_requested: bool,
 }
 
@@ -145,12 +145,12 @@ pub(crate) enum InterruptTurnError {
 }
 
 pub(crate) struct SessionTurnLease {
-    entry:   Arc<SessionRuntimeEntry>,
+    entry: Arc<SessionRuntimeEntry>,
     turn_id: TurnId,
 }
 
 pub(crate) struct PendingTurnInterrupt {
-    entry:   Arc<SessionRuntimeEntry>,
+    entry: Arc<SessionRuntimeEntry>,
     turn_id: TurnId,
 }
 

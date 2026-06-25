@@ -14,10 +14,10 @@ pub const CODEX_TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
 pub enum LoginResult {
     ApiKey {
         provider: ProviderId,
-        key:      String,
+        key: String,
     },
     OAuth {
-        provider:   ProviderId,
+        provider: ProviderId,
         // Boxed to keep the enum small: `OAuthCredential` is far larger than the
         // `ApiKey` variant. Matches `ResolvedSecret::OAuth`'s boxing in resolve.
         credential: Box<OAuthCredential>,
@@ -39,17 +39,17 @@ pub enum AuthMethod {
 #[must_use]
 pub fn codex_oauth_config() -> OAuthConfig {
     OAuthConfig {
-        auth_url:     CODEX_AUTH_URL.to_string(),
-        token_url:    CODEX_TOKEN_URL.to_string(),
-        client_id:    CODEX_CLIENT_ID.to_string(),
-        scopes:       vec![
+        auth_url: CODEX_AUTH_URL.to_string(),
+        token_url: CODEX_TOKEN_URL.to_string(),
+        client_id: CODEX_CLIENT_ID.to_string(),
+        scopes: vec![
             "openid".to_string(),
             "profile".to_string(),
             "email".to_string(),
             "offline_access".to_string(),
         ],
         redirect_uri: Some(format!("{CODEX_AUTH_URL}/deviceauth/callback")),
-        use_pkce:     false,
+        use_pkce: false,
     }
 }
 
@@ -106,11 +106,14 @@ mod tests {
         let provider = catalog.provider(&ProviderId::anthropic()).unwrap();
         let mut strategy = ApiKeyStrategy::new(provider);
         let request = strategy.init().await.unwrap();
-        assert_eq!(request, AuthContextRequest::ApiKey {
-            provider_id:   ProviderId::anthropic(),
-            display_name:  "Anthropic".to_string(),
-            env_var_names: vec!["ANTHROPIC_API_KEY".to_string()],
-            api_key_url:   Some("https://console.anthropic.com/settings/keys".to_string()),
-        });
+        assert_eq!(
+            request,
+            AuthContextRequest::ApiKey {
+                provider_id: ProviderId::anthropic(),
+                display_name: "Anthropic".to_string(),
+                env_var_names: vec!["ANTHROPIC_API_KEY".to_string()],
+                api_key_url: Some("https://console.anthropic.com/settings/keys".to_string()),
+            }
+        );
     }
 }

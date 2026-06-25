@@ -168,13 +168,13 @@ fn parse_doc(attr: &Attribute) -> syn::Result<String> {
 
 #[derive(Default)]
 struct FieldAttributes {
-    name:            Option<String>,
-    default:         Option<String>,
-    value_type:      Option<String>,
-    scope:           Option<String>,
-    example:         Option<String>,
+    name: Option<String>,
+    default: Option<String>,
+    value_type: Option<String>,
+    scope: Option<String>,
+    example: Option<String>,
     possible_values: Option<bool>,
-    added_in:        Option<String>,
+    added_in: Option<String>,
 }
 
 fn parse_option_attributes(attr: &Attribute) -> syn::Result<FieldAttributes> {

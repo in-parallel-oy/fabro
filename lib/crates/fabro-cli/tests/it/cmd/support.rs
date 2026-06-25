@@ -48,22 +48,22 @@ struct CommandLogResponseRecord {
 }
 
 pub(crate) struct RunSetup {
-    pub(crate) run_id:  String,
+    pub(crate) run_id: String,
     pub(crate) run_dir: PathBuf,
 }
 
 pub(crate) struct SeededGitRunSetup {
-    pub(crate) run:          RunSetup,
+    pub(crate) run: RunSetup,
     pub(crate) step_one_sha: String,
 }
 
 pub(crate) struct ProjectFixture {
     pub(crate) project_dir: PathBuf,
-    pub(crate) fabro_root:  PathBuf,
+    pub(crate) fabro_root: PathBuf,
 }
 
 pub(crate) struct WorkspaceRunSetup {
-    pub(crate) run:           RunSetup,
+    pub(crate) run: RunSetup,
     pub(crate) workspace_dir: PathBuf,
 }
 
@@ -286,10 +286,10 @@ fn run_completed_dry_run(context: &TestContext, workflow: &Path) -> RunSetup {
         run_dir: context.find_run_dir(&run_id),
         run_id,
     };
-    wait_for_event_names(&run_setup.run_dir, &[
-        "run.completed",
-        "sandbox.stop.completed",
-    ]);
+    wait_for_event_names(
+        &run_setup.run_dir,
+        &["run.completed", "sandbox.stop.completed"],
+    );
     run_setup
 }
 

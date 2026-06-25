@@ -31,12 +31,12 @@ pub fn parse_schedule_expression(expression: &str) -> Result<Cron, CronError> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Automation {
-    pub id:          AutomationId,
-    pub revision:    AutomationRevision,
-    pub name:        String,
+    pub id: AutomationId,
+    pub revision: AutomationRevision,
+    pub name: String,
     pub description: Option<String>,
-    pub target:      AutomationTarget,
-    pub triggers:    Vec<AutomationTrigger>,
+    pub target: AutomationTarget,
+    pub triggers: Vec<AutomationTrigger>,
 }
 
 impl Automation {
@@ -71,10 +71,10 @@ impl Automation {
 
     pub(crate) fn to_persisted(&self) -> PersistedAutomation {
         PersistedAutomation {
-            name:        self.name.clone(),
+            name: self.name.clone(),
             description: self.description.clone(),
-            target:      self.target.clone(),
-            triggers:    self.triggers.clone(),
+            target: self.target.clone(),
+            triggers: self.triggers.clone(),
         }
     }
 
@@ -131,10 +131,10 @@ impl Automation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AutomationTarget {
-    pub repository:   String,
+    pub repository: String,
     #[serde(rename = "ref")]
     pub ref_selector: String,
-    pub workflow:     String,
+    pub workflow: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -165,68 +165,71 @@ impl AutomationTrigger {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ApiTrigger {
-    pub id:      AutomationTriggerId,
+    pub id: AutomationTriggerId,
     pub enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ScheduleTrigger {
-    pub id:         AutomationTriggerId,
-    pub enabled:    bool,
+    pub id: AutomationTriggerId,
+    pub enabled: bool,
     pub expression: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AutomationDraft {
-    pub id:          AutomationId,
-    pub name:        String,
+    pub id: AutomationId,
+    pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    pub target:      AutomationTarget,
-    pub triggers:    Vec<AutomationTrigger>,
+    pub target: AutomationTarget,
+    pub triggers: Vec<AutomationTrigger>,
 }
 
 impl From<AutomationDraft> for (AutomationId, AutomationReplace) {
     fn from(value: AutomationDraft) -> Self {
-        (value.id, AutomationReplace {
-            name:        value.name,
-            description: value.description,
-            target:      value.target,
-            triggers:    value.triggers,
-        })
+        (
+            value.id,
+            AutomationReplace {
+                name: value.name,
+                description: value.description,
+                target: value.target,
+                triggers: value.triggers,
+            },
+        )
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AutomationReplace {
-    pub name:        String,
+    pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    pub target:      AutomationTarget,
-    pub triggers:    Vec<AutomationTrigger>,
+    pub target: AutomationTarget,
+    pub triggers: Vec<AutomationTrigger>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct PersistedAutomation {
-    name:        String,
+    name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     description: Option<String>,
-    target:      AutomationTarget,
+    target: AutomationTarget,
     #[serde(default)]
-    triggers:    Vec<AutomationTrigger>,
+    triggers: Vec<AutomationTrigger>,
 }
 
 impl From<AutomationReplace> for PersistedAutomation {
     fn from(value: AutomationReplace) -> Self {
         Self {
-            name:        value.name,
+            name: value.name,
             description: value.description,
-            target:      value.target,
-            triggers:    value.triggers,
+            target: value.target,
+            triggers: value.triggers,
         }
     }
 }
@@ -234,10 +237,10 @@ impl From<AutomationReplace> for PersistedAutomation {
 impl From<PersistedAutomation> for AutomationReplace {
     fn from(value: PersistedAutomation) -> Self {
         Self {
-            name:        value.name,
+            name: value.name,
             description: value.description,
-            target:      value.target,
-            triggers:    value.triggers,
+            target: value.target,
+            triggers: value.triggers,
         }
     }
 }
@@ -410,15 +413,15 @@ mod tests {
 
     fn target() -> AutomationTarget {
         AutomationTarget {
-            repository:   "in-parallel-oy/fabro".to_string(),
+            repository: "in-parallel-oy/fabro".to_string(),
             ref_selector: "main".to_string(),
-            workflow:     ".fabro/workflows/test/workflow.toml".to_string(),
+            workflow: ".fabro/workflows/test/workflow.toml".to_string(),
         }
     }
 
     fn api_trigger(id: &str) -> AutomationTrigger {
         AutomationTrigger::Api(ApiTrigger {
-            id:      AutomationTriggerId::new(id).unwrap(),
+            id: AutomationTriggerId::new(id).unwrap(),
             enabled: true,
         })
     }
@@ -494,18 +497,20 @@ enabled = true
 
     #[test]
     fn enabled_schedule_triggers_returns_only_enabled_schedule_triggers() {
-        let (automation, _) =
-            Automation::from_replace(AutomationId::new("nightly").unwrap(), AutomationReplace {
-                name:        "Nightly".to_string(),
+        let (automation, _) = Automation::from_replace(
+            AutomationId::new("nightly").unwrap(),
+            AutomationReplace {
+                name: "Nightly".to_string(),
                 description: None,
-                target:      target(),
-                triggers:    vec![
+                target: target(),
+                triggers: vec![
                     api_trigger("manual"),
                     schedule_trigger_with_enabled("nightly", "0 0 * * *", true),
                     schedule_trigger_with_enabled("disabled", "0 1 * * *", false),
                 ],
-            })
-            .unwrap();
+            },
+        )
+        .unwrap();
 
         let trigger_ids = automation
             .enabled_schedule_triggers()
@@ -519,67 +524,67 @@ enabled = true
     fn validation_rejects_invalid_inputs() {
         let cases = [
             AutomationReplace {
-                name:        " ".to_string(),
+                name: " ".to_string(),
                 description: None,
-                target:      target(),
-                triggers:    vec![api_trigger("manual")],
+                target: target(),
+                triggers: vec![api_trigger("manual")],
             },
             AutomationReplace {
-                name:        "Bad repo".to_string(),
+                name: "Bad repo".to_string(),
                 description: None,
-                target:      AutomationTarget {
-                    repository:   "not/github/slug".to_string(),
+                target: AutomationTarget {
+                    repository: "not/github/slug".to_string(),
                     ref_selector: "main".to_string(),
-                    workflow:     "release".to_string(),
+                    workflow: "release".to_string(),
                 },
-                triggers:    vec![api_trigger("manual")],
+                triggers: vec![api_trigger("manual")],
             },
             AutomationReplace {
-                name:        "Bad ref".to_string(),
+                name: "Bad ref".to_string(),
                 description: None,
-                target:      AutomationTarget {
-                    repository:   "in-parallel-oy/fabro".to_string(),
+                target: AutomationTarget {
+                    repository: "in-parallel-oy/fabro".to_string(),
                     ref_selector: "main;rm".to_string(),
-                    workflow:     "release".to_string(),
+                    workflow: "release".to_string(),
                 },
-                triggers:    vec![api_trigger("manual")],
+                triggers: vec![api_trigger("manual")],
             },
             AutomationReplace {
-                name:        "Bad workflow".to_string(),
+                name: "Bad workflow".to_string(),
                 description: None,
-                target:      AutomationTarget {
-                    repository:   "in-parallel-oy/fabro".to_string(),
+                target: AutomationTarget {
+                    repository: "in-parallel-oy/fabro".to_string(),
                     ref_selector: "main".to_string(),
-                    workflow:     "../release".to_string(),
+                    workflow: "../release".to_string(),
                 },
-                triggers:    vec![api_trigger("manual")],
+                triggers: vec![api_trigger("manual")],
             },
             AutomationReplace {
-                name:        "Duplicate trigger".to_string(),
+                name: "Duplicate trigger".to_string(),
                 description: None,
-                target:      target(),
-                triggers:    vec![
+                target: target(),
+                triggers: vec![
                     api_trigger("manual"),
                     schedule_trigger("manual", "0 0 * * *"),
                 ],
             },
             AutomationReplace {
-                name:        "Two API triggers".to_string(),
+                name: "Two API triggers".to_string(),
                 description: None,
-                target:      target(),
-                triggers:    vec![api_trigger("one"), api_trigger("two")],
+                target: target(),
+                triggers: vec![api_trigger("one"), api_trigger("two")],
             },
             AutomationReplace {
-                name:        "Six field cron".to_string(),
+                name: "Six field cron".to_string(),
                 description: None,
-                target:      target(),
-                triggers:    vec![schedule_trigger("nightly", "0 0 0 * * *")],
+                target: target(),
+                triggers: vec![schedule_trigger("nightly", "0 0 0 * * *")],
             },
             AutomationReplace {
-                name:        "Bad cron".to_string(),
+                name: "Bad cron".to_string(),
                 description: None,
-                target:      target(),
-                triggers:    vec![schedule_trigger("nightly", "99 0 * * *")],
+                target: target(),
+                triggers: vec![schedule_trigger("nightly", "99 0 * * *")],
             },
         ];
 

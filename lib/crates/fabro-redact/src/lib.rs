@@ -16,7 +16,7 @@ pub use safe_url::{DisplaySafeUrl, DisplaySafeUrlError};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Region {
     pub start: usize,
-    pub end:   usize,
+    pub end: usize,
 }
 
 /// Replace all detected secrets in `s` with "REDACTED".

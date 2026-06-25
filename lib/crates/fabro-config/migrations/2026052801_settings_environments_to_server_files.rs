@@ -18,9 +18,9 @@ pub(crate) const REMOVAL_NOTE: &str =
 #[derive(Debug)]
 pub(crate) struct SettingsEnvironmentsMigrationReport {
     pub(crate) contents: String,
-    pub(crate) warning:  String,
+    pub(crate) warning: String,
     #[cfg(test)]
-    backup_path:         PathBuf,
+    backup_path: PathBuf,
 }
 
 pub(crate) fn migrate_settings_path(
@@ -108,7 +108,7 @@ pub(crate) fn migrate_settings_path(
 
 #[derive(Debug)]
 struct ExtractedEnvironment {
-    id:       String,
+    id: String,
     contents: String,
 }
 

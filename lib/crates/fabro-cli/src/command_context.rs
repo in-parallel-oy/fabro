@@ -27,29 +27,29 @@ pub(crate) enum ServerMode {
         target_override: Option<String>,
     },
     ByStorageDir {
-        target_override:      Option<String>,
+        target_override: Option<String>,
         storage_dir_override: Option<PathBuf>,
     },
 }
 
 pub(crate) struct CommandContext {
-    printer:            Printer,
+    printer: Printer,
     process_local_json: bool,
-    cwd:                PathBuf,
-    base_config_path:   PathBuf,
-    cli_layer:          CliLayer,
-    storage_dir:        PathBuf,
-    run_settings:       std::result::Result<RunNamespace, SharedError>,
-    user_settings:      UserSettings,
-    server_mode:        ServerMode,
-    server:             OnceCell<Arc<Client>>,
-    llm_source:         OnceCell<Arc<dyn CredentialSource>>,
-    catalog:            OnceLock<Arc<Catalog>>,
+    cwd: PathBuf,
+    base_config_path: PathBuf,
+    cli_layer: CliLayer,
+    storage_dir: PathBuf,
+    run_settings: std::result::Result<RunNamespace, SharedError>,
+    user_settings: UserSettings,
+    server_mode: ServerMode,
+    server: OnceCell<Arc<Client>>,
+    llm_source: OnceCell<Arc<dyn CredentialSource>>,
+    catalog: OnceLock<Arc<Catalog>>,
 }
 
 struct ResolvedCommandSettings {
-    storage_dir:   PathBuf,
-    run_settings:  std::result::Result<RunNamespace, SharedError>,
+    storage_dir: PathBuf,
+    run_settings: std::result::Result<RunNamespace, SharedError>,
     user_settings: UserSettings,
 }
 
@@ -84,7 +84,7 @@ impl CommandContext {
 
     pub(crate) fn with_connection(&self, args: &ServerConnectionArgs) -> Result<Self> {
         self.with_server_mode(ServerMode::ByStorageDir {
-            target_override:      args.target.server.clone(),
+            target_override: args.target.server.clone(),
             storage_dir_override: args.storage_dir.clone_path(),
         })
     }
@@ -250,8 +250,8 @@ fn load_merged_settings(
 
 fn resolve_command_settings(loaded_settings: LoadedSettings) -> ResolvedCommandSettings {
     ResolvedCommandSettings {
-        storage_dir:   loaded_settings.storage_dir,
-        run_settings:  loaded_settings.run_settings,
+        storage_dir: loaded_settings.storage_dir,
+        run_settings: loaded_settings.run_settings,
         user_settings: loaded_settings.user_settings,
     }
 }
@@ -272,7 +272,7 @@ mod tests {
     fn cli_layer_with_json_and_verbose() -> CliLayer {
         CliLayer {
             output: Some(CliOutputLayer {
-                format:    Some(OutputFormat::Json),
+                format: Some(OutputFormat::Json),
                 verbosity: Some(OutputVerbosity::Verbose),
             }),
             ..CliLayer::default()

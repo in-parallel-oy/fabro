@@ -111,25 +111,25 @@ enum RunsSortDirection {
 #[derive(serde::Deserialize)]
 struct ListRunsParams {
     #[serde(rename = "page[limit]", default = "default_page_limit")]
-    limit:            u32,
+    limit: u32,
     #[serde(rename = "page[offset]", default)]
-    offset:           u32,
+    offset: u32,
     #[serde(default)]
     include_archived: bool,
     #[serde(default)]
-    parent_id:        Option<RunId>,
+    parent_id: Option<RunId>,
     #[serde(default)]
-    status:           Vec<BoardColumn>,
+    status: Vec<BoardColumn>,
     #[serde(default)]
-    sort:             RunsSortKey,
+    sort: RunsSortKey,
     #[serde(default)]
-    direction:        RunsSortDirection,
+    direction: RunsSortDirection,
 }
 
 impl ListRunsParams {
     fn pagination(&self) -> PaginationParams {
         PaginationParams {
-            limit:  self.limit,
+            limit: self.limit,
             offset: self.offset,
         }
     }
@@ -442,17 +442,17 @@ struct CommandLogQuery {
     #[serde(default)]
     offset: u64,
     #[serde(default = "default_command_log_limit")]
-    limit:  u64,
+    limit: u64,
 }
 
 #[derive(Debug, serde::Serialize)]
 struct CommandLogResponseBody {
-    offset:         u64,
-    next_offset:    u64,
-    total_bytes:    u64,
-    bytes_base64:   String,
-    eof:            bool,
-    cas_ref:        Option<String>,
+    offset: u64,
+    next_offset: u64,
+    total_bytes: u64,
+    bytes_base64: String,
+    eof: bool,
+    cas_ref: Option<String>,
     live_streaming: bool,
 }
 
@@ -563,12 +563,15 @@ async fn update_run(
                 .into_response();
         }
     };
-    if let Err(err) =
-        workflow_event::append_event(&run_store, &id, &workflow_event::Event::RunTitleUpdated {
+    if let Err(err) = workflow_event::append_event(
+        &run_store,
+        &id,
+        &workflow_event::Event::RunTitleUpdated {
             title,
             actor: Some(Principal::User(subject.0)),
-        })
-        .await
+        },
+    )
+    .await
     {
         return ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response();
     }
@@ -597,11 +600,10 @@ async fn create_run(
     // not the raw body — becomes `submitted_manifest_bytes`, so the secret never
     // lands in the manifest blob. Fail-closed: a malformed credential block is a
     // 400 with a static message that cannot echo the secret.
-    let (remainder, injected_acp_credentials) =
-        match fabro_workflow::split_acp_credentials(&body) {
-            Ok(split) => split,
-            Err(err) => return ApiError::bad_request(err.to_string()).into_response(),
-        };
+    let (remainder, injected_acp_credentials) = match fabro_workflow::split_acp_credentials(&body) {
+        Ok(split) => split,
+        Err(err) => return ApiError::bad_request(err.to_string()).into_response(),
+    };
     let req = match serde_json::from_slice::<RunManifest>(&remainder) {
         Ok(req) => req,
         Err(err) => return ApiError::bad_request(err.to_string()).into_response(),
@@ -624,13 +626,13 @@ async fn create_run(
 }
 
 pub(crate) struct CreateRunFromManifestRequest {
-    pub(crate) manifest:                 RunManifest,
+    pub(crate) manifest: RunManifest,
     pub(crate) submitted_manifest_bytes: Vec<u8>,
-    pub(crate) explicit_run_id:          Option<RunId>,
-    pub(crate) explicit_title_supplied:  bool,
-    pub(crate) actor:                    Principal,
-    pub(crate) headers:                  HeaderMap,
-    pub(crate) automation:               Option<AutomationRef>,
+    pub(crate) explicit_run_id: Option<RunId>,
+    pub(crate) explicit_title_supplied: bool,
+    pub(crate) actor: Principal,
+    pub(crate) headers: HeaderMap,
+    pub(crate) automation: Option<AutomationRef>,
     /// Per-run ACP credentials (GOAL B), already split off the request body at
     /// the transport edge. `None` for callers that never carry them
     /// (automations, scheduled runs).
@@ -796,29 +798,29 @@ pub(crate) async fn create_run_from_manifest(
 }
 
 struct GeneratedTitleTask {
-    state:               Arc<AppState>,
-    run_id:              RunId,
+    state: Arc<AppState>,
+    run_id: RunId,
     deterministic_title: String,
-    workflow_target:     String,
-    workflow:            WorkflowSummary,
-    run_inputs:          std::collections::HashMap<String, toml::Value>,
-    client:              LlmClient,
-    model_id:            String,
-    provider_id:         fabro_model::ProviderId,
+    workflow_target: String,
+    workflow: WorkflowSummary,
+    run_inputs: std::collections::HashMap<String, toml::Value>,
+    client: LlmClient,
+    model_id: String,
+    provider_id: fabro_model::ProviderId,
 }
 
 fn spawn_generated_title_task(task: GeneratedTitleTask) {
     tokio::spawn(async move {
         let generated_title = run_title_generation::generate_title_or_current(GenerateTitleInput {
-            client:      Arc::new(task.client),
-            model_id:    task.model_id,
+            client: Arc::new(task.client),
+            model_id: task.model_id,
             provider_id: task.provider_id,
-            prompt:      TitlePromptInput {
-                run_id:          &task.run_id,
-                current_title:   &task.deterministic_title,
+            prompt: TitlePromptInput {
+                run_id: &task.run_id,
+                current_title: &task.deterministic_title,
                 workflow_target: Some(task.workflow_target.as_str()),
-                run_inputs:      &task.run_inputs,
-                workflow:        &task.workflow,
+                run_inputs: &task.run_inputs,
+                workflow: &task.workflow,
             },
         })
         .await;
@@ -868,10 +870,10 @@ fn spawn_generated_title_task(task: GeneratedTitleTask) {
 
 pub(super) fn run_provenance(headers: &HeaderMap, subject: &Principal) -> RunProvenance {
     RunProvenance {
-        server:  Some(RunServerProvenance {
+        server: Some(RunServerProvenance {
             version: FABRO_VERSION.to_string(),
         }),
-        client:  run_client_provenance(headers),
+        client: run_client_provenance(headers),
         subject: subject.clone(),
     }
 }
@@ -1258,10 +1260,7 @@ async fn get_run_stage_command_log(
 }
 
 enum LogSource<'a> {
-    Sliced {
-        bytes:       Vec<u8>,
-        total_bytes: u64,
-    },
+    Sliced { bytes: Vec<u8>, total_bytes: u64 },
     Full(&'a [u8]),
 }
 

@@ -225,11 +225,11 @@ impl RunSettingsBuilder {
 
 #[derive(Clone)]
 pub struct ServerRuntimeSettings {
-    pub server_settings:               ServerSettings,
-    pub manifest_run_defaults:         RunLayer,
+    pub server_settings: ServerSettings,
+    pub manifest_run_defaults: RunLayer,
     pub manifest_environment_defaults: crate::MergeMap<crate::EnvironmentLayer>,
-    pub manifest_run_settings:         std::result::Result<RunNamespace, SharedError>,
-    pub llm_catalog_settings:          model_catalog::LlmCatalogSettings,
+    pub manifest_run_settings: std::result::Result<RunNamespace, SharedError>,
+    pub llm_catalog_settings: model_catalog::LlmCatalogSettings,
 }
 
 pub fn load_server_runtime_settings(
@@ -315,7 +315,7 @@ fn llm_layer_to_catalog_settings(llm: LlmLayer) -> model_catalog::LlmCatalogSett
             .into_iter()
             .map(|(id, settings)| (id, provider_settings_to_catalog(settings)))
             .collect(),
-        models:    llm
+        models: llm
             .models
             .into_inner()
             .into_iter()
@@ -328,18 +328,18 @@ fn provider_settings_to_catalog(
     settings: ProviderSettings,
 ) -> model_catalog::ProviderCatalogSettings {
     model_catalog::ProviderCatalogSettings {
-        display_name:   settings.display_name,
-        adapter:        settings.adapter,
-        codec:          settings.codec,
-        agent_profile:  settings.agent_profile,
-        auth:           settings.auth,
+        display_name: settings.display_name,
+        adapter: settings.adapter,
+        codec: settings.codec,
+        agent_profile: settings.agent_profile,
+        auth: settings.auth,
         billing_policy: settings.billing_policy,
-        api_key_url:    settings.api_key_url,
-        base_url:       settings.base_url,
-        extra_headers:  settings.extra_headers,
-        priority:       settings.priority,
-        enabled:        settings.enabled,
-        aliases:        settings.aliases,
+        api_key_url: settings.api_key_url,
+        base_url: settings.base_url,
+        extra_headers: settings.extra_headers,
+        priority: settings.priority,
+        enabled: settings.enabled,
+        aliases: settings.aliases,
     }
 }
 
@@ -391,31 +391,31 @@ fn model_settings_to_catalog(settings: ModelSettings) -> model_catalog::ModelCat
 fn model_limits_to_catalog(limits: &LlmModelLimits) -> model_catalog::SettingsModelLimits {
     model_catalog::SettingsModelLimits {
         context_window: limits.context_window,
-        max_output:     limits.max_output,
+        max_output: limits.max_output,
     }
 }
 
 fn model_features_to_catalog(features: &LlmModelFeatures) -> model_catalog::SettingsModelFeatures {
     model_catalog::SettingsModelFeatures {
-        tools:            features.tools,
-        vision:           features.vision,
-        reasoning:        features.reasoning,
+        tools: features.tools,
+        vision: features.vision,
+        reasoning: features.reasoning,
         reasoning_effort: features.reasoning_effort,
-        prompt_cache:     features.prompt_cache,
-        sampling_params:  features.sampling_params,
+        prompt_cache: features.prompt_cache,
+        sampling_params: features.sampling_params,
     }
 }
 
 fn model_controls_to_catalog(controls: ModelControls) -> model_catalog::SettingsModelControls {
     model_catalog::SettingsModelControls {
         reasoning_effort: controls.reasoning_effort,
-        speed:            controls.speed,
+        speed: controls.speed,
     }
 }
 
 fn model_cost_table_to_catalog(costs: &ModelCostTable) -> model_catalog::SettingsModelCostTable {
     model_catalog::SettingsModelCostTable {
-        base:  cost_rates_to_catalog(&costs.base),
+        base: cost_rates_to_catalog(&costs.base),
         speed: costs.speed.as_ref().map(|speed| {
             speed
                 .iter()
@@ -427,8 +427,8 @@ fn model_cost_table_to_catalog(costs: &ModelCostTable) -> model_catalog::Setting
 
 fn cost_rates_to_catalog(rates: &CostRates) -> model_catalog::CostRates {
     model_catalog::CostRates {
-        input_cost_per_mtok:       rates.input_cost_per_mtok,
-        output_cost_per_mtok:      rates.output_cost_per_mtok,
+        input_cost_per_mtok: rates.input_cost_per_mtok,
+        output_cost_per_mtok: rates.output_cost_per_mtok,
         cache_input_cost_per_mtok: rates.cache_input_cost_per_mtok,
     }
 }
@@ -444,11 +444,11 @@ fn parse_settings_toml(source: &str, kind: SettingsSource) -> Result<SettingsLay
 
 #[derive(Clone, Debug, Default)]
 pub struct WorkflowSettingsBuilder {
-    args:     SettingsLayer,
+    args: SettingsLayer,
     workflow: SettingsLayer,
-    project:  SettingsLayer,
-    user:     SettingsLayer,
-    server:   SettingsLayer,
+    project: SettingsLayer,
+    user: SettingsLayer,
+    server: SettingsLayer,
 }
 
 impl WorkflowSettingsBuilder {
@@ -705,13 +705,13 @@ command = ["demo-mcp"]
             .run_overrides(RunLayer {
                 metadata: ReplaceMap::from(HashMap::from([("env".to_string(), "cli".to_string())])),
                 model: Some(RunModelLayer {
-                    provider:  Some("openai".to_string()),
-                    name:      Some("gpt-5".to_string()),
+                    provider: Some("openai".to_string()),
+                    name: Some("gpt-5".to_string()),
                     fallbacks: Vec::new(),
-                    controls:  None,
+                    controls: None,
                 }),
                 execution: Some(RunExecutionLayer {
-                    mode:     Some(RunMode::DryRun),
+                    mode: Some(RunMode::DryRun),
                     approval: Some(ApprovalMode::Auto),
                 }),
                 ..RunLayer::default()

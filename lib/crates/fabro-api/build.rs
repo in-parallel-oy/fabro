@@ -618,8 +618,11 @@ fn main() {
         ("AskFabro", "fabro_types::AskFabro", &[]),
         ("Automation", "fabro_automation::Automation", &[]),
         ("AutomationRef", "fabro_types::AutomationRef", &[]),
-        ("AutomationTarget", "fabro_automation::AutomationTarget", &[
-        ]),
+        (
+            "AutomationTarget",
+            "fabro_automation::AutomationTarget",
+            &[],
+        ),
         (
             "AutomationTrigger",
             "fabro_automation::AutomationTrigger",

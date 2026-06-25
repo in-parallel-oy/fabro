@@ -91,14 +91,17 @@ fn events_completed_run_outputs_raw_ndjson() {
 
     let events = parse_ndjson(&output.stdout);
     assert_events_belong_to_run(&events, &run.run_id);
-    assert_event_sequence_contains(&events, &[
-        "run.created",
-        "run.running",
-        "stage.started",
-        "stage.completed",
-        "run.completed",
-        "sandbox.stop.completed",
-    ]);
+    assert_event_sequence_contains(
+        &events,
+        &[
+            "run.created",
+            "run.running",
+            "stage.started",
+            "stage.completed",
+            "run.completed",
+            "sandbox.stop.completed",
+        ],
+    );
 }
 
 #[test]
@@ -232,12 +235,15 @@ fn events_follow_detached_run_streams_until_completion() {
 
     let events = parse_ndjson(&output.stdout);
     assert_events_belong_to_run(&events, &run.run_id);
-    assert_event_sequence_contains(&events, &[
-        "run.created",
-        "run.running",
-        "stage.started",
-        "stage.completed",
-        "run.completed",
-        "sandbox.stop.completed",
-    ]);
+    assert_event_sequence_contains(
+        &events,
+        &[
+            "run.created",
+            "run.running",
+            "stage.started",
+            "stage.completed",
+            "run.completed",
+            "sandbox.stop.completed",
+        ],
+    );
 }

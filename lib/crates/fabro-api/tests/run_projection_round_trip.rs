@@ -128,19 +128,19 @@ fn run_projection_round_trips_with_pending_control_unset() {
 
 fn run_spec_json() -> serde_json::Value {
     serde_json::to_value(RunSpec {
-        run_id:           fabro_types::fixtures::RUN_1,
-        settings:         WorkflowSettings::default(),
-        graph:            Graph::new("test"),
-        graph_source:     Some("digraph test {}".to_string()),
-        workflow_slug:    None,
-        automation:       None,
+        run_id: fabro_types::fixtures::RUN_1,
+        settings: WorkflowSettings::default(),
+        graph: Graph::new("test"),
+        graph_source: Some("digraph test {}".to_string()),
+        workflow_slug: None,
+        automation: None,
         source_directory: None,
-        labels:           std::collections::HashMap::new(),
-        provenance:       test_support::test_run_provenance(),
-        manifest_blob:    None,
-        definition_blob:  None,
-        git:              None,
-        fork_source_ref:  None,
+        labels: std::collections::HashMap::new(),
+        provenance: test_support::test_run_provenance(),
+        manifest_blob: None,
+        definition_blob: None,
+        git: None,
+        fork_source_ref: None,
     })
     .unwrap()
 }

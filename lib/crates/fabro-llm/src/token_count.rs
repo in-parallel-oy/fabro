@@ -55,16 +55,16 @@ pub enum InputTokenCountMethod {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InputTokenCount {
     pub input_tokens: i64,
-    pub method:       InputTokenCountMethod,
-    pub provider:     String,
-    pub model:        String,
+    pub method: InputTokenCountMethod,
+    pub provider: String,
+    pub model: String,
     #[serde(default)]
-    pub warnings:     Vec<Warning>,
+    pub warnings: Vec<Warning>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LocalTokenEstimate {
-    pub tokens:   usize,
+    pub tokens: usize,
     pub warnings: Vec<Warning>,
 }
 
@@ -90,10 +90,10 @@ pub fn estimate_input_tokens(request: &Request, provider: impl Into<String>) -> 
 
     InputTokenCount {
         input_tokens: i64::try_from(tokens).unwrap_or(i64::MAX),
-        method:       InputTokenCountMethod::LocalEstimate,
-        provider:     provider.into(),
-        model:        request.model.clone(),
-        warnings:     estimator.warnings,
+        method: InputTokenCountMethod::LocalEstimate,
+        provider: provider.into(),
+        model: request.model.clone(),
+        warnings: estimator.warnings,
     }
 }
 
@@ -144,7 +144,7 @@ pub fn estimate_request_control_tokens(request: &Request) -> LocalTokenEstimate 
 
 #[derive(Default)]
 struct Estimator {
-    warnings:   Vec<Warning>,
+    warnings: Vec<Warning>,
     seen_codes: HashSet<&'static str>,
 }
 
@@ -280,7 +280,7 @@ impl Estimator {
         if self.seen_codes.insert(code) {
             self.warnings.push(Warning {
                 message: message.to_string(),
-                code:    Some(code.to_string()),
+                code: Some(code.to_string()),
             });
         }
     }
@@ -378,11 +378,11 @@ mod tests {
         let without_schema = estimate_input_tokens(&with_schema, "test");
 
         with_schema.response_format = Some(ResponseFormat {
-            kind:        ResponseFormatType::JsonSchema,
+            kind: ResponseFormatType::JsonSchema,
             json_schema: Some(
                 json!({"type": "object", "properties": {"answer": {"type": "string"}}}),
             ),
-            strict:      true,
+            strict: true,
         });
         let with_schema = estimate_input_tokens(&with_schema, "test");
 
@@ -393,22 +393,22 @@ mod tests {
     fn media_content_gets_media_warning_and_sized_estimate() {
         let count = estimate_input_tokens(
             &request(vec![Message {
-                role:         Role::User,
-                content:      vec![
+                role: Role::User,
+                content: vec![
                     ContentPart::Image(ImageData {
-                        url:        Some("https://example.test/image.png".to_string()),
-                        data:       None,
+                        url: Some("https://example.test/image.png".to_string()),
+                        data: None,
                         media_type: Some("image/png".to_string()),
-                        detail:     Some("high".to_string()),
+                        detail: Some("high".to_string()),
                     }),
                     ContentPart::Document(DocumentData {
-                        url:        None,
-                        data:       Some(vec![0; 4096]),
+                        url: None,
+                        data: Some(vec![0; 4096]),
                         media_type: Some("application/pdf".to_string()),
-                        file_name:  Some("doc.pdf".to_string()),
+                        file_name: Some("doc.pdf".to_string()),
                     }),
                 ],
-                name:         None,
+                name: None,
                 tool_call_id: None,
             }]),
             "test",
@@ -432,12 +432,12 @@ mod tests {
     fn opaque_content_produces_opaque_warning() {
         let count = estimate_input_tokens(
             &request(vec![Message {
-                role:         Role::Assistant,
-                content:      vec![ContentPart::Other {
+                role: Role::Assistant,
+                content: vec![ContentPart::Other {
                     kind: "openai_reasoning".to_string(),
                     data: json!({"id": "rs_123", "summary": []}),
                 }],
-                name:         None,
+                name: None,
                 tool_call_id: None,
             }]),
             "test",

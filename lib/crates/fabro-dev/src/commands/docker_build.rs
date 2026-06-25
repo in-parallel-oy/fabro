@@ -12,16 +12,16 @@ const ZIG_VERSION: &str = "0.13.0";
 pub(crate) struct DockerBuildArgs {
     /// Target Docker architecture.
     #[arg(long, value_enum)]
-    arch:         Option<DockerArch>,
+    arch: Option<DockerArch>,
     /// Docker image tag to build.
     #[arg(long, default_value = "in-parallel-oy/fabro")]
-    tag:          String,
+    tag: String,
     /// Stage the compiled binary without running docker build.
     #[arg(long)]
     compile_only: bool,
     /// Print the Docker commands instead of running them.
     #[arg(long)]
-    dry_run:      bool,
+    dry_run: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
@@ -64,9 +64,9 @@ impl fmt::Display for DockerArch {
 }
 
 struct DockerBuildPlan {
-    arch:           DockerArch,
-    compile_only:   bool,
-    tag:            String,
+    arch: DockerArch,
+    compile_only: bool,
+    tag: String,
     workspace_root: PathBuf,
 }
 
@@ -76,9 +76,9 @@ struct DockerBuildPlan {
 )]
 pub(crate) fn docker_build(args: DockerBuildArgs) -> Result<()> {
     let plan = DockerBuildPlan {
-        arch:           args.arch.map_or_else(DockerArch::detect, Ok)?,
-        compile_only:   args.compile_only,
-        tag:            args.tag,
+        arch: args.arch.map_or_else(DockerArch::detect, Ok)?,
+        compile_only: args.compile_only,
+        tag: args.tag,
         workspace_root: workspace_root(),
     };
 

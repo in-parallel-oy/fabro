@@ -12,32 +12,32 @@ const CLOCK_SKEW_SECS: u64 = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct JwtSubject {
-    pub identity:    IdpIdentity,
-    pub login:       String,
-    pub name:        String,
-    pub email:       String,
-    pub avatar_url:  String,
-    pub user_url:    String,
+    pub identity: IdpIdentity,
+    pub login: String,
+    pub name: String,
+    pub email: String,
+    pub avatar_url: String,
+    pub user_url: String,
     pub auth_method: AuthMethod,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Claims {
-    pub iss:         String,
-    pub aud:         String,
-    pub sub:         String,
-    pub exp:         u64,
-    pub iat:         u64,
-    pub jti:         String,
-    pub idp_issuer:  String,
+    pub iss: String,
+    pub aud: String,
+    pub sub: String,
+    pub exp: u64,
+    pub iat: u64,
+    pub jti: String,
+    pub idp_issuer: String,
     pub idp_subject: String,
-    pub login:       String,
-    pub name:        String,
-    pub email:       String,
+    pub login: String,
+    pub name: String,
+    pub email: String,
     #[serde(default)]
-    pub avatar_url:  String,
+    pub avatar_url: String,
     #[serde(default)]
-    pub user_url:    String,
+    pub user_url: String,
     pub auth_method: AuthMethod,
 }
 
@@ -142,31 +142,31 @@ mod tests {
 
     fn subject() -> JwtSubject {
         JwtSubject {
-            identity:    fabro_types::IdpIdentity::new("https://github.com", "12345").unwrap(),
-            login:       "octocat".to_string(),
-            name:        "The Octocat".to_string(),
-            email:       "octocat@example.com".to_string(),
-            avatar_url:  "https://example.com/octocat.png".to_string(),
-            user_url:    "https://github.com/octocat".to_string(),
+            identity: fabro_types::IdpIdentity::new("https://github.com", "12345").unwrap(),
+            login: "octocat".to_string(),
+            name: "The Octocat".to_string(),
+            email: "octocat@example.com".to_string(),
+            avatar_url: "https://example.com/octocat.png".to_string(),
+            user_url: "https://github.com/octocat".to_string(),
             auth_method: AuthMethod::Github,
         }
     }
 
     fn claims_with_times(iat: i64, exp: i64) -> Claims {
         Claims {
-            iss:         "https://fabro.example".to_string(),
-            aud:         "fabro-cli".to_string(),
-            sub:         "12345".to_string(),
-            exp:         exp.try_into().unwrap(),
-            iat:         iat.try_into().unwrap(),
-            jti:         Uuid::new_v4().to_string(),
-            idp_issuer:  "https://github.com".to_string(),
+            iss: "https://fabro.example".to_string(),
+            aud: "fabro-cli".to_string(),
+            sub: "12345".to_string(),
+            exp: exp.try_into().unwrap(),
+            iat: iat.try_into().unwrap(),
+            jti: Uuid::new_v4().to_string(),
+            idp_issuer: "https://github.com".to_string(),
             idp_subject: "12345".to_string(),
-            login:       "octocat".to_string(),
-            name:        "The Octocat".to_string(),
-            email:       "octocat@example.com".to_string(),
-            avatar_url:  "https://example.com/octocat.png".to_string(),
-            user_url:    "https://github.com/octocat".to_string(),
+            login: "octocat".to_string(),
+            name: "The Octocat".to_string(),
+            email: "octocat@example.com".to_string(),
+            avatar_url: "https://example.com/octocat.png".to_string(),
+            user_url: "https://github.com/octocat".to_string(),
             auth_method: AuthMethod::Github,
         }
     }
@@ -210,17 +210,17 @@ mod tests {
     fn legacy_tokens_without_profile_fields_default_to_empty_strings() {
         #[derive(Serialize)]
         struct LegacyClaims {
-            iss:         String,
-            aud:         String,
-            sub:         String,
-            exp:         u64,
-            iat:         u64,
-            jti:         String,
-            idp_issuer:  String,
+            iss: String,
+            aud: String,
+            sub: String,
+            exp: u64,
+            iat: u64,
+            jti: String,
+            idp_issuer: String,
             idp_subject: String,
-            login:       String,
-            name:        String,
-            email:       String,
+            login: String,
+            name: String,
+            email: String,
             auth_method: AuthMethod,
         }
 
@@ -228,17 +228,17 @@ mod tests {
         let token = encode(
             &Header::new(Algorithm::HS256),
             &LegacyClaims {
-                iss:         "https://fabro.example".to_string(),
-                aud:         "fabro-cli".to_string(),
-                sub:         "12345".to_string(),
-                exp:         (now + 600).try_into().unwrap(),
-                iat:         (now - 1).try_into().unwrap(),
-                jti:         Uuid::new_v4().to_string(),
-                idp_issuer:  "https://github.com".to_string(),
+                iss: "https://fabro.example".to_string(),
+                aud: "fabro-cli".to_string(),
+                sub: "12345".to_string(),
+                exp: (now + 600).try_into().unwrap(),
+                iat: (now - 1).try_into().unwrap(),
+                jti: Uuid::new_v4().to_string(),
+                idp_issuer: "https://github.com".to_string(),
                 idp_subject: "12345".to_string(),
-                login:       "octocat".to_string(),
-                name:        "The Octocat".to_string(),
-                email:       "octocat@example.com".to_string(),
+                login: "octocat".to_string(),
+                name: "The Octocat".to_string(),
+                email: "octocat@example.com".to_string(),
                 auth_method: AuthMethod::Github,
             },
             &signing_key().encoding_key(),

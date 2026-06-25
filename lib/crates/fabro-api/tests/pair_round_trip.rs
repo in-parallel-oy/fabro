@@ -36,7 +36,7 @@ fn pair_api_reuses_canonical_types() {
 #[test]
 fn pair_target_omits_internal_fields() {
     let target = PairTarget {
-        stage_id:   "code@1".parse().unwrap(),
+        stage_id: "code@1".parse().unwrap(),
         node_label: "Code".to_string(),
     };
     let serialized = serde_json::to_value(&target).unwrap();

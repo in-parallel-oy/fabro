@@ -94,11 +94,11 @@ fn openai_step_id(list_id: &str, step: &str) -> String {
 pub fn make_update_plan_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
     RegisteredTool {
         definition: ToolDefinition {
-            name:        "update_plan".into(),
+            name: "update_plan".into(),
             description: "Update the multi-step plan for the current task. Submit the entire \
                           plan; existing steps are reconciled by exact step text."
                 .into(),
-            parameters:  serde_json::json!({
+            parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "explanation": {
@@ -124,7 +124,7 @@ pub fn make_update_plan_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
                 "required": ["plan"]
             }),
         },
-        executor:   Arc::new(move |args, ctx| {
+        executor: Arc::new(move |args, ctx| {
             let runtime = runtime.clone();
             Box::pin(async move {
                 let list_id = openai_plan_scope(&ctx)?;
@@ -183,12 +183,19 @@ pub fn make_update_plan_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
                             // No change.
                         }
                         Some(_) => {
-                            runtime.update(&ctx, TodoUpdatedProps {
-                                status: Some(*status),
-                                order: Some(order),
-                                subject: Some(step.clone()),
-                                ..TodoUpdatedProps::new(&list_id, TodoListKind::OpenAiPlan, todo_id)
-                            });
+                            runtime.update(
+                                &ctx,
+                                TodoUpdatedProps {
+                                    status: Some(*status),
+                                    order: Some(order),
+                                    subject: Some(step.clone()),
+                                    ..TodoUpdatedProps::new(
+                                        &list_id,
+                                        TodoListKind::OpenAiPlan,
+                                        todo_id,
+                                    )
+                                },
+                            );
                         }
                         None => {
                             let mut projection =
@@ -207,7 +214,7 @@ pub fn make_update_plan_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
                 Ok("Plan updated".to_string())
             })
         }),
-        source:     ToolSource::Native,
+        source: ToolSource::Native,
     }
 }
 
@@ -290,9 +297,9 @@ pub fn make_task_create_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
     let counters = Arc::new(AnthropicTaskCounters::default());
     RegisteredTool {
         definition: ToolDefinition {
-            name:        "TaskCreate".into(),
+            name: "TaskCreate".into(),
             description: TASK_CREATE_DESCRIPTION.into(),
-            parameters:  serde_json::json!({
+            parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "subject":     {"type": "string"},
@@ -303,7 +310,7 @@ pub fn make_task_create_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
                 "required": ["subject", "description"]
             }),
         },
-        executor:   Arc::new(move |args, ctx| {
+        executor: Arc::new(move |args, ctx| {
             let runtime = runtime.clone();
             let counters = counters.clone();
             Box::pin(async move {
@@ -332,7 +339,7 @@ pub fn make_task_create_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
                 Ok(format!("Task #{task_id} created successfully: {subject}"))
             })
         }),
-        source:     ToolSource::Native,
+        source: ToolSource::Native,
     }
 }
 
@@ -340,9 +347,9 @@ pub fn make_task_create_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
 pub fn make_task_update_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
     RegisteredTool {
         definition: ToolDefinition {
-            name:        "TaskUpdate".into(),
+            name: "TaskUpdate".into(),
             description: TASK_UPDATE_DESCRIPTION.into(),
-            parameters:  serde_json::json!({
+            parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "taskId":       {"type": "string"},
@@ -361,7 +368,7 @@ pub fn make_task_update_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
                 "required": ["taskId"]
             }),
         },
-        executor:   Arc::new(move |args, ctx| {
+        executor: Arc::new(move |args, ctx| {
             let runtime = runtime.clone();
             Box::pin(async move {
                 let list_id = anthropic_task_scope(&ctx)?;
@@ -401,7 +408,7 @@ pub fn make_task_update_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
                 }
             })
         }),
-        source:     ToolSource::Native,
+        source: ToolSource::Native,
     }
 }
 
@@ -409,9 +416,9 @@ pub fn make_task_update_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
 pub fn make_task_get_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
     RegisteredTool {
         definition: ToolDefinition {
-            name:        "TaskGet".into(),
+            name: "TaskGet".into(),
             description: TASK_GET_DESCRIPTION.into(),
-            parameters:  serde_json::json!({
+            parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "taskId": {"type": "string"}
@@ -419,7 +426,7 @@ pub fn make_task_get_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
                 "required": ["taskId"]
             }),
         },
-        executor:   Arc::new(move |args, ctx| {
+        executor: Arc::new(move |args, ctx| {
             let runtime = runtime.clone();
             Box::pin(async move {
                 let list_id = anthropic_task_scope(&ctx)?;
@@ -438,7 +445,7 @@ pub fn make_task_get_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
                 Ok(format_task_details(todo))
             })
         }),
-        source:     ToolSource::Native,
+        source: ToolSource::Native,
     }
 }
 
@@ -446,15 +453,15 @@ pub fn make_task_get_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
 pub fn make_task_list_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
     RegisteredTool {
         definition: ToolDefinition {
-            name:        "TaskList".into(),
+            name: "TaskList".into(),
             description: TASK_LIST_DESCRIPTION.into(),
-            parameters:  serde_json::json!({
+            parameters: serde_json::json!({
                 "type": "object",
                 "properties": {},
                 "additionalProperties": false
             }),
         },
-        executor:   Arc::new(move |_args, ctx| {
+        executor: Arc::new(move |_args, ctx| {
             let runtime = runtime.clone();
             Box::pin(async move {
                 let list_id = anthropic_task_scope(&ctx)?;
@@ -493,7 +500,7 @@ pub fn make_task_list_tool(runtime: Arc<TodoRuntime>) -> RegisteredTool {
                 Ok(out.trim_end().to_string())
             })
         }),
-        source:     ToolSource::Native,
+        source: ToolSource::Native,
     }
 }
 

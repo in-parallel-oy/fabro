@@ -10,7 +10,7 @@ use crate::{CredentialResolver, CredentialUsage, EnvLookup, ResolveError, Resolv
 
 #[derive(Clone)]
 pub struct VaultCredentialSource {
-    vault:    Arc<AsyncRwLock<Vault>>,
+    vault: Arc<AsyncRwLock<Vault>>,
     resolver: CredentialResolver,
 }
 
@@ -90,19 +90,19 @@ mod tests {
 
     fn expired_openai_credential() -> OAuthCredential {
         OAuthCredential {
-            tokens:     OAuthTokens {
-                access_token:  "expired-access".to_string(),
+            tokens: OAuthTokens {
+                access_token: "expired-access".to_string(),
                 refresh_token: Some("refresh-token".to_string()),
-                expires_at:    Utc::now() - Duration::hours(1),
-                id_token:      None,
+                expires_at: Utc::now() - Duration::hours(1),
+                id_token: None,
             },
-            config:     OAuthConfig {
-                auth_url:     "https://auth.openai.com".to_string(),
-                token_url:    "http://127.0.0.1:9/oauth/token".to_string(),
-                client_id:    "client".to_string(),
-                scopes:       vec!["openid".to_string()],
+            config: OAuthConfig {
+                auth_url: "https://auth.openai.com".to_string(),
+                token_url: "http://127.0.0.1:9/oauth/token".to_string(),
+                client_id: "client".to_string(),
+                scopes: vec!["openid".to_string()],
                 redirect_uri: Some("https://example.com/callback".to_string()),
-                use_pkce:     true,
+                use_pkce: true,
             },
             account_id: Some("acct_123".to_string()),
         }
@@ -152,10 +152,10 @@ mod tests {
             VaultCredentialSource::with_env_lookup(Arc::new(AsyncRwLock::new(vault)), |_| None);
         let catalog = default_catalog();
 
-        assert_eq!(source.configured_providers(&catalog).await, vec![
-            ProviderId::anthropic(),
-            ProviderId::openai()
-        ]);
+        assert_eq!(
+            source.configured_providers(&catalog).await,
+            vec![ProviderId::anthropic(), ProviderId::openai()]
+        );
     }
 
     #[tokio::test]
@@ -169,9 +169,10 @@ mod tests {
             )),
             |name| (name == "OPENAI_API_KEY").then(|| "env-openai-key".to_string()),
         );
-        assert_eq!(env_backed.configured_providers(&catalog).await, vec![
-            ProviderId::openai()
-        ]);
+        assert_eq!(
+            env_backed.configured_providers(&catalog).await,
+            vec![ProviderId::openai()]
+        );
 
         let vault_only = VaultCredentialSource::vault_only(Arc::new(AsyncRwLock::new(
             Vault::load(vault_only_dir.path().join("secrets.json")).unwrap(),

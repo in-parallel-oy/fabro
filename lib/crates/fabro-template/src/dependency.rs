@@ -20,13 +20,13 @@ pub enum TemplateDependencyKind {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TemplateDependency {
-    pub kind:      TemplateDependencyKind,
+    pub kind: TemplateDependencyKind,
     pub reference: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ExtractedTemplateDependencies {
-    pub static_references:  Vec<TemplateDependency>,
+    pub static_references: Vec<TemplateDependency>,
     pub dynamic_references: Vec<TemplateDependencyKind>,
 }
 
@@ -38,7 +38,7 @@ pub enum TemplateDiscoveryError {
     Load(#[from] TemplateLoadError),
     #[error("missing template dependency `{reference}` from `{parent}`")]
     Missing {
-        parent:    ManifestPath,
+        parent: ManifestPath,
         reference: String,
     },
     #[error("dynamic template dependency in `{parent}` must be declared explicitly")]
@@ -102,7 +102,7 @@ pub fn discover_static_dependency_closure(
         for dependency in dependencies.static_references {
             let loaded = store.load(&source, &dependency.reference)?.ok_or_else(|| {
                 TemplateDiscoveryError::Missing {
-                    parent:    source.path.clone(),
+                    parent: source.path.clone(),
                     reference: dependency.reference.clone(),
                 }
             })?;

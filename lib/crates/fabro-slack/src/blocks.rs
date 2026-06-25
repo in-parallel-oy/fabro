@@ -224,8 +224,8 @@ pub fn question_to_blocks(
                         &opt.label,
                         &encode_action_value(&SlackActionPayload::Selected {
                             run_id: run_id.to_string(),
-                            qid:    question_id.to_string(),
-                            key:    opt.key.clone(),
+                            qid: question_id.to_string(),
+                            key: opt.key.clone(),
                         }),
                         &answer_action_id(&idx.to_string()),
                     )
@@ -295,19 +295,19 @@ pub fn question_to_blocks(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RunLifecyclePullRequest<'a> {
     pub number: u64,
-    pub title:  Option<&'a str>,
-    pub url:    Option<&'a str>,
+    pub title: Option<&'a str>,
+    pub url: Option<&'a str>,
 }
 
 /// Data needed to render a run lifecycle notification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RunLifecycleBlocks<'a> {
-    pub run_id:         &'a str,
-    pub run_url:        Option<&'a str>,
+    pub run_id: &'a str,
+    pub run_url: Option<&'a str>,
     pub workflow_label: &'a str,
-    pub result:         Option<&'a str>,
-    pub duration_ms:    Option<u64>,
-    pub pull_request:   Option<RunLifecyclePullRequest<'a>>,
+    pub result: Option<&'a str>,
+    pub duration_ms: Option<u64>,
+    pub pull_request: Option<RunLifecyclePullRequest<'a>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::IntoStaticStr)]
@@ -535,22 +535,22 @@ mod tests {
         let mut q = Question::new("Pick a language:", QuestionType::MultipleChoice);
         q.options = vec![
             InterviewOption {
-                key:         "rs".to_string(),
-                label:       "Rust".to_string(),
+                key: "rs".to_string(),
+                label: "Rust".to_string(),
                 description: None,
-                preview:     None,
+                preview: None,
             },
             InterviewOption {
-                key:         "ts".to_string(),
-                label:       "TypeScript".to_string(),
+                key: "ts".to_string(),
+                label: "TypeScript".to_string(),
                 description: None,
-                preview:     None,
+                preview: None,
             },
             InterviewOption {
-                key:         "py".to_string(),
-                label:       "Python".to_string(),
+                key: "py".to_string(),
+                label: "Python".to_string(),
                 description: None,
-                preview:     None,
+                preview: None,
             },
         ];
         let blocks = question_to_blocks("run-1", "q-3", &q, None);
@@ -814,16 +814,16 @@ mod tests {
         let mut q = Question::new("Select features:", QuestionType::MultiSelect);
         q.options = vec![
             InterviewOption {
-                key:         "a".to_string(),
-                label:       "Auth".to_string(),
+                key: "a".to_string(),
+                label: "Auth".to_string(),
                 description: None,
-                preview:     None,
+                preview: None,
             },
             InterviewOption {
-                key:         "b".to_string(),
-                label:       "Billing".to_string(),
+                key: "b".to_string(),
+                label: "Billing".to_string(),
                 description: None,
-                preview:     None,
+                preview: None,
             },
         ];
         let blocks = question_to_blocks("run-1", "q-5", &q, None);
@@ -859,10 +859,10 @@ mod tests {
     fn option_descriptions_are_rendered_and_preview_is_not_special_cased() {
         let mut q = Question::new("Pick one:", QuestionType::MultipleChoice);
         q.options = vec![InterviewOption {
-            key:         "ship".to_string(),
-            label:       "Ship".to_string(),
+            key: "ship".to_string(),
+            label: "Ship".to_string(),
             description: Some("Deploy <now>".to_string()),
-            preview:     Some("preview should not render".to_string()),
+            preview: Some("preview should not render".to_string()),
         }];
 
         let blocks_value: Value =
@@ -875,14 +875,17 @@ mod tests {
 
     #[test]
     fn run_started_blocks_include_run_link_workflow_and_run_id_without_actions() {
-        let blocks = run_lifecycle_blocks(RunLifecycleKind::Started, &RunLifecycleBlocks {
-            run_id:         "01HSTART",
-            run_url:        Some("https://fabro.example/runs/01HSTART"),
-            workflow_label: "deploy",
-            result:         None,
-            duration_ms:    None,
-            pull_request:   None,
-        });
+        let blocks = run_lifecycle_blocks(
+            RunLifecycleKind::Started,
+            &RunLifecycleBlocks {
+                run_id: "01HSTART",
+                run_url: Some("https://fabro.example/runs/01HSTART"),
+                workflow_label: "deploy",
+                result: None,
+                duration_ms: None,
+                pull_request: None,
+            },
+        );
 
         assert_eq!(blocks[0]["type"], "header");
         assert_eq!(blocks[0]["text"]["text"], "Fabro run started");
@@ -898,18 +901,21 @@ mod tests {
 
     #[test]
     fn run_completed_blocks_include_result_duration_and_pull_request_title() {
-        let blocks = run_lifecycle_blocks(RunLifecycleKind::Completed, &RunLifecycleBlocks {
-            run_id:         "01HDONE",
-            run_url:        None,
-            workflow_label: "release",
-            result:         Some("completed"),
-            duration_ms:    Some(65_432),
-            pull_request:   Some(RunLifecyclePullRequest {
-                number: 42,
-                title:  Some("Ship <prod> & notify"),
-                url:    Some("https://github.com/in-parallel-oy/fabro/pull/42"),
-            }),
-        });
+        let blocks = run_lifecycle_blocks(
+            RunLifecycleKind::Completed,
+            &RunLifecycleBlocks {
+                run_id: "01HDONE",
+                run_url: None,
+                workflow_label: "release",
+                result: Some("completed"),
+                duration_ms: Some(65_432),
+                pull_request: Some(RunLifecyclePullRequest {
+                    number: 42,
+                    title: Some("Ship <prod> & notify"),
+                    url: Some("https://github.com/in-parallel-oy/fabro/pull/42"),
+                }),
+            },
+        );
 
         assert_eq!(blocks[0]["type"], "header");
         assert_eq!(blocks[0]["text"]["text"], "Fabro run completed");
@@ -924,14 +930,17 @@ mod tests {
 
     #[test]
     fn run_failed_blocks_include_failure_result_message_and_duration() {
-        let blocks = run_lifecycle_blocks(RunLifecycleKind::Failed, &RunLifecycleBlocks {
-            run_id:         "01HFAIL",
-            run_url:        None,
-            workflow_label: "deploy",
-            result:         Some("workflow_error — command <failed> & exited"),
-            duration_ms:    Some(1_234),
-            pull_request:   None,
-        });
+        let blocks = run_lifecycle_blocks(
+            RunLifecycleKind::Failed,
+            &RunLifecycleBlocks {
+                run_id: "01HFAIL",
+                run_url: None,
+                workflow_label: "deploy",
+                result: Some("workflow_error — command <failed> & exited"),
+                duration_ms: Some(1_234),
+                pull_request: None,
+            },
+        );
 
         assert_eq!(blocks[0]["type"], "header");
         assert_eq!(blocks[0]["text"]["text"], "Fabro run failed");
@@ -943,14 +952,17 @@ mod tests {
 
     #[test]
     fn run_lifecycle_blocks_escape_and_truncate_untrusted_text() {
-        let blocks = run_lifecycle_blocks(RunLifecycleKind::Completed, &RunLifecycleBlocks {
-            run_id:         "01H<&>",
-            run_url:        None,
-            workflow_label: &format!("deploy <!here> {}", "x".repeat(4_000)),
-            result:         Some("partial_success <needs-review> & done"),
-            duration_ms:    None,
-            pull_request:   None,
-        });
+        let blocks = run_lifecycle_blocks(
+            RunLifecycleKind::Completed,
+            &RunLifecycleBlocks {
+                run_id: "01H<&>",
+                run_url: None,
+                workflow_label: &format!("deploy <!here> {}", "x".repeat(4_000)),
+                result: Some("partial_success <needs-review> & done"),
+                duration_ms: None,
+                pull_request: None,
+            },
+        );
 
         let text = lifecycle_text(&blocks);
         assert!(!text.contains("<!here>"));
@@ -971,18 +983,21 @@ mod tests {
 
     #[test]
     fn run_lifecycle_pull_request_without_title_uses_number_and_link_only() {
-        let blocks = run_lifecycle_blocks(RunLifecycleKind::Completed, &RunLifecycleBlocks {
-            run_id:         "01HDONE",
-            run_url:        None,
-            workflow_label: "release",
-            result:         Some("completed"),
-            duration_ms:    Some(1000),
-            pull_request:   Some(RunLifecyclePullRequest {
-                number: 7,
-                title:  None,
-                url:    Some("https://github.com/in-parallel-oy/fabro/pull/7"),
-            }),
-        });
+        let blocks = run_lifecycle_blocks(
+            RunLifecycleKind::Completed,
+            &RunLifecycleBlocks {
+                run_id: "01HDONE",
+                run_url: None,
+                workflow_label: "release",
+                result: Some("completed"),
+                duration_ms: Some(1000),
+                pull_request: Some(RunLifecyclePullRequest {
+                    number: 7,
+                    title: None,
+                    url: Some("https://github.com/in-parallel-oy/fabro/pull/7"),
+                }),
+            },
+        );
 
         let text = lifecycle_text(&blocks);
         assert!(text.contains("*Pull request*"));

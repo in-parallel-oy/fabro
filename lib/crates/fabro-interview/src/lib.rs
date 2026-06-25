@@ -18,15 +18,15 @@ use tokio::time;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Question {
     #[serde(default)]
-    pub id:              String,
-    pub text:            String,
-    pub question_type:   QuestionType,
-    pub options:         Vec<InterviewOption>,
-    pub allow_freeform:  bool,
-    pub default:         Option<Answer>,
+    pub id: String,
+    pub text: String,
+    pub question_type: QuestionType,
+    pub options: Vec<InterviewOption>,
+    pub allow_freeform: bool,
+    pub default: Option<Answer>,
     pub timeout_seconds: Option<f64>,
-    pub stage:           String,
-    pub metadata:        HashMap<String, serde_json::Value>,
+    pub stage: String,
+    pub metadata: HashMap<String, serde_json::Value>,
     #[serde(default)]
     pub context_display: Option<String>,
 }
@@ -65,89 +65,89 @@ pub enum AnswerValue {
 /// An answer from the user.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Answer {
-    pub value:           AnswerValue,
+    pub value: AnswerValue,
     pub selected_option: Option<InterviewOption>,
-    pub text:            Option<String>,
+    pub text: Option<String>,
 }
 
 impl Answer {
     #[must_use]
     pub fn yes() -> Self {
         Self {
-            value:           AnswerValue::Yes,
+            value: AnswerValue::Yes,
             selected_option: None,
-            text:            None,
+            text: None,
         }
     }
 
     #[must_use]
     pub fn no() -> Self {
         Self {
-            value:           AnswerValue::No,
+            value: AnswerValue::No,
             selected_option: None,
-            text:            None,
+            text: None,
         }
     }
 
     #[must_use]
     pub fn cancelled() -> Self {
         Self {
-            value:           AnswerValue::Cancelled,
+            value: AnswerValue::Cancelled,
             selected_option: None,
-            text:            None,
+            text: None,
         }
     }
 
     #[must_use]
     pub fn interrupted() -> Self {
         Self {
-            value:           AnswerValue::Interrupted,
+            value: AnswerValue::Interrupted,
             selected_option: None,
-            text:            None,
+            text: None,
         }
     }
 
     #[must_use]
     pub fn skipped() -> Self {
         Self {
-            value:           AnswerValue::Skipped,
+            value: AnswerValue::Skipped,
             selected_option: None,
-            text:            None,
+            text: None,
         }
     }
 
     #[must_use]
     pub fn timeout() -> Self {
         Self {
-            value:           AnswerValue::Timeout,
+            value: AnswerValue::Timeout,
             selected_option: None,
-            text:            None,
+            text: None,
         }
     }
 
     pub fn selected(key: impl Into<String>, option: InterviewOption) -> Self {
         let key = key.into();
         Self {
-            value:           AnswerValue::Selected(key),
+            value: AnswerValue::Selected(key),
             selected_option: Some(option),
-            text:            None,
+            text: None,
         }
     }
 
     pub fn multi_selected(keys: Vec<String>) -> Self {
         Self {
-            value:           AnswerValue::MultiSelected(keys),
+            value: AnswerValue::MultiSelected(keys),
             selected_option: None,
-            text:            None,
+            text: None,
         }
     }
 
     pub fn text(text: impl Into<String>) -> Self {
         let t = text.into();
         Self {
-            value:           AnswerValue::Text(t.clone()),
+            value: AnswerValue::Text(t.clone()),
             selected_option: None,
-            text:            Some(t),
+            text: Some(t),
         }
     }
 }
@@ -156,7 +156,7 @@ impl Answer {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnswerSubmission {
     pub answer: Answer,
-    pub actor:  Principal,
+    pub actor: Principal,
 }
 
 impl AnswerSubmission {
@@ -303,10 +303,10 @@ mod tests {
     #[test]
     fn answer_selected() {
         let opt = InterviewOption {
-            key:         "A".to_string(),
-            label:       "Approve".to_string(),
+            key: "A".to_string(),
+            label: "Approve".to_string(),
             description: None,
-            preview:     None,
+            preview: None,
         };
         let a = Answer::selected("A", opt.clone());
         assert_eq!(a.value, AnswerValue::Selected("A".to_string()));
@@ -323,16 +323,16 @@ mod tests {
     #[test]
     fn question_option_eq() {
         let a = InterviewOption {
-            key:         "Y".to_string(),
-            label:       "Yes".to_string(),
+            key: "Y".to_string(),
+            label: "Yes".to_string(),
             description: None,
-            preview:     None,
+            preview: None,
         };
         let b = InterviewOption {
-            key:         "Y".to_string(),
-            label:       "Yes".to_string(),
+            key: "Y".to_string(),
+            label: "Yes".to_string(),
             description: None,
-            preview:     None,
+            preview: None,
         };
         assert_eq!(a, b);
     }

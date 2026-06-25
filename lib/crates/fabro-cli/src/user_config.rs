@@ -21,12 +21,12 @@ use tracing::debug;
 use crate::args::ServerTargetArgs;
 
 pub(crate) struct LoadedSettings {
-    pub(crate) storage_dir:            PathBuf,
-    pub(crate) config_log_level:       Option<LogFilter>,
+    pub(crate) storage_dir: PathBuf,
+    pub(crate) config_log_level: Option<LogFilter>,
     pub(crate) config_log_destination: Option<LogDestination>,
-    pub(crate) run_settings:           std::result::Result<RunNamespace, SharedError>,
-    pub(crate) server_settings:        std::result::Result<ServerSettings, SharedError>,
-    pub(crate) user_settings:          UserSettings,
+    pub(crate) run_settings: std::result::Result<RunNamespace, SharedError>,
+    pub(crate) server_settings: std::result::Result<ServerSettings, SharedError>,
+    pub(crate) user_settings: UserSettings,
 }
 
 pub(crate) fn load_resolved_settings(
@@ -125,13 +125,13 @@ fn load_user_settings(
 }
 
 struct PreTracingConfig {
-    log_level:       Option<LogFilter>,
+    log_level: Option<LogFilter>,
     log_destination: Option<LogDestination>,
 }
 
 fn pre_tracing_config_from_document(document: &toml::Value) -> Result<PreTracingConfig> {
     Ok(PreTracingConfig {
-        log_level:       log_filter_at_path(document, &["server", "logging", "level"])?,
+        log_level: log_filter_at_path(document, &["server", "logging", "level"])?,
         log_destination: log_destination_at_path(document, &["server", "logging", "destination"])?,
     })
 }

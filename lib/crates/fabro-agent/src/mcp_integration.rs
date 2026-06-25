@@ -20,11 +20,11 @@ pub fn make_mcp_tools(manager: &Arc<McpConnectionManager>) -> Vec<RegisteredTool
 
             RegisteredTool {
                 definition: ToolDefinition {
-                    name:        qualified_name.clone(),
+                    name: qualified_name.clone(),
                     description: info.description.clone(),
-                    parameters:  info.input_schema.clone(),
+                    parameters: info.input_schema.clone(),
                 },
-                executor:   Arc::new(move |args, _ctx| {
+                executor: Arc::new(move |args, _ctx| {
                     let mgr = Arc::clone(&mgr);
                     let name = name.clone();
                     let timeout = tool_timeout;
@@ -36,7 +36,7 @@ pub fn make_mcp_tools(manager: &Arc<McpConnectionManager>) -> Vec<RegisteredTool
                         call_result_to_string(&result)
                     })
                 }),
-                source:     ToolSource::Mcp {
+                source: ToolSource::Mcp {
                     server_name,
                     original_name,
                 },
@@ -63,15 +63,15 @@ mod tests {
             env!("CARGO_MANIFEST_DIR")
         );
         McpServerSettings {
-            name:                 "test-echo".into(),
-            transport:            McpTransport::Stdio {
+            name: "test-echo".into(),
+            transport: McpTransport::Stdio {
                 command: vec!["python3".into(), test_server],
-                env:     HashMap::new(),
+                env: HashMap::new(),
             },
-            current_dir:          None,
-            clear_env:            false,
+            current_dir: None,
+            clear_env: false,
             startup_timeout_secs: 10,
-            tool_timeout_secs:    30,
+            tool_timeout_secs: 30,
         }
     }
 

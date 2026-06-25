@@ -105,7 +105,7 @@ pub fn validate_standard_speed(
                 adapter.name(),
                 speed
             ),
-            source:  None,
+            source: None,
         });
     }
     Ok(())

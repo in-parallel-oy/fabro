@@ -13,18 +13,18 @@ const TRUNCATED_MARKER: &str = "...[truncated]";
 const MAX_PROMPT_SECTION_CHARS: usize = 4_000;
 
 pub(crate) struct TitlePromptInput<'a> {
-    pub(crate) run_id:          &'a RunId,
-    pub(crate) current_title:   &'a str,
+    pub(crate) run_id: &'a RunId,
+    pub(crate) current_title: &'a str,
     pub(crate) workflow_target: Option<&'a str>,
-    pub(crate) run_inputs:      &'a HashMap<String, TomlValue>,
-    pub(crate) workflow:        &'a WorkflowSummary,
+    pub(crate) run_inputs: &'a HashMap<String, TomlValue>,
+    pub(crate) workflow: &'a WorkflowSummary,
 }
 
 pub(crate) struct GenerateTitleInput<'a> {
-    pub(crate) client:      Arc<Client>,
-    pub(crate) model_id:    String,
+    pub(crate) client: Arc<Client>,
+    pub(crate) model_id: String,
     pub(crate) provider_id: ProviderId,
-    pub(crate) prompt:      TitlePromptInput<'a>,
+    pub(crate) prompt: TitlePromptInput<'a>,
 }
 
 pub(crate) async fn generate_title_or_current(input: GenerateTitleInput<'_>) -> String {
@@ -36,7 +36,7 @@ pub(crate) async fn generate_title_or_current(input: GenerateTitleInput<'_>) -> 
         .max_tokens(64)
         .max_retries(0)
         .timeout(TimeoutOptions {
-            total:    Some(10.0),
+            total: Some(10.0),
             per_step: Some(5.0),
         });
 
@@ -121,17 +121,17 @@ fn title_response_schema() -> serde_json::Value {
 
 #[derive(Serialize)]
 pub(crate) struct WorkflowSummary {
-    pub(crate) graph_name:  String,
-    pub(crate) goal:        String,
+    pub(crate) graph_name: String,
+    pub(crate) goal: String,
     pub(crate) stage_count: usize,
-    pub(crate) edge_count:  usize,
-    pub(crate) stages:      Vec<StageSummary>,
+    pub(crate) edge_count: usize,
+    pub(crate) stages: Vec<StageSummary>,
 }
 
 #[derive(Serialize)]
 pub(crate) struct StageSummary {
-    id:           String,
-    label:        String,
+    id: String,
+    label: String,
     handler_type: Option<String>,
 }
 
@@ -140,8 +140,8 @@ pub(crate) fn workflow_summary(graph: &Graph) -> WorkflowSummary {
         .nodes
         .values()
         .map(|node| StageSummary {
-            id:           node.id.clone(),
-            label:        node.label().to_string(),
+            id: node.id.clone(),
+            label: node.label().to_string(),
             handler_type: node.handler_type().map(str::to_string),
         })
         .collect::<Vec<_>>();
@@ -220,11 +220,11 @@ mod tests {
         ]);
 
         let prompt = build_title_prompt(&TitlePromptInput {
-            run_id:          &run_id,
-            current_title:   "Deploy API token SECRET_123 to production",
+            run_id: &run_id,
+            current_title: "Deploy API token SECRET_123 to production",
             workflow_target: Some("workflows/deploy.fabro"),
-            run_inputs:      &inputs,
-            workflow:        &summary,
+            run_inputs: &inputs,
+            workflow: &summary,
         });
 
         assert!(prompt.contains("Deploy API token SECRET_123 to production"));
@@ -246,11 +246,11 @@ mod tests {
         )]);
 
         let prompt = build_title_prompt(&TitlePromptInput {
-            run_id:          &run_id,
-            current_title:   "Current",
+            run_id: &run_id,
+            current_title: "Current",
             workflow_target: Some("workflow.fabro"),
-            run_inputs:      &inputs,
-            workflow:        &summary,
+            run_inputs: &inputs,
+            workflow: &summary,
         });
 
         // Section truncation: per-section budget × 3 + small boilerplate.
@@ -300,7 +300,7 @@ mod tests {
     async fn title_with_mocked_response(response_text: &str) -> (String, Arc<Mutex<Vec<Request>>>) {
         let captured = Arc::new(Mutex::new(Vec::new()));
         let provider = Arc::new(CapturingProvider {
-            captured:      Arc::clone(&captured),
+            captured: Arc::clone(&captured),
             response_text: response_text.to_string(),
         });
         let client = Arc::new(Client::new(
@@ -317,11 +317,11 @@ mod tests {
             model_id: "small-model".to_string(),
             provider_id: ProviderId::openai(),
             prompt: TitlePromptInput {
-                run_id:          &run_id,
-                current_title:   "Current",
+                run_id: &run_id,
+                current_title: "Current",
                 workflow_target: Some("workflow.fabro"),
-                run_inputs:      &inputs,
-                workflow:        &summary,
+                run_inputs: &inputs,
+                workflow: &summary,
             },
         })
         .await;
@@ -329,7 +329,7 @@ mod tests {
     }
 
     struct CapturingProvider {
-        captured:      Arc<Mutex<Vec<Request>>>,
+        captured: Arc<Mutex<Vec<Request>>>,
         response_text: String,
     }
 
@@ -346,17 +346,17 @@ mod tests {
         async fn complete(&self, request: &Request) -> Result<Response, LlmError> {
             self.captured.lock().unwrap().push(request.clone());
             Ok(Response {
-                id:            "resp_title".to_string(),
-                model:         request.model.clone(),
-                provider:      "openai".to_string(),
-                message:       Message::assistant(self.response_text.clone()),
+                id: "resp_title".to_string(),
+                model: request.model.clone(),
+                provider: "openai".to_string(),
+                message: Message::assistant(self.response_text.clone()),
                 finish_reason: FinishReason::Stop,
-                usage:         TokenCounts::default(),
-                raw:           None,
-                warnings:      Vec::new(),
-                rate_limit:    None,
-                cost_usd:      None,
-                cost_source:   None,
+                usage: TokenCounts::default(),
+                raw: None,
+                warnings: Vec::new(),
+                rate_limit: None,
+                cost_usd: None,
+                cost_source: None,
             })
         }
 

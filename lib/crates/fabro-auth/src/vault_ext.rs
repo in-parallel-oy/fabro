@@ -7,16 +7,16 @@ use crate::credential::OAuthCredential;
 pub enum VaultLookupError {
     #[error("vault entry '{name}' has schema {actual:?}, expected {expected:?}")]
     SchemaMismatch {
-        name:     String,
+        name: String,
         expected: SecretType,
-        actual:   SecretType,
+        actual: SecretType,
     },
     #[error("vault entry '{name}' is not valid {expected:?} JSON: {source}")]
     DecodeFailed {
-        name:     String,
+        name: String,
         expected: SecretType,
         #[source]
-        source:   serde_json::Error,
+        source: serde_json::Error,
     },
 }
 
@@ -26,9 +26,9 @@ pub fn vault_get_token(vault: &Vault, name: &str) -> Result<Option<String>, Vaul
     };
     if entry.secret_type != SecretType::Token {
         return Err(VaultLookupError::SchemaMismatch {
-            name:     name.to_string(),
+            name: name.to_string(),
             expected: SecretType::Token,
-            actual:   entry.secret_type,
+            actual: entry.secret_type,
         });
     }
     Ok(Some(entry.value.clone()))
@@ -43,9 +43,9 @@ pub fn vault_get_oauth(
     };
     if entry.secret_type != SecretType::Oauth {
         return Err(VaultLookupError::SchemaMismatch {
-            name:     name.to_string(),
+            name: name.to_string(),
             expected: SecretType::Oauth,
-            actual:   entry.secret_type,
+            actual: entry.secret_type,
         });
     }
     serde_json::from_str(&entry.value)
@@ -88,19 +88,19 @@ mod tests {
 
     fn fixture() -> OAuthCredential {
         OAuthCredential {
-            tokens:     OAuthTokens {
-                access_token:  "access".to_string(),
+            tokens: OAuthTokens {
+                access_token: "access".to_string(),
                 refresh_token: Some("refresh".to_string()),
-                expires_at:    Utc::now() + Duration::hours(1),
-                id_token:      None,
+                expires_at: Utc::now() + Duration::hours(1),
+                id_token: None,
             },
-            config:     OAuthConfig {
-                auth_url:     "https://auth.openai.com".to_string(),
-                token_url:    "https://auth.openai.com/oauth/token".to_string(),
-                client_id:    "client".to_string(),
-                scopes:       vec!["openid".to_string()],
+            config: OAuthConfig {
+                auth_url: "https://auth.openai.com".to_string(),
+                token_url: "https://auth.openai.com/oauth/token".to_string(),
+                client_id: "client".to_string(),
+                scopes: vec!["openid".to_string()],
                 redirect_uri: None,
-                use_pkce:     true,
+                use_pkce: true,
             },
             account_id: None,
         }

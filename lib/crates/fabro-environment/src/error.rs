@@ -13,7 +13,7 @@ pub enum EnvironmentValidationError {
     InvalidSettings { errors: Vec<String> },
     #[error("failed to read Dockerfile referenced by environment at {path:?}")]
     DockerfileRead {
-        path:   PathBuf,
+        path: PathBuf,
         #[source]
         source: std::io::Error,
     },
@@ -27,9 +27,9 @@ pub enum EnvironmentStoreError {
     AlreadyExists { id: EnvironmentId },
     #[error("environment revision is stale for {id}: expected {expected}, actual {actual}")]
     StaleRevision {
-        id:       EnvironmentId,
+        id: EnvironmentId,
         expected: EnvironmentRevision,
-        actual:   EnvironmentRevision,
+        actual: EnvironmentRevision,
     },
     #[error("environment is reserved and cannot be modified: {id}")]
     Reserved { id: EnvironmentId },
@@ -42,13 +42,13 @@ pub enum EnvironmentStoreError {
     InvalidFilename { path: PathBuf, reason: String },
     #[error("failed to parse environment TOML at {path:?}")]
     Parse {
-        path:   PathBuf,
+        path: PathBuf,
         #[source]
         source: TomlDeError,
     },
     #[error("environment TOML at {path:?} is not UTF-8")]
     InvalidUtf8 {
-        path:   PathBuf,
+        path: PathBuf,
         #[source]
         source: std::str::Utf8Error,
     },
@@ -59,7 +59,7 @@ pub enum EnvironmentStoreError {
     },
     #[error("I/O error at {path:?}")]
     Io {
-        path:   PathBuf,
+        path: PathBuf,
         #[source]
         source: std::io::Error,
     },

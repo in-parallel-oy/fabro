@@ -13,25 +13,25 @@ use super::LogFilter;
 #[serde(deny_unknown_fields)]
 pub struct ServerLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub listen:       Option<ServerListenLayer>,
+    pub listen: Option<ServerListenLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub api:          Option<ServerApiLayer>,
+    pub api: Option<ServerApiLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub web:          Option<ServerWebLayer>,
+    pub web: Option<ServerWebLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub auth:         Option<ServerAuthLayer>,
+    pub auth: Option<ServerAuthLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sandbox:      Option<ServerSandboxLayer>,
+    pub sandbox: Option<ServerSandboxLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub storage:      Option<ServerStorageLayer>,
+    pub storage: Option<ServerStorageLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub artifacts:    Option<ServerArtifactsLayer>,
+    pub artifacts: Option<ServerArtifactsLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub slatedb:      Option<ServerSlateDbLayer>,
+    pub slatedb: Option<ServerSlateDbLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scheduler:    Option<ServerSchedulerLayer>,
+    pub scheduler: Option<ServerSchedulerLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub logging:      Option<ServerLoggingLayer>,
+    pub logging: Option<ServerLoggingLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub integrations: Option<ServerIntegrationsLayer>,
 }
@@ -67,7 +67,7 @@ pub struct ServerWebLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub url:     Option<String>,
+    pub url: Option<String>,
 }
 
 /// `[server.auth]` — cohesive server auth surface.
@@ -81,7 +81,7 @@ pub struct ServerAuthLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub methods: Option<Vec<ServerAuthMethod>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub github:  Option<ServerAuthGithubLayer>,
+    pub github: Option<ServerAuthGithubLayer>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -103,13 +103,13 @@ pub struct ServerSandboxLayer {
 #[serde(deny_unknown_fields)]
 pub struct ServerSandboxProvidersLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub local:   Option<ServerSandboxProviderLayer>,
+    pub local: Option<ServerSandboxProviderLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub docker:  Option<ServerSandboxProviderLayer>,
+    pub docker: Option<ServerSandboxProviderLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub daytona: Option<ServerSandboxProviderLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub gcloud:  Option<ServerSandboxProviderLayer>,
+    pub gcloud: Option<ServerSandboxProviderLayer>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, fabro_macros::Combine)]
@@ -134,11 +134,11 @@ pub struct ServerArtifactsLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider: Option<ObjectStoreProvider>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prefix:   Option<String>,
+    pub prefix: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub local:    Option<ObjectStoreLocalLayer>,
+    pub local: Option<ObjectStoreLocalLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub s3:       Option<ObjectStoreS3Layer>,
+    pub s3: Option<ObjectStoreS3Layer>,
 }
 
 /// `[server.slatedb]` — SlateDB bottomless storage plus tunables.
@@ -146,17 +146,17 @@ pub struct ServerArtifactsLayer {
 #[serde(deny_unknown_fields)]
 pub struct ServerSlateDbLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider:       Option<ObjectStoreProvider>,
+    pub provider: Option<ObjectStoreProvider>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prefix:         Option<String>,
+    pub prefix: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flush_interval: Option<Duration>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub local:          Option<ObjectStoreLocalLayer>,
+    pub local: Option<ObjectStoreLocalLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub s3:             Option<ObjectStoreS3Layer>,
+    pub s3: Option<ObjectStoreS3Layer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub disk_cache:     Option<bool>,
+    pub disk_cache: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -172,11 +172,11 @@ pub struct ObjectStoreLocalLayer {
 #[serde(deny_unknown_fields)]
 pub struct ObjectStoreS3Layer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub bucket:     Option<String>,
+    pub bucket: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub region:     Option<String>,
+    pub region: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub endpoint:   Option<String>,
+    pub endpoint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path_style: Option<bool>,
 }
@@ -194,7 +194,7 @@ pub struct ServerSchedulerLayer {
 #[serde(deny_unknown_fields)]
 pub struct ServerLoggingLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub level:       Option<LogFilter>,
+    pub level: Option<LogFilter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub destination: Option<LogDestination>,
 }
@@ -207,7 +207,7 @@ pub struct ServerIntegrationsLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub github: Option<GithubIntegrationLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub slack:  Option<SlackIntegrationLayer>,
+    pub slack: Option<SlackIntegrationLayer>,
 }
 
 /// `[server.integrations.github]` — GitHub App, credentials, and inbound
@@ -216,17 +216,17 @@ pub struct ServerIntegrationsLayer {
 #[serde(deny_unknown_fields)]
 pub struct GithubIntegrationLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub enabled:   Option<bool>,
+    pub enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub strategy:  Option<GithubIntegrationStrategy>,
+    pub strategy: Option<GithubIntegrationStrategy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub app_id:    Option<String>,
+    pub app_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub slug:      Option<String>,
+    pub slug: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub webhooks:  Option<IntegrationWebhooksLayer>,
+    pub webhooks: Option<IntegrationWebhooksLayer>,
 }
 
 /// `[server.integrations.slack]` — Slack workspace credentials and defaults.
@@ -234,7 +234,7 @@ pub struct GithubIntegrationLayer {
 #[serde(deny_unknown_fields)]
 pub struct SlackIntegrationLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub enabled:         Option<bool>,
+    pub enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_channel: Option<InterpString>,
 }

@@ -26,22 +26,22 @@ type Provider = ProviderId;
 #[derive(Clone)]
 struct OpenAiTwinOptions {
     base_url: String,
-    api_key:  String,
+    api_key: String,
 }
 
 fn summarizer_model_id(provider: &Provider) -> ModelHandle {
     match provider.as_str() {
         ProviderId::OPENAI | "kimi" | "zai" | "minimax" | "inception" => ModelHandle::ByName {
             provider: ProviderId::openai(),
-            model:    "gpt-5.4-mini".to_string(),
+            model: "gpt-5.4-mini".to_string(),
         },
         ProviderId::GEMINI => ModelHandle::ByName {
             provider: ProviderId::gemini(),
-            model:    "gemini-3-flash-preview".to_string(),
+            model: "gemini-3-flash-preview".to_string(),
         },
         ProviderId::ANTHROPIC => ModelHandle::ByName {
             provider: ProviderId::anthropic(),
-            model:    "claude-haiku-4-5".to_string(),
+            model: "claude-haiku-4-5".to_string(),
         },
         other => panic!("unexpected provider {other}"),
     }
@@ -49,7 +49,7 @@ fn summarizer_model_id(provider: &Provider) -> ModelHandle {
 
 fn build_summarizer(provider: &Provider, client: &Client) -> WebFetchSummarizer {
     WebFetchSummarizer {
-        client:   client.clone(),
+        client: client.clone(),
         model_id: summarizer_model_id(provider),
     }
 }

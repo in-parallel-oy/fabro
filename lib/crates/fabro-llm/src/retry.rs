@@ -87,9 +87,9 @@ mod tests {
     fn fast_backoff() -> BackoffPolicy {
         BackoffPolicy {
             initial_delay: Duration::from_micros(1),
-            factor:        2.0,
-            max_delay:     Duration::from_mins(1),
-            jitter:        false,
+            factor: 2.0,
+            max_delay: Duration::from_mins(1),
+            jitter: false,
         }
     }
 
@@ -137,7 +137,7 @@ mod tests {
                 let count = cc.fetch_add(1, Ordering::SeqCst);
                 if count < 2 {
                     Err(Error::Provider {
-                        kind:   ProviderErrorKind::Server,
+                        kind: ProviderErrorKind::Server,
                         detail: Box::new(ProviderErrorDetail {
                             status_code: Some(500),
                             ..ProviderErrorDetail::new("error", "test")
@@ -170,7 +170,7 @@ mod tests {
             async move {
                 cc.fetch_add(1, Ordering::SeqCst);
                 Err::<i32, _>(Error::Provider {
-                    kind:   ProviderErrorKind::Server,
+                    kind: ProviderErrorKind::Server,
                     detail: Box::new(ProviderErrorDetail {
                         status_code: Some(500),
                         ..ProviderErrorDetail::new("error", "test")
@@ -200,7 +200,7 @@ mod tests {
             async move {
                 cc.fetch_add(1, Ordering::SeqCst);
                 Err::<i32, _>(Error::Provider {
-                    kind:   ProviderErrorKind::Authentication,
+                    kind: ProviderErrorKind::Authentication,
                     detail: Box::new(ProviderErrorDetail {
                         status_code: Some(401),
                         ..ProviderErrorDetail::new("bad key", "test")
@@ -220,9 +220,9 @@ mod tests {
             max_retries: 3,
             backoff: BackoffPolicy {
                 initial_delay: Duration::from_micros(1),
-                factor:        2.0,
-                max_delay:     Duration::from_secs(5),
-                jitter:        false,
+                factor: 2.0,
+                max_delay: Duration::from_secs(5),
+                jitter: false,
             },
             ..Default::default()
         };
@@ -235,7 +235,7 @@ mod tests {
             async move {
                 cc.fetch_add(1, Ordering::SeqCst);
                 Err::<i32, _>(Error::Provider {
-                    kind:   ProviderErrorKind::RateLimit,
+                    kind: ProviderErrorKind::RateLimit,
                     detail: Box::new(ProviderErrorDetail {
                         status_code: Some(429),
                         retry_after: Some(100.0), // Way beyond max_delay
@@ -256,9 +256,9 @@ mod tests {
             max_retries: 1,
             backoff: BackoffPolicy {
                 initial_delay: Duration::from_secs(10), // high, but retry_after is low
-                factor:        2.0,
-                max_delay:     Duration::from_mins(1),
-                jitter:        false,
+                factor: 2.0,
+                max_delay: Duration::from_mins(1),
+                jitter: false,
             },
             ..Default::default()
         };
@@ -273,7 +273,7 @@ mod tests {
                 let count = cc.fetch_add(1, Ordering::SeqCst);
                 if count < 1 {
                     Err(Error::Provider {
-                        kind:   ProviderErrorKind::RateLimit,
+                        kind: ProviderErrorKind::RateLimit,
                         detail: Box::new(ProviderErrorDetail {
                             status_code: Some(429),
                             retry_after: Some(0.01),
@@ -301,8 +301,8 @@ mod tests {
 
         let policy = RetryPolicy {
             max_retries: 2,
-            backoff:     fast_backoff(),
-            on_retry:    Some(Arc::new(move |_err, _attempt, _delay| {
+            backoff: fast_backoff(),
+            on_retry: Some(Arc::new(move |_err, _attempt, _delay| {
                 retry_attempts_clone.fetch_add(1, Ordering::SeqCst);
             })),
         };
@@ -316,7 +316,7 @@ mod tests {
                 let count = cc.fetch_add(1, Ordering::SeqCst);
                 if count < 2 {
                     Err(Error::Provider {
-                        kind:   ProviderErrorKind::Server,
+                        kind: ProviderErrorKind::Server,
                         detail: Box::new(ProviderErrorDetail {
                             status_code: Some(500),
                             ..ProviderErrorDetail::new("error", "test")

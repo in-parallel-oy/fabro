@@ -18,13 +18,13 @@ const LOCAL_WORKER_CONTROL_SUBSCRIBER_BUFFER: usize = 64;
 
 #[derive(Default)]
 pub(crate) struct LocalWorkerControlBus {
-    streams:       Arc<Mutex<HashMap<RunId, LocalRunControlStream>>>,
+    streams: Arc<Mutex<HashMap<RunId, LocalRunControlStream>>>,
     next_sequence: Arc<AtomicU64>,
 }
 
 struct LocalRunControlStream {
-    messages:    VecDeque<LocalMessage>,
-    notify:      Arc<Notify>,
+    messages: VecDeque<LocalMessage>,
+    notify: Arc<Notify>,
     has_trimmed: bool,
 }
 
@@ -38,7 +38,7 @@ impl LocalWorkerControlBus {
     #[must_use]
     pub(crate) fn new() -> Self {
         Self {
-            streams:       Arc::new(Mutex::new(HashMap::new())),
+            streams: Arc::new(Mutex::new(HashMap::new())),
             next_sequence: Arc::new(AtomicU64::new(1)),
         }
     }
@@ -99,8 +99,8 @@ impl LocalWorkerControlBus {
 impl LocalRunControlStream {
     fn new() -> Self {
         Self {
-            messages:    VecDeque::new(),
-            notify:      Arc::new(Notify::new()),
+            messages: VecDeque::new(),
+            notify: Arc::new(Notify::new()),
             has_trimmed: false,
         }
     }

@@ -33,8 +33,8 @@ pub(crate) async fn optional_timeout(timeout_ms: Option<u64>) {
 /// Information returned when a sandbox sets up git for a workflow run.
 #[derive(Debug, Clone)]
 pub struct GitRunInfo {
-    pub base_sha:    String,
-    pub run_branch:  String,
+    pub base_sha: String,
+    pub run_branch: String,
     pub base_branch: Option<String>,
 }
 
@@ -45,8 +45,8 @@ pub enum GitSetupIntent {
         run_id: String,
     },
     ForkFromCheckpoint {
-        new_run_id:     String,
-        source_run_id:  String,
+        new_run_id: String,
+        source_run_id: String,
         checkpoint_sha: String,
     },
 }
@@ -271,71 +271,71 @@ pub enum SandboxEvent {
         provider: String,
     },
     Ready {
-        provider:    String,
+        provider: String,
         duration_ms: u64,
-        name:        Option<String>,
-        cpu:         Option<f64>,
-        memory:      Option<f64>,
-        url:         Option<String>,
+        name: Option<String>,
+        cpu: Option<f64>,
+        memory: Option<f64>,
+        url: Option<String>,
     },
     InitializeFailed {
-        provider:    String,
-        error:       String,
+        provider: String,
+        error: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        causes:      Vec<String>,
+        causes: Vec<String>,
         duration_ms: u64,
     },
     CleanupStarted {
         provider: String,
     },
     CleanupCompleted {
-        provider:    String,
+        provider: String,
         duration_ms: u64,
     },
     CleanupFailed {
         provider: String,
-        error:    String,
+        error: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        causes:   Vec<String>,
+        causes: Vec<String>,
     },
     StartStarted {
         provider: String,
     },
     StartCompleted {
-        provider:    String,
+        provider: String,
         duration_ms: u64,
     },
     StartFailed {
         provider: String,
-        error:    String,
+        error: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        causes:   Vec<String>,
+        causes: Vec<String>,
     },
     StopStarted {
         provider: String,
     },
     StopCompleted {
-        provider:    String,
+        provider: String,
         duration_ms: u64,
     },
     StopFailed {
         provider: String,
-        error:    String,
+        error: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        causes:   Vec<String>,
+        causes: Vec<String>,
     },
     DeleteStarted {
         provider: String,
     },
     DeleteCompleted {
-        provider:    String,
+        provider: String,
         duration_ms: u64,
     },
     DeleteFailed {
         provider: String,
-        error:    String,
+        error: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        causes:   Vec<String>,
+        causes: Vec<String>,
     },
 
     // -- Snapshot lifecycle --
@@ -346,28 +346,28 @@ pub enum SandboxEvent {
         name: String,
     },
     SnapshotReady {
-        name:        String,
+        name: String,
         duration_ms: u64,
     },
     SnapshotFailed {
-        name:   String,
-        error:  String,
+        name: String,
+        error: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         causes: Vec<String>,
     },
 
     // -- Daytona git --
     GitCloneStarted {
-        url:    String,
+        url: String,
         branch: Option<String>,
     },
     GitCloneCompleted {
-        url:         String,
+        url: String,
         duration_ms: u64,
     },
     GitCloneFailed {
-        url:    String,
-        error:  String,
+        url: String,
+        error: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         causes: Vec<String>,
     },
@@ -516,9 +516,9 @@ pub fn format_lines_numbered(content: &str, offset: Option<usize>, limit: Option
 
 #[derive(Debug, Clone)]
 pub struct ExecResult {
-    pub stdout:      String,
-    pub stderr:      String,
-    pub exit_code:   Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: Option<i32>,
     pub termination: CommandTermination,
     pub duration_ms: u64,
 }
@@ -549,11 +549,14 @@ impl ExecResult {
         label: impl Into<String>,
         redactor: impl Fn(&str) -> String,
     ) -> crate::Error {
-        crate::Error::exec(label, Self {
-            stdout: redactor(&self.stdout),
-            stderr: redactor(&self.stderr),
-            ..self
-        })
+        crate::Error::exec(
+            label,
+            Self {
+                stdout: redactor(&self.stdout),
+                stderr: redactor(&self.stderr),
+                ..self
+            },
+        )
     }
 
     pub fn into_result(self, label: impl Into<String>) -> crate::Result<Self> {
@@ -678,9 +681,9 @@ fn sanitize_exec_output(text: &str) -> String {
 
 #[derive(Debug, Clone)]
 pub struct ExecStreamingResult {
-    pub result:            ExecResult,
+    pub result: ExecResult,
     pub streams_separated: bool,
-    pub live_streaming:    bool,
+    pub live_streaming: bool,
 }
 
 pub type CommandOutputCallback = Arc<
@@ -690,7 +693,7 @@ pub type CommandOutputCallback = Arc<
 >;
 
 pub struct StdioProcess {
-    pub stdin:  Pin<Box<dyn AsyncWrite + Send>>,
+    pub stdin: Pin<Box<dyn AsyncWrite + Send>>,
     pub stdout: Pin<Box<dyn AsyncRead + Send>>,
     pub stderr: StderrCollector,
     pub handle: StdioProcessHandle,
@@ -698,7 +701,7 @@ pub struct StdioProcess {
 
 #[derive(Debug, Clone)]
 pub struct StderrCollector {
-    inner:     Arc<TokioMutex<Vec<u8>>>,
+    inner: Arc<TokioMutex<Vec<u8>>>,
     max_bytes: usize,
 }
 
@@ -770,7 +773,7 @@ impl StdioProcessHandle {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StdioProcessTermination {
     pub termination: CommandTermination,
-    pub exit_code:   Option<i32>,
+    pub exit_code: Option<i32>,
 }
 
 impl StdioProcessTermination {
@@ -786,7 +789,7 @@ impl StdioProcessTermination {
     pub fn cancelled() -> Self {
         Self {
             termination: CommandTermination::Cancelled,
-            exit_code:   None,
+            exit_code: None,
         }
     }
 }
@@ -799,16 +802,16 @@ pub(crate) trait StdioProcessControl: Send + Sync {
 
 #[derive(Debug, Clone)]
 pub struct DirEntry {
-    pub name:   String,
+    pub name: String,
     pub is_dir: bool,
-    pub size:   Option<u64>,
+    pub size: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct GrepOptions {
-    pub glob_filter:      Option<String>,
+    pub glob_filter: Option<String>,
     pub case_insensitive: bool,
-    pub max_results:      Option<usize>,
+    pub max_results: Option<usize>,
 }
 
 #[async_trait]
@@ -1195,9 +1198,9 @@ mod tests {
     #[test]
     fn exec_result_fields() {
         let result = ExecResult {
-            stdout:      "out".into(),
-            stderr:      "err".into(),
-            exit_code:   Some(1),
+            stdout: "out".into(),
+            stderr: "err".into(),
+            exit_code: Some(1),
             termination: CommandTermination::Exited,
             duration_ms: 5000,
         };
@@ -1209,9 +1212,9 @@ mod tests {
     #[test]
     fn exec_result_helpers_convert_failure_to_exec_error() {
         let result = ExecResult {
-            stdout:      "out".into(),
-            stderr:      "fatal: could not read Username".into(),
-            exit_code:   Some(128),
+            stdout: "out".into(),
+            stderr: "fatal: could not read Username".into(),
+            exit_code: Some(128),
             termination: CommandTermination::Exited,
             duration_ms: 42,
         };
@@ -1227,9 +1230,9 @@ mod tests {
     #[test]
     fn exec_result_success_honors_timeouts() {
         let success = ExecResult {
-            stdout:      String::new(),
-            stderr:      String::new(),
-            exit_code:   Some(0),
+            stdout: String::new(),
+            stderr: String::new(),
+            exit_code: Some(0),
             termination: CommandTermination::Exited,
             duration_ms: 1,
         };
@@ -1246,9 +1249,9 @@ mod tests {
     #[test]
     fn exec_result_redactor_applies_to_stderr_and_stdout() {
         let result = ExecResult {
-            stdout:      "stdout https://token@example.com".into(),
-            stderr:      "stderr https://token@example.com".into(),
-            exit_code:   Some(1),
+            stdout: "stdout https://token@example.com".into(),
+            stderr: "stderr https://token@example.com".into(),
+            exit_code: Some(1),
             termination: CommandTermination::Exited,
             duration_ms: 1,
         };
@@ -1267,9 +1270,9 @@ mod tests {
     fn exec_result_redacts_before_taking_tail() {
         let secret = "sk-ant-api03-xK9mZ2vL8nQ5rT1wY4bC7dF0gH3jE6pA";
         let result = ExecResult {
-            stdout:      format!("{} {secret} done", "context ".repeat(20)),
-            stderr:      String::new(),
-            exit_code:   Some(1),
+            stdout: format!("{} {secret} done", "context ".repeat(20)),
+            stderr: String::new(),
+            exit_code: Some(1),
             termination: CommandTermination::Exited,
             duration_ms: 1,
         };
@@ -1286,11 +1289,11 @@ mod tests {
     #[test]
     fn exec_result_tail_sanitizes_terminal_control_sequences() {
         let result = ExecResult {
-            stdout:      "\u{1b}[31mred\u{1b}[0m \u{1b}]0;window-title\u{7}shown \
+            stdout: "\u{1b}[31mred\u{1b}[0m \u{1b}]0;window-title\u{7}shown \
                           \u{1b}(Bset \u{1b}Mtwo-byte \u{8}backspace"
                 .to_string(),
-            stderr:      String::new(),
-            exit_code:   Some(1),
+            stderr: String::new(),
+            exit_code: Some(1),
             termination: CommandTermination::Exited,
             duration_ms: 1,
         };
@@ -1349,9 +1352,9 @@ mod tests {
     #[test]
     fn default_exec_output_tail_serialized_budget_stays_below_40_kib() {
         let result = ExecResult {
-            stdout:      "o".repeat(DEFAULT_EXEC_OUTPUT_TAIL_BYTES + 128),
-            stderr:      "e".repeat(DEFAULT_EXEC_OUTPUT_TAIL_BYTES + 128),
-            exit_code:   Some(1),
+            stdout: "o".repeat(DEFAULT_EXEC_OUTPUT_TAIL_BYTES + 128),
+            stderr: "e".repeat(DEFAULT_EXEC_OUTPUT_TAIL_BYTES + 128),
+            exit_code: Some(1),
             termination: CommandTermination::Exited,
             duration_ms: 1,
         };
@@ -1390,9 +1393,9 @@ mod tests {
     #[test]
     fn dir_entry_fields() {
         let entry = DirEntry {
-            name:   "src".into(),
+            name: "src".into(),
             is_dir: true,
-            size:   None,
+            size: None,
         };
         assert_eq!(entry.name, "src");
         assert!(entry.is_dir);
@@ -1414,30 +1417,30 @@ mod tests {
                 provider: "local".into(),
             },
             SandboxEvent::Ready {
-                provider:    "local".into(),
+                provider: "local".into(),
                 duration_ms: 50,
-                name:        None,
-                cpu:         None,
-                memory:      None,
-                url:         None,
+                name: None,
+                cpu: None,
+                memory: None,
+                url: None,
             },
             SandboxEvent::InitializeFailed {
-                provider:    "docker".into(),
-                error:       "no daemon".into(),
-                causes:      vec!["connection refused".into()],
+                provider: "docker".into(),
+                error: "no daemon".into(),
+                causes: vec!["connection refused".into()],
                 duration_ms: 100,
             },
             SandboxEvent::CleanupStarted {
                 provider: "daytona".into(),
             },
             SandboxEvent::CleanupCompleted {
-                provider:    "daytona".into(),
+                provider: "daytona".into(),
                 duration_ms: 200,
             },
             SandboxEvent::CleanupFailed {
                 provider: "docker".into(),
-                error:    "container gone".into(),
-                causes:   Vec::new(),
+                error: "container gone".into(),
+                causes: Vec::new(),
             },
             SandboxEvent::SnapshotPulling {
                 name: "ubuntu:22.04".into(),
@@ -1446,25 +1449,25 @@ mod tests {
                 name: "my-snap".into(),
             },
             SandboxEvent::SnapshotReady {
-                name:        "my-snap".into(),
+                name: "my-snap".into(),
                 duration_ms: 30000,
             },
             SandboxEvent::SnapshotFailed {
-                name:   "my-snap".into(),
-                error:  "build failed".into(),
+                name: "my-snap".into(),
+                error: "build failed".into(),
                 causes: Vec::new(),
             },
             SandboxEvent::GitCloneStarted {
-                url:    "https://github.com/org/repo.git".into(),
+                url: "https://github.com/org/repo.git".into(),
                 branch: Some("main".into()),
             },
             SandboxEvent::GitCloneCompleted {
-                url:         "https://github.com/org/repo.git".into(),
+                url: "https://github.com/org/repo.git".into(),
                 duration_ms: 8000,
             },
             SandboxEvent::GitCloneFailed {
-                url:    "https://github.com/org/repo.git".into(),
-                error:  "auth failed".into(),
+                url: "https://github.com/org/repo.git".into(),
+                error: "auth failed".into(),
                 causes: Vec::new(),
             },
         ];

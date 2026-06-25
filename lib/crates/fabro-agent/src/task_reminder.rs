@@ -26,7 +26,7 @@ fn task_management_tools_available(tool_names: &[&str]) -> bool {
 #[derive(Debug, Clone, Copy, Default)]
 struct TurnCounts {
     assistant_turns_since_task_management: usize,
-    assistant_turns_since_reminder:        usize,
+    assistant_turns_since_reminder: usize,
 }
 
 fn turn_counts(history: &History) -> TurnCounts {
@@ -93,7 +93,7 @@ mod tests {
 
     fn system(content: &str) -> Message {
         Message::System {
-            content:   content.into(),
+            content: content.into(),
             timestamp: SystemTime::now(),
         }
     }

@@ -33,10 +33,10 @@ fn dirty_status_serializes_with_snake_case_strings() {
 #[test]
 fn git_context_with_known_sha_round_trips() {
     let ctx = GitContext {
-        origin_url:   "https://github.com/acme/widgets".to_string(),
-        branch:       "main".to_string(),
-        sha:          Some("abc123".to_string()),
-        dirty:        DirtyStatus::Clean,
+        origin_url: "https://github.com/acme/widgets".to_string(),
+        branch: "main".to_string(),
+        sha: Some("abc123".to_string()),
+        dirty: DirtyStatus::Clean,
         push_outcome: PreRunPushOutcome::Succeeded {
             remote: "origin".to_string(),
             branch: "main".to_string(),
@@ -64,10 +64,10 @@ fn git_context_with_known_sha_round_trips() {
 #[test]
 fn git_context_omits_absent_sha_on_serialize() {
     let ctx = GitContext {
-        origin_url:   "https://github.com/acme/widgets".to_string(),
-        branch:       "feature/foo".to_string(),
-        sha:          None,
-        dirty:        DirtyStatus::Unknown,
+        origin_url: "https://github.com/acme/widgets".to_string(),
+        branch: "feature/foo".to_string(),
+        sha: None,
+        dirty: DirtyStatus::Unknown,
         push_outcome: PreRunPushOutcome::SkippedNoRemote,
     };
     let json = serde_json::to_value(&ctx).unwrap();

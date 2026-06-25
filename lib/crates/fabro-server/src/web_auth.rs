@@ -33,21 +33,21 @@ const OAUTH_STATE_TTL_MINUTES: i64 = 30;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SessionCookie {
-    pub v:           u8,
-    pub login:       String,
+    pub v: u8,
+    pub login: String,
     pub auth_method: AuthMethod,
-    pub identity:    IdpIdentity,
-    pub name:        String,
-    pub email:       String,
-    pub avatar_url:  String,
-    pub user_url:    String,
-    pub iat:         i64,
-    pub exp:         i64,
+    pub identity: IdpIdentity,
+    pub name: String,
+    pub email: String,
+    pub avatar_url: String,
+    pub user_url: String,
+    pub iat: i64,
+    pub exp: i64,
 }
 
 #[derive(Deserialize)]
 struct OAuthCallbackParams {
-    code:  Option<String>,
+    code: Option<String>,
     state: Option<String>,
     error: Option<String>,
 }
@@ -59,8 +59,8 @@ struct LoginGithubParams {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct OAuthStateCookie {
-    state:     String,
-    exp:       i64,
+    state: String,
+    exp: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     return_to: Option<String>,
 }
@@ -77,8 +77,8 @@ struct AuthConfigResponse {
 
 #[derive(Serialize)]
 struct AuthMeResponse {
-    user:      SessionUser,
-    provider:  String,
+    user: SessionUser,
+    provider: String,
     #[serde(rename = "demoMode")]
     demo_mode: bool,
 }
@@ -91,32 +91,32 @@ struct AuthSessionsResponse {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AuthSession {
-    id:           String,
-    kind:         &'static str,
-    current:      bool,
-    provider:     String,
-    login:        String,
-    label:        String,
-    user_agent:   Option<String>,
-    created_at:   DateTime<Utc>,
+    id: String,
+    kind: &'static str,
+    current: bool,
+    provider: String,
+    login: String,
+    label: String,
+    user_agent: Option<String>,
+    created_at: DateTime<Utc>,
     last_seen_at: DateTime<Utc>,
-    expires_at:   DateTime<Utc>,
-    revocable:    bool,
+    expires_at: DateTime<Utc>,
+    revocable: bool,
 }
 
 #[derive(Serialize)]
 struct SessionUser {
-    login:       String,
-    name:        String,
-    email:       String,
+    login: String,
+    name: String,
+    email: String,
     #[serde(rename = "idpIssuer", skip_serializing_if = "Option::is_none")]
-    idp_issuer:  Option<String>,
+    idp_issuer: Option<String>,
     #[serde(rename = "idpSubject", skip_serializing_if = "Option::is_none")]
     idp_subject: Option<String>,
     #[serde(rename = "avatarUrl")]
-    avatar_url:  String,
+    avatar_url: String,
     #[serde(rename = "userUrl")]
-    user_url:    String,
+    user_url: String,
 }
 
 #[derive(Deserialize)]
@@ -126,16 +126,16 @@ struct GitHubTokenResponse {
 
 #[derive(Deserialize)]
 struct GitHubUser {
-    id:         i64,
-    login:      String,
-    name:       Option<String>,
+    id: i64,
+    login: String,
+    name: Option<String>,
     avatar_url: String,
 }
 
 #[derive(Deserialize)]
 struct GitHubEmail {
-    email:    String,
-    primary:  bool,
+    email: String,
+    primary: bool,
     verified: bool,
 }
 
@@ -192,10 +192,10 @@ pub(crate) fn auth_context_from_session(session: &SessionCookie) -> RequestAuthC
         session.login.clone(),
         session.auth_method,
         UserProfile {
-            name:       session.name.clone(),
-            email:      session.email.clone(),
+            name: session.name.clone(),
+            email: session.email.clone(),
             avatar_url: session.avatar_url.clone(),
-            user_url:   session.user_url.clone(),
+            user_url: session.user_url.clone(),
         },
     )
 }
@@ -371,16 +371,16 @@ async fn login_dev_token(
 
     let now = chrono::Utc::now();
     let session = SessionCookie {
-        v:           2,
-        login:       "dev".to_string(),
+        v: 2,
+        login: "dev".to_string(),
         auth_method: AuthMethod::DevToken,
-        identity:    IdpIdentity::new("fabro:dev", "dev").expect("non-empty dev identity"),
-        name:        "Development User".to_string(),
-        email:       "dev@localhost".to_string(),
-        avatar_url:  "/images/logo.svg".to_string(),
-        user_url:    String::new(),
-        iat:         now.timestamp(),
-        exp:         (now + chrono::Duration::days(30)).timestamp(),
+        identity: IdpIdentity::new("fabro:dev", "dev").expect("non-empty dev identity"),
+        name: "Development User".to_string(),
+        email: "dev@localhost".to_string(),
+        avatar_url: "/images/logo.svg".to_string(),
+        user_url: String::new(),
+        iat: now.timestamp(),
+        exp: (now + chrono::Duration::days(30)).timestamp(),
     };
     auth_slot.replace(auth_context_from_session(&session));
 
@@ -472,8 +472,8 @@ async fn login_github(
         &mut jar,
         &session_key,
         &OAuthStateCookie {
-            state:     state_token,
-            exp:       (chrono::Utc::now() + chrono::Duration::minutes(OAUTH_STATE_TTL_MINUTES))
+            state: state_token,
+            exp: (chrono::Utc::now() + chrono::Duration::minutes(OAUTH_STATE_TTL_MINUTES))
                 .timestamp(),
             return_to: sanitize_return_to(params.return_to),
         },
@@ -749,17 +749,17 @@ async fn callback_github(
         .unwrap_or_default();
     let now = chrono::Utc::now();
     let session = SessionCookie {
-        v:           2,
-        login:       profile.login.clone(),
+        v: 2,
+        login: profile.login.clone(),
         auth_method: AuthMethod::Github,
-        identity:    IdpIdentity::new("https://github.com", profile.id.to_string())
+        identity: IdpIdentity::new("https://github.com", profile.id.to_string())
             .expect("GitHub profile id should produce a valid identity"),
-        name:        profile.name.unwrap_or_else(|| profile.login.clone()),
-        email:       primary_email,
-        avatar_url:  profile.avatar_url,
-        user_url:    format!("https://github.com/{}", profile.login),
-        iat:         now.timestamp(),
-        exp:         (now + chrono::Duration::days(30)).timestamp(),
+        name: profile.name.unwrap_or_else(|| profile.login.clone()),
+        email: primary_email,
+        avatar_url: profile.avatar_url,
+        user_url: format!("https://github.com/{}", profile.login),
+        iat: now.timestamp(),
+        exp: (now + chrono::Duration::days(30)).timestamp(),
     };
     auth_slot.replace(auth_context_from_session(&session));
 
@@ -835,13 +835,13 @@ async fn auth_me(RequestAuth(auth_slot): RequestAuth, headers: HeaderMap) -> Res
         .is_some_and(|cookie| cookie.value() == "1");
     Json(AuthMeResponse {
         user: SessionUser {
-            login:       authenticated.principal.login.clone(),
-            name:        authenticated.profile.name,
-            email:       authenticated.profile.email,
-            idp_issuer:  Some(authenticated.principal.identity.issuer().to_string()),
+            login: authenticated.principal.login.clone(),
+            name: authenticated.profile.name,
+            email: authenticated.profile.email,
+            idp_issuer: Some(authenticated.principal.identity.issuer().to_string()),
             idp_subject: Some(authenticated.principal.identity.subject().to_string()),
-            avatar_url:  authenticated.profile.avatar_url,
-            user_url:    authenticated.profile.user_url,
+            avatar_url: authenticated.profile.avatar_url,
+            user_url: authenticated.profile.user_url,
         },
         provider: session_provider(authenticated.principal.auth_method).to_string(),
         demo_mode,
@@ -914,17 +914,17 @@ async fn list_auth_sessions(
     };
 
     sessions.extend(cli_sessions.into_iter().map(|token| AuthSession {
-        id:           format!("cli:{}", token.chain_id),
-        kind:         "cli",
-        current:      false,
-        provider:     "github".to_string(),
-        login:        token.login,
-        label:        "Fabro CLI".to_string(),
-        user_agent:   Some(token.user_agent),
-        created_at:   token.issued_at,
+        id: format!("cli:{}", token.chain_id),
+        kind: "cli",
+        current: false,
+        provider: "github".to_string(),
+        login: token.login,
+        label: "Fabro CLI".to_string(),
+        user_agent: Some(token.user_agent),
+        created_at: token.issued_at,
         last_seen_at: token.last_used_at,
-        expires_at:   token.expires_at,
-        revocable:    true,
+        expires_at: token.expires_at,
+        revocable: true,
     }));
     sessions.sort_by(|left, right| {
         right
@@ -1034,18 +1034,18 @@ mod tests {
 
     fn dev_token_auth_mode() -> AuthMode {
         AuthMode::Enabled(ConfiguredAuth {
-            methods:    vec![ServerAuthMethod::DevToken],
-            dev_token:  Some(DEV_TOKEN.to_string()),
-            jwt_key:    Some(test_jwt_key()),
+            methods: vec![ServerAuthMethod::DevToken],
+            dev_token: Some(DEV_TOKEN.to_string()),
+            jwt_key: Some(test_jwt_key()),
             jwt_issuer: Some("https://fabro.example".to_string()),
         })
     }
 
     fn github_auth_mode() -> AuthMode {
         AuthMode::Enabled(ConfiguredAuth {
-            methods:    vec![ServerAuthMethod::Github],
-            dev_token:  None,
-            jwt_key:    Some(test_jwt_key()),
+            methods: vec![ServerAuthMethod::Github],
+            dev_token: None,
+            jwt_key: Some(test_jwt_key()),
             jwt_issuer: Some("https://fabro.example".to_string()),
         })
     }
@@ -1229,12 +1229,12 @@ client_id = "github-client-id"
             &test_jwt_key(),
             "https://fabro.example",
             &auth::JwtSubject {
-                identity:    IdpIdentity::new("https://github.com", "12345").unwrap(),
-                login:       "octocat".to_string(),
-                name:        "The Octocat".to_string(),
-                email:       "octocat@example.com".to_string(),
-                avatar_url:  String::new(),
-                user_url:    String::new(),
+                identity: IdpIdentity::new("https://github.com", "12345").unwrap(),
+                login: "octocat".to_string(),
+                name: "The Octocat".to_string(),
+                email: "octocat@example.com".to_string(),
+                avatar_url: String::new(),
+                user_url: String::new(),
                 auth_method: AuthMethod::Github,
             },
             chrono::Duration::minutes(10),
@@ -1464,8 +1464,8 @@ client_id = "github-client-id"
             state,
             &github_auth_mode(),
             crate::server::RouterOptions {
-                web_enabled:       true,
-                github_endpoints:  Some(Arc::new(GithubEndpoints::with_bases(
+                web_enabled: true,
+                github_endpoints: Some(Arc::new(GithubEndpoints::with_bases(
                     "http://127.0.0.1:12345/"
                         .parse()
                         .expect("oauth base should parse"),
@@ -1474,7 +1474,7 @@ client_id = "github-client-id"
                         .expect("api base should parse"),
                 ))),
                 static_asset_root: None,
-                watch_web:         false,
+                watch_web: false,
             },
         );
 
@@ -1535,8 +1535,8 @@ client_id = "github-client-id"
             &mut jar,
             &key,
             &super::OAuthStateCookie {
-                state:     "fabro-test-state".to_string(),
-                exp:       (chrono::Utc::now() - chrono::Duration::minutes(5)).timestamp(),
+                state: "fabro-test-state".to_string(),
+                exp: (chrono::Utc::now() - chrono::Duration::minutes(5)).timestamp(),
                 return_to: Some("/auth/cli/resume".to_string()),
             },
             true,
@@ -1579,8 +1579,8 @@ client_id = "github-client-id"
             &mut jar,
             &key,
             &super::OAuthStateCookie {
-                state:     "fabro-test-state".to_string(),
-                exp:       (chrono::Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+                state: "fabro-test-state".to_string(),
+                exp: (chrono::Utc::now() + chrono::Duration::minutes(30)).timestamp(),
                 return_to: Some("/auth/cli/resume".to_string()),
             },
             true,
@@ -1667,23 +1667,26 @@ client_id = "github-client-id"
                 None,
             )
             .unwrap();
-        let app =
-            server::build_router_with_options(state, &github_auth_mode(), server::RouterOptions {
+        let app = server::build_router_with_options(
+            state,
+            &github_auth_mode(),
+            server::RouterOptions {
                 web_enabled: true,
                 github_endpoints: Some(Arc::new(GithubEndpoints::with_bases(
                     github.url("/").parse().expect("oauth base should parse"),
                     github.url("/api/").parse().expect("api base should parse"),
                 ))),
                 ..server::RouterOptions::default()
-            });
+            },
+        );
         let key = test_cookie_key();
         let mut jar = cookie::CookieJar::new();
         super::add_oauth_state_cookie(
             &mut jar,
             &key,
             &super::OAuthStateCookie {
-                state:     "fabro-test-state".to_string(),
-                exp:       (chrono::Utc::now() + chrono::Duration::minutes(30)).timestamp(),
+                state: "fabro-test-state".to_string(),
+                exp: (chrono::Utc::now() + chrono::Duration::minutes(30)).timestamp(),
                 return_to: None,
             },
             true,

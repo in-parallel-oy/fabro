@@ -18,19 +18,19 @@ pub async fn refresh_oauth_credential(
     .await
     .map_err(anyhow::Error::msg)?;
     Ok(OAuthCredential {
-        tokens:     OAuthTokens {
-            access_token:  response.access_token,
+        tokens: OAuthTokens {
+            access_token: response.access_token,
             refresh_token: response
                 .refresh_token
                 .or_else(|| credential.tokens.refresh_token.clone()),
-            expires_at:    expires_at_from_now(response.expires_in),
+            expires_at: expires_at_from_now(response.expires_in),
             // Refresh responses may omit a fresh id_token; keep the prior one
             // so the vaulted credential never loses its ChatGPT account claims.
-            id_token:      response
+            id_token: response
                 .id_token
                 .or_else(|| credential.tokens.id_token.clone()),
         },
-        config:     credential.config.clone(),
+        config: credential.config.clone(),
         account_id: credential.account_id.clone(),
     })
 }

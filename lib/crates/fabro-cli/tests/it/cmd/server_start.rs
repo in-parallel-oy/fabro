@@ -38,10 +38,13 @@ fn write_dev_token_server_settings(config_path: &std::path::Path, rest: &str) {
 fn provision_dev_token_auth(_home_dir: &std::path::Path, storage_dir: &std::path::Path) {
     let runtime_directory = Storage::new(storage_dir).runtime_directory();
     let server_env_path = runtime_directory.env_path();
-    envfile::merge_env_file(&server_env_path, [
-        ("FABRO_DEV_TOKEN", TEST_DEV_TOKEN),
-        ("SESSION_SECRET", TEST_SESSION_SECRET),
-    ])
+    envfile::merge_env_file(
+        &server_env_path,
+        [
+            ("FABRO_DEV_TOKEN", TEST_DEV_TOKEN),
+            ("SESSION_SECRET", TEST_SESSION_SECRET),
+        ],
+    )
     .expect("merging server auth into server.env");
     dev_token::write_dev_token(&runtime_directory.dev_token_path(), TEST_DEV_TOKEN)
         .expect("writing runtime dev-token");
@@ -71,9 +74,9 @@ impl ServerStartMode {
 }
 
 struct StartupFailureCase {
-    name:           &'static str,
-    settings:       &'static str,
-    server_env:     &'static [(&'static str, &'static str)],
+    name: &'static str,
+    settings: &'static str,
+    server_env: &'static [(&'static str, &'static str)],
     expected_error: &'static str,
 }
 
@@ -275,51 +278,51 @@ methods = []
     let context = test_context!();
     let cases = [
         StartupFailureCase {
-            name:           "missing-session-secret",
-            settings:       DEV_TOKEN_SETTINGS,
-            server_env:     &[("FABRO_DEV_TOKEN", TEST_DEV_TOKEN)],
+            name: "missing-session-secret",
+            settings: DEV_TOKEN_SETTINGS,
+            server_env: &[("FABRO_DEV_TOKEN", TEST_DEV_TOKEN)],
             expected_error: "Fabro server refuses to start: auth is configured but SESSION_SECRET is not set.",
         },
         StartupFailureCase {
-            name:           "missing-dev-token",
-            settings:       DEV_TOKEN_SETTINGS,
-            server_env:     &[("SESSION_SECRET", TEST_SESSION_SECRET)],
+            name: "missing-dev-token",
+            settings: DEV_TOKEN_SETTINGS,
+            server_env: &[("SESSION_SECRET", TEST_SESSION_SECRET)],
             expected_error: "Fabro server refuses to start: dev-token auth is enabled but FABRO_DEV_TOKEN is not set.",
         },
         StartupFailureCase {
-            name:           "missing-github-client-secret",
-            settings:       GITHUB_SETTINGS,
-            server_env:     &[("SESSION_SECRET", TEST_SESSION_SECRET)],
+            name: "missing-github-client-secret",
+            settings: GITHUB_SETTINGS,
+            server_env: &[("SESSION_SECRET", TEST_SESSION_SECRET)],
             expected_error: "Fabro server refuses to start: github auth is enabled but GITHUB_APP_CLIENT_SECRET is not configured in the vault.",
         },
         StartupFailureCase {
-            name:           "empty-auth-methods",
-            settings:       EMPTY_AUTH_METHODS_SETTINGS,
-            server_env:     &[],
+            name: "empty-auth-methods",
+            settings: EMPTY_AUTH_METHODS_SETTINGS,
+            server_env: &[],
             expected_error: "failed to resolve server settings:\n  server.auth.methods: invalid value - must not be empty",
         },
         StartupFailureCase {
-            name:           "github-web-disabled",
-            settings:       GITHUB_WEB_DISABLED_SETTINGS,
-            server_env:     &[
+            name: "github-web-disabled",
+            settings: GITHUB_WEB_DISABLED_SETTINGS,
+            server_env: &[
                 ("SESSION_SECRET", TEST_SESSION_SECRET),
                 ("GITHUB_APP_CLIENT_SECRET", "github-client-secret"),
             ],
             expected_error: "Fabro server refuses to start: github auth is enabled but server.web.enabled is false.",
         },
         StartupFailureCase {
-            name:           "github-missing-client-id",
-            settings:       GITHUB_WITHOUT_CLIENT_ID_SETTINGS,
-            server_env:     &[
+            name: "github-missing-client-id",
+            settings: GITHUB_WITHOUT_CLIENT_ID_SETTINGS,
+            server_env: &[
                 ("SESSION_SECRET", TEST_SESSION_SECRET),
                 ("GITHUB_APP_CLIENT_SECRET", "github-client-secret"),
             ],
             expected_error: "Fabro server refuses to start: github auth is enabled but server.integrations.github.client_id is not configured.",
         },
         StartupFailureCase {
-            name:           "invalid-dev-token",
-            settings:       DEV_TOKEN_SETTINGS,
-            server_env:     &[
+            name: "invalid-dev-token",
+            settings: DEV_TOKEN_SETTINGS,
+            server_env: &[
                 ("SESSION_SECRET", TEST_SESSION_SECRET),
                 ("FABRO_DEV_TOKEN", "not-a-valid-dev-token"),
             ],

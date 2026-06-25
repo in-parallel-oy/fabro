@@ -112,10 +112,10 @@ async fn session_update_callback_receives_notifications_without_changing_text_ou
         cancel_token: CancellationToken::new(),
         on_activity: None,
         live_control: Some(AcpLiveControl {
-            handle:                AcpControlHandle::default(),
+            handle: AcpControlHandle::default(),
             on_natural_completion: None,
-            on_steer_prompt:       None,
-            on_session_update:     Some(Arc::new(move |update| {
+            on_steer_prompt: None,
+            on_session_update: Some(Arc::new(move |update| {
                 updates_for_callback
                     .lock()
                     .expect("updates lock poisoned")

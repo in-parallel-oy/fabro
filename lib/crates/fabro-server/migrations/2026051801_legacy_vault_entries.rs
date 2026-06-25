@@ -22,8 +22,8 @@ pub(crate) const REMOVAL_DEADLINE: &str = "2026-08-18";
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct LegacyVaultMigrationReport {
     pub(crate) migrated_entries: usize,
-    pub(crate) skipped_entries:  usize,
-    pub(crate) backup_path:      Option<PathBuf>,
+    pub(crate) skipped_entries: usize,
+    pub(crate) backup_path: Option<PathBuf>,
 }
 
 impl LegacyVaultMigrationReport {
@@ -36,7 +36,7 @@ impl LegacyVaultMigrationReport {
 struct LegacyAuthCredential {
     provider: String,
     #[serde(flatten)]
-    details:  LegacyAuthDetails,
+    details: LegacyAuthDetails,
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,9 +46,9 @@ enum LegacyAuthDetails {
         key: String,
     },
     CodexOauth {
-        tokens:     OAuthTokens,
+        tokens: OAuthTokens,
         // Boxed to keep this deserialize-only enum's variants balanced in size.
-        config:     Box<OAuthConfig>,
+        config: Box<OAuthConfig>,
         #[serde(default)]
         account_id: Option<String>,
     },

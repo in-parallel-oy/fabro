@@ -27,19 +27,19 @@ const CLEAN_EXIT_PROTOCOL_GRACE: Duration = Duration::from_millis(500);
 
 #[derive(Clone)]
 pub(crate) struct TransportState {
-    handle:        Arc<TokioMutex<Option<StdioProcessHandle>>>,
-    stderr:        Arc<TokioMutex<Option<StderrCollector>>>,
+    handle: Arc<TokioMutex<Option<StdioProcessHandle>>>,
+    stderr: Arc<TokioMutex<Option<StderrCollector>>>,
     startup_error: Arc<TokioMutex<Option<SandboxError>>>,
-    process_exit:  Arc<TokioMutex<Option<AcpProcessExit>>>,
+    process_exit: Arc<TokioMutex<Option<AcpProcessExit>>>,
 }
 
 impl TransportState {
     pub(crate) fn new() -> Self {
         Self {
-            handle:        Arc::new(TokioMutex::new(None)),
-            stderr:        Arc::new(TokioMutex::new(None)),
+            handle: Arc::new(TokioMutex::new(None)),
+            stderr: Arc::new(TokioMutex::new(None)),
             startup_error: Arc::new(TokioMutex::new(None)),
-            process_exit:  Arc::new(TokioMutex::new(None)),
+            process_exit: Arc::new(TokioMutex::new(None)),
         }
     }
 
@@ -54,8 +54,8 @@ impl TransportState {
 
     async fn set_process_exit(&self, termination: StdioProcessTermination, stderr: &str) {
         *self.process_exit.lock().await = Some(AcpProcessExit {
-            termination:      termination.termination,
-            exit_code:        termination.exit_code,
+            termination: termination.termination,
+            exit_code: termination.exit_code,
             exec_output_tail: redacted_stderr_tail(stderr),
         });
     }
@@ -90,10 +90,10 @@ impl TransportState {
 
 pub(crate) struct SandboxAcpTransport {
     command: AcpProcessSpec,
-    cwd:     String,
-    env:     HashMap<String, String>,
+    cwd: String,
+    env: HashMap<String, String>,
     sandbox: Arc<dyn Sandbox>,
-    state:   TransportState,
+    state: TransportState,
 }
 
 impl SandboxAcpTransport {

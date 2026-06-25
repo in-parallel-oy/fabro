@@ -22,17 +22,17 @@ pub trait AgentEventEmitter: Send + Sync {
 }
 
 pub struct ToolContext {
-    pub env:                 Arc<dyn Sandbox>,
-    pub cancel:              CancellationToken,
-    pub tool_env_provider:   Option<Arc<dyn ToolEnvProvider>>,
+    pub env: Arc<dyn Sandbox>,
+    pub cancel: CancellationToken,
+    pub tool_env_provider: Option<Arc<dyn ToolEnvProvider>>,
     /// Emitting session's ID. `None` when a tool is invoked outside of a
     /// session (e.g. ad-hoc unit tests).
-    pub session_id:          Option<String>,
+    pub session_id: Option<String>,
     /// Root session for this session's agent tree. Equal to `session_id`
     /// for the root agent; subagent sessions inherit the parent's root.
-    pub root_session_id:     Option<String>,
+    pub root_session_id: Option<String>,
     /// Active model-native tool call ID, when available.
-    pub tool_call_id:        Option<String>,
+    pub tool_call_id: Option<String>,
     /// Narrow emitter for typed agent events (todo mutations and similar).
     pub agent_event_emitter: Option<Arc<dyn AgentEventEmitter>>,
 }
@@ -66,8 +66,8 @@ pub type ToolExecutor = Arc<
 #[derive(Clone)]
 pub struct RegisteredTool {
     pub definition: ToolDefinition,
-    pub executor:   ToolExecutor,
-    pub source:     ToolSource,
+    pub executor: ToolExecutor,
+    pub source: ToolSource,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -79,7 +79,7 @@ pub enum ToolSource {
     /// supplied by the MCP integration that registers the tool, so consumers
     /// never need to re-parse the qualified name.
     Mcp {
-        server_name:   String,
+        server_name: String,
         original_name: String,
     },
     Skill,
@@ -88,7 +88,7 @@ pub enum ToolSource {
 #[derive(Clone)]
 pub struct ToolDefinitionWithSource {
     pub definition: ToolDefinition,
-    pub source:     ToolSource,
+    pub source: ToolSource,
 }
 
 impl ToolDefinitionWithSource {
@@ -100,12 +100,12 @@ impl ToolDefinitionWithSource {
     #[must_use]
     pub fn to_agent_tool_summary(&self) -> AgentToolSummary {
         AgentToolSummary {
-            name:        self.definition.name.clone(),
+            name: self.definition.name.clone(),
             description: self.definition.description.clone(),
-            source:      agent_tool_source(&self.source),
-            category:    tool_permissions::known_tool_category(&self.definition.name)
+            source: agent_tool_source(&self.source),
+            category: tool_permissions::known_tool_category(&self.definition.name)
                 .unwrap_or(AgentToolCategory::Other),
-            invoked:     false,
+            invoked: false,
         }
     }
 }
@@ -117,7 +117,7 @@ fn agent_tool_source(source: &ToolSource) -> AgentToolSource {
             server_name,
             original_name,
         } => AgentToolSource::Mcp {
-            server_name:   server_name.clone(),
+            server_name: server_name.clone(),
             original_name: original_name.clone(),
         },
         ToolSource::Skill => AgentToolSource::Skill,
@@ -160,7 +160,7 @@ impl ToolRegistry {
             .values()
             .map(|tool| ToolDefinitionWithSource {
                 definition: tool.definition.clone(),
-                source:     tool.source.clone(),
+                source: tool.source.clone(),
             })
             .collect()
     }
@@ -194,7 +194,7 @@ impl ToolRegistry {
             })
             .map(|tool| ToolDefinitionWithSource {
                 definition: tool.definition.clone(),
-                source:     tool.source.clone(),
+                source: tool.source.clone(),
             })
             .collect()
     }
@@ -245,12 +245,12 @@ mod tests {
     fn make_tool(name: &str) -> RegisteredTool {
         RegisteredTool {
             definition: ToolDefinition {
-                name:        name.into(),
+                name: name.into(),
                 description: format!("Tool {name}"),
-                parameters:  serde_json::json!({"type": "object"}),
+                parameters: serde_json::json!({"type": "object"}),
             },
-            executor:   Arc::new(|_args, _ctx| Box::pin(async { Ok("ok".into()) })),
-            source:     ToolSource::Native,
+            executor: Arc::new(|_args, _ctx| Box::pin(async { Ok("ok".into()) })),
+            source: ToolSource::Native,
         }
     }
 
@@ -290,21 +290,21 @@ mod tests {
         let mut registry = ToolRegistry::new();
         registry.register(RegisteredTool {
             definition: ToolDefinition {
-                name:        "tool_a".into(),
+                name: "tool_a".into(),
                 description: "version 1".into(),
-                parameters:  serde_json::json!({}),
+                parameters: serde_json::json!({}),
             },
-            executor:   Arc::new(|_args, _ctx| Box::pin(async { Ok("v1".into()) })),
-            source:     ToolSource::Native,
+            executor: Arc::new(|_args, _ctx| Box::pin(async { Ok("v1".into()) })),
+            source: ToolSource::Native,
         });
         registry.register(RegisteredTool {
             definition: ToolDefinition {
-                name:        "tool_a".into(),
+                name: "tool_a".into(),
                 description: "version 2".into(),
-                parameters:  serde_json::json!({}),
+                parameters: serde_json::json!({}),
             },
-            executor:   Arc::new(|_args, _ctx| Box::pin(async { Ok("v2".into()) })),
-            source:     ToolSource::Native,
+            executor: Arc::new(|_args, _ctx| Box::pin(async { Ok("v2".into()) })),
+            source: ToolSource::Native,
         });
 
         let tool = registry.get("tool_a").unwrap();
@@ -429,9 +429,9 @@ mod tests {
     fn tool_with_source(name: &str, source: ToolSource) -> ToolDefinitionWithSource {
         ToolDefinitionWithSource {
             definition: ToolDefinition {
-                name:        name.to_string(),
+                name: name.to_string(),
                 description: format!("{name} description"),
-                parameters:  serde_json::json!({
+                parameters: serde_json::json!({
                     "type": "object",
                     "properties": { "path": { "type": "string" } }
                 }),
@@ -468,16 +468,22 @@ mod tests {
 
     #[test]
     fn to_agent_tool_summary_carries_mcp_original_name_from_source() {
-        let summary = tool_with_source("mcp__filesystem__read_file", ToolSource::Mcp {
-            server_name:   "filesystem".to_string(),
-            original_name: "read_file".to_string(),
-        })
+        let summary = tool_with_source(
+            "mcp__filesystem__read_file",
+            ToolSource::Mcp {
+                server_name: "filesystem".to_string(),
+                original_name: "read_file".to_string(),
+            },
+        )
         .to_agent_tool_summary();
 
-        assert_eq!(summary.source, AgentToolSource::Mcp {
-            server_name:   "filesystem".to_string(),
-            original_name: "read_file".to_string(),
-        });
+        assert_eq!(
+            summary.source,
+            AgentToolSource::Mcp {
+                server_name: "filesystem".to_string(),
+                original_name: "read_file".to_string(),
+            }
+        );
         assert_eq!(summary.category, AgentToolCategory::Other);
     }
 }

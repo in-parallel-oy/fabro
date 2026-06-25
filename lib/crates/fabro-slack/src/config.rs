@@ -68,7 +68,7 @@ pub fn resolve_credentials() -> Option<SlackCredentials> {
 }
 
 pub struct SlackRuntimeOptions {
-    pub config:      SlackOptions,
+    pub config: SlackOptions,
     pub credentials: SlackCredentials,
 }
 

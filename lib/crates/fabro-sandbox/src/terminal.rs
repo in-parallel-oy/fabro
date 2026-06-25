@@ -177,22 +177,22 @@ mod daytona_terminal {
 
     pub(super) struct DaytonaTerminalSession {
         toolbox_base_url: String,
-        api_key:          String,
-        org_id:           Option<String>,
-        session_id:       String,
-        write:            Mutex<Option<ProviderSink>>,
-        read:             Mutex<Option<ProviderStream>>,
-        closed:           Mutex<bool>,
+        api_key: String,
+        org_id: Option<String>,
+        session_id: String,
+        write: Mutex<Option<ProviderSink>>,
+        read: Mutex<Option<ProviderStream>>,
+        closed: Mutex<bool>,
     }
 
     #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]
     struct DaytonaPtyCreateRequest {
-        cols:       u16,
-        rows:       u16,
-        cwd:        String,
-        envs:       HashMap<String, String>,
-        id:         String,
+        cols: u16,
+        rows: u16,
+        cwd: String,
+        envs: HashMap<String, String>,
+        id: String,
         lazy_start: bool,
     }
 
@@ -449,13 +449,13 @@ mod daytona_terminal {
         let http_client = fabro_http::http_client()
             .map_err(|err| crate::Error::context("Failed to build HTTP client", err))?;
         let configuration = Configuration {
-            base_path:           trim_slash(api_base_url).to_string(),
-            user_agent:          Some(concat!("fabro-sandbox/", env!("CARGO_PKG_VERSION")).into()),
-            client:              reqwest_middleware::ClientBuilder::new(http_client).build(),
-            basic_auth:          None,
-            oauth_access_token:  None,
+            base_path: trim_slash(api_base_url).to_string(),
+            user_agent: Some(concat!("fabro-sandbox/", env!("CARGO_PKG_VERSION")).into()),
+            client: reqwest_middleware::ClientBuilder::new(http_client).build(),
+            basic_auth: None,
+            oauth_access_token: None,
             bearer_access_token: Some(api_key.to_string()),
-            api_key:             None,
+            api_key: None,
         };
         let proxy_url = sandbox_api::get_toolbox_proxy_url(&configuration, sandbox_id, org_id)
             .await
@@ -702,13 +702,13 @@ mod docker_terminal {
     type DockerOutput = Pin<Box<dyn Stream<Item = Result<LogOutput, DockerError>> + Send>>;
 
     pub(super) struct DockerTerminalSession {
-        docker:       Docker,
+        docker: Docker,
         container_id: String,
-        exec_id:      String,
-        pid_file:     String,
-        input:        Mutex<Option<DockerInput>>,
-        output:       Mutex<Option<DockerOutput>>,
-        closed:       Mutex<bool>,
+        exec_id: String,
+        pid_file: String,
+        input: Mutex<Option<DockerInput>>,
+        output: Mutex<Option<DockerOutput>>,
+        closed: Mutex<bool>,
     }
 
     impl DockerTerminalSession {
@@ -734,10 +734,13 @@ mod docker_terminal {
                 return Err(crate::Error::message("Docker terminal exec did not attach"));
             };
             docker
-                .resize_exec(&exec_id, ResizeExecOptions {
-                    height: size.rows,
-                    width:  size.cols,
-                })
+                .resize_exec(
+                    &exec_id,
+                    ResizeExecOptions {
+                        height: size.rows,
+                        width: size.cols,
+                    },
+                )
                 .await
                 .map_err(|err| {
                     crate::Error::context("Failed to resize Docker terminal exec", err)
@@ -760,12 +763,15 @@ mod docker_terminal {
             );
             let exec = self
                 .docker
-                .create_exec(&self.container_id, CreateExecOptions {
-                    cmd: Some(vec!["sh".to_string(), "-lc".to_string(), command]),
-                    attach_stdout: Some(false),
-                    attach_stderr: Some(false),
-                    ..Default::default()
-                })
+                .create_exec(
+                    &self.container_id,
+                    CreateExecOptions {
+                        cmd: Some(vec!["sh".to_string(), "-lc".to_string(), command]),
+                        attach_stdout: Some(false),
+                        attach_stderr: Some(false),
+                        ..Default::default()
+                    },
+                )
                 .await
                 .map_err(|err| {
                     crate::Error::context("Failed to create Docker terminal cleanup exec", err)
@@ -810,10 +816,13 @@ mod docker_terminal {
 
         async fn resize(&self, size: TerminalSize) -> crate::Result<()> {
             self.docker
-                .resize_exec(&self.exec_id, ResizeExecOptions {
-                    height: size.rows,
-                    width:  size.cols,
-                })
+                .resize_exec(
+                    &self.exec_id,
+                    ResizeExecOptions {
+                        height: size.rows,
+                        width: size.cols,
+                    },
+                )
                 .await
                 .map_err(|err| crate::Error::context("Failed to resize Docker terminal exec", err))
         }

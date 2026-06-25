@@ -17,15 +17,15 @@ pub fn build_run_tool_manifest(
     catalog: Arc<Catalog>,
 ) -> ToolResult<types::RunManifest> {
     let built = fabro_manifest::build_run_manifest(ManifestBuildInput {
-        workflow:             PathBuf::from(&spec.workflow),
-        cwd:                  cwd.to_path_buf(),
-        run_overrides:        run_tool_run_overrides(spec),
-        cli_overrides:        Some(CliLayer::default()),
-        input_overrides:      spec.inputs.clone(),
-        args:                 run_tool_manifest_args(spec),
-        run_id:               spec.run_id,
+        workflow: PathBuf::from(&spec.workflow),
+        cwd: cwd.to_path_buf(),
+        run_overrides: run_tool_run_overrides(spec),
+        cli_overrides: Some(CliLayer::default()),
+        input_overrides: spec.inputs.clone(),
+        args: run_tool_manifest_args(spec),
+        run_id: spec.run_id,
         environment_defaults: fabro_environment::seeded_catalog_layer(),
-        user_settings_path:   Some(user_settings_path.to_path_buf()),
+        user_settings_path: Some(user_settings_path.to_path_buf()),
     })
     .map_err(|err| ToolError::from_anyhow(&err))?;
 
@@ -77,21 +77,21 @@ pub fn run_tool_manifest_args(spec: &ValidatedCreateRunSpec) -> Option<types::Ma
 
 pub fn run_tool_run_overrides(spec: &ValidatedCreateRunSpec) -> Option<RunLayer> {
     let mut run = fabro_manifest::build_run_overrides(RunOverrideInput {
-        goal:             spec.goal.as_deref(),
-        model:            spec.model.as_deref(),
-        provider:         spec.provider.as_deref(),
+        goal: spec.goal.as_deref(),
+        model: spec.model.as_deref(),
+        provider: spec.provider.as_deref(),
         // ponytail: rebase anchor — backend/skip-prepare/overseer. TODO(wire): read from
         // spec once it carries them (see notes).
-        backend:          None,
-        skip_prepare:     false,
-        overseer_session:  None,
+        backend: None,
+        skip_prepare: false,
+        overseer_session: None,
         overseer_worktree: None,
-        environment:      spec.environment.as_deref(),
-        docker_image:     None,
+        environment: spec.environment.as_deref(),
+        docker_image: None,
         preserve_sandbox: spec.preserve_sandbox,
-        dry_run:          spec.dry_run,
-        auto_approve:     spec.auto_approve,
-        labels:           spec.labels.clone(),
+        dry_run: spec.dry_run,
+        auto_approve: spec.auto_approve,
+        labels: spec.labels.clone(),
     });
     if let Some(goal_file) = spec.goal_file.as_ref() {
         run.goal = Some(RunGoalLayer::File {
@@ -118,24 +118,24 @@ mod tests {
     #[test]
     fn manifest_args_preserve_input_provenance() {
         let spec = ValidatedCreateRunSpec::try_from(CreateRunSpec {
-            workflow:         "simple".to_string(),
-            run_id:           None,
-            parent_id:        None,
-            cwd:              None,
-            goal:             None,
-            goal_file:        None,
-            inputs:           HashMap::from([
+            workflow: "simple".to_string(),
+            run_id: None,
+            parent_id: None,
+            cwd: None,
+            goal: None,
+            goal_file: None,
+            inputs: HashMap::from([
                 ("count".to_string(), json!(3).into()),
                 ("decision".to_string(), json!("approve").into()),
             ]),
-            labels:           HashMap::new(),
-            model:            None,
-            provider:         None,
-            environment:      None,
-            dry_run:          None,
-            auto_approve:     None,
+            labels: HashMap::new(),
+            model: None,
+            provider: None,
+            environment: None,
+            dry_run: None,
+            auto_approve: None,
             preserve_sandbox: None,
-            start:            None,
+            start: None,
         })
         .expect("create spec should validate");
         let args = run_tool_manifest_args(&spec).expect("input args should be present");
@@ -150,21 +150,21 @@ mod tests {
     #[test]
     fn run_overrides_preserve_goal_file_as_file_goal() {
         let spec = ValidatedCreateRunSpec::try_from(CreateRunSpec {
-            workflow:         "implement-plan".to_string(),
-            run_id:           None,
-            parent_id:        None,
-            cwd:              None,
-            goal:             None,
-            goal_file:        Some(PathBuf::from("plans/ship-it.md")),
-            inputs:           HashMap::new(),
-            labels:           HashMap::new(),
-            model:            None,
-            provider:         None,
-            environment:      None,
-            dry_run:          None,
-            auto_approve:     None,
+            workflow: "implement-plan".to_string(),
+            run_id: None,
+            parent_id: None,
+            cwd: None,
+            goal: None,
+            goal_file: Some(PathBuf::from("plans/ship-it.md")),
+            inputs: HashMap::new(),
+            labels: HashMap::new(),
+            model: None,
+            provider: None,
+            environment: None,
+            dry_run: None,
+            auto_approve: None,
             preserve_sandbox: None,
-            start:            None,
+            start: None,
         })
         .expect("create spec with goal_file should validate");
 

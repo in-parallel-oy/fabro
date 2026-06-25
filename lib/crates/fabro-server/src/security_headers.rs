@@ -203,10 +203,10 @@ mod tests {
     fn existing_cache_control_is_not_overridden() {
         // Static assets set their own cache-control with long immutability.
         // The middleware default must not clobber it.
-        let headers = headers_after(&req("/assets/app-abc.js", &[]), &[(
-            "cache-control",
-            "public, max-age=31536000, immutable",
-        )]);
+        let headers = headers_after(
+            &req("/assets/app-abc.js", &[]),
+            &[("cache-control", "public, max-age=31536000, immutable")],
+        );
         assert_eq!(
             headers.get("cache-control").unwrap(),
             "public, max-age=31536000, immutable"

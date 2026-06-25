@@ -21,7 +21,7 @@ pub(crate) enum Error {
 }
 
 pub(crate) struct ServerSecrets {
-    env_entries:  HashMap<String, String>,
+    env_entries: HashMap<String, String>,
     file_entries: HashMap<String, String>,
 }
 
@@ -57,8 +57,8 @@ impl std::fmt::Debug for ServerSecrets {
 }
 
 pub(crate) struct LlmClientResult {
-    pub client:              Client,
-    pub auth_issues:         Vec<(ProviderId, ResolveError)>,
+    pub client: Client,
+    pub auth_issues: Vec<(ProviderId, ResolveError)>,
     pub registration_issues: Vec<ProviderRegistrationIssue>,
 }
 

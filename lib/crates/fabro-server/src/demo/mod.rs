@@ -192,33 +192,33 @@ pub(crate) async fn list_run_commits_stub(
     let parent = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     let tree = "cccccccccccccccccccccccccccccccccccccccc";
     let commit = RunCommit {
-        sha:       sha_newtype::<RunCommitSha>(sha),
+        sha: sha_newtype::<RunCommitSha>(sha),
         short_sha: short_sha_newtype::<RunCommitShortSha>(sha),
-        parents:   vec![RunCommitParent {
-            sha:       sha_newtype::<RunCommitParentSha>(parent),
+        parents: vec![RunCommitParent {
+            sha: sha_newtype::<RunCommitParentSha>(parent),
             short_sha: short_sha_newtype::<RunCommitParentShortSha>(parent),
         }],
-        author:    RunCommitPerson {
-            name:  "Fabro".to_string(),
+        author: RunCommitPerson {
+            name: "Fabro".to_string(),
             email: "bot@fabro.sh".to_string(),
-            date:  None,
+            date: None,
         },
         committer: RunCommitPerson {
-            name:  "Fabro".to_string(),
+            name: "Fabro".to_string(),
             email: "bot@fabro.sh".to_string(),
-            date:  None,
+            date: None,
         },
-        subject:   "fabro(demo): implement (succeeded)".to_string(),
-        body:      None,
-        message:   "fabro(demo): implement (succeeded)\n\nFabro-Run: demo\nFabro-Completed: 1\n"
+        subject: "fabro(demo): implement (succeeded)".to_string(),
+        body: None,
+        message: "fabro(demo): implement (succeeded)\n\nFabro-Run: demo\nFabro-Completed: 1\n"
             .to_string(),
-        trailers:  [
+        trailers: [
             ("Fabro-Run".to_string(), "demo".to_string()),
             ("Fabro-Completed".to_string(), "1".to_string()),
         ]
         .into_iter()
         .collect(),
-        tree_sha:  Some(sha_newtype::<RunCommitTreeSha>(tree)),
+        tree_sha: Some(sha_newtype::<RunCommitTreeSha>(tree)),
     };
 
     (
@@ -226,13 +226,12 @@ pub(crate) async fn list_run_commits_stub(
         Json(PaginatedRunCommitList {
             data: vec![commit],
             meta: RunCommitsMeta {
-                source:         RunCommitsMetaSource::Sandbox,
-                base_sha:       sha_newtype::<RunCommitsMetaBaseSha>(parent),
-                head_sha:       sha_newtype::<RunCommitsMetaHeadSha>(sha),
-                limit:          std::num::NonZeroU64::new(100)
-                    .expect("hardcoded literal 100 is non-zero"),
+                source: RunCommitsMetaSource::Sandbox,
+                base_sha: sha_newtype::<RunCommitsMetaBaseSha>(parent),
+                head_sha: sha_newtype::<RunCommitsMetaHeadSha>(sha),
+                limit: std::num::NonZeroU64::new(100).expect("hardcoded literal 100 is non-zero"),
                 total_returned: 1,
-                truncated:      false,
+                truncated: false,
             },
         }),
     )
@@ -270,68 +269,68 @@ fn demo_run_files() -> PaginatedRunFileList {
     PaginatedRunFileList {
         data: vec![
             FileDiff {
-                binary:            None,
-                change_kind:       Some(FileDiffChangeKind::Modified),
-                new_file:          DiffFile {
-                    name:     "src/commands/run.ts".to_string(),
+                binary: None,
+                change_kind: Some(FileDiffChangeKind::Modified),
+                new_file: DiffFile {
+                    name: "src/commands/run.ts".to_string(),
                     contents: Some(new_main.to_string()),
                 },
-                old_file:          DiffFile {
-                    name:     "src/commands/run.ts".to_string(),
+                old_file: DiffFile {
+                    name: "src/commands/run.ts".to_string(),
                     contents: Some(old_main.to_string()),
                 },
-                sensitive:         None,
-                truncated:         None,
+                sensitive: None,
+                truncated: None,
                 truncation_reason: None,
-                unified_patch:     None,
+                unified_patch: None,
             },
             FileDiff {
-                binary:            None,
-                change_kind:       Some(FileDiffChangeKind::Added),
-                new_file:          DiffFile {
-                    name:     "src/config.ts".to_string(),
+                binary: None,
+                change_kind: Some(FileDiffChangeKind::Added),
+                new_file: DiffFile {
+                    name: "src/config.ts".to_string(),
                     contents: Some(new_config.to_string()),
                 },
-                old_file:          DiffFile {
-                    name:     String::new(),
+                old_file: DiffFile {
+                    name: String::new(),
                     contents: Some(String::new()),
                 },
-                sensitive:         None,
-                truncated:         None,
+                sensitive: None,
+                truncated: None,
                 truncation_reason: None,
-                unified_patch:     None,
+                unified_patch: None,
             },
             FileDiff {
-                binary:            None,
-                change_kind:       Some(FileDiffChangeKind::Renamed),
-                new_file:          DiffFile {
-                    name:     "src/legacy/old-runner.ts".to_string(),
+                binary: None,
+                change_kind: Some(FileDiffChangeKind::Renamed),
+                new_file: DiffFile {
+                    name: "src/legacy/old-runner.ts".to_string(),
                     contents: Some("export const legacy = true;\n".to_string()),
                 },
-                old_file:          DiffFile {
-                    name:     "src/old-runner.ts".to_string(),
+                old_file: DiffFile {
+                    name: "src/old-runner.ts".to_string(),
                     contents: Some("export const legacy = true;\n".to_string()),
                 },
-                sensitive:         None,
-                truncated:         None,
+                sensitive: None,
+                truncated: None,
                 truncation_reason: None,
-                unified_patch:     None,
+                unified_patch: None,
             },
         ],
         meta: RunFilesMeta {
-            source:                  RunFilesMetaSource::Sandbox,
-            scope:                   RunFilesMetaScope::Committed,
-            truncated:               false,
+            source: RunFilesMetaSource::Sandbox,
+            scope: RunFilesMetaScope::Committed,
+            truncated: false,
             files_omitted_by_budget: None,
-            total_changed:           3,
-            stats:                   DiffStats {
+            total_changed: 3,
+            stats: DiffStats {
                 additions: 42,
                 deletions: 11,
             },
-            to_sha:                  None,
-            to_sha_committed_at:     None,
-            degraded:                Some(false),
-            degraded_reason:         None,
+            to_sha: None,
+            to_sha_committed_at: None,
+            degraded: Some(false),
+            degraded_reason: None,
         },
     }
 }
@@ -403,15 +402,15 @@ pub(crate) async fn list_sandbox_services_stub(
         Json(SandboxServiceListResponse {
             data: vec![
                 SandboxService {
-                    port:              3000,
-                    addresses:         vec!["0.0.0.0:3000".to_string()],
-                    processes:         vec![r#"users:(("node",pid=42,fd=23))"#.to_string()],
+                    port: 3000,
+                    addresses: vec!["0.0.0.0:3000".to_string()],
+                    processes: vec![r#"users:(("node",pid=42,fd=23))"#.to_string()],
                     preview_supported: true,
                 },
                 SandboxService {
-                    port:              2500,
-                    addresses:         vec!["127.0.0.1:2500".to_string()],
-                    processes:         vec![r#"users:(("debug",pid=84,fd=19))"#.to_string()],
+                    port: 2500,
+                    addresses: vec!["127.0.0.1:2500".to_string()],
+                    processes: vec![r#"users:(("debug",pid=84,fd=19))"#.to_string()],
                     preview_supported: false,
                 },
             ],
@@ -1564,148 +1563,148 @@ mod runs {
 
     pub(super) fn billing() -> RunBilling {
         RunBilling {
-            stages:   vec![
+            stages: vec![
                 RunBillingStage {
-                    stage:      BillingStageRef {
-                        id:   "detect-drift".into(),
+                    stage: BillingStageRef {
+                        id: "detect-drift".into(),
                         name: "Detect Drift".into(),
                     },
-                    model:      Some(billing_model(
+                    model: Some(billing_model(
                         fabro_model::ProviderId::anthropic(),
                         "claude-opus-4-6",
                     )),
-                    billing:    BilledTokenCounts {
-                        cache_read_tokens:  0,
+                    billing: BilledTokenCounts {
+                        cache_read_tokens: 0,
                         cache_write_tokens: 0,
-                        input_tokens:       12480,
-                        output_tokens:      3210,
-                        reasoning_tokens:   0,
-                        total_tokens:       15690,
-                        total_usd_micros:   Some(480_000),
+                        input_tokens: 12480,
+                        output_tokens: 3210,
+                        reasoning_tokens: 0,
+                        total_tokens: 15690,
+                        total_usd_micros: Some(480_000),
                     },
-                    timing:     fabro_types::StageTiming::wall_only(72_000),
+                    timing: fabro_types::StageTiming::wall_only(72_000),
                     started_at: None,
-                    state:      Some(StageState::Succeeded),
+                    state: Some(StageState::Succeeded),
                 },
                 RunBillingStage {
-                    stage:      BillingStageRef {
-                        id:   "propose-changes".into(),
+                    stage: BillingStageRef {
+                        id: "propose-changes".into(),
                         name: "Propose Changes".into(),
                     },
-                    model:      Some(billing_model(
+                    model: Some(billing_model(
                         fabro_model::ProviderId::gemini(),
                         "gemini-3.1-pro-preview",
                     )),
-                    billing:    BilledTokenCounts {
-                        cache_read_tokens:  0,
+                    billing: BilledTokenCounts {
+                        cache_read_tokens: 0,
                         cache_write_tokens: 0,
-                        input_tokens:       28640,
-                        output_tokens:      8750,
-                        reasoning_tokens:   0,
-                        total_tokens:       37390,
-                        total_usd_micros:   Some(720_000),
+                        input_tokens: 28640,
+                        output_tokens: 8750,
+                        reasoning_tokens: 0,
+                        total_tokens: 37390,
+                        total_usd_micros: Some(720_000),
                     },
-                    timing:     fabro_types::StageTiming::wall_only(154_000),
+                    timing: fabro_types::StageTiming::wall_only(154_000),
                     started_at: None,
-                    state:      Some(StageState::Succeeded),
+                    state: Some(StageState::Succeeded),
                 },
                 RunBillingStage {
-                    stage:      BillingStageRef {
-                        id:   "review-changes".into(),
+                    stage: BillingStageRef {
+                        id: "review-changes".into(),
                         name: "Review Changes".into(),
                     },
-                    model:      Some(billing_model(
+                    model: Some(billing_model(
                         fabro_model::ProviderId::openai(),
                         "gpt-5.3-codex",
                     )),
-                    billing:    BilledTokenCounts {
-                        cache_read_tokens:  0,
+                    billing: BilledTokenCounts {
+                        cache_read_tokens: 0,
                         cache_write_tokens: 0,
-                        input_tokens:       9120,
-                        output_tokens:      2640,
-                        reasoning_tokens:   0,
-                        total_tokens:       11760,
-                        total_usd_micros:   Some(190_000),
+                        input_tokens: 9120,
+                        output_tokens: 2640,
+                        reasoning_tokens: 0,
+                        total_tokens: 11760,
+                        total_usd_micros: Some(190_000),
                     },
-                    timing:     fabro_types::StageTiming::wall_only(45_000),
+                    timing: fabro_types::StageTiming::wall_only(45_000),
                     started_at: None,
-                    state:      Some(StageState::Succeeded),
+                    state: Some(StageState::Succeeded),
                 },
                 RunBillingStage {
-                    stage:      BillingStageRef {
-                        id:   "apply-changes".into(),
+                    stage: BillingStageRef {
+                        id: "apply-changes".into(),
                         name: "Apply Changes".into(),
                     },
-                    model:      Some(billing_model(
+                    model: Some(billing_model(
                         fabro_model::ProviderId::anthropic(),
                         "claude-opus-4-6",
                     )),
-                    billing:    BilledTokenCounts {
-                        cache_read_tokens:  0,
+                    billing: BilledTokenCounts {
+                        cache_read_tokens: 0,
                         cache_write_tokens: 0,
-                        input_tokens:       21300,
-                        output_tokens:      6480,
-                        reasoning_tokens:   0,
-                        total_tokens:       27780,
-                        total_usd_micros:   Some(870_000),
+                        input_tokens: 21300,
+                        output_tokens: 6480,
+                        reasoning_tokens: 0,
+                        total_tokens: 27780,
+                        total_usd_micros: Some(870_000),
                     },
-                    timing:     fabro_types::StageTiming::wall_only(118_000),
+                    timing: fabro_types::StageTiming::wall_only(118_000),
                     started_at: None,
-                    state:      Some(StageState::Running),
+                    state: Some(StageState::Running),
                 },
             ],
-            totals:   RunBillingTotals {
-                cache_read_tokens:  0,
+            totals: RunBillingTotals {
+                cache_read_tokens: 0,
                 cache_write_tokens: 0,
-                timing:             fabro_types::RunTiming::wall_only(389_000),
-                input_tokens:       71540,
-                output_tokens:      21080,
-                reasoning_tokens:   0,
-                total_tokens:       92620,
-                total_usd_micros:   Some(2_260_000),
+                timing: fabro_types::RunTiming::wall_only(389_000),
+                input_tokens: 71540,
+                output_tokens: 21080,
+                reasoning_tokens: 0,
+                total_tokens: 92620,
+                total_usd_micros: Some(2_260_000),
             },
             by_model: vec![
                 BillingByModel {
                     billing: BilledTokenCounts {
-                        cache_read_tokens:  0,
+                        cache_read_tokens: 0,
                         cache_write_tokens: 0,
-                        input_tokens:       33780,
-                        output_tokens:      9690,
-                        reasoning_tokens:   0,
-                        total_tokens:       43470,
-                        total_usd_micros:   Some(1_350_000),
+                        input_tokens: 33780,
+                        output_tokens: 9690,
+                        reasoning_tokens: 0,
+                        total_tokens: 43470,
+                        total_usd_micros: Some(1_350_000),
                     },
-                    model:   billing_model(fabro_model::ProviderId::anthropic(), "claude-opus-4-6"),
-                    stages:  2,
+                    model: billing_model(fabro_model::ProviderId::anthropic(), "claude-opus-4-6"),
+                    stages: 2,
                 },
                 BillingByModel {
                     billing: BilledTokenCounts {
-                        cache_read_tokens:  0,
+                        cache_read_tokens: 0,
                         cache_write_tokens: 0,
-                        input_tokens:       28640,
-                        output_tokens:      8750,
-                        reasoning_tokens:   0,
-                        total_tokens:       37390,
-                        total_usd_micros:   Some(720_000),
+                        input_tokens: 28640,
+                        output_tokens: 8750,
+                        reasoning_tokens: 0,
+                        total_tokens: 37390,
+                        total_usd_micros: Some(720_000),
                     },
-                    model:   billing_model(
+                    model: billing_model(
                         fabro_model::ProviderId::gemini(),
                         "gemini-3.1-pro-preview",
                     ),
-                    stages:  1,
+                    stages: 1,
                 },
                 BillingByModel {
                     billing: BilledTokenCounts {
-                        cache_read_tokens:  0,
+                        cache_read_tokens: 0,
                         cache_write_tokens: 0,
-                        input_tokens:       9120,
-                        output_tokens:      2640,
-                        reasoning_tokens:   0,
-                        total_tokens:       11760,
-                        total_usd_micros:   Some(190_000),
+                        input_tokens: 9120,
+                        output_tokens: 2640,
+                        reasoning_tokens: 0,
+                        total_tokens: 11760,
+                        total_usd_micros: Some(190_000),
                     },
-                    model:   billing_model(fabro_model::ProviderId::openai(), "gpt-5.3-codex"),
-                    stages:  1,
+                    model: billing_model(fabro_model::ProviderId::openai(), "gpt-5.3-codex"),
+                    stages: 1,
                 },
             ],
         }
@@ -1714,48 +1713,48 @@ mod runs {
     pub(super) fn questions() -> Vec<ApiQuestion> {
         vec![
             ApiQuestion {
-                id:              "q-001".into(),
-                text:            "Should we proceed with the proposed changes?".into(),
-                stage:           "review".into(),
-                question_type:   QuestionType::YesNo,
-                options:         vec![
+                id: "q-001".into(),
+                text: "Should we proceed with the proposed changes?".into(),
+                stage: "review".into(),
+                question_type: QuestionType::YesNo,
+                options: vec![
                     InterviewOption {
-                        key:         "yes".into(),
-                        label:       "Yes".into(),
+                        key: "yes".into(),
+                        label: "Yes".into(),
                         description: None,
-                        preview:     None,
+                        preview: None,
                     },
                     InterviewOption {
-                        key:         "no".into(),
-                        label:       "No".into(),
+                        key: "no".into(),
+                        label: "No".into(),
                         description: None,
-                        preview:     None,
+                        preview: None,
                     },
                 ],
-                allow_freeform:  false,
+                allow_freeform: false,
                 timeout_seconds: None,
                 context_display: None,
             },
             ApiQuestion {
-                id:              "q-002".into(),
-                text:            "Which approach do you prefer for the migration?".into(),
-                stage:           "migration".into(),
-                question_type:   QuestionType::MultipleChoice,
-                options:         vec![
+                id: "q-002".into(),
+                text: "Which approach do you prefer for the migration?".into(),
+                stage: "migration".into(),
+                question_type: QuestionType::MultipleChoice,
+                options: vec![
                     InterviewOption {
-                        key:         "incremental".into(),
-                        label:       "Incremental migration".into(),
+                        key: "incremental".into(),
+                        label: "Incremental migration".into(),
                         description: None,
-                        preview:     None,
+                        preview: None,
                     },
                     InterviewOption {
-                        key:         "big_bang".into(),
-                        label:       "Big-bang rewrite".into(),
+                        key: "big_bang".into(),
+                        label: "Big-bang rewrite".into(),
                         description: None,
-                        preview:     None,
+                        preview: None,
                     },
                 ],
-                allow_freeform:  true,
+                allow_freeform: true,
                 timeout_seconds: None,
                 context_display: None,
             },
@@ -1766,31 +1765,29 @@ mod runs {
         let environment = EnvironmentSettings {
             provider: EnvironmentProvider::Daytona,
             image: EnvironmentImageSettings {
-                docker:     Some("api-server-dev".into()),
+                docker: Some("api-server-dev".into()),
                 dockerfile: None,
             },
             resources: EnvironmentResourcesSettings {
-                cpu:    Some(4),
+                cpu: Some(4),
                 memory: Some(fabro_types::settings::Size::from_gigabytes(8)),
-                disk:   Some(fabro_types::settings::Size::from_gigabytes(10)),
+                disk: Some(fabro_types::settings::Size::from_gigabytes(10)),
             },
             lifecycle: EnvironmentLifecycleSettings {
-                preserve:         false,
+                preserve: false,
                 stop_on_terminal: true,
-                auto_stop:        Some(
-                    "60m".parse().expect("hardcoded demo duration should parse"),
-                ),
+                auto_stop: Some("60m".parse().expect("hardcoded demo duration should parse")),
             },
             labels: HashMap::from([("project".to_string(), "api-server".to_string())]),
             ..EnvironmentSettings::default()
         };
         let settings = WorkflowSettings {
-            project:  ProjectNamespace::default(),
+            project: ProjectNamespace::default(),
             workflow: WorkflowNamespace {
                 graph: "workflow.fabro".into(),
                 ..WorkflowNamespace::default()
             },
-            run:      RunNamespace {
+            run: RunNamespace {
                 goal: Some(RunGoal::Inline(InterpString::parse(
                     "Add rate limiting to auth endpoints",
                 ))),
@@ -1801,7 +1798,7 @@ mod runs {
                     ..RunModelSettings::default()
                 },
                 prepare: RunPrepareSettings {
-                    commands:   vec!["bun install".into(), "bun run typecheck".into()],
+                    commands: vec!["bun install".into(), "bun run typecheck".into()],
                     timeout_ms: 120_000,
                 },
                 environment: RunEnvironmentSettings::from_environment(
@@ -1836,9 +1833,12 @@ mod runs {
                 &[],
             );
 
-            assert_eq!(summary.lifecycle.status, RunStatus::Failed {
-                reason: FailureReason::Cancelled,
-            });
+            assert_eq!(
+                summary.lifecycle.status,
+                RunStatus::Failed {
+                    reason: FailureReason::Cancelled,
+                }
+            );
         }
 
         #[test]
@@ -1858,9 +1858,12 @@ mod runs {
                 &[],
             );
 
-            assert_eq!(summary.lifecycle.status, RunStatus::Failed {
-                reason: FailureReason::WorkflowError,
-            });
+            assert_eq!(
+                summary.lifecycle.status,
+                RunStatus::Failed {
+                    reason: FailureReason::WorkflowError,
+                }
+            );
         }
 
         #[test]
@@ -2043,59 +2046,59 @@ mod billing {
 
     pub(super) fn aggregate() -> AggregateBilling {
         AggregateBilling {
-            totals:   AggregateBillingTotals {
-                cache_read_tokens:  0,
+            totals: AggregateBillingTotals {
+                cache_read_tokens: 0,
                 cache_write_tokens: 0,
-                runs:               9,
-                input_tokens:       643_860,
-                output_tokens:      189_720,
-                reasoning_tokens:   0,
-                timing:             fabro_types::RunTiming::wall_only(3_501_000),
-                total_tokens:       833_580,
-                total_usd_micros:   Some(20_340_000),
+                runs: 9,
+                input_tokens: 643_860,
+                output_tokens: 189_720,
+                reasoning_tokens: 0,
+                timing: fabro_types::RunTiming::wall_only(3_501_000),
+                total_tokens: 833_580,
+                total_usd_micros: Some(20_340_000),
             },
             by_model: vec![
                 BillingByModel {
                     billing: BilledTokenCounts {
-                        cache_read_tokens:  0,
+                        cache_read_tokens: 0,
                         cache_write_tokens: 0,
-                        input_tokens:       304_020,
-                        output_tokens:      87_210,
-                        reasoning_tokens:   0,
-                        total_tokens:       391_230,
-                        total_usd_micros:   Some(12_150_000),
+                        input_tokens: 304_020,
+                        output_tokens: 87_210,
+                        reasoning_tokens: 0,
+                        total_tokens: 391_230,
+                        total_usd_micros: Some(12_150_000),
                     },
-                    model:   billing_model(fabro_model::ProviderId::anthropic(), "claude-opus-4-6"),
-                    stages:  18,
+                    model: billing_model(fabro_model::ProviderId::anthropic(), "claude-opus-4-6"),
+                    stages: 18,
                 },
                 BillingByModel {
                     billing: BilledTokenCounts {
-                        cache_read_tokens:  0,
+                        cache_read_tokens: 0,
                         cache_write_tokens: 0,
-                        input_tokens:       257_760,
-                        output_tokens:      78_750,
-                        reasoning_tokens:   0,
-                        total_tokens:       336_510,
-                        total_usd_micros:   Some(6_480_000),
+                        input_tokens: 257_760,
+                        output_tokens: 78_750,
+                        reasoning_tokens: 0,
+                        total_tokens: 336_510,
+                        total_usd_micros: Some(6_480_000),
                     },
-                    model:   billing_model(
+                    model: billing_model(
                         fabro_model::ProviderId::gemini(),
                         "gemini-3.1-pro-preview",
                     ),
-                    stages:  9,
+                    stages: 9,
                 },
                 BillingByModel {
                     billing: BilledTokenCounts {
-                        cache_read_tokens:  0,
+                        cache_read_tokens: 0,
                         cache_write_tokens: 0,
-                        input_tokens:       82_080,
-                        output_tokens:      23_760,
-                        reasoning_tokens:   0,
-                        total_tokens:       105_840,
-                        total_usd_micros:   Some(1_710_000),
+                        input_tokens: 82_080,
+                        output_tokens: 23_760,
+                        reasoning_tokens: 0,
+                        total_tokens: 105_840,
+                        total_usd_micros: Some(1_710_000),
                     },
-                    model:   billing_model(fabro_model::ProviderId::openai(), "gpt-5.3-codex"),
-                    stages:  9,
+                    model: billing_model(fabro_model::ProviderId::openai(), "gpt-5.3-codex"),
+                    stages: 9,
                 },
             ],
         }
@@ -2118,26 +2121,25 @@ mod insights {
     pub(super) fn history() -> Vec<HistoryEntry> {
         vec![
             HistoryEntry {
-                id:        "h1".into(),
-                sql:       "SELECT workflow_name, COUNT(*) FROM runs GROUP BY 1".into(),
+                id: "h1".into(),
+                sql: "SELECT workflow_name, COUNT(*) FROM runs GROUP BY 1".into(),
                 timestamp: ts("2025-09-15T13:58:00Z"),
-                elapsed:   0.342,
+                elapsed: 0.342,
                 row_count: 6,
             },
             HistoryEntry {
-                id:        "h2".into(),
-                sql:       "SELECT * FROM runs WHERE status = 'failed' LIMIT 100".into(),
+                id: "h2".into(),
+                sql: "SELECT * FROM runs WHERE status = 'failed' LIMIT 100".into(),
                 timestamp: ts("2025-09-15T13:52:00Z"),
-                elapsed:   0.127,
+                elapsed: 0.127,
                 row_count: 23,
             },
             HistoryEntry {
-                id:        "h3".into(),
-                sql:
-                    "SELECT date_trunc('day', created_at) as d, COUNT(*) FROM runs GROUP BY 1"
-                        .into(),
+                id: "h3".into(),
+                sql: "SELECT date_trunc('day', created_at) as d, COUNT(*) FROM runs GROUP BY 1"
+                    .into(),
                 timestamp: ts("2025-09-15T13:45:00Z"),
-                elapsed:   0.531,
+                elapsed: 0.531,
                 row_count: 30,
             },
         ]

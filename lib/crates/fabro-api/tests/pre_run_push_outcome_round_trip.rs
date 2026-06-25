@@ -40,8 +40,8 @@ fn succeeded_carries_remote_and_branch() {
 #[test]
 fn failed_carries_message_alongside_remote_and_branch() {
     let outcome = PreRunPushOutcome::Failed {
-        remote:  "origin".to_string(),
-        branch:  "feature/foo".to_string(),
+        remote: "origin".to_string(),
+        branch: "feature/foo".to_string(),
         message: "permission denied".to_string(),
     };
     assert_eq!(
@@ -58,7 +58,7 @@ fn failed_carries_message_alongside_remote_and_branch() {
 #[test]
 fn skipped_remote_mismatch_carries_remote_and_repo_origin_url() {
     let outcome = PreRunPushOutcome::SkippedRemoteMismatch {
-        remote:          "git@github.com:user/fork.git".to_string(),
+        remote: "git@github.com:user/fork.git".to_string(),
         repo_origin_url: "https://github.com/acme/canonical.git".to_string(),
     };
     assert_eq!(
@@ -83,10 +83,13 @@ fn deserializes_each_variant_from_discriminator_payloads() {
         "branch": "main",
     }))
     .unwrap();
-    assert_eq!(succeeded, PreRunPushOutcome::Succeeded {
-        remote: "origin".to_string(),
-        branch: "main".to_string(),
-    });
+    assert_eq!(
+        succeeded,
+        PreRunPushOutcome::Succeeded {
+            remote: "origin".to_string(),
+            branch: "main".to_string(),
+        }
+    );
 
     let failed: PreRunPushOutcome = serde_json::from_value(json!({
         "type": "failed",
@@ -95,11 +98,14 @@ fn deserializes_each_variant_from_discriminator_payloads() {
         "message": "denied",
     }))
     .unwrap();
-    assert_eq!(failed, PreRunPushOutcome::Failed {
-        remote:  "origin".to_string(),
-        branch:  "main".to_string(),
-        message: "denied".to_string(),
-    });
+    assert_eq!(
+        failed,
+        PreRunPushOutcome::Failed {
+            remote: "origin".to_string(),
+            branch: "main".to_string(),
+            message: "denied".to_string(),
+        }
+    );
 
     let skipped_no_remote: PreRunPushOutcome =
         serde_json::from_value(json!({ "type": "skipped_no_remote" })).unwrap();
@@ -111,10 +117,13 @@ fn deserializes_each_variant_from_discriminator_payloads() {
         "repo_origin_url": "https://github.com/acme/canonical.git",
     }))
     .unwrap();
-    assert_eq!(skipped_mismatch, PreRunPushOutcome::SkippedRemoteMismatch {
-        remote:          "git@github.com:user/fork.git".to_string(),
-        repo_origin_url: "https://github.com/acme/canonical.git".to_string(),
-    });
+    assert_eq!(
+        skipped_mismatch,
+        PreRunPushOutcome::SkippedRemoteMismatch {
+            remote: "git@github.com:user/fork.git".to_string(),
+            repo_origin_url: "https://github.com/acme/canonical.git".to_string(),
+        }
+    );
 }
 
 fn assert_same_type<T: 'static, U: 'static>() {

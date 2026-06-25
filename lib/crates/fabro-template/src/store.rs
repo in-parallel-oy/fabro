@@ -7,7 +7,7 @@ use thiserror::Error;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TemplateSourceOrigin {
-    source_text:    Arc<str>,
+    source_text: Arc<str>,
     fragment_start: usize,
 }
 
@@ -45,10 +45,10 @@ impl TemplateSourceOrigin {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TemplateSource {
-    pub path:    ManifestPath,
-    pub root:    ManifestPath,
+    pub path: ManifestPath,
+    pub root: ManifestPath,
     pub content: String,
-    pub origin:  Option<TemplateSourceOrigin>,
+    pub origin: Option<TemplateSourceOrigin>,
 }
 
 impl TemplateSource {
@@ -81,18 +81,18 @@ pub trait TemplateStore: Send + Sync {
 pub enum TemplateLoadError {
     #[error("unsafe template reference `{reference}` from `{parent}`")]
     UnsafeReference {
-        parent:    ManifestPath,
+        parent: ManifestPath,
         reference: String,
     },
     #[error("template reference `{reference}` from `{parent}` escapes template root `{root}`")]
     EscapesRoot {
-        parent:    ManifestPath,
+        parent: ManifestPath,
         reference: String,
-        root:      ManifestPath,
+        root: ManifestPath,
     },
     #[error("failed to read template `{path}`")]
     Io {
-        path:   PathBuf,
+        path: PathBuf,
         source: std::io::Error,
     },
     #[error("dynamic template dependency `{path}` is not declared as an asset")]
@@ -132,7 +132,7 @@ impl TemplateStore for FilesystemTemplateStore {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(error) => {
                 return Err(TemplateLoadError::Io {
-                    path:   absolute,
+                    path: absolute,
                     source: error,
                 });
             }
@@ -145,9 +145,9 @@ impl TemplateStore for FilesystemTemplateStore {
             })?;
         if !canonical.starts_with(&canonical_root) {
             return Err(TemplateLoadError::EscapesRoot {
-                parent:    parent.path.clone(),
+                parent: parent.path.clone(),
                 reference: reference.to_owned(),
-                root:      parent.root.clone(),
+                root: parent.root.clone(),
             });
         }
 
@@ -232,8 +232,8 @@ where
 
 #[derive(Debug)]
 pub struct RecordingTemplateStore<T> {
-    inner:   T,
-    loaded:  Mutex<HashSet<ManifestPath>>,
+    inner: T,
+    loaded: Mutex<HashSet<ManifestPath>>,
     allowed: Option<HashSet<ManifestPath>>,
 }
 
@@ -304,22 +304,22 @@ impl TemplateIncludeResolver {
     ) -> Result<ManifestPath, TemplateLoadError> {
         if !is_safe_template_reference(reference) {
             return Err(TemplateLoadError::UnsafeReference {
-                parent:    parent.clone(),
+                parent: parent.clone(),
                 reference: reference.to_owned(),
             });
         }
         let path =
             ManifestPath::from_reference(parent.parent_or_dot(), reference).ok_or_else(|| {
                 TemplateLoadError::UnsafeReference {
-                    parent:    parent.clone(),
+                    parent: parent.clone(),
                     reference: reference.to_owned(),
                 }
             })?;
         if !is_within_root(&path, &self.root) {
             return Err(TemplateLoadError::EscapesRoot {
-                parent:    parent.clone(),
+                parent: parent.clone(),
                 reference: reference.to_owned(),
-                root:      self.root.clone(),
+                root: self.root.clone(),
             });
         }
         Ok(path)

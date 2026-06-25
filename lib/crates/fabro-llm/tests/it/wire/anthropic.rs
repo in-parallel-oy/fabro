@@ -220,9 +220,9 @@ async fn encode_audio_attachment() {
 #[tokio::test]
 async fn encode_response_format_json_object() {
     let format = ResponseFormat {
-        kind:        ResponseFormatType::JsonObject,
+        kind: ResponseFormatType::JsonObject,
         json_schema: None,
-        strict:      false,
+        strict: false,
     };
     let capture = encode_capture(adapter(), &corpus_response_format(MODEL, format)).await;
     fabro_test::fabro_json_snapshot!(capture.body);

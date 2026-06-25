@@ -899,7 +899,10 @@ fn worker_exits_after_sigterm_cancel_even_when_stdin_stays_open() {
     );
 
     let status_record = run_state(&run_dir).status;
-    assert_eq!(status_record, fabro_types::RunStatus::Failed {
-        reason: FailureReason::Cancelled,
-    });
+    assert_eq!(
+        status_record,
+        fabro_types::RunStatus::Failed {
+            reason: FailureReason::Cancelled,
+        }
+    );
 }

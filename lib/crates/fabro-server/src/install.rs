@@ -55,39 +55,39 @@ use crate::{security_headers, static_files};
 
 #[derive(Clone)]
 pub struct InstallAppState {
-    install_token:      Arc<str>,
-    pending_install:    Arc<Mutex<PendingInstall>>,
-    storage_dir:        Arc<Path>,
-    config_path:        Arc<Path>,
-    home:               Option<Home>,
-    install_listen:     Arc<Mutex<InstallListenConfig>>,
-    first_operator:     Arc<Mutex<Option<InstallOperatorFingerprint>>>,
+    install_token: Arc<str>,
+    pending_install: Arc<Mutex<PendingInstall>>,
+    storage_dir: Arc<Path>,
+    config_path: Arc<Path>,
+    home: Option<Home>,
+    install_listen: Arc<Mutex<InstallListenConfig>>,
+    first_operator: Arc<Mutex<Option<InstallOperatorFingerprint>>>,
     finish_in_progress: Arc<AtomicBool>,
-    upstreams:          InstallUpstreamConfig,
-    static_asset_root:  Option<Arc<Path>>,
-    on_finish:          Option<Arc<dyn Fn() + Send + Sync>>,
-    finish_hook:        Option<InstallFinishHook>,
+    upstreams: InstallUpstreamConfig,
+    static_asset_root: Option<Arc<Path>>,
+    on_finish: Option<Arc<dyn Fn() + Send + Sync>>,
+    finish_hook: Option<InstallFinishHook>,
 }
 
 pub struct InstallFinishInfo {
     pub canonical_url: String,
-    pub dev_token:     Option<String>,
+    pub dev_token: Option<String>,
 }
 
 pub type InstallFinishHook = Arc<dyn Fn(&InstallFinishInfo) -> anyhow::Result<()> + Send + Sync>;
 
 #[derive(Clone, Debug, Default)]
 struct InstallUpstreamConfig {
-    provider_base_urls:      HashMap<ProviderId, String>,
-    github_api_base_url:     Option<String>,
-    daytona_api_base_url:    Option<String>,
+    provider_base_urls: HashMap<ProviderId, String>,
+    github_api_base_url: Option<String>,
+    daytona_api_base_url: Option<String>,
     daytona_organization_id: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct InstallOperatorFingerprint {
     user_agent: Option<String>,
-    remote_ip:  Option<String>,
+    remote_ip: Option<String>,
 }
 
 pub const DEFAULT_INSTALL_GITHUB_API_BASE_URL: &str = "https://api.github.com";
@@ -104,20 +104,20 @@ impl InstallAppState {
     #[must_use]
     pub fn new(token: String, storage_dir: &Path, config_path: &Path) -> Self {
         Self {
-            install_token:      Arc::from(token),
-            pending_install:    Arc::new(Mutex::new(PendingInstall::default())),
-            storage_dir:        Arc::from(storage_dir),
-            config_path:        Arc::from(config_path),
-            home:               None,
-            install_listen:     Arc::new(Mutex::new(InstallListenConfig::Tcp(
+            install_token: Arc::from(token),
+            pending_install: Arc::new(Mutex::new(PendingInstall::default())),
+            storage_dir: Arc::from(storage_dir),
+            config_path: Arc::from(config_path),
+            home: None,
+            install_listen: Arc::new(Mutex::new(InstallListenConfig::Tcp(
                 DEFAULT_INSTALL_TCP_LISTEN_ADDRESS.to_string(),
             ))),
-            first_operator:     Arc::new(Mutex::new(None)),
+            first_operator: Arc::new(Mutex::new(None)),
             finish_in_progress: Arc::new(AtomicBool::new(false)),
-            upstreams:          InstallUpstreamConfig::default(),
-            static_asset_root:  None,
-            on_finish:          None,
-            finish_hook:        None,
+            upstreams: InstallUpstreamConfig::default(),
+            static_asset_root: None,
+            on_finish: None,
+            finish_hook: None,
         }
     }
 
@@ -146,20 +146,20 @@ impl InstallAppState {
             std::env::set_var(EnvVars::FABRO_TEST_IN_MEMORY_STORE, "1");
         }
         Self {
-            install_token:      Arc::from(token),
-            pending_install:    Arc::new(Mutex::new(PendingInstall::default())),
-            storage_dir:        Arc::from(storage_dir),
-            config_path:        Arc::from(config_path),
-            home:               None,
-            install_listen:     Arc::new(Mutex::new(InstallListenConfig::Tcp(
+            install_token: Arc::from(token),
+            pending_install: Arc::new(Mutex::new(PendingInstall::default())),
+            storage_dir: Arc::from(storage_dir),
+            config_path: Arc::from(config_path),
+            home: None,
+            install_listen: Arc::new(Mutex::new(InstallListenConfig::Tcp(
                 DEFAULT_INSTALL_TCP_LISTEN_ADDRESS.to_string(),
             ))),
-            first_operator:     Arc::new(Mutex::new(None)),
+            first_operator: Arc::new(Mutex::new(None)),
             finish_in_progress: Arc::new(AtomicBool::new(false)),
-            upstreams:          InstallUpstreamConfig::default(),
-            static_asset_root:  None,
-            on_finish:          None,
-            finish_hook:        None,
+            upstreams: InstallUpstreamConfig::default(),
+            static_asset_root: None,
+            on_finish: None,
+            finish_hook: None,
         }
     }
 
@@ -237,11 +237,11 @@ struct InstallTokenQuery {
 
 #[derive(Clone, Debug, Default)]
 struct PendingInstall {
-    llm:                Option<LlmProvidersInput>,
-    server:             Option<ServerConfigInput>,
-    object_store:       Option<InstallObjectStoreState>,
-    sandbox:            Option<InstallSandboxState>,
-    github:             Option<GithubInstallState>,
+    llm: Option<LlmProvidersInput>,
+    server: Option<ServerConfigInput>,
+    object_store: Option<InstallObjectStoreState>,
+    sandbox: Option<InstallSandboxState>,
+    github: Option<GithubInstallState>,
     pending_github_app: Option<PendingGithubApp>,
 }
 
@@ -253,7 +253,7 @@ struct LlmProvidersInput {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct LlmProviderInput {
     provider: ProviderId,
-    api_key:  String,
+    api_key: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -279,12 +279,12 @@ enum InstallObjectStoreCredentialMode {
 
 #[derive(Clone, Debug, Deserialize)]
 struct InstallObjectStoreInput {
-    provider:          InstallObjectStoreProvider,
-    root:              Option<String>,
-    bucket:            Option<String>,
-    region:            Option<String>,
-    credential_mode:   Option<InstallObjectStoreCredentialMode>,
-    access_key_id:     Option<String>,
+    provider: InstallObjectStoreProvider,
+    root: Option<String>,
+    bucket: Option<String>,
+    region: Option<String>,
+    credential_mode: Option<InstallObjectStoreCredentialMode>,
+    access_key_id: Option<String>,
     secret_access_key: Option<String>,
 }
 
@@ -324,14 +324,14 @@ impl Serialize for InstallSecret {
 
 #[derive(Clone)]
 struct InstallAwsCredentialPair {
-    access_key_id:     InstallSecret,
+    access_key_id: InstallSecret,
     secret_access_key: InstallSecret,
 }
 
 impl InstallAwsCredentialPair {
     fn new(access_key_id: impl Into<String>, secret_access_key: impl Into<String>) -> Self {
         Self {
-            access_key_id:     InstallSecret::new(access_key_id),
+            access_key_id: InstallSecret::new(access_key_id),
             secret_access_key: InstallSecret::new(secret_access_key),
         }
     }
@@ -352,9 +352,9 @@ enum InstallObjectStoreState {
         root: String,
     },
     S3 {
-        bucket:             String,
-        region:             String,
-        credential_mode:    InstallObjectStoreCredentialMode,
+        bucket: String,
+        region: String,
+        credential_mode: InstallObjectStoreCredentialMode,
         manual_credentials: Option<InstallAwsCredentialPair>,
     },
 }
@@ -395,9 +395,9 @@ impl InstallObjectStoreState {
                 credential_mode,
                 manual_credentials,
             } => fabro_install::InstallObjectStoreSelection::S3 {
-                bucket:            bucket.clone(),
-                region:            region.clone(),
-                credential_mode:   match credential_mode {
+                bucket: bucket.clone(),
+                region: region.clone(),
+                credential_mode: match credential_mode {
                     InstallObjectStoreCredentialMode::Runtime => {
                         fabro_install::InstallObjectStoreCredentialMode::Runtime
                     }
@@ -405,7 +405,7 @@ impl InstallObjectStoreState {
                         fabro_install::InstallObjectStoreCredentialMode::AccessKey
                     }
                 },
-                access_key_id:     manual_credentials
+                access_key_id: manual_credentials
                     .as_ref()
                     .map(|credentials| credentials.access_key_id.expose_secret().to_string()),
                 secret_access_key: manual_credentials
@@ -426,8 +426,8 @@ enum InstallSandboxProvider {
 
 #[derive(Clone, Debug, Deserialize)]
 struct InstallSandboxInput {
-    provider:    InstallSandboxProvider,
-    api_key:     Option<String>,
+    provider: InstallSandboxProvider,
+    api_key: Option<String>,
     allow_local: Option<bool>,
 }
 
@@ -439,7 +439,7 @@ enum InstallSandboxProviderState {
 
 #[derive(Clone, Debug)]
 struct InstallSandboxState {
-    provider:    InstallSandboxProviderState,
+    provider: InstallSandboxProviderState,
     allow_local: bool,
 }
 
@@ -475,7 +475,7 @@ impl InstallSandboxState {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct GithubTokenInput {
-    token:    String,
+    token: String,
     username: String,
 }
 
@@ -487,30 +487,30 @@ enum GithubInstallState {
 
 #[derive(Clone, Debug)]
 struct PendingGithubApp {
-    state:            String,
-    owner:            GitHubAppOwner,
-    app_name:         String,
+    state: String,
+    owner: GitHubAppOwner,
+    app_name: String,
     allowed_username: String,
-    expires_at:       Instant,
+    expires_at: Instant,
 }
 
 #[derive(Clone, Debug)]
 struct GithubAppInstall {
-    owner:            GitHubAppOwner,
-    app_name:         String,
+    owner: GitHubAppOwner,
+    app_name: String,
     allowed_username: String,
-    app_id:           String,
-    slug:             String,
-    client_id:        String,
-    client_secret:    String,
-    webhook_secret:   Option<String>,
-    pem:              String,
+    app_id: String,
+    slug: String,
+    client_id: String,
+    client_secret: String,
+    webhook_secret: Option<String>,
+    pem: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 struct InstallLlmTestInput {
     provider: ProviderId,
-    api_key:  String,
+    api_key: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -520,8 +520,8 @@ struct GithubTokenTestInput {
 
 #[derive(Clone, Debug, Deserialize)]
 struct GithubAppManifestInput {
-    owner:            GithubAppOwnerInput,
-    app_name:         String,
+    owner: GithubAppOwnerInput,
+    app_name: String,
     allowed_username: String,
 }
 
@@ -540,7 +540,7 @@ enum GithubAppOwnerKind {
 
 #[derive(Clone, Debug, Deserialize)]
 struct GithubAppRedirectQuery {
-    code:  Option<String>,
+    code: Option<String>,
     state: Option<String>,
 }
 
@@ -551,12 +551,12 @@ struct GithubUserResponse {
 
 #[derive(Clone, Debug, Deserialize)]
 struct GitHubAppManifestConversion {
-    id:             i64,
-    slug:           String,
-    client_id:      String,
-    client_secret:  String,
+    id: i64,
+    slug: String,
+    client_id: String,
+    client_secret: String,
     webhook_secret: Option<String>,
-    pem:            String,
+    pem: String,
 }
 
 #[derive(Clone, Debug)]
@@ -670,7 +670,7 @@ pub fn build_install_router(state: InstallAppState) -> Router {
 }
 
 struct InstallFinishGuard {
-    flag:    Arc<AtomicBool>,
+    flag: Arc<AtomicBool>,
     release: bool,
 }
 
@@ -1187,9 +1187,9 @@ fn object_store_validation_settings(
     match selection {
         InstallObjectStoreState::Local { .. } => None,
         InstallObjectStoreState::S3 { bucket, region, .. } => Some(ObjectStoreSettings::S3 {
-            bucket:     bucket.clone(),
-            region:     region.clone(),
-            endpoint:   None,
+            bucket: bucket.clone(),
+            region: region.clone(),
+            endpoint: None,
             path_style: false,
         }),
     }
@@ -1434,11 +1434,11 @@ async fn post_install_github_app_manifest(
     );
 
     pending_install.pending_github_app = Some(PendingGithubApp {
-        state:            state_token.clone(),
-        owner:            owner.clone(),
-        app_name:         input.app_name.trim().to_string(),
+        state: state_token.clone(),
+        owner: owner.clone(),
+        app_name: input.app_name.trim().to_string(),
         allowed_username: input.allowed_username.trim().to_string(),
-        expires_at:       Instant::now() + Duration::from_mins(10),
+        expires_at: Instant::now() + Duration::from_mins(10),
     });
 
     Json(serde_json::json!({
@@ -1496,21 +1496,24 @@ async fn get_install_github_app_redirect(
             }
             pending_install.pending_github_app = None;
             pending_install.github = Some(GithubInstallState::App(GithubAppInstall {
-                owner:            pending.owner,
-                app_name:         pending.app_name,
+                owner: pending.owner,
+                app_name: pending.app_name,
                 allowed_username: pending.allowed_username,
-                app_id:           conversion.id.to_string(),
-                slug:             conversion.slug,
-                client_id:        conversion.client_id,
-                client_secret:    conversion.client_secret,
-                webhook_secret:   conversion.webhook_secret,
-                pem:              conversion.pem,
+                app_id: conversion.id.to_string(),
+                slug: conversion.slug,
+                client_id: conversion.client_id,
+                client_secret: conversion.client_secret,
+                webhook_secret: conversion.webhook_secret,
+                pem: conversion.pem,
             }));
             info!(step = "github_app", "install step completed");
-            (StatusCode::FOUND, [(
-                header::LOCATION,
-                format!("/install/github/done?token={}", &*state.install_token),
-            )])
+            (
+                StatusCode::FOUND,
+                [(
+                    header::LOCATION,
+                    format!("/install/github/done?token={}", &*state.install_token),
+                )],
+            )
                 .into_response()
         }
         Err(err) => {
@@ -1578,8 +1581,8 @@ async fn post_install_finish(
     let mut vault_secrets = Vec::new();
     if let InstallSandboxProviderState::Daytona { api_key } = &sandbox.provider {
         vault_secrets.push(VaultSecretWrite {
-            name:        EnvVars::DAYTONA_API_KEY.to_string(),
-            value:       api_key.expose_secret().to_string(),
+            name: EnvVars::DAYTONA_API_KEY.to_string(),
+            value: api_key.expose_secret().to_string(),
             secret_type: VaultSecretType::Token,
             description: None,
         });
@@ -1603,7 +1606,7 @@ async fn post_install_finish(
         comment: None,
     };
     let make_env_removal = |key: &str| EnvFileRemoval {
-        key:     key.to_string(),
+        key: key.to_string(),
         comment: None,
     };
     let mut server_env_writes = object_store_env_plan.writes;
@@ -1617,8 +1620,8 @@ async fn post_install_finish(
                 return install_error_response(StatusCode::INTERNAL_SERVER_ERROR, err.to_string());
             }
             vault_secrets.push(VaultSecretWrite {
-                name:        EnvVars::GITHUB_TOKEN.to_string(),
-                value:       github.token,
+                name: EnvVars::GITHUB_TOKEN.to_string(),
+                value: github.token,
                 secret_type: VaultSecretType::Token,
                 description: None,
             });
@@ -1654,21 +1657,21 @@ async fn post_install_finish(
                 return install_error_response(StatusCode::INTERNAL_SERVER_ERROR, err.to_string());
             }
             vault_secrets.push(VaultSecretWrite {
-                name:        EnvVars::GITHUB_APP_PRIVATE_KEY.to_string(),
-                value:       BASE64_STANDARD.encode(github.pem.as_bytes()),
+                name: EnvVars::GITHUB_APP_PRIVATE_KEY.to_string(),
+                value: BASE64_STANDARD.encode(github.pem.as_bytes()),
                 secret_type: VaultSecretType::File,
                 description: None,
             });
             vault_secrets.push(VaultSecretWrite {
-                name:        EnvVars::GITHUB_APP_CLIENT_SECRET.to_string(),
-                value:       github.client_secret,
+                name: EnvVars::GITHUB_APP_CLIENT_SECRET.to_string(),
+                value: github.client_secret,
                 secret_type: VaultSecretType::Token,
                 description: None,
             });
             if let Some(secret) = github.webhook_secret {
                 vault_secrets.push(VaultSecretWrite {
-                    name:        EnvVars::GITHUB_APP_WEBHOOK_SECRET.to_string(),
-                    value:       secret,
+                    name: EnvVars::GITHUB_APP_WEBHOOK_SECRET.to_string(),
+                    value: secret,
                     secret_type: VaultSecretType::Token,
                     description: None,
                 });
@@ -1707,8 +1710,8 @@ async fn post_install_finish(
     let persistence_plan = InstallPersistencePlan {
         storage_dir: state.storage_dir.as_ref(),
         settings_write: Some(PendingSettingsWrite {
-            path:              state.config_path.as_ref(),
-            contents:          &settings_toml,
+            path: state.config_path.as_ref(),
+            contents: &settings_toml,
             previous_contents: previous_settings.as_deref(),
         }),
         server_env_writes,
@@ -1793,7 +1796,7 @@ async fn post_install_finish(
     if let Some(finish_hook) = state.finish_hook.clone() {
         let info = InstallFinishInfo {
             canonical_url: server.canonical_url.clone(),
-            dev_token:     dev_token.clone(),
+            dev_token: dev_token.clone(),
         };
         if let Err(err) = finish_hook(&info) {
             warn!(error = %err, "install finish hook failed");
@@ -1867,7 +1870,7 @@ fn observe_operator(state: &InstallAppState, headers: &HeaderMap) {
             .get(header::USER_AGENT)
             .and_then(|value| value.to_str().ok())
             .map(ToString::to_string),
-        remote_ip:  detect_remote_ip(headers),
+        remote_ip: detect_remote_ip(headers),
     };
     if current.user_agent.is_none() && current.remote_ip.is_none() {
         return;
@@ -1900,13 +1903,16 @@ fn detect_remote_ip(headers: &HeaderMap) -> Option<String> {
 }
 
 fn install_github_redirect_error(state: &InstallAppState, error: &str) -> Response {
-    (StatusCode::FOUND, [(
-        header::LOCATION,
-        format!(
-            "/install/github?token={}&error={error}",
-            state.install_token
-        ),
-    )])
+    (
+        StatusCode::FOUND,
+        [(
+            header::LOCATION,
+            format!(
+                "/install/github?token={}&error={error}",
+                state.install_token
+            ),
+        )],
+    )
         .into_response()
 }
 
@@ -2286,7 +2292,7 @@ async fn write_artifact_store_metadata(
 
 struct InstallListener {
     listener: BoundInstallListener,
-    bind:     Bind,
+    bind: Bind,
 }
 
 enum BoundInstallListener {
@@ -2303,20 +2309,20 @@ async fn bind_install_listener(requested: &BindRequest) -> anyhow::Result<Instal
             let listener = UnixListener::bind(path)?;
             Ok(InstallListener {
                 listener: BoundInstallListener::Unix(listener),
-                bind:     Bind::Unix(path.clone()),
+                bind: Bind::Unix(path.clone()),
             })
         }
         BindRequest::Tcp(address) => {
             let listener = TcpListener::bind(address).await?;
             Ok(InstallListener {
-                bind:     Bind::Tcp(listener.local_addr()?),
+                bind: Bind::Tcp(listener.local_addr()?),
                 listener: BoundInstallListener::Tcp(listener),
             })
         }
         BindRequest::TcpHost(host) => {
             let listener = TcpListener::bind((*host, DEFAULT_TCP_PORT)).await?;
             Ok(InstallListener {
-                bind:     Bind::Tcp(listener.local_addr()?),
+                bind: Bind::Tcp(listener.local_addr()?),
                 listener: BoundInstallListener::Tcp(listener),
             })
         }
@@ -2467,23 +2473,22 @@ mod tests {
                 root: dir.path().join("runs").display().to_string(),
             });
             pending.sandbox = Some(InstallSandboxState {
-                provider:    InstallSandboxProviderState::Docker,
+                provider: InstallSandboxProviderState::Docker,
                 allow_local: true,
             });
             pending.llm = Some(LlmProvidersInput {
                 providers: Vec::new(),
             });
             pending.github = Some(GithubInstallState::App(GithubAppInstall {
-                owner:            GitHubAppOwner::Personal,
-                app_name:         "Fabro Test".to_string(),
+                owner: GitHubAppOwner::Personal,
+                app_name: "Fabro Test".to_string(),
                 allowed_username: "octocat".to_string(),
-                app_id:           "12345".to_string(),
-                slug:             "fabro-test".to_string(),
-                client_id:        "Iv1.test".to_string(),
-                client_secret:    "vault-client-secret".to_string(),
-                webhook_secret:   Some("vault-webhook-secret".to_string()),
-                pem:              "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n"
-                    .to_string(),
+                app_id: "12345".to_string(),
+                slug: "fabro-test".to_string(),
+                client_id: "Iv1.test".to_string(),
+                client_secret: "vault-client-secret".to_string(),
+                webhook_secret: Some("vault-webhook-secret".to_string()),
+                pem: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----\n".to_string(),
             }));
         }
 
@@ -2602,12 +2607,12 @@ methods = ["dev-token"]
         let err = resolve_install_object_store_state(
             None,
             InstallObjectStoreInput {
-                provider:          InstallObjectStoreProvider::Local,
-                root:              Some("/srv/fabro/objects".to_string()),
-                bucket:            Some("fabro-data".to_string()),
-                region:            None,
-                credential_mode:   None,
-                access_key_id:     None,
+                provider: InstallObjectStoreProvider::Local,
+                root: Some("/srv/fabro/objects".to_string()),
+                bucket: Some("fabro-data".to_string()),
+                region: None,
+                credential_mode: None,
+                access_key_id: None,
                 secret_access_key: None,
             },
             "/srv/fabro/objects",
@@ -2625,12 +2630,12 @@ methods = ["dev-token"]
         let selection = resolve_install_object_store_state(
             None,
             InstallObjectStoreInput {
-                provider:          InstallObjectStoreProvider::Local,
-                root:              Some(" /srv/fabro/objects ".to_string()),
-                bucket:            None,
-                region:            None,
-                credential_mode:   None,
-                access_key_id:     None,
+                provider: InstallObjectStoreProvider::Local,
+                root: Some(" /srv/fabro/objects ".to_string()),
+                bucket: None,
+                region: None,
+                credential_mode: None,
+                access_key_id: None,
                 secret_access_key: None,
             },
             "/default/fabro/objects",
@@ -2648,12 +2653,12 @@ methods = ["dev-token"]
         let err = resolve_install_object_store_state(
             None,
             InstallObjectStoreInput {
-                provider:          InstallObjectStoreProvider::S3,
-                root:              None,
-                bucket:            Some("fabro-data".to_string()),
-                region:            Some("us-east-1".to_string()),
-                credential_mode:   Some(InstallObjectStoreCredentialMode::Runtime),
-                access_key_id:     Some("AKIA_FAKE_VALUE".to_string()),
+                provider: InstallObjectStoreProvider::S3,
+                root: None,
+                bucket: Some("fabro-data".to_string()),
+                region: Some("us-east-1".to_string()),
+                credential_mode: Some(InstallObjectStoreCredentialMode::Runtime),
+                access_key_id: Some("AKIA_FAKE_VALUE".to_string()),
                 secret_access_key: Some("fake-secret-value".to_string()),
             },
             "/srv/fabro/objects",
@@ -2707,7 +2712,7 @@ AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/fabro-web-identity-token\n",
     #[test]
     fn classify_object_store_validation_error_reports_region_mismatch() {
         let err = ObjectStoreError::Generic {
-            store:  "AmazonS3",
+            store: "AmazonS3",
             source: Box::new(io::Error::other(
                 "Received redirect without LOCATION, this normally indicates an incorrectly configured region",
             )),

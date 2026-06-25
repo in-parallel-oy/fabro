@@ -47,15 +47,15 @@ fn node_result_from_outcome<M: OutcomeMeta>(
 
 #[derive(Default)]
 pub struct ExecutorOptions {
-    pub cancel_token:    Option<CancellationToken>,
-    pub stall_token:     Option<CancellationToken>,
+    pub cancel_token: Option<CancellationToken>,
+    pub stall_token: Option<CancellationToken>,
     pub max_node_visits: Option<usize>,
 }
 
 pub struct Executor<G: Graph> {
-    handler:   Arc<dyn NodeHandler<G>>,
+    handler: Arc<dyn NodeHandler<G>>,
     lifecycle: Box<dyn RunLifecycle<G>>,
-    options:   ExecutorOptions,
+    options: ExecutorOptions,
 }
 
 enum NextStep {
@@ -66,9 +66,9 @@ enum NextStep {
 }
 
 pub struct ExecutorBuilder<G: Graph> {
-    handler:   Arc<dyn NodeHandler<G>>,
+    handler: Arc<dyn NodeHandler<G>>,
     lifecycle: Option<Box<dyn RunLifecycle<G>>>,
-    options:   ExecutorOptions,
+    options: ExecutorOptions,
 }
 
 impl<G: Graph + 'static> ExecutorBuilder<G> {
@@ -106,9 +106,9 @@ impl<G: Graph + 'static> ExecutorBuilder<G> {
 
     pub fn build(self) -> Executor<G> {
         Executor {
-            handler:   self.handler,
+            handler: self.handler,
             lifecycle: self.lifecycle.unwrap_or_else(|| Box::new(NoopLifecycle)),
-            options:   self.options,
+            options: self.options,
         }
     }
 }
@@ -714,9 +714,12 @@ mod tests {
         )
         .build();
         let (result, _) = executor.run(&g, state).await.unwrap();
-        assert_eq!(result.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            result.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
     }
 
     #[tokio::test]
@@ -1026,9 +1029,12 @@ mod tests {
         )
         .build();
         let (result, _) = executor.run(&g, state).await.unwrap();
-        assert_eq!(result.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            result.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
     }
 
     #[tokio::test]
@@ -1126,11 +1132,11 @@ mod tests {
             ])
             .with_retry_policy(RetryPolicy {
                 max_attempts: 3,
-                backoff:      BackoffPolicy {
+                backoff: BackoffPolicy {
                     initial_delay: Duration::from_millis(1),
-                    factor:        1.0,
-                    max_delay:     Duration::from_millis(1),
-                    jitter:        false,
+                    factor: 1.0,
+                    max_delay: Duration::from_millis(1),
+                    jitter: false,
                 },
             }),
         );
@@ -1164,11 +1170,11 @@ mod tests {
             ])
             .with_retry_policy(RetryPolicy {
                 max_attempts: 3,
-                backoff:      BackoffPolicy {
+                backoff: BackoffPolicy {
                     initial_delay: Duration::from_millis(1),
-                    factor:        1.0,
-                    max_delay:     Duration::from_millis(1),
-                    jitter:        false,
+                    factor: 1.0,
+                    max_delay: Duration::from_millis(1),
+                    jitter: false,
                 },
             }),
         );
@@ -1236,11 +1242,11 @@ mod tests {
             fn retry_policy(&self, _n: &TestNode, _g: &TestGraph) -> RetryPolicy {
                 RetryPolicy {
                     max_attempts: 2,
-                    backoff:      BackoffPolicy {
+                    backoff: BackoffPolicy {
                         initial_delay: Duration::from_millis(1),
-                        factor:        1.0,
-                        max_delay:     Duration::from_millis(1),
-                        jitter:        false,
+                        factor: 1.0,
+                        max_delay: Duration::from_millis(1),
+                        jitter: false,
                     },
                 }
             }
@@ -1283,11 +1289,11 @@ mod tests {
             fn retry_policy(&self, _n: &TestNode, _g: &TestGraph) -> RetryPolicy {
                 RetryPolicy {
                     max_attempts: 2,
-                    backoff:      BackoffPolicy {
+                    backoff: BackoffPolicy {
                         initial_delay: Duration::from_millis(1),
-                        factor:        1.0,
-                        max_delay:     Duration::from_millis(1),
-                        jitter:        false,
+                        factor: 1.0,
+                        max_delay: Duration::from_millis(1),
+                        jitter: false,
                     },
                 }
             }
@@ -1298,9 +1304,12 @@ mod tests {
             ExecutorBuilder::new(Arc::new(ExhaustedHandler) as Arc<dyn NodeHandler<TestGraph>>)
                 .build();
         let (result, _) = executor.run(&g, state).await.unwrap();
-        assert_eq!(result.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            result.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
     }
 
     #[tokio::test]
@@ -1325,11 +1334,11 @@ mod tests {
             ])
             .with_retry_policy(RetryPolicy {
                 max_attempts: 3,
-                backoff:      BackoffPolicy {
+                backoff: BackoffPolicy {
                     initial_delay: Duration::from_millis(1),
-                    factor:        1.0,
-                    max_delay:     Duration::from_millis(1),
-                    jitter:        false,
+                    factor: 1.0,
+                    max_delay: Duration::from_millis(1),
+                    jitter: false,
                 },
             }),
         );
@@ -1364,11 +1373,11 @@ mod tests {
             ])
             .with_retry_policy(RetryPolicy {
                 max_attempts: 3,
-                backoff:      BackoffPolicy {
+                backoff: BackoffPolicy {
                     initial_delay: Duration::from_millis(1),
-                    factor:        1.0,
-                    max_delay:     Duration::from_millis(1),
-                    jitter:        false,
+                    factor: 1.0,
+                    max_delay: Duration::from_millis(1),
+                    jitter: false,
                 },
             }),
         );
@@ -1425,11 +1434,11 @@ mod tests {
             fn retry_policy(&self, _n: &TestNode, _g: &TestGraph) -> RetryPolicy {
                 RetryPolicy {
                     max_attempts: 2,
-                    backoff:      BackoffPolicy {
+                    backoff: BackoffPolicy {
                         initial_delay: Duration::from_millis(500),
-                        factor:        1.0,
-                        max_delay:     Duration::from_millis(500),
-                        jitter:        false,
+                        factor: 1.0,
+                        max_delay: Duration::from_millis(500),
+                        jitter: false,
                     },
                 }
             }
@@ -1483,11 +1492,11 @@ mod tests {
             ])
             .with_retry_policy(RetryPolicy {
                 max_attempts: 3,
-                backoff:      BackoffPolicy {
+                backoff: BackoffPolicy {
                     initial_delay: Duration::from_millis(1),
-                    factor:        1.0,
-                    max_delay:     Duration::from_millis(1),
-                    jitter:        false,
+                    factor: 1.0,
+                    max_delay: Duration::from_millis(1),
+                    jitter: false,
                 },
             }),
         );
@@ -1517,11 +1526,11 @@ mod tests {
             ])
             .with_retry_policy(RetryPolicy {
                 max_attempts: 3,
-                backoff:      BackoffPolicy {
+                backoff: BackoffPolicy {
                     initial_delay: Duration::from_secs(5),
-                    factor:        2.0,
-                    max_delay:     Duration::from_mins(1),
-                    jitter:        false,
+                    factor: 2.0,
+                    max_delay: Duration::from_mins(1),
+                    jitter: false,
                 },
             }),
         );
@@ -1858,10 +1867,13 @@ mod tests {
         executor.run(&g, state).await.unwrap();
         let checkpoints = log.lock().unwrap().clone();
         // "start" checkpoints with next="work", "work" checkpoints with next="end"
-        assert_eq!(checkpoints, vec![
-            ("start".to_string(), Some("work".to_string())),
-            ("work".to_string(), Some("end".to_string())),
-        ]);
+        assert_eq!(
+            checkpoints,
+            vec![
+                ("start".to_string(), Some("work".to_string())),
+                ("work".to_string(), Some("end".to_string())),
+            ]
+        );
     }
 
     #[tokio::test]
@@ -1931,10 +1943,13 @@ mod tests {
 
         executor.run(&g, state).await.unwrap();
 
-        assert_eq!(*log.lock().unwrap(), vec![
-            "after_record:start:start:hello".to_string(),
-            "on_edge_selected:start:hello".to_string(),
-        ]);
+        assert_eq!(
+            *log.lock().unwrap(),
+            vec![
+                "after_record:start:start:hello".to_string(),
+                "on_edge_selected:start:hello".to_string(),
+            ]
+        );
     }
 
     #[tokio::test]
@@ -1983,10 +1998,10 @@ mod tests {
         .lifecycle(Box::new(GateTracker(log2.clone())))
         .build();
         executor2.run(&g2, state2).await.unwrap();
-        assert_eq!(log2.lock().unwrap().clone(), vec![(
-            "end".to_string(),
-            false
-        )]);
+        assert_eq!(
+            log2.lock().unwrap().clone(),
+            vec![("end".to_string(), false)]
+        );
     }
 
     #[tokio::test]
@@ -2202,9 +2217,12 @@ mod tests {
         .build();
 
         let (result, _) = executor.run(&g, state).await.unwrap();
-        assert_eq!(result.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            result.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         assert_eq!(
             result
                 .failure
@@ -2284,11 +2302,11 @@ mod tests {
             fn retry_policy(&self, _n: &TestNode, _g: &TestGraph) -> RetryPolicy {
                 RetryPolicy {
                     max_attempts: 3,
-                    backoff:      BackoffPolicy {
+                    backoff: BackoffPolicy {
                         initial_delay: Duration::from_mins(1),
-                        factor:        1.0,
-                        max_delay:     Duration::from_mins(1),
-                        jitter:        false,
+                        factor: 1.0,
+                        max_delay: Duration::from_mins(1),
+                        jitter: false,
                     },
                 }
             }

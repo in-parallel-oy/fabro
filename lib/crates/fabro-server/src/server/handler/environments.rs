@@ -32,34 +32,34 @@ struct EnvironmentListMeta {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CreateEnvironmentRequest {
-    id:        EnvironmentId,
-    provider:  EnvironmentProvider,
-    cwd:       Option<String>,
-    image:     ApiEnvironmentImageSettings,
+    id: EnvironmentId,
+    provider: EnvironmentProvider,
+    cwd: Option<String>,
+    image: ApiEnvironmentImageSettings,
     resources: EnvironmentResourcesSettings,
-    network:   EnvironmentNetworkSettings,
+    network: EnvironmentNetworkSettings,
     lifecycle: EnvironmentLifecycleSettings,
-    labels:    HashMap<String, String>,
-    env:       HashMap<String, InterpString>,
+    labels: HashMap<String, String>,
+    env: HashMap<String, InterpString>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ReplaceEnvironmentRequest {
-    provider:  EnvironmentProvider,
-    cwd:       Option<String>,
-    image:     ApiEnvironmentImageSettings,
+    provider: EnvironmentProvider,
+    cwd: Option<String>,
+    image: ApiEnvironmentImageSettings,
     resources: EnvironmentResourcesSettings,
-    network:   EnvironmentNetworkSettings,
+    network: EnvironmentNetworkSettings,
     lifecycle: EnvironmentLifecycleSettings,
-    labels:    HashMap<String, String>,
-    env:       HashMap<String, InterpString>,
+    labels: HashMap<String, String>,
+    env: HashMap<String, InterpString>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ApiEnvironmentImageSettings {
-    docker:     Option<String>,
+    docker: Option<String>,
     dockerfile: Option<ApiDockerfileSource>,
 }
 
@@ -80,19 +80,19 @@ enum ApiDockerfileSource {
 impl CreateEnvironmentRequest {
     fn into_draft(self) -> Result<EnvironmentDraft, ApiError> {
         Ok(EnvironmentDraft {
-            id:       self.id,
+            id: self.id,
             settings: EnvironmentSettings {
-                provider:  self.provider,
-                cwd:       self.cwd,
-                image:     self.image.into_settings()?,
+                provider: self.provider,
+                cwd: self.cwd,
+                image: self.image.into_settings()?,
                 resources: self.resources,
-                network:   self.network,
+                network: self.network,
                 lifecycle: self.lifecycle,
-                labels:    self.labels,
-                env:       self.env,
+                labels: self.labels,
+                env: self.env,
                 // ponytail: binds are inline-config only; the REST/server-store
                 // environment surface deliberately doesn't expose them.
-                binds:     Vec::new(),
+                binds: Vec::new(),
             },
         })
     }
@@ -101,15 +101,15 @@ impl CreateEnvironmentRequest {
 impl ReplaceEnvironmentRequest {
     fn into_settings(self) -> Result<EnvironmentSettings, ApiError> {
         Ok(EnvironmentSettings {
-            provider:  self.provider,
-            cwd:       self.cwd,
-            image:     self.image.into_settings()?,
+            provider: self.provider,
+            cwd: self.cwd,
+            image: self.image.into_settings()?,
             resources: self.resources,
-            network:   self.network,
+            network: self.network,
             lifecycle: self.lifecycle,
-            labels:    self.labels,
-            env:       self.env,
-            binds:     Vec::new(),
+            labels: self.labels,
+            env: self.env,
+            binds: Vec::new(),
         })
     }
 }
@@ -117,7 +117,7 @@ impl ReplaceEnvironmentRequest {
 impl ApiEnvironmentImageSettings {
     fn into_settings(self) -> Result<EnvironmentImageSettings, ApiError> {
         Ok(EnvironmentImageSettings {
-            docker:     self.docker,
+            docker: self.docker,
             dockerfile: self
                 .dockerfile
                 .map(ApiDockerfileSource::into_settings)

@@ -19,7 +19,7 @@ use crate::{Error, EventEnvelope, EventPayload, Result, RunProjection, StageId, 
 const DEFAULT_EVENT_TAIL_LIMIT: usize = 1024;
 #[derive(Clone)]
 pub struct RunDatabase {
-    inner:     Arc<RunDatabaseInner>,
+    inner: Arc<RunDatabaseInner>,
     read_only: bool,
 }
 
@@ -100,7 +100,7 @@ impl RunDatabase {
 
     pub(crate) fn read_only_clone(&self) -> Self {
         Self {
-            inner:     Arc::clone(&self.inner),
+            inner: Arc::clone(&self.inner),
             read_only: true,
         }
     }
@@ -544,7 +544,7 @@ where
         #[serde(default, borrow)]
         stage_id: Option<&'a str>,
         #[serde(default, borrow)]
-        node_id:  Option<&'a str>,
+        node_id: Option<&'a str>,
     }
 
     let stage_id_string = stage_id.to_string();

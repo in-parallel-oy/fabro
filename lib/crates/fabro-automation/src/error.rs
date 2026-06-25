@@ -34,7 +34,7 @@ pub enum AutomationValidationError {
         trigger_id: String,
         expression: String,
         #[source]
-        source:     CronError,
+        source: CronError,
     },
 }
 
@@ -48,9 +48,9 @@ pub enum AutomationStoreError {
     MissingRevision { id: AutomationId },
     #[error("automation revision is stale for {id}: expected {expected}, actual {actual}")]
     StaleRevision {
-        id:       AutomationId,
+        id: AutomationId,
         expected: AutomationRevision,
-        actual:   AutomationRevision,
+        actual: AutomationRevision,
     },
     #[error("automation validation failed")]
     Validation {
@@ -61,13 +61,13 @@ pub enum AutomationStoreError {
     InvalidFilename { path: PathBuf, reason: String },
     #[error("failed to parse automation TOML at {path:?}")]
     Parse {
-        path:   PathBuf,
+        path: PathBuf,
         #[source]
         source: TomlDeError,
     },
     #[error("automation TOML at {path:?} is not UTF-8")]
     InvalidUtf8 {
-        path:   PathBuf,
+        path: PathBuf,
         #[source]
         source: std::str::Utf8Error,
     },
@@ -78,7 +78,7 @@ pub enum AutomationStoreError {
     },
     #[error("I/O error at {path:?}")]
     Io {
-        path:   PathBuf,
+        path: PathBuf,
         #[source]
         source: std::io::Error,
     },

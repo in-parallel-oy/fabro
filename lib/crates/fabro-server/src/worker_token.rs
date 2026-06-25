@@ -19,8 +19,8 @@ pub(crate) const WORKER_TOKEN_TTL_SECS: u64 = 72 * 60 * 60;
 
 #[derive(Clone)]
 pub(crate) struct WorkerTokenKeys {
-    encoding:   Arc<EncodingKey>,
-    decoding:   Arc<DecodingKey>,
+    encoding: Arc<EncodingKey>,
+    decoding: Arc<DecodingKey>,
     validation: Arc<Validation>,
 }
 
@@ -33,8 +33,8 @@ impl WorkerTokenKeys {
         validation.set_issuer(&[WORKER_TOKEN_ISSUER]);
 
         Ok(Self {
-            encoding:   Arc::new(EncodingKey::from_secret(&key)),
-            decoding:   Arc::new(DecodingKey::from_secret(&key)),
+            encoding: Arc::new(EncodingKey::from_secret(&key)),
+            decoding: Arc::new(DecodingKey::from_secret(&key)),
             validation: Arc::new(validation),
         })
     }
@@ -52,12 +52,12 @@ impl WorkerTokenKeys {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub(crate) struct WorkerTokenClaims {
-    pub(crate) iss:    String,
-    pub(crate) iat:    u64,
-    pub(crate) exp:    u64,
+    pub(crate) iss: String,
+    pub(crate) iat: u64,
+    pub(crate) exp: u64,
     pub(crate) run_id: String,
-    pub(crate) scope:  String,
-    pub(crate) jti:    String,
+    pub(crate) scope: String,
+    pub(crate) jti: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -116,12 +116,12 @@ pub(crate) fn issue_worker_token_with_scopes(
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs());
     let claims = WorkerTokenClaims {
-        iss:    WORKER_TOKEN_ISSUER.to_string(),
-        iat:    now,
-        exp:    now + WORKER_TOKEN_TTL_SECS,
+        iss: WORKER_TOKEN_ISSUER.to_string(),
+        iat: now,
+        exp: now + WORKER_TOKEN_TTL_SECS,
         run_id: run_id.to_string(),
-        scope:  scopes.claim(),
-        jti:    Uuid::new_v4().simple().to_string(),
+        scope: scopes.claim(),
+        jti: Uuid::new_v4().simple().to_string(),
     };
     jsonwebtoken::encode(&worker_token_header(), &claims, &keys.encoding).map_err(|err| {
         ApiError::new(
@@ -219,12 +219,12 @@ mod tests {
         scope: &str,
     ) -> String {
         let claims = WorkerTokenClaims {
-            iss:    WORKER_TOKEN_ISSUER.to_string(),
-            iat:    1,
-            exp:    u64::MAX / 2,
+            iss: WORKER_TOKEN_ISSUER.to_string(),
+            iat: 1,
+            exp: u64::MAX / 2,
             run_id: run_id.to_string(),
-            scope:  scope.to_string(),
-            jti:    Uuid::new_v4().simple().to_string(),
+            scope: scope.to_string(),
+            jti: Uuid::new_v4().simple().to_string(),
         };
         jsonwebtoken::encode(&worker_token_header(), &claims, &keys.encoding)
             .expect("test token should encode")
@@ -232,12 +232,12 @@ mod tests {
 
     fn expired_worker_token(keys: &WorkerTokenKeys, run_id: &fabro_types::RunId) -> String {
         let claims = WorkerTokenClaims {
-            iss:    WORKER_TOKEN_ISSUER.to_string(),
-            iat:    1,
-            exp:    2,
+            iss: WORKER_TOKEN_ISSUER.to_string(),
+            iat: 1,
+            exp: 2,
             run_id: run_id.to_string(),
-            scope:  WORKER_TOKEN_SCOPE.to_string(),
-            jti:    Uuid::new_v4().simple().to_string(),
+            scope: WORKER_TOKEN_SCOPE.to_string(),
+            jti: Uuid::new_v4().simple().to_string(),
         };
         jsonwebtoken::encode(&worker_token_header(), &claims, &keys.encoding)
             .expect("expired test token should encode")
@@ -274,14 +274,17 @@ mod tests {
         let decoded = decode::<WorkerTokenClaims>(&token, &keys.decoding, &keys.validation)
             .expect("worker token should decode");
 
-        assert_eq!(decoded.claims, WorkerTokenClaims {
-            iss:    WORKER_TOKEN_ISSUER.to_string(),
-            iat:    decoded.claims.iat,
-            exp:    decoded.claims.exp,
-            run_id: run_id.to_string(),
-            scope:  WORKER_TOKEN_SCOPE.to_string(),
-            jti:    decoded.claims.jti.clone(),
-        });
+        assert_eq!(
+            decoded.claims,
+            WorkerTokenClaims {
+                iss: WORKER_TOKEN_ISSUER.to_string(),
+                iat: decoded.claims.iat,
+                exp: decoded.claims.exp,
+                run_id: run_id.to_string(),
+                scope: WORKER_TOKEN_SCOPE.to_string(),
+                jti: decoded.claims.jti.clone(),
+            }
+        );
         assert_eq!(decoded.header.alg, Algorithm::HS256);
         assert_eq!(decoded.header.kid.as_deref(), Some(WORKER_TOKEN_KID));
         assert_eq!(decoded.claims.jti.len(), 32);

@@ -35,9 +35,10 @@ impl SandboxProvider for DockerSandboxProvider {
     async fn list(&self) -> crate::Result<Vec<SandboxInfo>> {
         let docker = Self::docker_client()?;
         let mut filters = HashMap::new();
-        filters.insert("label".to_string(), vec![format!(
-            "{MANAGED_LABEL}={MANAGED_LABEL_VALUE}"
-        )]);
+        filters.insert(
+            "label".to_string(),
+            vec![format!("{MANAGED_LABEL}={MANAGED_LABEL_VALUE}")],
+        );
         let options = ListContainersOptions::<String> {
             all: true,
             filters,
@@ -156,8 +157,11 @@ fn managed_from_inspect(inspect: &ContainerInspectResponse) -> bool {
 }
 
 fn docker_not_found(error: &DockerError) -> bool {
-    matches!(error, DockerError::DockerResponseServerError {
-        status_code: 404,
-        ..
-    })
+    matches!(
+        error,
+        DockerError::DockerResponseServerError {
+            status_code: 404,
+            ..
+        }
+    )
 }

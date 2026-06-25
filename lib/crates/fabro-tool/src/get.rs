@@ -33,10 +33,10 @@ impl TryFrom<FabroRunGetParams> for ValidatedRunGet {
 
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct RunGetResult {
-    pub run_id:     String,
-    pub summary:    RunSummaryResult,
+    pub run_id: String,
+    pub summary: RunSummaryResult,
     pub projection: Value,
-    pub questions:  Value,
+    pub questions: Value,
 }
 
 pub async fn run_get(
@@ -58,10 +58,10 @@ pub async fn run_get(
         .await
         .map_err(|err| ToolError::from_anyhow(&err))?;
     Ok(RunGetResult {
-        run_id:     run_id.to_string(),
-        summary:    common::run_summary_result(&summary),
+        run_id: run_id.to_string(),
+        summary: common::run_summary_result(&summary),
         projection: json!(projection),
-        questions:  json!(questions),
+        questions: json!(questions),
     })
 }
 

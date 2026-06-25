@@ -12,7 +12,7 @@ pub(crate) async fn approve_command(
     let ctx = base_ctx.with_target(&args.server)?;
     run_resolved_run_batch(
         RunBatchAction {
-            past:     "approved",
+            past: "approved",
             json_key: "approved",
         },
         &args.runs,
@@ -27,7 +27,7 @@ pub(crate) async fn deny_command(args: &RunsDenyArgs, base_ctx: &CommandContext)
     let reason = args.reason.clone();
     run_resolved_run_batch(
         RunBatchAction {
-            past:     "denied",
+            past: "denied",
             json_key: "denied",
         },
         &args.runs,

@@ -66,7 +66,7 @@ impl Sigv4Signer {
             .credentials_provider()
             .ok_or_else(|| Error::Configuration {
                 message: "no AWS credentials provider found in the default chain".to_string(),
-                source:  None,
+                source: None,
             })?;
         Ok(Self {
             credentials: CredentialSource::Chain(provider),
@@ -86,7 +86,7 @@ impl Sigv4Signer {
                     .await
                     .map_err(|e| Error::Configuration {
                         message: format!("failed to resolve AWS credentials: {e}"),
-                        source:  None,
+                        source: None,
                     })
             }
         }
@@ -113,7 +113,7 @@ impl Sigv4Signer {
             .build()
             .map_err(|e| Error::Configuration {
                 message: format!("sigv4 params: {e}"),
-                source:  None,
+                source: None,
             })?
             .into();
 
@@ -121,13 +121,13 @@ impl Sigv4Signer {
             SignableRequest::new(method, url, std::iter::empty(), SignableBody::Bytes(body))
                 .map_err(|e| Error::Configuration {
                     message: format!("sigv4 signable request: {e}"),
-                    source:  None,
+                    source: None,
                 })?;
 
         let (instructions, _signature) = sign(signable, &signing_params)
             .map_err(|e| Error::Configuration {
                 message: format!("sigv4 signing failed: {e}"),
-                source:  None,
+                source: None,
             })?
             .into_parts();
 
@@ -151,7 +151,7 @@ impl Sigv4Signer {
             .duration_since(UNIX_EPOCH)
             .map_err(|e| Error::Configuration {
                 message: format!("system clock before epoch: {e}"),
-                source:  None,
+                source: None,
             })?
             .as_secs();
         for (name, value) in

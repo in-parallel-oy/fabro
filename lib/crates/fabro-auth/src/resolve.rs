@@ -35,13 +35,13 @@ pub(crate) enum ResolvedSecret {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApiCredential {
-    pub provider:      ProviderId,
-    pub auth_header:   Option<ApiKeyHeader>,
+    pub provider: ProviderId,
+    pub auth_header: Option<ApiKeyHeader>,
     pub extra_headers: HashMap<String, String>,
-    pub base_url:      Option<String>,
-    pub codex_mode:    bool,
-    pub org_id:        Option<String>,
-    pub project_id:    Option<String>,
+    pub base_url: Option<String>,
+    pub codex_mode: bool,
+    pub org_id: Option<String>,
+    pub project_id: Option<String>,
 }
 
 impl ApiCredential {
@@ -58,13 +58,13 @@ impl ApiCredential {
             .ok_or_else(|| ResolveError::NotConfigured(provider_id.clone()))?;
         let auth_header = auth_header_for_catalog_provider(provider, key)?;
         Ok(Self {
-            provider:      provider_id,
-            auth_header:   Some(auth_header),
+            provider: provider_id,
+            auth_header: Some(auth_header),
             extra_headers: HashMap::new(),
-            base_url:      provider.base_url.clone(),
-            codex_mode:    false,
-            org_id:        None,
-            project_id:    None,
+            base_url: provider.base_url.clone(),
+            codex_mode: false,
+            org_id: None,
+            project_id: None,
         })
     }
 }
@@ -131,21 +131,21 @@ pub enum ResolveError {
     #[error("{provider} vault credential '{name}' has schema {actual:?}, expected Token or Oauth")]
     VaultSchemaMismatch {
         provider: ProviderId,
-        name:     String,
-        actual:   SecretType,
+        name: String,
+        actual: SecretType,
     },
     #[error("{provider} vault credential '{name}' is not valid Oauth JSON: {source}")]
     VaultDecodeFailed {
         provider: ProviderId,
-        name:     String,
+        name: String,
         #[source]
-        source:   serde_json::Error,
+        source: serde_json::Error,
     },
     #[error("{provider} requires re-authentication: {source}")]
     RefreshFailed {
         provider: ProviderId,
         #[source]
-        source:   anyhow::Error,
+        source: anyhow::Error,
     },
     #[error("{0} requires re-authentication: missing refresh token")]
     RefreshTokenMissing(ProviderId),
@@ -177,7 +177,7 @@ pub fn auth_issue_message(provider: &ProviderId, err: &ResolveError) -> String {
 
 #[derive(Clone)]
 pub struct CredentialResolver {
-    vault:      Arc<AsyncRwLock<Vault>>,
+    vault: Arc<AsyncRwLock<Vault>>,
     env_lookup: EnvLookup,
 }
 
@@ -245,7 +245,7 @@ impl CredentialResolver {
                 .await
                 .map_err(|join_err| ResolveError::RefreshFailed {
                     provider: provider_id.clone(),
-                    source:   anyhow::Error::from(join_err),
+                    source: anyhow::Error::from(join_err),
                 })?
                 .map_err(|source| ResolveError::RefreshFailed {
                     provider: provider_id.clone(),
@@ -515,13 +515,13 @@ mod tests {
 
     fn oauth_credential(token_url: String, expires_at: chrono::DateTime<Utc>) -> OAuthCredential {
         OAuthCredential {
-            tokens:     OAuthTokens {
+            tokens: OAuthTokens {
                 access_token: "expired-access".to_string(),
                 refresh_token: Some("refresh-token".to_string()),
                 expires_at,
                 id_token: None,
             },
-            config:     OAuthConfig {
+            config: OAuthConfig {
                 auth_url: "https://auth.openai.com".to_string(),
                 token_url,
                 client_id: "test-client".to_string(),
@@ -677,7 +677,7 @@ credentials = ["aws_sigv4"]
         assert_eq!(
             api.auth_header,
             Some(ApiKeyHeader::Custom {
-                name:  "x-api-key".to_string(),
+                name: "x-api-key".to_string(),
                 value: "anthropic-key".to_string(),
             })
         );
@@ -776,9 +776,10 @@ reasoning = false
         let vault = resolver.vault.read().await;
         let catalog = default_catalog();
 
-        assert_eq!(resolver.configured_providers(&vault, &catalog), vec![
-            ProviderId::openai()
-        ]);
+        assert_eq!(
+            resolver.configured_providers(&vault, &catalog),
+            vec![ProviderId::openai()]
+        );
     }
 
     #[tokio::test]
@@ -843,9 +844,10 @@ reasoning = false
         let vault = resolver.vault.read().await;
         let catalog = default_catalog();
 
-        assert_eq!(resolver.configured_providers(&vault, &catalog), vec![
-            ProviderId::openai()
-        ]);
+        assert_eq!(
+            resolver.configured_providers(&vault, &catalog),
+            vec![ProviderId::openai()]
+        );
     }
 
     #[tokio::test]
@@ -956,13 +958,13 @@ reasoning = false
     #[test]
     fn api_credential_debug_redacts_secret_material() {
         let credential = ApiCredential {
-            provider:      ProviderId::openai(),
-            auth_header:   Some(ApiKeyHeader::Bearer("sk-test".to_string())),
+            provider: ProviderId::openai(),
+            auth_header: Some(ApiKeyHeader::Bearer("sk-test".to_string())),
             extra_headers: HashMap::new(),
-            base_url:      None,
-            codex_mode:    false,
-            org_id:        None,
-            project_id:    None,
+            base_url: None,
+            codex_mode: false,
+            org_id: None,
+            project_id: None,
         };
 
         let debug = format!("{credential:?}");

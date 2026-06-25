@@ -14,8 +14,8 @@ use crate::args::{PreflightArgs, RunArgs};
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ManifestSettingsOverrides {
-    pub(crate) run:             Option<RunLayer>,
-    pub(crate) cli:             Option<CliLayer>,
+    pub(crate) run: Option<RunLayer>,
+    pub(crate) cli: Option<CliLayer>,
     pub(crate) input_overrides: HashMap<String, toml::Value>,
 }
 
@@ -102,25 +102,25 @@ pub(crate) fn run_args_overrides(args: &RunArgs) -> Result<ManifestSettingsOverr
     let overseer_session = overseer_env("OVERSEER_SESSION");
     let overseer_worktree = overseer_env("OVERSEER_WORKTREE");
     let mut run = build_run_overrides(RunOverrideInput {
-        goal:             None,
-        model:            args.model.as_deref(),
-        provider:         args.provider.as_deref(),
-        backend:          parse_backend_override(args.backend.as_deref())?,
-        skip_prepare:     args.skip_prepare, // ponytail: rebase anchor — skip-prepare
-        overseer_session:  overseer_session.as_deref(),
+        goal: None,
+        model: args.model.as_deref(),
+        provider: args.provider.as_deref(),
+        backend: parse_backend_override(args.backend.as_deref())?,
+        skip_prepare: args.skip_prepare, // ponytail: rebase anchor — skip-prepare
+        overseer_session: overseer_session.as_deref(),
         overseer_worktree: overseer_worktree.as_deref(),
-        environment:      args.environment.as_deref(),
-        docker_image:     None,
+        environment: args.environment.as_deref(),
+        docker_image: None,
         preserve_sandbox: sparse_flag(args.preserve_sandbox),
-        dry_run:          sparse_flag(args.dry_run),
-        auto_approve:     sparse_flag(args.auto_approve),
-        labels:           parse_labels(&args.label),
+        dry_run: sparse_flag(args.dry_run),
+        auto_approve: sparse_flag(args.auto_approve),
+        labels: parse_labels(&args.label),
     });
     run.goal = goal;
 
     Ok(ManifestSettingsOverrides {
-        run:             Some(run),
-        cli:             cli_layer_for_verbose(args.verbose),
+        run: Some(run),
+        cli: cli_layer_for_verbose(args.verbose),
         input_overrides: parse_input_overrides(&args.inputs.values)?,
     })
 }
@@ -129,25 +129,25 @@ pub(crate) fn preflight_args_overrides(args: &PreflightArgs) -> Result<ManifestS
     let cwd = current_dir_or_dot();
     let goal = goal_layer_from_args(args.goal.as_deref(), args.goal_file.as_deref(), &cwd)?;
     let mut run = build_run_overrides(RunOverrideInput {
-        goal:             None,
-        model:            args.model.as_deref(),
-        provider:         args.provider.as_deref(),
-        backend:          None, // ponytail: rebase anchor — tmux backend (preflight has no --backend)
-        skip_prepare:     false, // ponytail: rebase anchor — skip-prepare (preflight has no --skip-prepare)
-        overseer_session:  None, // ponytail: rebase anchor — Overseer handshake (preflight: none)
+        goal: None,
+        model: args.model.as_deref(),
+        provider: args.provider.as_deref(),
+        backend: None, // ponytail: rebase anchor — tmux backend (preflight has no --backend)
+        skip_prepare: false, // ponytail: rebase anchor — skip-prepare (preflight has no --skip-prepare)
+        overseer_session: None, // ponytail: rebase anchor — Overseer handshake (preflight: none)
         overseer_worktree: None,
-        environment:      args.environment.as_deref(),
-        docker_image:     None,
+        environment: args.environment.as_deref(),
+        docker_image: None,
         preserve_sandbox: None,
-        dry_run:          None,
-        auto_approve:     None,
-        labels:           HashMap::new(),
+        dry_run: None,
+        auto_approve: None,
+        labels: HashMap::new(),
     });
     run.goal = goal;
 
     Ok(ManifestSettingsOverrides {
-        run:             Some(run),
-        cli:             cli_layer_for_verbose(args.verbose),
+        run: Some(run),
+        cli: cli_layer_for_verbose(args.verbose),
         input_overrides: parse_input_overrides(&args.inputs.values)?,
     })
 }

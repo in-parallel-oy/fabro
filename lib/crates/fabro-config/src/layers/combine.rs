@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use fabro_model::{AgentProfileKind, BillingPolicy, CodecKind, ProviderAuthConfig};
+use fabro_types::AgentBackend; // ponytail: rebase anchor — tmux backend
 use fabro_types::settings::cli::{CliAuthStrategy, OutputFormat, OutputVerbosity};
 use fabro_types::settings::run::{
     AgentPermissions, ApprovalMode, EnvironmentNetworkMode, EnvironmentProvider, MergeStrategy,
@@ -10,7 +11,6 @@ use fabro_types::settings::server::{
     GithubIntegrationStrategy, LogDestination, ObjectStoreProvider, ServerAuthMethod,
     WebhookStrategy,
 };
-use fabro_types::AgentBackend; // ponytail: rebase anchor — tmux backend
 use fabro_types::settings::{Duration, InterpString, Size};
 
 use super::LogFilter;
@@ -327,9 +327,10 @@ mod tests {
             LogFilter::parse("info").unwrap(),
         );
         assert_option_leaf(vec!["this".to_string()], vec!["fallback".to_string()]);
-        assert_option_leaf(vec![ServerAuthMethod::Github], vec![
-            ServerAuthMethod::DevToken,
-        ]);
+        assert_option_leaf(
+            vec![ServerAuthMethod::Github],
+            vec![ServerAuthMethod::DevToken],
+        );
         assert_option_leaf(
             HashMap::from([("this".to_string(), toml::Value::String("value".to_string()))]),
             HashMap::from([(

@@ -43,7 +43,7 @@ impl<'a> MakeWriter<'a> for BufferedFileAppender {
 
     fn make_writer(&'a self) -> Self::Writer {
         BufferedFileGuard {
-            buf:  Vec::new(),
+            buf: Vec::new(),
             file: self.file.clone(),
         }
     }
@@ -52,7 +52,7 @@ impl<'a> MakeWriter<'a> for BufferedFileAppender {
 /// Per-event write guard. Buffers tracing's write calls and flushes the whole
 /// event when the guard is dropped.
 pub struct BufferedFileGuard {
-    buf:  Vec<u8>,
+    buf: Vec<u8>,
     file: Arc<Mutex<File>>,
 }
 

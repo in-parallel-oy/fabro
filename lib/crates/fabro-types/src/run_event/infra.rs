@@ -92,9 +92,9 @@ pub enum MetadataSnapshotFailureKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExecOutputTail {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stdout:           Option<String>,
+    pub stdout: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stderr:           Option<String>,
+    pub stderr: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub stdout_truncated: bool,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -129,9 +129,9 @@ impl ExecOutputTail {
     #[must_use]
     pub fn trace_summary(tail: Option<&Self>) -> ExecOutputTailTrace {
         ExecOutputTailTrace {
-            present:          tail.is_some(),
-            stdout_bytes:     tail.map_or(0, Self::stdout_len),
-            stderr_bytes:     tail.map_or(0, Self::stderr_len),
+            present: tail.is_some(),
+            stdout_bytes: tail.map_or(0, Self::stdout_len),
+            stderr_bytes: tail.map_or(0, Self::stderr_len),
             stdout_truncated: tail.is_some_and(|t| t.stdout_truncated),
             stderr_truncated: tail.is_some_and(|t| t.stderr_truncated),
         }
@@ -141,44 +141,44 @@ impl ExecOutputTail {
 /// Flat view of an `ExecOutputTail` for tracing field expansion.
 #[derive(Debug, Clone, Copy)]
 pub struct ExecOutputTailTrace {
-    pub present:          bool,
-    pub stdout_bytes:     usize,
-    pub stderr_bytes:     usize,
+    pub present: bool,
+    pub stdout_bytes: usize,
+    pub stderr_bytes: usize,
     pub stdout_truncated: bool,
     pub stderr_truncated: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetadataSnapshotStartedProps {
-    pub phase:  MetadataSnapshotPhase,
+    pub phase: MetadataSnapshotPhase,
     pub branch: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetadataSnapshotCompletedProps {
-    pub phase:       MetadataSnapshotPhase,
-    pub branch:      String,
+    pub phase: MetadataSnapshotPhase,
+    pub branch: String,
     pub duration_ms: u64,
     pub entry_count: usize,
-    pub bytes:       u64,
-    pub commit_sha:  String,
+    pub bytes: u64,
+    pub commit_sha: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetadataSnapshotFailedProps {
-    pub phase:            MetadataSnapshotPhase,
-    pub branch:           String,
-    pub duration_ms:      u64,
-    pub failure_kind:     MetadataSnapshotFailureKind,
-    pub error:            String,
+    pub phase: MetadataSnapshotPhase,
+    pub branch: String,
+    pub duration_ms: u64,
+    pub failure_kind: MetadataSnapshotFailureKind,
+    pub error: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub causes:           Vec<String>,
+    pub causes: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub commit_sha:       Option<String>,
+    pub commit_sha: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub entry_count:      Option<usize>,
+    pub entry_count: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub bytes:            Option<u64>,
+    pub bytes: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exec_output_tail: Option<ExecOutputTail>,
 }
@@ -190,16 +190,16 @@ pub struct SandboxInitializingProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SandboxReadyProps {
-    pub provider:    String,
+    pub provider: String,
     pub duration_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub name:        Option<String>,
+    pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cpu:         Option<f64>,
+    pub cpu: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub memory:      Option<f64>,
+    pub memory: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub url:         Option<String>,
+    pub url: Option<String>,
 }
 
 pub type SandboxFailedProps = RunSandboxFailure;
@@ -211,16 +211,16 @@ pub struct SandboxCleanupStartedProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SandboxCleanupCompletedProps {
-    pub provider:    String,
+    pub provider: String,
     pub duration_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SandboxCleanupFailedProps {
     pub provider: String,
-    pub error:    String,
+    pub error: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub causes:   Vec<String>,
+    pub causes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -230,16 +230,16 @@ pub struct SandboxStartStartedProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SandboxStartCompletedProps {
-    pub provider:    String,
+    pub provider: String,
     pub duration_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SandboxStartFailedProps {
     pub provider: String,
-    pub error:    String,
+    pub error: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub causes:   Vec<String>,
+    pub causes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -249,16 +249,16 @@ pub struct SandboxStopStartedProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SandboxStopCompletedProps {
-    pub provider:    String,
+    pub provider: String,
     pub duration_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SandboxStopFailedProps {
     pub provider: String,
-    pub error:    String,
+    pub error: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub causes:   Vec<String>,
+    pub causes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -268,16 +268,16 @@ pub struct SandboxDeleteStartedProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SandboxDeleteCompletedProps {
-    pub provider:    String,
+    pub provider: String,
     pub duration_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SandboxDeleteFailedProps {
     pub provider: String,
-    pub error:    String,
+    pub error: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub causes:   Vec<String>,
+    pub causes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -287,35 +287,35 @@ pub struct SnapshotNameProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SnapshotCompletedProps {
-    pub name:        String,
+    pub name: String,
     pub duration_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SnapshotFailedProps {
-    pub name:   String,
-    pub error:  String,
+    pub name: String,
+    pub error: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub causes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GitCloneStartedProps {
-    pub url:    String,
+    pub url: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GitCloneCompletedProps {
-    pub url:         String,
+    pub url: String,
     pub duration_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GitCloneFailedProps {
-    pub url:    String,
-    pub error:  String,
+    pub url: String,
+    pub error: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub causes: Vec<String>,
 }
@@ -323,22 +323,22 @@ pub struct GitCloneFailedProps {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SandboxInitializedProps {
     pub working_directory: String,
-    pub provider:          SandboxProviderKind,
-    pub id:                String,
+    pub provider: SandboxProviderKind,
+    pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub image:             Option<String>,
+    pub image: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub snapshot:          Option<String>,
+    pub snapshot: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub repo_cloned:       Option<bool>,
+    pub repo_cloned: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub clone_origin_url:  Option<String>,
+    pub clone_origin_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub clone_branch:      Option<String>,
+    pub clone_branch: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workspace_root:    Option<String>,
+    pub workspace_root: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub repos_root:        Option<String>,
+    pub repos_root: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primary_repo_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -353,14 +353,14 @@ pub struct SetupStartedProps {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetupCommandStartedProps {
     pub command: String,
-    pub index:   usize,
+    pub index: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetupCommandCompletedProps {
-    pub command:     String,
-    pub index:       usize,
-    pub exit_code:   i32,
+    pub command: String,
+    pub index: usize,
+    pub exit_code: i32,
     pub duration_ms: u64,
 }
 
@@ -371,10 +371,10 @@ pub struct SetupCompletedProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetupFailedProps {
-    pub command:          String,
-    pub index:            usize,
-    pub exit_code:        i32,
-    pub stderr:           String,
+    pub command: String,
+    pub index: usize,
+    pub exit_code: i32,
+    pub stderr: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exec_output_tail: Option<ExecOutputTail>,
 }
@@ -387,19 +387,19 @@ pub struct CliEnsureStartedProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CliEnsureCompletedProps {
-    pub cli_name:          String,
-    pub provider:          String,
+    pub cli_name: String,
+    pub provider: String,
     pub already_installed: bool,
-    pub node_installed:    bool,
-    pub duration_ms:       u64,
+    pub node_installed: bool,
+    pub duration_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CliEnsureFailedProps {
-    pub cli_name:         String,
-    pub provider:         String,
-    pub error:            String,
-    pub duration_ms:      u64,
+    pub cli_name: String,
+    pub provider: String,
+    pub error: String,
+    pub duration_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exec_output_tail: Option<ExecOutputTail>,
 }

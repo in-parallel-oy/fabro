@@ -36,13 +36,13 @@ pub fn resolve_run(
         }
         meta_branch = RunMetaBranchSettings {
             enabled: false,
-            push:    false,
+            push: false,
         };
     }
     let pull_request = resolve_pull_request(layer.pull_request.as_ref());
     if pull_request.is_some() && (!run_branch.enabled || !run_branch.push) {
         errors.push(ResolveError::Invalid {
-            path:   "run.pull_request".to_string(),
+            path: "run.pull_request".to_string(),
             reason: "run.pull_request.enabled requires run.run_branch.enabled and \
                      run.run_branch.push"
                 .to_string(),
@@ -135,8 +135,8 @@ fn resolve_model(model: Option<&RunModelLayer>) -> RunModelSettings {
     super::warn_if_demoted_template("run.model.name", model.name.as_deref());
 
     RunModelSettings {
-        provider:  model.provider.clone(),
-        name:      model.name.clone(),
+        provider: model.provider.clone(),
+        name: model.name.clone(),
         fallbacks: model
             .fallbacks
             .iter()
@@ -145,12 +145,12 @@ fn resolve_model(model: Option<&RunModelLayer>) -> RunModelSettings {
                 ModelRefOrSplice::Splice => None,
             })
             .collect(),
-        controls:  model
+        controls: model
             .controls
             .as_ref()
             .map(|c| RunModelControls {
                 reasoning_effort: c.reasoning_effort.clone(),
-                speed:            c.speed.clone(),
+                speed: c.speed.clone(),
             })
             .unwrap_or_default(),
     }
@@ -164,7 +164,7 @@ fn resolve_git(git: Option<&RunGitLayer>) -> RunGitSettings {
     }
     RunGitSettings {
         author: author.map(|author| GitAuthorSettings {
-            name:  author.name.clone(),
+            name: author.name.clone(),
             email: author.email.clone(),
         }),
     }
@@ -192,7 +192,7 @@ fn resolve_prepare(
                     .join(" "),
             ),
             (Some(_), Some(_)) | (None, None) => errors.push(ResolveError::Invalid {
-                path:   format!("run.prepare.steps[{index}]"),
+                path: format!("run.prepare.steps[{index}]"),
                 reason: "exactly one of script or command must be set".to_string(),
             }),
         }
@@ -210,7 +210,7 @@ fn resolve_execution(execution: Option<&RunExecutionLayer>) -> RunExecutionSetti
     let execution = execution.expect("defaults.toml should provide run.execution defaults");
 
     RunExecutionSettings {
-        mode:     execution
+        mode: execution
             .mode
             .expect("defaults.toml should provide run.execution.mode"),
         approval: execution
@@ -221,7 +221,7 @@ fn resolve_execution(execution: Option<&RunExecutionLayer>) -> RunExecutionSetti
 
 fn resolve_checkpoint(checkpoint: Option<&RunCheckpointLayer>) -> RunCheckpointSettings {
     RunCheckpointSettings {
-        exclude_globs:  checkpoint
+        exclude_globs: checkpoint
             .map(|checkpoint| checkpoint.exclude_globs.clone())
             .unwrap_or_default(),
         skip_git_hooks: checkpoint
@@ -241,7 +241,7 @@ fn resolve_run_branch(run_branch: Option<&RunRunBranchLayer>) -> RunBranchSettin
         enabled: run_branch
             .and_then(|run_branch| run_branch.enabled)
             .unwrap_or(true),
-        push:    run_branch
+        push: run_branch
             .and_then(|run_branch| run_branch.push)
             .unwrap_or(true),
     }
@@ -252,7 +252,7 @@ fn resolve_meta_branch(meta_branch: Option<&RunMetaBranchLayer>) -> RunMetaBranc
         enabled: meta_branch
             .and_then(|meta_branch| meta_branch.enabled)
             .unwrap_or(true),
-        push:    meta_branch
+        push: meta_branch
             .and_then(|meta_branch| meta_branch.push)
             .unwrap_or(true),
     }
@@ -260,9 +260,9 @@ fn resolve_meta_branch(meta_branch: Option<&RunMetaBranchLayer>) -> RunMetaBranc
 
 fn resolve_notification_route(route: &NotificationRouteLayer) -> NotificationRouteSettings {
     NotificationRouteSettings {
-        enabled:  route.enabled.unwrap_or(false),
+        enabled: route.enabled.unwrap_or(false),
         provider: route.provider.clone(),
-        events:   route
+        events: route
             .events
             .iter()
             .filter_map(|event| match event {
@@ -270,7 +270,7 @@ fn resolve_notification_route(route: &NotificationRouteLayer) -> NotificationRou
                 StringOrSplice::Splice => None,
             })
             .collect(),
-        slack:    route.slack.as_ref().map(resolve_notification_provider),
+        slack: route.slack.as_ref().map(resolve_notification_provider),
     }
 }
 
@@ -289,7 +289,7 @@ fn resolve_interviews(interviews: Option<&InterviewsLayer>) -> RunInterviewsSett
 
     RunInterviewsSettings {
         provider: interviews.provider.clone(),
-        slack:    interviews.slack.as_ref().map(resolve_interview_provider),
+        slack: interviews.slack.as_ref().map(resolve_interview_provider),
     }
 }
 
@@ -307,7 +307,7 @@ fn resolve_agent(agent: Option<&RunAgentLayer>) -> RunAgentSettings {
     RunAgentSettings {
         fabro_tools: agent.fabro_tools.unwrap_or(false),
         permissions: agent.permissions,
-        mcps:        agent
+        mcps: agent
             .mcps
             .iter()
             .map(|(name, entry)| (name.clone(), resolve_mcp_entry(name, entry)))
@@ -330,7 +330,7 @@ pub(crate) fn resolve_mcp_entry(name: &str, entry: &McpEntryLayer) -> McpServerS
             ..
         } => McpTransport::Stdio {
             command: resolve_mcp_command(script.as_ref(), command.as_ref()),
-            env:     env
+            env: env
                 .iter()
                 .map(|(key, value)| (key.clone(), value.as_source()))
                 .collect(),
@@ -342,8 +342,8 @@ pub(crate) fn resolve_mcp_entry(name: &str, entry: &McpEntryLayer) -> McpServerS
             ..
         } => McpTransport::Http {
             protocol: *protocol,
-            url:      url.as_source(),
-            headers:  headers
+            url: url.as_source(),
+            headers: headers
                 .iter()
                 .map(|(key, value)| (key.clone(), value.as_source()))
                 .collect(),
@@ -357,9 +357,9 @@ pub(crate) fn resolve_mcp_entry(name: &str, entry: &McpEntryLayer) -> McpServerS
             ..
         } => McpTransport::Sandbox {
             protocol: *protocol,
-            command:  resolve_mcp_command(script.as_ref(), command.as_ref()),
-            port:     *port,
-            env:      env
+            command: resolve_mcp_command(script.as_ref(), command.as_ref()),
+            port: *port,
+            env: env
                 .iter()
                 .map(|(key, value)| (key.clone(), value.as_source()))
                 .collect(),
@@ -433,7 +433,7 @@ fn resolve_hook(hook: &HookEntry, index: usize, errors: &mut Vec<ResolveError>) 
 
     if variants != 1 {
         errors.push(ResolveError::Invalid {
-            path:   format!("run.hooks[{index}]"),
+            path: format!("run.hooks[{index}]"),
             reason: "exactly one hook transport must be configured".to_string(),
         });
     }
@@ -502,19 +502,19 @@ fn resolve_hook_type(hook: &HookEntry) -> Option<HookType> {
 
     if hook.agent == Some(HookAgentMarker::Enabled) {
         return Some(HookType::Agent {
-            prompt:          hook
+            prompt: hook
                 .prompt
                 .as_ref()
                 .map(InterpString::as_source)
                 .unwrap_or_default(),
-            model:           hook.model.as_ref().map(InterpString::as_source),
+            model: hook.model.as_ref().map(InterpString::as_source),
             max_tool_rounds: hook.max_tool_rounds,
         });
     }
 
     hook.prompt.as_ref().map(|prompt| HookType::Prompt {
         prompt: prompt.as_source(),
-        model:  hook.model.as_ref().map(InterpString::as_source),
+        model: hook.model.as_ref().map(InterpString::as_source),
     })
 }
 
@@ -527,10 +527,10 @@ fn resolve_scm(scm: Option<&RunScmLayer>) -> RunScmSettings {
     super::warn_if_demoted_template("run.scm.repository", scm.repository.as_deref());
 
     RunScmSettings {
-        provider:   scm.provider.clone(),
-        owner:      scm.owner.clone(),
+        provider: scm.provider.clone(),
+        owner: scm.owner.clone(),
         repository: scm.repository.clone(),
-        github:     scm.github.as_ref().map(|_| ScmGitHubSettings {}),
+        github: scm.github.as_ref().map(|_| ScmGitHubSettings {}),
     }
 }
 
@@ -541,9 +541,9 @@ fn resolve_pull_request(pull_request: Option<&RunPullRequestLayer>) -> Option<Pu
     }
 
     Some(PullRequestSettings {
-        enabled:        true,
-        draft:          pull_request.draft.unwrap_or(true),
-        auto_merge:     pull_request.auto_merge.unwrap_or(false),
+        enabled: true,
+        draft: pull_request.draft.unwrap_or(true),
+        auto_merge: pull_request.auto_merge.unwrap_or(false),
         merge_strategy: pull_request.merge_strategy.unwrap_or(MergeStrategy::Squash),
     })
 }

@@ -4,7 +4,7 @@ use crate::RunEvent;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EventEnvelope {
-    pub seq:   u32,
+    pub seq: u32,
     #[serde(flatten)]
     pub event: RunEvent,
 }
@@ -23,28 +23,28 @@ mod tests {
     #[test]
     fn wire_event_envelope_round_trips() {
         let event = RunEvent {
-            id:                 "evt_1".to_string(),
-            ts:                 Utc.with_ymd_and_hms(2026, 4, 9, 12, 0, 0).unwrap(),
-            run_id:             fixtures::RUN_1,
-            node_id:            Some("code".to_string()),
-            node_label:         Some("Code".to_string()),
-            stage_id:           Some(StageId::new("code", 1)),
-            parallel_group_id:  None,
+            id: "evt_1".to_string(),
+            ts: Utc.with_ymd_and_hms(2026, 4, 9, 12, 0, 0).unwrap(),
+            run_id: fixtures::RUN_1,
+            node_id: Some("code".to_string()),
+            node_label: Some("Code".to_string()),
+            stage_id: Some(StageId::new("code", 1)),
+            parallel_group_id: None,
             parallel_branch_id: None,
-            session_id:         None,
-            parent_session_id:  None,
-            tool_call_id:       None,
-            actor:              None,
-            body:               EventBody::RunCompleted(RunCompletedProps {
-                timing:               RunTiming::wall_only(42),
-                artifact_count:       0,
-                status:               "success".to_string(),
-                reason:               SuccessReason::Completed,
-                total_usd_micros:     None,
+            session_id: None,
+            parent_session_id: None,
+            tool_call_id: None,
+            actor: None,
+            body: EventBody::RunCompleted(RunCompletedProps {
+                timing: RunTiming::wall_only(42),
+                artifact_count: 0,
+                status: "success".to_string(),
+                reason: SuccessReason::Completed,
+                total_usd_micros: None,
                 final_git_commit_sha: None,
-                final_patch:          None,
-                diff_summary:         None,
-                billing:              None,
+                final_patch: None,
+                diff_summary: None,
+                billing: None,
             }),
         };
         let envelope = EventEnvelope { seq: 7, event };
@@ -63,32 +63,32 @@ mod tests {
         let group = StageId::new("review", 2);
         let branch = ParallelBranchId::new(group.clone(), 3);
         let event = RunEvent {
-            id:                 "evt_2".to_string(),
-            ts:                 Utc.with_ymd_and_hms(2026, 4, 9, 13, 0, 0).unwrap(),
-            run_id:             fixtures::RUN_1,
-            node_id:            Some("review".to_string()),
-            node_label:         Some("Review".to_string()),
-            stage_id:           Some(StageId::new("review", 2)),
-            parallel_group_id:  Some(group),
+            id: "evt_2".to_string(),
+            ts: Utc.with_ymd_and_hms(2026, 4, 9, 13, 0, 0).unwrap(),
+            run_id: fixtures::RUN_1,
+            node_id: Some("review".to_string()),
+            node_label: Some("Review".to_string()),
+            stage_id: Some(StageId::new("review", 2)),
+            parallel_group_id: Some(group),
             parallel_branch_id: Some(branch),
-            session_id:         Some("ses_42".to_string()),
-            parent_session_id:  Some("ses_root".to_string()),
-            tool_call_id:       Some("tool_call_xyz".to_string()),
-            actor:              Some(Principal::Agent {
-                session_id:        Some("ses_42".to_string()),
+            session_id: Some("ses_42".to_string()),
+            parent_session_id: Some("ses_root".to_string()),
+            tool_call_id: Some("tool_call_xyz".to_string()),
+            actor: Some(Principal::Agent {
+                session_id: Some("ses_42".to_string()),
                 parent_session_id: Some("ses_root".to_string()),
-                model:             Some("claude-sonnet".to_string()),
+                model: Some("claude-sonnet".to_string()),
             }),
-            body:               EventBody::RunCompleted(RunCompletedProps {
-                timing:               RunTiming::wall_only(100),
-                artifact_count:       1,
-                status:               "success".to_string(),
-                reason:               SuccessReason::Completed,
-                total_usd_micros:     None,
+            body: EventBody::RunCompleted(RunCompletedProps {
+                timing: RunTiming::wall_only(100),
+                artifact_count: 1,
+                status: "success".to_string(),
+                reason: SuccessReason::Completed,
+                total_usd_micros: None,
                 final_git_commit_sha: None,
-                final_patch:          None,
-                diff_summary:         None,
-                billing:              None,
+                final_patch: None,
+                diff_summary: None,
+                billing: None,
             }),
         };
         let envelope = EventEnvelope { seq: 99, event };

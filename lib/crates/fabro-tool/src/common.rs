@@ -146,28 +146,28 @@ pub trait RunManifestBuilder: Send + Sync {
 
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct RunSummaryResult {
-    pub run_id:              String,
-    pub parent_id:           Option<String>,
-    pub children_count:      u64,
-    pub workflow_name:       Option<String>,
+    pub run_id: String,
+    pub parent_id: Option<String>,
+    pub children_count: u64,
+    pub workflow_name: Option<String>,
     pub workflow_graph_name: Option<String>,
-    pub workflow_slug:       Option<String>,
-    pub status:              String,
-    pub archived:            bool,
-    pub created_at:          String,
-    pub started_at:          Option<String>,
-    pub completed_at:        Option<String>,
-    pub labels:              HashMap<String, String>,
-    pub source_directory:    Option<String>,
-    pub repo_origin_url:     Option<String>,
-    pub goal:                String,
+    pub workflow_slug: Option<String>,
+    pub status: String,
+    pub archived: bool,
+    pub created_at: String,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub source_directory: Option<String>,
+    pub repo_origin_url: Option<String>,
+    pub goal: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ToolDefinition {
-    pub name:        &'static str,
+    pub name: &'static str,
     pub description: &'static str,
-    pub parameters:  Value,
+    pub parameters: Value,
 }
 
 pub const FABRO_RUN_CREATE_TOOL_NAME: &str = "fabro_run_create";
@@ -254,30 +254,30 @@ pub(super) async fn retrieve_run(
 
 pub(crate) fn run_summary_result(run: &Run) -> RunSummaryResult {
     RunSummaryResult {
-        run_id:              run.id.to_string(),
-        parent_id:           run.parent_id.map(|parent_id| parent_id.to_string()),
-        children_count:      run.children_count,
-        workflow_name:       run.workflow.name.clone(),
+        run_id: run.id.to_string(),
+        parent_id: run.parent_id.map(|parent_id| parent_id.to_string()),
+        children_count: run.children_count,
+        workflow_name: run.workflow.name.clone(),
         workflow_graph_name: run.workflow.graph_name.clone(),
-        workflow_slug:       run.workflow.slug.clone(),
-        status:              run.lifecycle.status.kind().to_string(),
-        archived:            run.lifecycle.archived,
-        created_at:          run.timestamps.created_at.to_rfc3339(),
-        started_at:          run
+        workflow_slug: run.workflow.slug.clone(),
+        status: run.lifecycle.status.kind().to_string(),
+        archived: run.lifecycle.archived,
+        created_at: run.timestamps.created_at.to_rfc3339(),
+        started_at: run
             .timestamps
             .started_at
             .map(|timestamp| timestamp.to_rfc3339()),
-        completed_at:        run
+        completed_at: run
             .timestamps
             .completed_at
             .map(|timestamp| timestamp.to_rfc3339()),
-        labels:              run.labels.clone(),
-        source_directory:    run.source_directory.clone(),
-        repo_origin_url:     run
+        labels: run.labels.clone(),
+        source_directory: run.source_directory.clone(),
+        repo_origin_url: run
             .repository
             .as_ref()
             .and_then(|repository| repository.origin_url.clone()),
-        goal:                run.goal.clone(),
+        goal: run.goal.clone(),
     }
 }
 
@@ -322,15 +322,18 @@ mod tests {
 
     #[test]
     fn shared_tool_definitions_include_run_management_catalog() {
-        assert_eq!(shared_tool_names(), vec![
-            FABRO_RUN_CREATE_TOOL_NAME,
-            FABRO_RUN_SEARCH_TOOL_NAME,
-            FABRO_RUN_GET_TOOL_NAME,
-            FABRO_RUN_INTERACT_TOOL_NAME,
-            FABRO_RUN_GATHER_TOOL_NAME,
-            FABRO_RUN_PAIR_TOOL_NAME,
-            FABRO_RUN_EVENTS_TOOL_NAME,
-        ]);
+        assert_eq!(
+            shared_tool_names(),
+            vec![
+                FABRO_RUN_CREATE_TOOL_NAME,
+                FABRO_RUN_SEARCH_TOOL_NAME,
+                FABRO_RUN_GET_TOOL_NAME,
+                FABRO_RUN_INTERACT_TOOL_NAME,
+                FABRO_RUN_GATHER_TOOL_NAME,
+                FABRO_RUN_PAIR_TOOL_NAME,
+                FABRO_RUN_EVENTS_TOOL_NAME,
+            ]
+        );
     }
 
     #[test]
@@ -401,51 +404,51 @@ mod tests {
     fn run_summary_result_includes_parent_metadata() {
         let parent_id = run_id("01KRBZW4DW0000000000000002");
         let run = Run {
-            id:               run_id("01KRBZW5C00000000000000001"),
-            parent_id:        Some(parent_id),
-            children_count:   3,
-            title:            "test".to_string(),
-            goal:             "test".to_string(),
-            workflow:         WorkflowRef {
-                slug:       Some("simple".to_string()),
-                name:       Some("Simple".to_string()),
+            id: run_id("01KRBZW5C00000000000000001"),
+            parent_id: Some(parent_id),
+            children_count: 3,
+            title: "test".to_string(),
+            goal: "test".to_string(),
+            workflow: WorkflowRef {
+                slug: Some("simple".to_string()),
+                name: Some("Simple".to_string()),
                 graph_name: Some("GraphName".to_string()),
                 node_count: 0,
                 edge_count: 0,
             },
-            automation:       None,
-            repository:       None,
-            created_by:       test_support::test_principal(),
-            origin:           RunOrigin::default(),
-            labels:           HashMap::new(),
-            lifecycle:        RunLifecycle {
-                status:          RunStatus::Submitted,
-                approval:        None,
+            automation: None,
+            repository: None,
+            created_by: test_support::test_principal(),
+            origin: RunOrigin::default(),
+            labels: HashMap::new(),
+            lifecycle: RunLifecycle {
+                status: RunStatus::Submitted,
+                approval: None,
                 pending_control: None,
-                queue_position:  None,
-                error:           None,
-                archived:        false,
-                archived_at:     None,
+                queue_position: None,
+                error: None,
+                archived: false,
+                archived_at: None,
             },
-            sandbox:          None,
-            models:           Vec::new(),
+            sandbox: None,
+            models: Vec::new(),
             source_directory: None,
-            timestamps:       RunTimestamps {
-                created_at:    Utc.with_ymd_and_hms(2026, 5, 11, 12, 0, 0).unwrap(),
-                started_at:    None,
+            timestamps: RunTimestamps {
+                created_at: Utc.with_ymd_and_hms(2026, 5, 11, 12, 0, 0).unwrap(),
+                started_at: None,
                 last_event_at: None,
-                completed_at:  None,
+                completed_at: None,
             },
-            timing:           None,
-            billing:          None,
-            size:             fabro_types::RunSize::default(),
-            ask_fabro:        fabro_types::AskFabro::default(),
-            diff:             None,
-            pull_request:     None,
+            timing: None,
+            billing: None,
+            size: fabro_types::RunSize::default(),
+            ask_fabro: fabro_types::AskFabro::default(),
+            diff: None,
+            pull_request: None,
             current_question: None,
-            superseded_by:    None,
-            retried_from:     None,
-            links:            RunLinks { web: None },
+            superseded_by: None,
+            retried_from: None,
+            links: RunLinks { web: None },
         };
 
         let summary = run_summary_result(&run);

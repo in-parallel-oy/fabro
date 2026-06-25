@@ -30,23 +30,23 @@ pub enum Change {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hunk {
     pub context_line: String,
-    pub changes:      Vec<Change>,
-    pub end_of_file:  bool,
+    pub changes: Vec<Change>,
+    pub end_of_file: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PatchOperation {
     Add {
-        path:    String,
+        path: String,
         content: String,
     },
     Delete {
         path: String,
     },
     Update {
-        path:     String,
+        path: String,
         new_path: Option<String>,
-        hunks:    Vec<Hunk>,
+        hunks: Vec<Hunk>,
     },
 }
 
@@ -484,7 +484,7 @@ pub fn make_apply_patch_tool() -> RegisteredTool {
                 "definition": apply_patch_lark_grammar_definition(),
             }),
         ),
-        executor:   Arc::new(|args, ctx| {
+        executor: Arc::new(|args, ctx| {
             Box::pin(async move {
                 let patch_text = args
                     .as_str()
@@ -494,7 +494,7 @@ pub fn make_apply_patch_tool() -> RegisteredTool {
                 apply_patch_operations(&ops, ctx.env.as_ref()).await
             })
         }),
-        source:     ToolSource::Native,
+        source: ToolSource::Native,
     }
 }
 
@@ -525,10 +525,13 @@ mod tests {
 
         let ops = parse_apply_patch(patch).unwrap();
         assert_eq!(ops.len(), 1);
-        assert_eq!(ops[0], PatchOperation::Add {
-            path:    "src/new_file.rs".into(),
-            content: "fn main() {\n    println!(\"hello\");\n}\n".into(),
-        });
+        assert_eq!(
+            ops[0],
+            PatchOperation::Add {
+                path: "src/new_file.rs".into(),
+                content: "fn main() {\n    println!(\"hello\");\n}\n".into(),
+            }
+        );
     }
 
     #[test]
@@ -540,9 +543,12 @@ mod tests {
 
         let ops = parse_apply_patch(patch).unwrap();
         assert_eq!(ops.len(), 1);
-        assert_eq!(ops[0], PatchOperation::Delete {
-            path: "src/old_file.rs".into(),
-        });
+        assert_eq!(
+            ops[0],
+            PatchOperation::Delete {
+                path: "src/old_file.rs".into(),
+            }
+        );
     }
 
     #[test]
@@ -659,21 +665,21 @@ mod tests {
         let env = MutableMockSandbox::new(files);
 
         let ops = vec![PatchOperation::Update {
-            path:     "src/game.py".into(),
+            path: "src/game.py".into(),
             new_path: None,
-            hunks:    vec![
+            hunks: vec![
                 Hunk {
                     context_line: String::new(),
-                    end_of_file:  false,
-                    changes:      vec![
+                    end_of_file: false,
+                    changes: vec![
                         Change::Remove("from src.cards import Suit".into()),
                         Change::Add("from src.cards import Card, Suit".into()),
                     ],
                 },
                 Hunk {
                     context_line: String::new(),
-                    end_of_file:  false,
-                    changes:      vec![
+                    end_of_file: false,
+                    changes: vec![
                         Change::Remove("    stock: list = field(default_factory=list)".into()),
                         Change::Remove("    waste: list = field(default_factory=list)".into()),
                         Change::Add("    stock: list[Card] = field(default_factory=list)".into()),
@@ -790,12 +796,12 @@ mod tests {
         let env = MutableMockSandbox::new(files);
 
         let ops = vec![PatchOperation::Update {
-            path:     "src/lib.rs".into(),
+            path: "src/lib.rs".into(),
             new_path: None,
-            hunks:    vec![Hunk {
+            hunks: vec![Hunk {
                 context_line: String::new(),
-                end_of_file:  false,
-                changes:      vec![
+                end_of_file: false,
+                changes: vec![
                     Change::Context("fn unchanged() {".into()),
                     Change::Remove("    old_line();".into()),
                     Change::Add("    new_line();".into()),
@@ -821,21 +827,21 @@ mod tests {
         let env = MutableMockSandbox::new(files);
 
         let ops = vec![PatchOperation::Update {
-            path:     "src/lib.rs".into(),
+            path: "src/lib.rs".into(),
             new_path: None,
-            hunks:    vec![
+            hunks: vec![
                 Hunk {
                     context_line: "def setup():".into(),
-                    end_of_file:  false,
-                    changes:      vec![
+                    end_of_file: false,
+                    changes: vec![
                         Change::Remove("    old_setup()".into()),
                         Change::Add("    new_setup()".into()),
                     ],
                 },
                 Hunk {
                     context_line: String::new(),
-                    end_of_file:  false,
-                    changes:      vec![
+                    end_of_file: false,
+                    changes: vec![
                         Change::Remove("    old_teardown()".into()),
                         Change::Add("    new_teardown()".into()),
                     ],
@@ -857,7 +863,7 @@ mod tests {
     async fn apply_patch_add_file() {
         let env = MutableMockSandbox::new(HashMap::new());
         let ops = vec![PatchOperation::Add {
-            path:    "src/new.rs".into(),
+            path: "src/new.rs".into(),
             content: "fn new() {}".into(),
         }];
 
@@ -878,12 +884,12 @@ mod tests {
         let env = MutableMockSandbox::new(files);
 
         let ops = vec![PatchOperation::Update {
-            path:     "src/lib.rs".into(),
+            path: "src/lib.rs".into(),
             new_path: None,
-            hunks:    vec![Hunk {
+            hunks: vec![Hunk {
                 context_line: "fn hello() {".into(),
-                end_of_file:  false,
-                changes:      vec![
+                end_of_file: false,
+                changes: vec![
                     Change::Remove("    println!(\"old\");".into()),
                     Change::Add("    println!(\"new\");".into()),
                 ],
@@ -1114,12 +1120,12 @@ please apply this
         let env = MutableMockSandbox::new(files);
 
         let ops = vec![PatchOperation::Update {
-            path:     "src/game.py".into(),
+            path: "src/game.py".into(),
             new_path: None,
-            hunks:    vec![Hunk {
+            hunks: vec![Hunk {
                 context_line: "def nonexistent():".into(),
-                end_of_file:  false,
-                changes:      vec![
+                end_of_file: false,
+                changes: vec![
                     Change::Remove("    old_body()".into()),
                     Change::Add("    new_body()".into()),
                 ],
@@ -1175,16 +1181,16 @@ please apply this
         let hunks = vec![
             Hunk {
                 context_line: String::new(),
-                end_of_file:  false,
-                changes:      vec![
+                end_of_file: false,
+                changes: vec![
                     Change::Remove("    pass".into()),
                     Change::Add("    return 1".into()),
                 ],
             },
             Hunk {
                 context_line: String::new(),
-                end_of_file:  false,
-                changes:      vec![
+                end_of_file: false,
+                changes: vec![
                     Change::Remove("    pass".into()),
                     Change::Add("    return 2".into()),
                 ],
@@ -1269,8 +1275,8 @@ please apply this
         let content = "def foo():\n    pass\n\ndef bar():\n    pass";
         let hunks = vec![Hunk {
             context_line: String::new(),
-            end_of_file:  true,
-            changes:      vec![
+            end_of_file: true,
+            changes: vec![
                 Change::Remove("    pass".into()),
                 Change::Add("    return 99".into()),
             ],
@@ -1321,12 +1327,12 @@ please apply this
         let env = MutableMockSandbox::new(files);
 
         let ops = vec![PatchOperation::Update {
-            path:     "src/old.py".into(),
+            path: "src/old.py".into(),
             new_path: Some("src/new.py".into()),
-            hunks:    vec![Hunk {
+            hunks: vec![Hunk {
                 context_line: "def hello():".into(),
-                end_of_file:  false,
-                changes:      vec![
+                end_of_file: false,
+                changes: vec![
                     Change::Remove("    pass".into()),
                     Change::Add("    return 1".into()),
                 ],
@@ -1353,8 +1359,8 @@ please apply this
         let content = "  indented\nindented";
         let hunks = vec![Hunk {
             context_line: "indented".into(),
-            end_of_file:  false,
-            changes:      vec![Change::Add("extra".into())],
+            end_of_file: false,
+            changes: vec![Change::Add("extra".into())],
         }];
         let result = apply_hunks("example.txt", content, &hunks).unwrap();
         // Should match line 1 (exact), so "extra" inserted after "indented" (line 1)
@@ -1366,8 +1372,8 @@ please apply this
         let content = "print(\u{201C}hello\u{201D})";
         let hunks = vec![Hunk {
             context_line: "print(\"hello\")".into(),
-            end_of_file:  false,
-            changes:      vec![Change::Add("print(\"world\")".into())],
+            end_of_file: false,
+            changes: vec![Change::Add("print(\"world\")".into())],
         }];
         let result = apply_hunks("example.py", content, &hunks).unwrap();
         // Original line preserved, new line added after
@@ -1736,22 +1742,22 @@ def farewell(name):
         tool_call.raw_arguments = Some(patch_text.to_string());
         let responses = vec![
             Response {
-                id:            "resp_call_1".to_string(),
-                model:         "mock-model".to_string(),
-                provider:      "mock".to_string(),
-                message:       LlmMessage {
-                    role:         Role::Assistant,
-                    content:      vec![ContentPart::ToolCall(tool_call)],
-                    name:         None,
+                id: "resp_call_1".to_string(),
+                model: "mock-model".to_string(),
+                provider: "mock".to_string(),
+                message: LlmMessage {
+                    role: Role::Assistant,
+                    content: vec![ContentPart::ToolCall(tool_call)],
+                    name: None,
                     tool_call_id: None,
                 },
                 finish_reason: FinishReason::ToolCalls,
-                usage:         TokenCounts::default(),
-                raw:           None,
-                warnings:      vec![],
-                rate_limit:    None,
-                cost_usd:      None,
-                cost_source:   None,
+                usage: TokenCounts::default(),
+                raw: None,
+                warnings: vec![],
+                rate_limit: None,
+                cost_usd: None,
+                cost_source: None,
             },
             text_response("Done! Updated greet and farewell functions."),
         ];
@@ -1814,22 +1820,22 @@ def farewell(name):
 
         let responses = vec![
             Response {
-                id:            "resp_call_1".to_string(),
-                model:         "mock-model".to_string(),
-                provider:      "mock".to_string(),
-                message:       LlmMessage {
-                    role:         Role::Assistant,
-                    content:      vec![ContentPart::ToolCall(tool_call)],
-                    name:         None,
+                id: "resp_call_1".to_string(),
+                model: "mock-model".to_string(),
+                provider: "mock".to_string(),
+                message: LlmMessage {
+                    role: Role::Assistant,
+                    content: vec![ContentPart::ToolCall(tool_call)],
+                    name: None,
                     tool_call_id: None,
                 },
                 finish_reason: FinishReason::ToolCalls,
-                usage:         TokenCounts::default(),
-                raw:           None,
-                warnings:      vec![],
-                rate_limit:    None,
-                cost_usd:      None,
-                cost_source:   None,
+                usage: TokenCounts::default(),
+                raw: None,
+                warnings: vec![],
+                rate_limit: None,
+                cost_usd: None,
+                cost_source: None,
             },
             text_response("I will correct the patch."),
         ];

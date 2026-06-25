@@ -42,21 +42,21 @@ const DEFAULT_HEALTH_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration:
 type TransportFuture = BoxFuture<'static, Result<(fabro_http::HttpClient, String)>>;
 
 pub struct RunEventStream {
-    stream:          progenitor_client::ByteStream,
-    pending_bytes:   Vec<u8>,
+    stream: progenitor_client::ByteStream,
+    pending_bytes: Vec<u8>,
     buffered_events: VecDeque<EventEnvelope>,
 }
 
 type HttpByteStream = Pin<Box<dyn Stream<Item = Result<Bytes>> + Send>>;
 
 pub struct SessionEventStream {
-    stream:          HttpByteStream,
-    pending_bytes:   Vec<u8>,
+    stream: HttpByteStream,
+    pending_bytes: Vec<u8>,
     buffered_events: VecDeque<EventEnvelope>,
 }
 
 pub struct RewindRunResult {
-    pub status:   u16,
+    pub status: u16,
     pub response: types::RewindResponse,
 }
 
@@ -67,19 +67,19 @@ struct ListStoreRunsOptions {
 
 #[derive(Clone)]
 struct ClientState {
-    client:       fabro_api::ApiClient,
-    http_client:  fabro_http::HttpClient,
+    client: fabro_api::ApiClient,
+    http_client: fabro_http::HttpClient,
     bearer_token: Option<String>,
-    base_url:     String,
+    base_url: String,
 }
 
 #[derive(Clone)]
 pub struct Client {
-    state:               Arc<RwLock<ClientState>>,
-    oauth_session:       Option<OAuthSession>,
-    refresh_lock:        Arc<Mutex<()>>,
+    state: Arc<RwLock<ClientState>>,
+    oauth_session: Option<OAuthSession>,
+    refresh_lock: Arc<Mutex<()>>,
     transport_connector: Option<TransportConnector>,
-    request_timeout:     Option<std::time::Duration>,
+    request_timeout: Option<std::time::Duration>,
 }
 
 #[derive(Clone)]
@@ -89,35 +89,35 @@ pub struct TransportConnector {
 
 #[derive(Default)]
 pub struct ClientBuilder {
-    target:              Option<ServerTarget>,
-    credential:          Option<Credential>,
-    oauth_session:       Option<OAuthSession>,
-    transport:           Option<(String, fabro_http::HttpClient)>,
+    target: Option<ServerTarget>,
+    credential: Option<Credential>,
+    oauth_session: Option<OAuthSession>,
+    transport: Option<(String, fabro_http::HttpClient)>,
     transport_connector: Option<TransportConnector>,
-    request_timeout:     Option<std::time::Duration>,
+    request_timeout: Option<std::time::Duration>,
 }
 
 #[derive(Debug, Deserialize)]
 struct CliTokenResponse {
-    access_token:             String,
-    access_token_expires_at:  chrono::DateTime<chrono::Utc>,
-    refresh_token:            String,
+    access_token: String,
+    access_token_expires_at: chrono::DateTime<chrono::Utc>,
+    refresh_token: String,
     refresh_token_expires_at: chrono::DateTime<chrono::Utc>,
-    subject:                  CliTokenSubject,
+    subject: CliTokenSubject,
 }
 
 #[derive(Debug, Deserialize)]
 struct CliTokenSubject {
-    idp_issuer:  String,
+    idp_issuer: String,
     idp_subject: String,
-    login:       String,
-    name:        String,
-    email:       String,
+    login: String,
+    name: String,
+    email: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct OAuthErrorBody {
-    error:             String,
+    error: String,
     #[serde(default)]
     error_description: Option<String>,
 }
@@ -129,14 +129,14 @@ struct ArtifactBatchUploadManifest {
 
 #[derive(Debug, Serialize)]
 struct ArtifactBatchUploadEntry {
-    part:           String,
-    path:           String,
+    part: String,
+    path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    sha256:         Option<String>,
+    sha256: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     expected_bytes: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    content_type:   Option<String>,
+    content_type: Option<String>,
 }
 
 impl RunEventStream {
@@ -323,15 +323,15 @@ impl Client {
         http_client: fabro_http::HttpClient,
     ) -> Self {
         Self {
-            state:               Arc::new(RwLock::new(client_state(
+            state: Arc::new(RwLock::new(client_state(
                 base_url.into(),
                 http_client,
                 None,
             ))),
-            oauth_session:       None,
-            refresh_lock:        Arc::new(Mutex::new(())),
+            oauth_session: None,
+            refresh_lock: Arc::new(Mutex::new(())),
             transport_connector: None,
-            request_timeout:     None,
+            request_timeout: None,
         }
     }
 
@@ -481,18 +481,18 @@ impl Client {
                 .await
                 .context("failed to parse CLI auth refresh response")?;
             let entry = OAuthEntry {
-                access_token:             tokens.access_token.clone(),
-                access_token_expires_at:  tokens.access_token_expires_at,
-                refresh_token:            tokens.refresh_token.clone(),
+                access_token: tokens.access_token.clone(),
+                access_token_expires_at: tokens.access_token_expires_at,
+                refresh_token: tokens.refresh_token.clone(),
                 refresh_token_expires_at: tokens.refresh_token_expires_at,
-                subject:                  StoredSubject {
-                    idp_issuer:  tokens.subject.idp_issuer,
+                subject: StoredSubject {
+                    idp_issuer: tokens.subject.idp_issuer,
                     idp_subject: tokens.subject.idp_subject,
-                    login:       tokens.subject.login,
-                    name:        tokens.subject.name,
-                    email:       tokens.subject.email,
+                    login: tokens.subject.login,
+                    name: tokens.subject.name,
+                    email: tokens.subject.email,
                 },
-                logged_in_at:             oauth_entry.logged_in_at,
+                logged_in_at: oauth_entry.logged_in_at,
             };
             oauth_session
                 .auth_store
@@ -649,7 +649,7 @@ impl Client {
             .map_err(|()| anyhow!("server base URL cannot accept path segments"))?
             .extend(["api", "v1", "sessions", &session_id.to_string(), "turns"]);
         let body = types::SubmitTurnRequest {
-            input:   input.into(),
+            input: input.into(),
             turn_id: None,
         };
         let response = self
@@ -1851,11 +1851,11 @@ impl Client {
                 .len();
 
             manifest_entries.push(ArtifactBatchUploadEntry {
-                part:           part_name.clone(),
-                path:           artifact.path.clone(),
-                sha256:         Some(artifact.content_sha256.clone()),
+                part: part_name.clone(),
+                path: artifact.path.clone(),
+                sha256: Some(artifact.content_sha256.clone()),
                 expected_bytes: Some(artifact.bytes),
-                content_type:   Some(artifact.mime.clone()),
+                content_type: Some(artifact.mime.clone()),
             });
 
             file_parts.push((
@@ -2103,18 +2103,18 @@ mod tests {
     fn oauth_entry(login: &str) -> OAuthEntry {
         let now = chrono::Utc::now();
         OAuthEntry {
-            access_token:             format!("access-{login}"),
-            access_token_expires_at:  now + ChronoDuration::minutes(10),
-            refresh_token:            format!("refresh-{login}"),
+            access_token: format!("access-{login}"),
+            access_token_expires_at: now + ChronoDuration::minutes(10),
+            refresh_token: format!("refresh-{login}"),
             refresh_token_expires_at: now + ChronoDuration::days(30),
-            subject:                  StoredSubject {
-                idp_issuer:  "https://github.com".to_string(),
+            subject: StoredSubject {
+                idp_issuer: "https://github.com".to_string(),
                 idp_subject: "12345".to_string(),
-                login:       login.to_string(),
-                name:        format!("Name {login}"),
-                email:       format!("{login}@example.com"),
+                login: login.to_string(),
+                name: format!("Name {login}"),
+                email: format!("{login}@example.com"),
             },
-            logged_in_at:             now,
+            logged_in_at: now,
         }
     }
 
@@ -2297,7 +2297,7 @@ mod tests {
             .put(
                 &target,
                 AuthEntry::DevToken(DevTokenEntry {
-                    token:        stored_token.to_string(),
+                    token: stored_token.to_string(),
                     logged_in_at: chrono::Utc::now(),
                 }),
             )
@@ -2325,10 +2325,10 @@ mod tests {
         client.refresh_access_token(old_token).await.unwrap();
 
         assert_eq!(refresh_mock.calls(), 0);
-        assert_eq!(*seen_tokens.lock().unwrap(), vec![
-            Some(old_token.to_string()),
-            Some(stored_token.to_string()),
-        ]);
+        assert_eq!(
+            *seen_tokens.lock().unwrap(),
+            vec![Some(old_token.to_string()), Some(stored_token.to_string()),]
+        );
     }
 
     #[tokio::test]
@@ -2412,7 +2412,7 @@ mod tests {
             anyhow!("request failed with status 404 Not Found"),
             ApiFailure {
                 status: fabro_http::StatusCode::NOT_FOUND,
-                code:   None,
+                code: None,
             },
         );
         let wrapped = super::add_pr_upgrade_hint(err);
@@ -2430,7 +2430,7 @@ mod tests {
             anyhow!("No pull request found in store. Create one first with: fabro pr create abc"),
             ApiFailure {
                 status: fabro_http::StatusCode::NOT_FOUND,
-                code:   Some("no_stored_record".to_string()),
+                code: Some("no_stored_record".to_string()),
             },
         );
         let wrapped = super::add_pr_upgrade_hint(err);

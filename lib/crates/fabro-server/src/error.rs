@@ -55,10 +55,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Serialize)]
 struct ErrorEntry {
     status: String,
-    title:  String,
+    title: String,
     detail: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    code:   Option<String>,
+    code: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -74,7 +74,7 @@ struct ErrorBody {
 pub struct ApiError {
     status: StatusCode,
     detail: String,
-    code:   Option<String>,
+    code: Option<String>,
 }
 
 impl ApiError {
@@ -136,14 +136,14 @@ impl ApiError {
     /// individual items carry structured failures.
     pub fn into_response_entry(self) -> ErrorResponseEntry {
         ErrorResponseEntry {
-            status:     self.status.as_u16().to_string(),
-            title:      self
+            status: self.status.as_u16().to_string(),
+            title: self
                 .status
                 .canonical_reason()
                 .unwrap_or("Unknown")
                 .to_string(),
-            detail:     self.detail,
-            code:       self.code,
+            detail: self.detail,
+            code: self.code,
             request_id: None,
         }
     }

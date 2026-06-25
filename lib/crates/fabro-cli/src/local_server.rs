@@ -13,11 +13,11 @@ use fabro_util::error::SharedError;
 use crate::user_config;
 
 pub(crate) struct LocalServerConfig {
-    storage_dir:            PathBuf,
-    auth_methods:           Vec<ServerAuthMethod>,
-    config_log_level:       Option<fabro_config::LogFilter>,
+    storage_dir: PathBuf,
+    auth_methods: Vec<ServerAuthMethod>,
+    config_log_level: Option<fabro_config::LogFilter>,
     config_log_destination: Option<LogDestination>,
-    server_settings:        std::result::Result<ServerSettings, SharedError>,
+    server_settings: std::result::Result<ServerSettings, SharedError>,
 }
 
 impl LocalServerConfig {

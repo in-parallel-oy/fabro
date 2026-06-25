@@ -41,9 +41,12 @@ impl StageOutcome {
 
     #[must_use]
     pub fn retry_requested(self) -> bool {
-        matches!(self, Self::Failed {
-            retry_requested: true,
-        })
+        matches!(
+            self,
+            Self::Failed {
+                retry_requested: true,
+            }
+        )
     }
 }
 
@@ -229,14 +232,14 @@ impl FailureCategory {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FailureDetail {
-    pub message:          String,
+    pub message: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub causes:           Vec<String>,
-    pub category:         FailureCategory,
+    pub causes: Vec<String>,
+    pub category: FailureCategory,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub system_actor:     Option<SystemActorKind>,
+    pub system_actor: Option<SystemActorKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signature:        Option<FailureSignature>,
+    pub signature: Option<FailureSignature>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exec_output_tail: Option<ExecOutputTail>,
 }
@@ -257,45 +260,45 @@ impl FailureDetail {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(bound = "M: OutcomeMeta")]
 pub struct Outcome<M: OutcomeMeta = ()> {
-    pub status:             StageOutcome,
+    pub status: StageOutcome,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preferred_label:    Option<String>,
+    pub preferred_label: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub suggested_next_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub context_updates:    HashMap<String, Value>,
+    pub context_updates: HashMap<String, Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub jump_to_node:       Option<String>,
+    pub jump_to_node: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub notes:              Option<String>,
+    pub notes: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub failure:            Option<FailureDetail>,
+    pub failure: Option<FailureDetail>,
     #[serde(default)]
-    pub usage:              M,
+    pub usage: M,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub files_touched:      Vec<String>,
+    pub files_touched: Vec<String>,
     /// Stage timing breakdown captured by the workflow engine.
     ///
     /// `None` until the stage produces a terminal outcome with a measured
     /// wall time. Stage handlers that perform no inference or tool work
     /// populate this with [`StageTiming::wall_only`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timing:             Option<StageTiming>,
+    pub timing: Option<StageTiming>,
 }
 
 impl<M: OutcomeMeta> Default for Outcome<M> {
     fn default() -> Self {
         Self {
-            status:             StageOutcome::Succeeded,
-            preferred_label:    None,
+            status: StageOutcome::Succeeded,
+            preferred_label: None,
             suggested_next_ids: Vec::new(),
-            context_updates:    HashMap::new(),
-            jump_to_node:       None,
-            notes:              None,
-            failure:            None,
-            usage:              M::default(),
-            files_touched:      Vec::new(),
-            timing:             None,
+            context_updates: HashMap::new(),
+            jump_to_node: None,
+            notes: None,
+            failure: None,
+            usage: M::default(),
+            files_touched: Vec::new(),
+            timing: None,
         }
     }
 }
@@ -311,11 +314,11 @@ impl<M: OutcomeMeta> Outcome<M> {
                 retry_requested: false,
             },
             failure: Some(FailureDetail {
-                message:          message.to_string(),
-                causes:           Vec::new(),
-                category:         FailureCategory::Deterministic,
-                system_actor:     None,
-                signature:        None,
+                message: message.to_string(),
+                causes: Vec::new(),
+                category: FailureCategory::Deterministic,
+                system_actor: None,
+                signature: None,
                 exec_output_tail: None,
             }),
             ..Self::default()
@@ -386,8 +389,8 @@ mod tests {
         ];
         failure.signature = Some(FailureSignature("work|deterministic|acp".to_string()));
         failure.exec_output_tail = Some(ExecOutputTail {
-            stdout:           None,
-            stderr:           Some("redacted stderr tail".to_string()),
+            stdout: None,
+            stderr: Some("redacted stderr tail".to_string()),
             stdout_truncated: false,
             stderr_truncated: true,
         });
@@ -407,19 +410,19 @@ mod tests {
 
 #[derive(Debug, Clone)]
 pub struct NodeResult<M: OutcomeMeta = ()> {
-    pub outcome:        Outcome<M>,
+    pub outcome: Outcome<M>,
     /// Wall-clock time spent executing this node attempt (including handler
     /// internal waits). Independent of the `inference_time` / `tool_time`
     /// breakdown — those are work-only measurements.
-    pub wall_time:      Duration,
+    pub wall_time: Duration,
     /// Sum of LLM request/stream elapsed time across this node attempt. Zero
     /// for non-LLM handlers.
     pub inference_time: Duration,
     /// Sum of tool/command execution elapsed time across this node attempt.
     /// Zero for handlers that do not invoke tools or commands.
-    pub tool_time:      Duration,
-    pub attempts:       u32,
-    pub max_attempts:   u32,
+    pub tool_time: Duration,
+    pub attempts: u32,
+    pub max_attempts: u32,
 }
 
 impl<M: OutcomeMeta> NodeResult<M> {

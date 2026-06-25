@@ -22,20 +22,20 @@ enum OAuthState {
 enum StatusRow {
     #[serde(rename = "oauth")]
     OAuth {
-        server:                   String,
-        oauth_state:              OAuthState,
-        access_token_expires_at:  DateTime<Utc>,
+        server: String,
+        oauth_state: OAuthState,
+        access_token_expires_at: DateTime<Utc>,
         refresh_token_expires_at: DateTime<Utc>,
-        logged_in_at:             DateTime<Utc>,
-        login:                    String,
-        name:                     String,
-        email:                    String,
-        idp_issuer:               String,
-        idp_subject:              String,
+        logged_in_at: DateTime<Utc>,
+        login: String,
+        name: String,
+        email: String,
+        idp_issuer: String,
+        idp_subject: String,
     },
     #[serde(rename = "dev-token")]
     DevToken {
-        server:       String,
+        server: String,
         logged_in_at: DateTime<Utc>,
     },
 }
@@ -157,19 +157,19 @@ fn filter_rows(
 fn status_row(target: &ServerTarget, entry: AuthEntry, now: DateTime<Utc>) -> StatusRow {
     match entry {
         AuthEntry::OAuth(entry) => StatusRow::OAuth {
-            server:                   target.to_string(),
-            oauth_state:              oauth_state(&entry, now),
-            access_token_expires_at:  entry.access_token_expires_at,
+            server: target.to_string(),
+            oauth_state: oauth_state(&entry, now),
+            access_token_expires_at: entry.access_token_expires_at,
             refresh_token_expires_at: entry.refresh_token_expires_at,
-            logged_in_at:             entry.logged_in_at,
-            login:                    entry.subject.login,
-            name:                     entry.subject.name,
-            email:                    entry.subject.email,
-            idp_issuer:               entry.subject.idp_issuer,
-            idp_subject:              entry.subject.idp_subject,
+            logged_in_at: entry.logged_in_at,
+            login: entry.subject.login,
+            name: entry.subject.name,
+            email: entry.subject.email,
+            idp_issuer: entry.subject.idp_issuer,
+            idp_subject: entry.subject.idp_subject,
         },
         AuthEntry::DevToken(entry) => StatusRow::DevToken {
-            server:       target.to_string(),
+            server: target.to_string(),
             logged_in_at: entry.logged_in_at,
         },
     }
@@ -203,18 +203,18 @@ mod tests {
     fn entry(access_offset_secs: i64, refresh_offset_secs: i64) -> OAuthEntry {
         let now = chrono::Utc::now();
         OAuthEntry {
-            access_token:             "access".to_string(),
-            access_token_expires_at:  now + Duration::seconds(access_offset_secs),
-            refresh_token:            "refresh".to_string(),
+            access_token: "access".to_string(),
+            access_token_expires_at: now + Duration::seconds(access_offset_secs),
+            refresh_token: "refresh".to_string(),
             refresh_token_expires_at: now + Duration::seconds(refresh_offset_secs),
-            subject:                  StoredSubject {
-                idp_issuer:  "https://github.com".to_string(),
+            subject: StoredSubject {
+                idp_issuer: "https://github.com".to_string(),
                 idp_subject: "12345".to_string(),
-                login:       "octocat".to_string(),
-                name:        "The Octocat".to_string(),
-                email:       "octocat@example.com".to_string(),
+                login: "octocat".to_string(),
+                name: "The Octocat".to_string(),
+                email: "octocat@example.com".to_string(),
             },
-            logged_in_at:             now,
+            logged_in_at: now,
         }
     }
 

@@ -36,8 +36,8 @@ fn run_failure_json_matches_openapi_shape() {
                 detail.signature =
                     Some(FailureSignature("init|transient_infra|docker".to_string()));
                 detail.exec_output_tail = Some(ExecOutputTail {
-                    stdout:           None,
-                    stderr:           Some("last stderr line".to_string()),
+                    stdout: None,
+                    stderr: Some("last stderr line".to_string()),
                     stdout_truncated: false,
                     stderr_truncated: true,
                 });
@@ -64,22 +64,22 @@ fn run_failure_json_matches_openapi_shape() {
 fn conclusion_json_uses_failure_object() {
     assert_json(
         Conclusion {
-            timestamp:            chrono::DateTime::parse_from_rfc3339("2026-05-13T12:00:00Z")
+            timestamp: chrono::DateTime::parse_from_rfc3339("2026-05-13T12:00:00Z")
                 .unwrap()
                 .with_timezone(&chrono::Utc),
-            status:               StageOutcome::Failed {
+            status: StageOutcome::Failed {
                 retry_requested: false,
             },
-            timing:               fabro_types::RunTiming::wall_only(42),
-            failure:              Some(RunFailure {
+            timing: fabro_types::RunTiming::wall_only(42),
+            failure: Some(RunFailure {
                 reason: FailureReason::WorkflowError,
                 detail: FailureDetail::new("boom", FailureCategory::Deterministic),
             }),
             final_git_commit_sha: None,
-            stages:               Vec::new(),
-            billing:              None,
-            total_retries:        0,
-            diff:                 Default::default(),
+            stages: Vec::new(),
+            billing: None,
+            total_retries: 0,
+            diff: Default::default(),
         },
         json!({
             "timestamp": "2026-05-13T12:00:00Z",

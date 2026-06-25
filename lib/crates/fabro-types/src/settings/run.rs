@@ -21,27 +21,27 @@ use super::size::Size;
 /// A structurally resolved `[run]` view for consumers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunNamespace {
-    pub goal:          Option<RunGoal>,
-    pub working_dir:   Option<String>,
-    pub metadata:      HashMap<String, String>,
-    pub inputs:        HashMap<String, toml::Value>,
-    pub model:         RunModelSettings,
-    pub git:           RunGitSettings,
-    pub prepare:       RunPrepareSettings,
-    pub execution:     RunExecutionSettings,
-    pub checkpoint:    RunCheckpointSettings,
-    pub clone:         RunCloneSettings,
-    pub run_branch:    RunBranchSettings,
-    pub meta_branch:   RunMetaBranchSettings,
-    pub environment:   RunEnvironmentSettings,
+    pub goal: Option<RunGoal>,
+    pub working_dir: Option<String>,
+    pub metadata: HashMap<String, String>,
+    pub inputs: HashMap<String, toml::Value>,
+    pub model: RunModelSettings,
+    pub git: RunGitSettings,
+    pub prepare: RunPrepareSettings,
+    pub execution: RunExecutionSettings,
+    pub checkpoint: RunCheckpointSettings,
+    pub clone: RunCloneSettings,
+    pub run_branch: RunBranchSettings,
+    pub meta_branch: RunMetaBranchSettings,
+    pub environment: RunEnvironmentSettings,
     pub notifications: HashMap<String, NotificationRouteSettings>,
-    pub interviews:    RunInterviewsSettings,
-    pub agent:         RunAgentSettings,
-    pub hooks:         Vec<HookDefinition>,
-    pub scm:           RunScmSettings,
-    pub pull_request:  Option<PullRequestSettings>,
-    pub artifacts:     ArtifactsSettings,
-    pub integrations:  RunIntegrationsSettings,
+    pub interviews: RunInterviewsSettings,
+    pub agent: RunAgentSettings,
+    pub hooks: Vec<HookDefinition>,
+    pub scm: RunScmSettings,
+    pub pull_request: Option<PullRequestSettings>,
+    pub artifacts: ArtifactsSettings,
+    pub integrations: RunIntegrationsSettings,
     /// ponytail: rebase anchor — tmux backend. Run-level `--backend` override
     /// applied at backend resolution; `None` defers to per-node `backend=`.
     #[serde(default)]
@@ -68,27 +68,27 @@ pub struct RunNamespace {
 impl Default for RunNamespace {
     fn default() -> Self {
         Self {
-            goal:          None,
-            working_dir:   None,
-            metadata:      HashMap::new(),
-            inputs:        HashMap::new(),
-            model:         RunModelSettings::default(),
-            git:           RunGitSettings::default(),
-            prepare:       RunPrepareSettings::default(),
-            execution:     RunExecutionSettings::default(),
-            checkpoint:    RunCheckpointSettings::default(),
-            clone:         RunCloneSettings::default(),
-            run_branch:    RunBranchSettings::default(),
-            meta_branch:   RunMetaBranchSettings::default(),
-            environment:   RunEnvironmentSettings::default(),
+            goal: None,
+            working_dir: None,
+            metadata: HashMap::new(),
+            inputs: HashMap::new(),
+            model: RunModelSettings::default(),
+            git: RunGitSettings::default(),
+            prepare: RunPrepareSettings::default(),
+            execution: RunExecutionSettings::default(),
+            checkpoint: RunCheckpointSettings::default(),
+            clone: RunCloneSettings::default(),
+            run_branch: RunBranchSettings::default(),
+            meta_branch: RunMetaBranchSettings::default(),
+            environment: RunEnvironmentSettings::default(),
             notifications: HashMap::new(),
-            interviews:    RunInterviewsSettings::default(),
-            agent:         RunAgentSettings::default(),
-            hooks:         Vec::new(),
-            scm:           RunScmSettings::default(),
-            pull_request:  None,
-            artifacts:     ArtifactsSettings::default(),
-            integrations:  RunIntegrationsSettings::default(),
+            interviews: RunInterviewsSettings::default(),
+            agent: RunAgentSettings::default(),
+            hooks: Vec::new(),
+            scm: RunScmSettings::default(),
+            pull_request: None,
+            artifacts: ArtifactsSettings::default(),
+            integrations: RunIntegrationsSettings::default(),
             backend_override: None, // ponytail: rebase anchor — tmux backend
             overseer_session: None, // ponytail: rebase anchor — Overseer handshake
             overseer_worktree: None,
@@ -372,44 +372,47 @@ mod run_namespace_variable_substitution_tests {
                 "deploy {{ vars.ENV }} in {{ env.REGION }}",
             ))),
             prepare: RunPrepareSettings {
-                commands:   vec!["echo {{ vars.ENV }} {{ env.REGION }}".to_string()],
+                commands: vec!["echo {{ vars.ENV }} {{ env.REGION }}".to_string()],
                 timeout_ms: 1_000,
             },
             agent: super::RunAgentSettings {
-                mcps: HashMap::from([("http".to_string(), McpServerSettings {
-                    name:                 "http".to_string(),
-                    transport:            McpTransport::Http {
-                        protocol: McpHttpProtocol::default(),
-                        url:      "https://{{ vars.HOST }}/mcp".to_string(),
-                        headers:  HashMap::from([(
-                            "X-Env".to_string(),
-                            "{{ vars.ENV }}".to_string(),
-                        )]),
+                mcps: HashMap::from([(
+                    "http".to_string(),
+                    McpServerSettings {
+                        name: "http".to_string(),
+                        transport: McpTransport::Http {
+                            protocol: McpHttpProtocol::default(),
+                            url: "https://{{ vars.HOST }}/mcp".to_string(),
+                            headers: HashMap::from([(
+                                "X-Env".to_string(),
+                                "{{ vars.ENV }}".to_string(),
+                            )]),
+                        },
+                        current_dir: None,
+                        clear_env: false,
+                        startup_timeout_secs: 10,
+                        tool_timeout_secs: 60,
                     },
-                    current_dir:          None,
-                    clear_env:            false,
-                    startup_timeout_secs: 10,
-                    tool_timeout_secs:    60,
-                })]),
+                )]),
                 ..super::RunAgentSettings::default()
             },
             hooks: vec![HookDefinition {
-                name:       Some("notify".to_string()),
-                event:      HookEvent::RunComplete,
-                command:    None,
-                hook_type:  Some(HookType::Http {
-                    url:              "https://hooks.example/{{ vars.ENV }}".to_string(),
-                    headers:          Some(HashMap::from([(
+                name: Some("notify".to_string()),
+                event: HookEvent::RunComplete,
+                command: None,
+                hook_type: Some(HookType::Http {
+                    url: "https://hooks.example/{{ vars.ENV }}".to_string(),
+                    headers: Some(HashMap::from([(
                         "X-Env".to_string(),
                         "{{ vars.ENV }}".to_string(),
                     )])),
                     allowed_env_vars: Vec::new(),
-                    tls:              super::TlsMode::Verify,
+                    tls: super::TlsMode::Verify,
                 }),
-                matcher:    None,
-                blocking:   None,
+                matcher: None,
+                blocking: None,
                 timeout_ms: None,
-                sandbox:    None,
+                sandbox: None,
             }],
             ..RunNamespace::default()
         };
@@ -429,9 +432,10 @@ mod run_namespace_variable_substitution_tests {
             goal_source,
             Some("deploy prod in {{ env.REGION }}".to_string())
         );
-        assert_eq!(run.prepare.commands, vec![
-            "echo prod {{ env.REGION }}".to_string()
-        ]);
+        assert_eq!(
+            run.prepare.commands,
+            vec!["echo prod {{ env.REGION }}".to_string()]
+        );
         let mcp = &run.agent.mcps["http"];
         match &mcp.transport {
             McpTransport::Http { url, headers, .. } => {
@@ -470,7 +474,7 @@ mod run_namespace_variable_substitution_tests {
             },
             git: super::RunGitSettings {
                 author: Some(super::GitAuthorSettings {
-                    name:  Some("{{ vars.AUTHOR }}".to_string()),
+                    name: Some("{{ vars.AUTHOR }}".to_string()),
                     email: Some("{{ env.EMAIL }}".to_string()),
                 }),
             },
@@ -503,18 +507,18 @@ mod run_namespace_variable_substitution_tests {
     fn substitutes_variables_in_string_backed_settings_families() {
         let mut run = RunNamespace {
             checkpoint: RunCheckpointSettings {
-                exclude_globs:  vec!["tmp/{{ vars.ENV }}/**".to_string()],
+                exclude_globs: vec!["tmp/{{ vars.ENV }}/**".to_string()],
                 skip_git_hooks: false,
             },
             environment: RunEnvironmentSettings {
                 image: EnvironmentImageSettings {
-                    docker:     Some("registry.example/{{ vars.ENV }}:latest".to_string()),
+                    docker: Some("registry.example/{{ vars.ENV }}:latest".to_string()),
                     dockerfile: Some(DockerfileSource::Inline(
                         "FROM registry.example/base:{{ vars.ENV }}".to_string(),
                     )),
                 },
                 network: EnvironmentNetworkSettings {
-                    mode:  EnvironmentNetworkMode::CidrAllowList,
+                    mode: EnvironmentNetworkMode::CidrAllowList,
                     allow: vec!["{{ vars.CIDR }}".to_string()],
                 },
                 labels: HashMap::from([("deploy-env".to_string(), "{{ vars.ENV }}".to_string())]),
@@ -652,20 +656,20 @@ pub enum RunGoal {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RunModelSettings {
-    pub provider:  Option<String>,
-    pub name:      Option<String>,
+    pub provider: Option<String>,
+    pub name: Option<String>,
     pub fallbacks: Vec<ModelRef>,
     /// Run-level default values for typed model controls
     /// (`reasoning_effort`, `speed`). Node and style attributes still win
     /// over these defaults.
     #[serde(default)]
-    pub controls:  RunModelControls,
+    pub controls: RunModelControls,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RunModelControls {
     pub reasoning_effort: Option<String>,
-    pub speed:            Option<String>,
+    pub speed: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -675,20 +679,20 @@ pub struct RunGitSettings {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct GitAuthorSettings {
-    pub name:  Option<String>,
+    pub name: Option<String>,
     pub email: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunPrepareSettings {
-    pub commands:   Vec<String>,
+    pub commands: Vec<String>,
     pub timeout_ms: u64,
 }
 
 impl Default for RunPrepareSettings {
     fn default() -> Self {
         Self {
-            commands:   Vec::new(),
+            commands: Vec::new(),
             timeout_ms: 300_000,
         }
     }
@@ -696,14 +700,14 @@ impl Default for RunPrepareSettings {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunExecutionSettings {
-    pub mode:     RunMode,
+    pub mode: RunMode,
     pub approval: ApprovalMode,
 }
 
 impl Default for RunExecutionSettings {
     fn default() -> Self {
         Self {
-            mode:     RunMode::Normal,
+            mode: RunMode::Normal,
             approval: ApprovalMode::Prompt,
         }
     }
@@ -711,7 +715,7 @@ impl Default for RunExecutionSettings {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RunCheckpointSettings {
-    pub exclude_globs:  Vec<String>,
+    pub exclude_globs: Vec<String>,
     /// When `true`, Fabro-managed run-branch checkpoint commits bypass
     /// local Git commit hooks (e.g. `pre-commit`, `commit-msg`). This does
     /// not affect Fabro workflow `[[run.hooks]]` or metadata-branch
@@ -734,14 +738,14 @@ impl Default for RunCloneSettings {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunBranchSettings {
     pub enabled: bool,
-    pub push:    bool,
+    pub push: bool,
 }
 
 impl Default for RunBranchSettings {
     fn default() -> Self {
         Self {
             enabled: true,
-            push:    true,
+            push: true,
         }
     }
 }
@@ -749,14 +753,14 @@ impl Default for RunBranchSettings {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunMetaBranchSettings {
     pub enabled: bool,
-    pub push:    bool,
+    pub push: bool,
 }
 
 impl Default for RunMetaBranchSettings {
     fn default() -> Self {
         Self {
             enabled: true,
-            push:    true,
+            push: true,
         }
     }
 }
@@ -829,27 +833,27 @@ pub enum EnvironmentNetworkMode {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct EnvironmentImageSettings {
-    pub docker:     Option<String>,
+    pub docker: Option<String>,
     pub dockerfile: Option<DockerfileSource>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct EnvironmentResourcesSettings {
-    pub cpu:    Option<i32>,
+    pub cpu: Option<i32>,
     pub memory: Option<Size>,
-    pub disk:   Option<Size>,
+    pub disk: Option<Size>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EnvironmentNetworkSettings {
-    pub mode:  EnvironmentNetworkMode,
+    pub mode: EnvironmentNetworkMode,
     pub allow: Vec<String>,
 }
 
 impl Default for EnvironmentNetworkSettings {
     fn default() -> Self {
         Self {
-            mode:  EnvironmentNetworkMode::AllowAll,
+            mode: EnvironmentNetworkMode::AllowAll,
             allow: Vec::new(),
         }
     }
@@ -857,10 +861,10 @@ impl Default for EnvironmentNetworkSettings {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EnvironmentLifecycleSettings {
-    pub preserve:         bool,
+    pub preserve: bool,
     #[serde(default = "default_stop_on_terminal")]
     pub stop_on_terminal: bool,
-    pub auto_stop:        Option<Duration>,
+    pub auto_stop: Option<Duration>,
 }
 
 fn default_stop_on_terminal() -> bool {
@@ -870,63 +874,63 @@ fn default_stop_on_terminal() -> bool {
 impl Default for EnvironmentLifecycleSettings {
     fn default() -> Self {
         Self {
-            preserve:         false,
+            preserve: false,
             stop_on_terminal: true,
-            auto_stop:        None,
+            auto_stop: None,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EnvironmentSettings {
-    pub provider:  EnvironmentProvider,
+    pub provider: EnvironmentProvider,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cwd:       Option<String>,
-    pub image:     EnvironmentImageSettings,
+    pub cwd: Option<String>,
+    pub image: EnvironmentImageSettings,
     pub resources: EnvironmentResourcesSettings,
-    pub network:   EnvironmentNetworkSettings,
+    pub network: EnvironmentNetworkSettings,
     pub lifecycle: EnvironmentLifecycleSettings,
-    pub labels:    HashMap<String, String>,
-    pub env:       HashMap<String, InterpString>,
+    pub labels: HashMap<String, String>,
+    pub env: HashMap<String, InterpString>,
     // ponytail: fork-only. Upstream removed `volumes`; this is the minimal
     // replacement narayan needs — bollard bind specs (`id:mount_path:ro|rw`)
     // mapped straight to Docker `HostConfig.binds`. Plain strings, no
     // interpolation; add InterpString if a host-path bind ever needs it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub binds:     Vec<String>,
+    pub binds: Vec<String>,
 }
 
 impl Default for EnvironmentSettings {
     fn default() -> Self {
         Self {
-            provider:  EnvironmentProvider::Local,
-            cwd:       None,
-            image:     EnvironmentImageSettings::default(),
+            provider: EnvironmentProvider::Local,
+            cwd: None,
+            image: EnvironmentImageSettings::default(),
             resources: EnvironmentResourcesSettings::default(),
-            network:   EnvironmentNetworkSettings::default(),
+            network: EnvironmentNetworkSettings::default(),
             lifecycle: EnvironmentLifecycleSettings::default(),
-            labels:    HashMap::new(),
-            env:       HashMap::new(),
-            binds:     Vec::new(),
+            labels: HashMap::new(),
+            env: HashMap::new(),
+            binds: Vec::new(),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunEnvironmentSettings {
-    pub id:        String,
-    pub provider:  EnvironmentProvider,
+    pub id: String,
+    pub provider: EnvironmentProvider,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cwd:       Option<String>,
-    pub image:     EnvironmentImageSettings,
+    pub cwd: Option<String>,
+    pub image: EnvironmentImageSettings,
     pub resources: EnvironmentResourcesSettings,
-    pub network:   EnvironmentNetworkSettings,
+    pub network: EnvironmentNetworkSettings,
     pub lifecycle: EnvironmentLifecycleSettings,
-    pub labels:    HashMap<String, String>,
-    pub env:       HashMap<String, InterpString>,
+    pub labels: HashMap<String, String>,
+    pub env: HashMap<String, InterpString>,
     // ponytail: fork-only Docker bind specs — see EnvironmentSettings::binds.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub binds:     Vec<String>,
+    pub binds: Vec<String>,
 }
 
 impl RunEnvironmentSettings {
@@ -1057,10 +1061,10 @@ impl<'de> Deserialize<'de> for DockerfileSource {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct NotificationRouteSettings {
-    pub enabled:  bool,
+    pub enabled: bool,
     pub provider: Option<String>,
-    pub events:   Vec<String>,
-    pub slack:    Option<NotificationProviderSettings>,
+    pub events: Vec<String>,
+    pub slack: Option<NotificationProviderSettings>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1071,7 +1075,7 @@ pub struct NotificationProviderSettings {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RunInterviewsSettings {
     pub provider: Option<String>,
-    pub slack:    Option<InterviewProviderSettings>,
+    pub slack: Option<InterviewProviderSettings>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1084,7 +1088,7 @@ pub struct RunAgentSettings {
     #[serde(default)]
     pub fabro_tools: bool,
     pub permissions: Option<AgentPermissions>,
-    pub mcps:        HashMap<String, McpServerSettings>,
+    pub mcps: HashMap<String, McpServerSettings>,
 }
 
 #[cfg(test)]
@@ -1105,28 +1109,28 @@ mod run_agent_settings_tests {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct McpServerSettings {
-    pub name:                 String,
-    pub transport:            McpTransport,
+    pub name: String,
+    pub transport: McpTransport,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_dir:          Option<PathBuf>,
+    pub current_dir: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "is_false")]
-    pub clear_env:            bool,
+    pub clear_env: bool,
     pub startup_timeout_secs: u64,
-    pub tool_timeout_secs:    u64,
+    pub tool_timeout_secs: u64,
 }
 
 impl Default for McpServerSettings {
     fn default() -> Self {
         Self {
-            name:                 String::new(),
-            transport:            McpTransport::Stdio {
+            name: String::new(),
+            transport: McpTransport::Stdio {
                 command: Vec::new(),
-                env:     HashMap::new(),
+                env: HashMap::new(),
             },
-            current_dir:          None,
-            clear_env:            false,
+            current_dir: None,
+            clear_env: false,
             startup_timeout_secs: 10,
-            tool_timeout_secs:    60,
+            tool_timeout_secs: 60,
         }
     }
 }
@@ -1207,7 +1211,7 @@ mod resolve_transport_env_tests {
             name: "baseline".to_string(),
             transport: McpTransport::Stdio {
                 command: vec!["python".to_string(), "server.py".to_string()],
-                env:     HashMap::from([("TOKEN".to_string(), "literal-value".to_string())]),
+                env: HashMap::from([("TOKEN".to_string(), "literal-value".to_string())]),
             },
             ..McpServerSettings::default()
         };
@@ -1227,7 +1231,7 @@ mod resolve_transport_env_tests {
             name: "gemini".to_string(),
             transport: McpTransport::Stdio {
                 command: vec!["python".to_string(), "{{ env.SERVER_PATH }}".to_string()],
-                env:     HashMap::from([(
+                env: HashMap::from([(
                     "GEMINI_API_KEY".to_string(),
                     "{{ env.GEMINI_API_KEY }}".to_string(),
                 )]),
@@ -1245,10 +1249,10 @@ mod resolve_transport_env_tests {
         let McpTransport::Stdio { command, env } = resolved.transport else {
             panic!("expected stdio transport");
         };
-        assert_eq!(command, vec![
-            "python".to_string(),
-            "/srv/mcp.py".to_string()
-        ]);
+        assert_eq!(
+            command,
+            vec!["python".to_string(), "/srv/mcp.py".to_string()]
+        );
         assert_eq!(
             env.get("GEMINI_API_KEY").map(String::as_str),
             Some("real-key")
@@ -1261,8 +1265,8 @@ mod resolve_transport_env_tests {
             name: "remote".to_string(),
             transport: McpTransport::Http {
                 protocol: McpHttpProtocol::default(),
-                url:      "https://{{ env.MCP_HOST }}/mcp".to_string(),
-                headers:  HashMap::from([(
+                url: "https://{{ env.MCP_HOST }}/mcp".to_string(),
+                headers: HashMap::from([(
                     "Authorization".to_string(),
                     "Bearer {{ env.MCP_TOKEN }}".to_string(),
                 )]),
@@ -1293,7 +1297,7 @@ mod resolve_transport_env_tests {
             name: "gemini".to_string(),
             transport: McpTransport::Stdio {
                 command: vec!["python".to_string()],
-                env:     HashMap::from([(
+                env: HashMap::from([(
                     "GEMINI_API_KEY".to_string(),
                     "{{ env.GEMINI_API_KEY }}".to_string(),
                 )]),
@@ -1314,10 +1318,7 @@ mod resolve_transport_env_tests {
             name: "vaulted".to_string(),
             transport: McpTransport::Stdio {
                 command: vec!["python".to_string()],
-                env:     HashMap::from([(
-                    "API_KEY".to_string(),
-                    "{{ secrets.API_KEY }}".to_string(),
-                )]),
+                env: HashMap::from([("API_KEY".to_string(), "{{ secrets.API_KEY }}".to_string())]),
             },
             ..McpServerSettings::default()
         };
@@ -1334,20 +1335,20 @@ mod resolve_transport_env_tests {
 pub enum McpTransport {
     Stdio {
         command: Vec<String>,
-        env:     HashMap<String, String>,
+        env: HashMap<String, String>,
     },
     Http {
         #[serde(default)]
         protocol: McpHttpProtocol,
-        url:      String,
-        headers:  HashMap<String, String>,
+        url: String,
+        headers: HashMap<String, String>,
     },
     Sandbox {
         #[serde(default)]
         protocol: McpHttpProtocol,
-        command:  Vec<String>,
-        port:     u16,
-        env:      HashMap<String, String>,
+        command: Vec<String>,
+        port: u16,
+        env: HashMap<String, String>,
     },
 }
 
@@ -1383,36 +1384,36 @@ pub enum HookType {
         command: String,
     },
     Http {
-        url:              String,
-        headers:          Option<HashMap<String, String>>,
+        url: String,
+        headers: Option<HashMap<String, String>>,
         #[serde(default)]
         allowed_env_vars: Vec<String>,
         #[serde(default)]
-        tls:              TlsMode,
+        tls: TlsMode,
     },
     Prompt {
         prompt: String,
-        model:  Option<String>,
+        model: Option<String>,
     },
     Agent {
-        prompt:          String,
-        model:           Option<String>,
+        prompt: String,
+        model: Option<String>,
         max_tool_rounds: Option<u32>,
     },
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Serialize)]
 pub struct HookDefinition {
-    pub name:       Option<String>,
-    pub event:      HookEvent,
+    pub name: Option<String>,
+    pub event: HookEvent,
     #[serde(default)]
-    pub command:    Option<String>,
+    pub command: Option<String>,
     #[serde(flatten)]
-    pub hook_type:  Option<HookType>,
-    pub matcher:    Option<String>,
-    pub blocking:   Option<bool>,
+    pub hook_type: Option<HookType>,
+    pub matcher: Option<String>,
+    pub blocking: Option<bool>,
     pub timeout_ms: Option<u64>,
-    pub sandbox:    Option<bool>,
+    pub sandbox: Option<bool>,
 }
 
 impl HookDefinition {
@@ -1481,10 +1482,10 @@ impl HookDefinition {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RunScmSettings {
-    pub provider:   Option<String>,
-    pub owner:      Option<String>,
+    pub provider: Option<String>,
+    pub owner: Option<String>,
     pub repository: Option<String>,
-    pub github:     Option<ScmGitHubSettings>,
+    pub github: Option<ScmGitHubSettings>,
 }
 
 #[expect(
@@ -1496,18 +1497,18 @@ pub struct ScmGitHubSettings {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PullRequestSettings {
-    pub enabled:        bool,
-    pub draft:          bool,
-    pub auto_merge:     bool,
+    pub enabled: bool,
+    pub draft: bool,
+    pub auto_merge: bool,
     pub merge_strategy: MergeStrategy,
 }
 
 impl Default for PullRequestSettings {
     fn default() -> Self {
         Self {
-            enabled:        false,
-            draft:          true,
-            auto_merge:     false,
+            enabled: false,
+            draft: true,
+            auto_merge: false,
             merge_strategy: MergeStrategy::Squash,
         }
     }
@@ -1523,7 +1524,7 @@ pub struct ArtifactsSettings {
 /// run manifest builder) can distinguish inline goals from file-sourced goals.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedRunGoal {
-    pub text:   String,
+    pub text: String,
     pub source: ResolvedGoalSource,
 }
 
@@ -1542,11 +1543,11 @@ pub enum ResolvedGoalSource {
 #[serde(deny_unknown_fields)]
 pub struct PrepareStep {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub script:  Option<InterpString>,
+    pub script: Option<InterpString>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<Vec<InterpString>>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub env:     HashMap<String, InterpString>,
+    pub env: HashMap<String, InterpString>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

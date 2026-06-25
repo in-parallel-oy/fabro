@@ -17,7 +17,7 @@ pub enum RunSandboxKind {
 pub struct RunSandboxPlan {
     pub provider: SandboxProviderKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub image:    Option<String>,
+    pub image: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snapshot: Option<String>,
 }
@@ -26,27 +26,27 @@ pub struct RunSandboxPlan {
 pub struct RunSandboxInstance {
     pub provider: SandboxProviderKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub image:    Option<String>,
+    pub image: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snapshot: Option<String>,
-    pub runtime:  RunSandboxRuntime,
+    pub runtime: RunSandboxRuntime,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunSandboxFailure {
-    pub provider:    String,
-    pub error:       String,
+    pub provider: String,
+    pub error: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub causes:      Vec<String>,
+    pub causes: Vec<String>,
     pub duration_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RunSandbox {
-    kind:     RunSandboxKind,
-    plan:     RunSandboxPlan,
+    kind: RunSandboxKind,
+    plan: RunSandboxPlan,
     instance: Option<RunSandboxInstance>,
-    failure:  Option<RunSandboxFailure>,
+    failure: Option<RunSandboxFailure>,
 }
 
 impl RunSandbox {
@@ -142,22 +142,22 @@ impl RunSandbox {
 
 #[derive(Serialize, Deserialize)]
 struct RunSandboxWire {
-    kind:     RunSandboxKind,
-    plan:     RunSandboxPlan,
+    kind: RunSandboxKind,
+    plan: RunSandboxPlan,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     instance: Option<RunSandboxInstance>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    failure:  Option<RunSandboxFailure>,
+    failure: Option<RunSandboxFailure>,
 }
 
 #[derive(Serialize)]
 struct RunSandboxWireRef<'a> {
-    kind:     RunSandboxKind,
-    plan:     &'a RunSandboxPlan,
+    kind: RunSandboxKind,
+    plan: &'a RunSandboxPlan,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     instance: Option<&'a RunSandboxInstance>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    failure:  Option<&'a RunSandboxFailure>,
+    failure: Option<&'a RunSandboxFailure>,
 }
 
 impl Serialize for RunSandbox {
@@ -167,10 +167,10 @@ impl Serialize for RunSandbox {
     {
         self.validate().map_err(S::Error::custom)?;
         RunSandboxWireRef {
-            kind:     self.kind,
-            plan:     &self.plan,
+            kind: self.kind,
+            plan: &self.plan,
             instance: self.instance.as_ref(),
-            failure:  self.failure.as_ref(),
+            failure: self.failure.as_ref(),
         }
         .serialize(serializer)
     }
@@ -183,10 +183,10 @@ impl<'de> Deserialize<'de> for RunSandbox {
     {
         let wire = RunSandboxWire::deserialize(deserializer)?;
         let sandbox = Self {
-            kind:     wire.kind,
-            plan:     wire.plan,
+            kind: wire.kind,
+            plan: wire.plan,
             instance: wire.instance,
-            failure:  wire.failure,
+            failure: wire.failure,
         };
         sandbox.validate().map_err(D::Error::custom)?;
         Ok(sandbox)
@@ -195,18 +195,18 @@ impl<'de> Deserialize<'de> for RunSandbox {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunSandboxRuntime {
-    pub id:                String,
+    pub id: String,
     pub working_directory: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub repo_cloned:       Option<bool>,
+    pub repo_cloned: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub clone_origin_url:  Option<String>,
+    pub clone_origin_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub clone_branch:      Option<String>,
+    pub clone_branch: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workspace_root:    Option<String>,
+    pub workspace_root: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub repos_root:        Option<String>,
+    pub repos_root: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primary_repo_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

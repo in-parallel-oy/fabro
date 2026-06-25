@@ -13,21 +13,21 @@ const SEARCH_GOAL_PREVIEW_CHARS: usize = 240;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct FabroRunSearchParams {
-    pub run_ids:        Option<Vec<String>>,
-    pub workflow:       Option<String>,
-    pub labels:         Option<HashMap<String, String>>,
-    pub status:         Option<Vec<String>>,
-    pub archived:       Option<bool>,
-    pub created_after:  Option<String>,
+    pub run_ids: Option<Vec<String>>,
+    pub workflow: Option<String>,
+    pub labels: Option<HashMap<String, String>>,
+    pub status: Option<Vec<String>>,
+    pub archived: Option<bool>,
+    pub created_after: Option<String>,
     pub created_before: Option<String>,
-    pub first:          Option<usize>,
-    pub after:          Option<String>,
-    pub parent_id:      Option<String>,
+    pub first: Option<usize>,
+    pub after: Option<String>,
+    pub parent_id: Option<String>,
 }
 
 #[derive(Debug)]
 pub struct ValidatedSearchRuns {
-    pub raw:    FabroRunSearchParams,
+    pub raw: FabroRunSearchParams,
     pub status: Option<Vec<RunStatusKind>>,
 }
 
@@ -77,28 +77,28 @@ impl TryFrom<FabroRunSearchParams> for ValidatedSearchRuns {
 
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct SearchRunsResult {
-    pub runs:        Vec<SearchRunSummaryResult>,
+    pub runs: Vec<SearchRunSummaryResult>,
     pub next_cursor: Option<String>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct SearchRunSummaryResult {
-    pub run_id:              String,
-    pub parent_id:           Option<String>,
-    pub children_count:      u64,
-    pub workflow_name:       Option<String>,
+    pub run_id: String,
+    pub parent_id: Option<String>,
+    pub children_count: u64,
+    pub workflow_name: Option<String>,
     pub workflow_graph_name: Option<String>,
-    pub workflow_slug:       Option<String>,
-    pub status:              String,
-    pub archived:            bool,
-    pub created_at:          String,
-    pub started_at:          Option<String>,
-    pub completed_at:        Option<String>,
-    pub labels:              HashMap<String, String>,
-    pub source_directory:    Option<String>,
-    pub repo_origin_url:     Option<String>,
-    pub goal_preview:        String,
-    pub goal_truncated:      bool,
+    pub workflow_slug: Option<String>,
+    pub status: String,
+    pub archived: bool,
+    pub created_at: String,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub source_directory: Option<String>,
+    pub repo_origin_url: Option<String>,
+    pub goal_preview: String,
+    pub goal_truncated: bool,
 }
 
 pub async fn search_runs(
@@ -134,7 +134,7 @@ pub async fn search_runs(
     let page = filter_sort_and_page_runs(runs, &raw, status.as_deref(), parent_id)?;
 
     Ok(SearchRunsResult {
-        runs:        page.runs.iter().map(search_run_summary_result).collect(),
+        runs: page.runs.iter().map(search_run_summary_result).collect(),
         next_cursor: page.next_cursor,
     })
 }
@@ -193,7 +193,7 @@ fn goal_preview(goal: &str) -> (String, bool) {
 }
 
 struct RunSearchPage {
-    runs:        Vec<Run>,
+    runs: Vec<Run>,
     next_cursor: Option<String>,
 }
 
@@ -312,16 +312,16 @@ mod tests {
                 matching_newer.clone(),
             ],
             &FabroRunSearchParams {
-                run_ids:        None,
-                workflow:       None,
-                labels:         Some(HashMap::from([("group".to_string(), "keep".to_string())])),
-                status:         None,
-                archived:       None,
-                created_after:  None,
+                run_ids: None,
+                workflow: None,
+                labels: Some(HashMap::from([("group".to_string(), "keep".to_string())])),
+                status: None,
+                archived: None,
+                created_after: None,
                 created_before: None,
-                first:          Some(10),
-                after:          Some(unrelated_cursor.id.to_string()),
-                parent_id:      None,
+                first: Some(10),
+                after: Some(unrelated_cursor.id.to_string()),
+                parent_id: None,
             },
             None,
             None,
@@ -340,16 +340,16 @@ mod tests {
         let result = filter_sort_and_page_runs(
             vec![archived.clone(), active.clone()],
             &FabroRunSearchParams {
-                run_ids:        None,
-                workflow:       None,
-                labels:         None,
-                status:         None,
-                archived:       None,
-                created_after:  None,
+                run_ids: None,
+                workflow: None,
+                labels: None,
+                status: None,
+                archived: None,
+                created_after: None,
                 created_before: None,
-                first:          Some(10),
-                after:          None,
-                parent_id:      None,
+                first: Some(10),
+                after: None,
+                parent_id: None,
             },
             None,
             None,
@@ -397,16 +397,16 @@ mod tests {
                 active_child.clone(),
             ],
             &FabroRunSearchParams {
-                run_ids:        None,
-                workflow:       None,
-                labels:         None,
-                status:         None,
-                archived:       None,
-                created_after:  None,
+                run_ids: None,
+                workflow: None,
+                labels: None,
+                status: None,
+                archived: None,
+                created_after: None,
                 created_before: None,
-                first:          Some(10),
-                after:          None,
-                parent_id:      Some("nightly-parent".to_string()),
+                first: Some(10),
+                after: None,
+                parent_id: Some("nightly-parent".to_string()),
             },
             None,
             Some(parent_id),
@@ -432,24 +432,24 @@ mod tests {
     fn run_with_archived(id: &str, group: &str, seconds: u32, archived: bool) -> Run {
         let created_at = Utc.with_ymd_and_hms(2026, 5, 11, 12, 0, seconds).unwrap();
         Run {
-            id:               id.parse().expect("test run id should parse"),
-            parent_id:        None,
-            children_count:   0,
-            title:            "test".to_string(),
-            goal:             "test".to_string(),
-            workflow:         WorkflowRef {
-                slug:       Some("simple".to_string()),
-                name:       Some("Simple".to_string()),
+            id: id.parse().expect("test run id should parse"),
+            parent_id: None,
+            children_count: 0,
+            title: "test".to_string(),
+            goal: "test".to_string(),
+            workflow: WorkflowRef {
+                slug: Some("simple".to_string()),
+                name: Some("Simple".to_string()),
                 graph_name: Some("GraphName".to_string()),
                 node_count: 0,
                 edge_count: 0,
             },
-            automation:       None,
-            repository:       None,
-            created_by:       test_support::test_principal(),
-            origin:           RunOrigin::default(),
-            labels:           HashMap::from([("group".to_string(), group.to_string())]),
-            lifecycle:        RunLifecycle {
+            automation: None,
+            repository: None,
+            created_by: test_support::test_principal(),
+            origin: RunOrigin::default(),
+            labels: HashMap::from([("group".to_string(), group.to_string())]),
+            lifecycle: RunLifecycle {
                 status: RunStatus::Submitted,
                 approval: None,
                 pending_control: None,
@@ -458,25 +458,25 @@ mod tests {
                 archived,
                 archived_at: None,
             },
-            sandbox:          None,
-            models:           Vec::new(),
+            sandbox: None,
+            models: Vec::new(),
             source_directory: None,
-            timestamps:       RunTimestamps {
+            timestamps: RunTimestamps {
                 created_at,
                 started_at: None,
                 last_event_at: None,
                 completed_at: None,
             },
-            timing:           None,
-            billing:          None,
-            size:             fabro_types::RunSize::default(),
-            ask_fabro:        fabro_types::AskFabro::default(),
-            diff:             None,
-            pull_request:     None,
+            timing: None,
+            billing: None,
+            size: fabro_types::RunSize::default(),
+            ask_fabro: fabro_types::AskFabro::default(),
+            diff: None,
+            pull_request: None,
             current_question: None,
-            superseded_by:    None,
-            retried_from:     None,
-            links:            RunLinks { web: None },
+            superseded_by: None,
+            retried_from: None,
+            links: RunLinks { web: None },
         }
     }
 }

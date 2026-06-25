@@ -107,9 +107,10 @@ mod tests {
     #[test]
     fn compact_cause_rendering_adds_first_cause_without_multiline_noise() {
         assert_eq!(
-            render_compact_with_causes("Failed to initialize sandbox", &[
-                "connection refused".to_string()
-            ]),
+            render_compact_with_causes(
+                "Failed to initialize sandbox",
+                &["connection refused".to_string()]
+            ),
             "Failed to initialize sandbox: connection refused"
         );
     }

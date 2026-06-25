@@ -9,15 +9,14 @@ use fabro_http::Url;
 #[derive(Debug, Clone)]
 pub struct GithubEndpoints {
     pub oauth_base: Url,
-    pub api_base:   Url,
+    pub api_base: Url,
 }
 
 impl GithubEndpoints {
     pub fn production_defaults() -> Self {
         Self {
             oauth_base: Url::parse("https://github.com/").expect("github oauth base should parse"),
-            api_base:   Url::parse("https://api.github.com/")
-                .expect("github api base should parse"),
+            api_base: Url::parse("https://api.github.com/").expect("github api base should parse"),
         }
     }
 

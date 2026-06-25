@@ -28,14 +28,14 @@ const CANCEL_GRACE_PERIOD: Duration = Duration::from_millis(500);
 
 #[derive(Default)]
 struct AcpControlState {
-    queue:               VecDeque<SteeringMessage>,
-    waiting_for_steer:   bool,
+    queue: VecDeque<SteeringMessage>,
+    waiting_for_steer: bool,
     interrupt_requested: bool,
 }
 
 #[derive(Clone, Default)]
 pub struct AcpControlHandle {
-    state:  Arc<Mutex<AcpControlState>>,
+    state: Arc<Mutex<AcpControlState>>,
     notify: Arc<Notify>,
 }
 
@@ -142,10 +142,10 @@ impl AcpControlHandle {
 
 #[derive(Default)]
 pub struct AcpLiveControl {
-    pub handle:                AcpControlHandle,
+    pub handle: AcpControlHandle,
     pub on_natural_completion: Option<AcpNaturalCompletionCallback>,
-    pub on_steer_prompt:       Option<AcpSteerPromptCallback>,
-    pub on_session_update:     Option<AcpSessionUpdateCallback>,
+    pub on_steer_prompt: Option<AcpSteerPromptCallback>,
+    pub on_session_update: Option<AcpSessionUpdateCallback>,
 }
 
 impl AcpLiveControl {
@@ -163,22 +163,22 @@ impl AcpLiveControl {
 pub type AcpSessionUpdateCallback = Arc<dyn Fn(&SessionUpdate) + Send + Sync>;
 
 pub struct AcpRunRequest {
-    pub command:      AcpProcessSpec,
-    pub prompt:       String,
-    pub cwd:          String,
-    pub timeout_ms:   Option<u64>,
-    pub env:          HashMap<String, String>,
-    pub sandbox:      Arc<dyn Sandbox>,
+    pub command: AcpProcessSpec,
+    pub prompt: String,
+    pub cwd: String,
+    pub timeout_ms: Option<u64>,
+    pub env: HashMap<String, String>,
+    pub sandbox: Arc<dyn Sandbox>,
     pub cancel_token: CancellationToken,
-    pub on_activity:  Option<Arc<dyn Fn() + Send + Sync>>,
+    pub on_activity: Option<Arc<dyn Fn() + Send + Sync>>,
     pub live_control: Option<AcpLiveControl>,
 }
 
 #[derive(Debug)]
 pub struct AcpRunResult {
-    pub text:        String,
+    pub text: String,
     pub stop_reason: StopReason,
-    pub stderr:      String,
+    pub stderr: String,
     pub duration_ms: u64,
 }
 

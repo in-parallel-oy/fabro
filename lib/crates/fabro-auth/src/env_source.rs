@@ -176,9 +176,10 @@ mod tests {
         let source = test_source(&[("ANTHROPIC_API_KEY", "anthropic-key")]);
         let catalog = default_catalog();
 
-        assert_eq!(source.configured_providers(&catalog).await, vec![
-            ProviderId::anthropic()
-        ]);
+        assert_eq!(
+            source.configured_providers(&catalog).await,
+            vec![ProviderId::anthropic()]
+        );
     }
 
     #[tokio::test]

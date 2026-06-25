@@ -196,23 +196,23 @@ impl JsonSchema for CreateRunSpecInput {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct CreateRunSpec {
-    pub workflow:         String,
-    pub cwd:              Option<PathBuf>,
-    pub run_id:           Option<String>,
-    pub parent_id:        Option<String>,
-    pub goal:             Option<String>,
-    pub goal_file:        Option<PathBuf>,
+    pub workflow: String,
+    pub cwd: Option<PathBuf>,
+    pub run_id: Option<String>,
+    pub parent_id: Option<String>,
+    pub goal: Option<String>,
+    pub goal_file: Option<PathBuf>,
     #[serde(default)]
-    pub inputs:           HashMap<String, RunInputValue>,
+    pub inputs: HashMap<String, RunInputValue>,
     #[serde(default)]
-    pub labels:           HashMap<String, String>,
-    pub dry_run:          Option<bool>,
-    pub auto_approve:     Option<bool>,
-    pub model:            Option<String>,
-    pub provider:         Option<String>,
-    pub environment:      Option<String>,
+    pub labels: HashMap<String, String>,
+    pub dry_run: Option<bool>,
+    pub auto_approve: Option<bool>,
+    pub model: Option<String>,
+    pub provider: Option<String>,
+    pub environment: Option<String>,
     pub preserve_sandbox: Option<bool>,
-    pub start:            Option<bool>,
+    pub start: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -260,21 +260,21 @@ pub struct ValidatedCreateRuns {
 
 #[derive(Debug)]
 pub struct ValidatedCreateRunSpec {
-    pub workflow:         String,
-    pub cwd:              Option<PathBuf>,
-    pub run_id:           Option<RunId>,
-    pub parent_id:        Option<String>,
-    pub goal:             Option<String>,
-    pub goal_file:        Option<PathBuf>,
-    pub inputs:           HashMap<String, toml::Value>,
-    pub labels:           HashMap<String, String>,
-    pub dry_run:          Option<bool>,
-    pub auto_approve:     Option<bool>,
-    pub model:            Option<String>,
-    pub provider:         Option<String>,
-    pub environment:      Option<String>,
+    pub workflow: String,
+    pub cwd: Option<PathBuf>,
+    pub run_id: Option<RunId>,
+    pub parent_id: Option<String>,
+    pub goal: Option<String>,
+    pub goal_file: Option<PathBuf>,
+    pub inputs: HashMap<String, toml::Value>,
+    pub labels: HashMap<String, String>,
+    pub dry_run: Option<bool>,
+    pub auto_approve: Option<bool>,
+    pub model: Option<String>,
+    pub provider: Option<String>,
+    pub environment: Option<String>,
     pub preserve_sandbox: Option<bool>,
-    pub start:            Option<bool>,
+    pub start: Option<bool>,
 }
 
 impl TryFrom<FabroRunCreateParams> for ValidatedCreateRuns {
@@ -302,21 +302,21 @@ impl TryFrom<CreateRunSpecInput> for ValidatedCreateRunSpec {
                     return Err(ToolError::message("workflow must not be blank"));
                 }
                 Self::try_from(CreateRunSpec {
-                    workflow:         workflow.to_string(),
-                    cwd:              None,
-                    run_id:           None,
-                    parent_id:        None,
-                    goal:             None,
-                    goal_file:        None,
-                    inputs:           HashMap::new(),
-                    labels:           HashMap::new(),
-                    dry_run:          None,
-                    auto_approve:     None,
-                    model:            None,
-                    provider:         None,
-                    environment:      None,
+                    workflow: workflow.to_string(),
+                    cwd: None,
+                    run_id: None,
+                    parent_id: None,
+                    goal: None,
+                    goal_file: None,
+                    inputs: HashMap::new(),
+                    labels: HashMap::new(),
+                    dry_run: None,
+                    auto_approve: None,
+                    model: None,
+                    provider: None,
+                    environment: None,
                     preserve_sandbox: None,
-                    start:            None,
+                    start: None,
                 })
             }
             CreateRunSpecInput::Spec(spec) => Self::try_from(*spec),
@@ -392,12 +392,12 @@ pub struct CreateRunsResult {
 
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct CreatedRunResult {
-    pub run_id:          String,
-    pub parent_id:       Option<String>,
-    pub children_count:  u64,
-    pub workflow:        String,
+    pub run_id: String,
+    pub parent_id: Option<String>,
+    pub children_count: u64,
+    pub workflow: String,
     pub start_requested: bool,
-    pub status:          String,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -535,21 +535,21 @@ mod tests {
     #[test]
     fn create_spec_accepts_parent_selector() {
         let spec = ValidatedCreateRunSpec::try_from(CreateRunSpec {
-            workflow:         "simple.fabro".to_string(),
-            cwd:              None,
-            run_id:           None,
-            parent_id:        Some(" nightly-parent ".to_string()),
-            goal:             None,
-            goal_file:        None,
-            inputs:           HashMap::new(),
-            labels:           HashMap::new(),
-            dry_run:          None,
-            auto_approve:     None,
-            model:            None,
-            provider:         None,
-            environment:      None,
+            workflow: "simple.fabro".to_string(),
+            cwd: None,
+            run_id: None,
+            parent_id: Some(" nightly-parent ".to_string()),
+            goal: None,
+            goal_file: None,
+            inputs: HashMap::new(),
+            labels: HashMap::new(),
+            dry_run: None,
+            auto_approve: None,
+            model: None,
+            provider: None,
+            environment: None,
             preserve_sandbox: None,
-            start:            None,
+            start: None,
         })
         .expect("parent selectors should validate without requiring exact run ids");
 
@@ -681,21 +681,21 @@ mod tests {
         let params = ValidatedCreateRuns::try_from(FabroRunCreateParams {
             runs: vec![
                 CreateRunSpec {
-                    workflow:         "simple.fabro".to_string(),
-                    cwd:              None,
-                    run_id:           None,
-                    parent_id:        Some("nightly-parent".to_string()),
-                    goal:             None,
-                    goal_file:        None,
-                    inputs:           HashMap::new(),
-                    labels:           HashMap::new(),
-                    dry_run:          Some(true),
-                    auto_approve:     Some(true),
-                    model:            None,
-                    provider:         None,
-                    environment:      None,
+                    workflow: "simple.fabro".to_string(),
+                    cwd: None,
+                    run_id: None,
+                    parent_id: Some("nightly-parent".to_string()),
+                    goal: None,
+                    goal_file: None,
+                    inputs: HashMap::new(),
+                    labels: HashMap::new(),
+                    dry_run: Some(true),
+                    auto_approve: Some(true),
+                    model: None,
+                    provider: None,
+                    environment: None,
                     preserve_sandbox: None,
-                    start:            Some(false),
+                    start: Some(false),
                 }
                 .into(),
             ],
@@ -708,12 +708,14 @@ mod tests {
 
         assert_eq!(result.runs[0].parent_id, Some(parent_id.to_string()));
         assert_eq!(result.runs[0].children_count, 0);
-        assert_eq!(backend.created_parent_ids.lock().unwrap().as_slice(), &[
-            Some(parent_id)
-        ]);
-        assert_eq!(backend.resolved_selectors.lock().unwrap().as_slice(), &[
-            "nightly-parent".to_string()
-        ]);
+        assert_eq!(
+            backend.created_parent_ids.lock().unwrap().as_slice(),
+            &[Some(parent_id)]
+        );
+        assert_eq!(
+            backend.resolved_selectors.lock().unwrap().as_slice(),
+            &["nightly-parent".to_string()]
+        );
     }
 
     #[tokio::test]
@@ -732,21 +734,21 @@ mod tests {
         let runs: Vec<CreateRunSpecInput> = (0..2)
             .map(|_| {
                 CreateRunSpecInput::from(CreateRunSpec {
-                    workflow:         "simple.fabro".to_string(),
-                    cwd:              None,
-                    run_id:           None,
-                    parent_id:        Some("nightly-parent".to_string()),
-                    goal:             None,
-                    goal_file:        None,
-                    inputs:           HashMap::new(),
-                    labels:           HashMap::new(),
-                    dry_run:          Some(true),
-                    auto_approve:     Some(true),
-                    model:            None,
-                    provider:         None,
-                    environment:      None,
+                    workflow: "simple.fabro".to_string(),
+                    cwd: None,
+                    run_id: None,
+                    parent_id: Some("nightly-parent".to_string()),
+                    goal: None,
+                    goal_file: None,
+                    inputs: HashMap::new(),
+                    labels: HashMap::new(),
+                    dry_run: Some(true),
+                    auto_approve: Some(true),
+                    model: None,
+                    provider: None,
+                    environment: None,
                     preserve_sandbox: None,
-                    start:            Some(false),
+                    start: Some(false),
                 })
             })
             .collect();
@@ -757,13 +759,14 @@ mod tests {
             .await
             .expect("runs should be created");
 
-        assert_eq!(backend.created_parent_ids.lock().unwrap().as_slice(), &[
-            Some(parent_id),
-            Some(parent_id),
-        ]);
-        assert_eq!(backend.resolved_selectors.lock().unwrap().as_slice(), &[
-            "nightly-parent".to_string()
-        ]);
+        assert_eq!(
+            backend.created_parent_ids.lock().unwrap().as_slice(),
+            &[Some(parent_id), Some(parent_id),]
+        );
+        assert_eq!(
+            backend.resolved_selectors.lock().unwrap().as_slice(),
+            &["nightly-parent".to_string()]
+        );
     }
 
     #[tokio::test]
@@ -782,21 +785,21 @@ mod tests {
         let params = ValidatedCreateRuns::try_from(FabroRunCreateParams {
             runs: vec![
                 CreateRunSpec {
-                    workflow:         "simple.fabro".to_string(),
-                    cwd:              None,
-                    run_id:           None,
-                    parent_id:        Some(parent_id.to_string()),
-                    goal:             None,
-                    goal_file:        None,
-                    inputs:           HashMap::new(),
-                    labels:           HashMap::new(),
-                    dry_run:          Some(true),
-                    auto_approve:     Some(true),
-                    model:            None,
-                    provider:         None,
-                    environment:      None,
+                    workflow: "simple.fabro".to_string(),
+                    cwd: None,
+                    run_id: None,
+                    parent_id: Some(parent_id.to_string()),
+                    goal: None,
+                    goal_file: None,
+                    inputs: HashMap::new(),
+                    labels: HashMap::new(),
+                    dry_run: Some(true),
+                    auto_approve: Some(true),
+                    model: None,
+                    provider: None,
+                    environment: None,
                     preserve_sandbox: None,
-                    start:            Some(false),
+                    start: Some(false),
                 }
                 .into(),
             ],
@@ -815,9 +818,10 @@ mod tests {
         .await
         .expect("run should be created");
 
-        assert_eq!(backend.created_parent_ids.lock().unwrap().as_slice(), &[
-            Some(parent_id)
-        ]);
+        assert_eq!(
+            backend.created_parent_ids.lock().unwrap().as_slice(),
+            &[Some(parent_id)]
+        );
         assert!(backend.resolved_selectors.lock().unwrap().is_empty());
     }
 
@@ -837,21 +841,21 @@ mod tests {
         let params = ValidatedCreateRuns::try_from(FabroRunCreateParams {
             runs: vec![
                 CreateRunSpec {
-                    workflow:         "simple.fabro".to_string(),
-                    cwd:              None,
-                    run_id:           None,
-                    parent_id:        Some(parent_id.to_string()),
-                    goal:             None,
-                    goal_file:        None,
-                    inputs:           HashMap::new(),
-                    labels:           HashMap::new(),
-                    dry_run:          Some(true),
-                    auto_approve:     Some(true),
-                    model:            None,
-                    provider:         None,
-                    environment:      None,
+                    workflow: "simple.fabro".to_string(),
+                    cwd: None,
+                    run_id: None,
+                    parent_id: Some(parent_id.to_string()),
+                    goal: None,
+                    goal_file: None,
+                    inputs: HashMap::new(),
+                    labels: HashMap::new(),
+                    dry_run: Some(true),
+                    auto_approve: Some(true),
+                    model: None,
+                    provider: None,
+                    environment: None,
                     preserve_sandbox: None,
-                    start:            None,
+                    start: None,
                 }
                 .into(),
             ],
@@ -864,9 +868,10 @@ mod tests {
 
         assert!(result.runs[0].start_requested);
         assert_eq!(result.runs[0].status, "pending");
-        assert_eq!(backend.started_run_ids.lock().unwrap().as_slice(), &[
-            child_id
-        ]);
+        assert_eq!(
+            backend.started_run_ids.lock().unwrap().as_slice(),
+            &[child_id]
+        );
         assert_eq!(
             create_runs_text(&result),
             "created 1 Fabro run(s), start requested for 1"
@@ -894,8 +899,8 @@ mod tests {
             title: "Test run".to_string(),
             goal: "Test run".to_string(),
             workflow: WorkflowRef {
-                slug:       Some("simple".to_string()),
-                name:       Some("Simple".to_string()),
+                slug: Some("simple".to_string()),
+                name: Some("Simple".to_string()),
                 graph_name: None,
                 node_count: 0,
                 edge_count: 0,
@@ -918,10 +923,10 @@ mod tests {
             models: Vec::new(),
             source_directory: Some("/srv/repo".to_string()),
             timestamps: RunTimestamps {
-                created_at:    Utc.with_ymd_and_hms(2026, 4, 5, 12, 0, 0).unwrap(),
-                started_at:    None,
+                created_at: Utc.with_ymd_and_hms(2026, 4, 5, 12, 0, 0).unwrap(),
+                started_at: None,
                 last_event_at: None,
-                completed_at:  None,
+                completed_at: None,
             },
             timing: None,
             billing: None,
@@ -937,11 +942,11 @@ mod tests {
     }
 
     struct MockCreateBackend {
-        child_id:           RunId,
-        parent_id:          RunId,
+        child_id: RunId,
+        parent_id: RunId,
         created_parent_ids: Mutex<Vec<Option<RunId>>>,
         resolved_selectors: Mutex<Vec<String>>,
-        started_run_ids:    Mutex<Vec<RunId>>,
+        started_run_ids: Mutex<Vec<RunId>>,
     }
 
     #[async_trait]

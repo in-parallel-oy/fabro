@@ -66,13 +66,13 @@ fn current_agent_tool_runtime() -> AgentToolRuntime {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentQuestion {
-    pub original_id:       Option<String>,
+    pub original_id: Option<String>,
     pub original_question: String,
-    pub header:            Option<String>,
-    pub text:              String,
-    pub question_type:     QuestionType,
-    pub options:           Vec<InterviewOption>,
-    pub allow_freeform:    bool,
+    pub header: Option<String>,
+    pub text: String,
+    pub question_type: QuestionType,
+    pub options: Vec<InterviewOption>,
+    pub allow_freeform: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,10 +86,10 @@ pub enum AgentQuestionAnswerStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentQuestionAnswer {
-    pub original_id:       Option<String>,
+    pub original_id: Option<String>,
     pub original_question: String,
-    pub answers:           Vec<String>,
-    pub status:            AgentQuestionAnswerStatus,
+    pub answers: Vec<String>,
+    pub status: AgentQuestionAnswerStatus,
 }
 
 #[async_trait]
@@ -109,16 +109,16 @@ struct OpenAiQuestionToolArgs {
 
 #[derive(Debug, Deserialize)]
 struct OpenAiQuestion {
-    id:       String,
-    header:   String,
+    id: String,
+    header: String,
     question: String,
     #[serde(default)]
-    options:  Vec<OpenAiOption>,
+    options: Vec<OpenAiOption>,
 }
 
 #[derive(Debug, Deserialize)]
 struct OpenAiOption {
-    label:       String,
+    label: String,
     #[serde(default)]
     description: Option<String>,
 }
@@ -131,22 +131,22 @@ struct AnthropicQuestionToolArgs {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AnthropicQuestion {
-    question:     String,
+    question: String,
     #[serde(default)]
-    header:       Option<String>,
+    header: Option<String>,
     #[serde(default)]
-    options:      Vec<AnthropicOption>,
+    options: Vec<AnthropicOption>,
     #[serde(default)]
     multi_select: bool,
 }
 
 #[derive(Debug, Deserialize)]
 struct AnthropicOption {
-    label:       String,
+    label: String,
     #[serde(default)]
     description: Option<String>,
     #[serde(default)]
-    preview:     Option<String>,
+    preview: Option<String>,
 }
 
 #[must_use]
@@ -348,12 +348,12 @@ fn options_from_openai(options: Vec<OpenAiOption>) -> Vec<InterviewOption> {
         .into_iter()
         .enumerate()
         .map(|(idx, option)| InterviewOption {
-            key:         option_key(idx),
-            label:       option.label,
+            key: option_key(idx),
+            label: option.label,
             description: option
                 .description
                 .map(|value| bounded_display_field(&value, OPTION_DESCRIPTION_MAX_CHARS)),
-            preview:     None,
+            preview: None,
         })
         .collect()
 }
@@ -363,12 +363,12 @@ fn options_from_anthropic(options: Vec<AnthropicOption>) -> Vec<InterviewOption>
         .into_iter()
         .enumerate()
         .map(|(idx, option)| InterviewOption {
-            key:         option_key(idx),
-            label:       option.label,
+            key: option_key(idx),
+            label: option.label,
             description: option
                 .description
                 .map(|value| bounded_display_field(&value, OPTION_DESCRIPTION_MAX_CHARS)),
-            preview:     option
+            preview: option
                 .preview
                 .map(|value| bounded_display_field(&value, OPTION_PREVIEW_MAX_CHARS)),
         })
@@ -471,10 +471,10 @@ mod tests {
         answers: &[&str],
     ) -> AgentQuestionAnswer {
         AgentQuestionAnswer {
-            original_id:       original_id.map(str::to_string),
+            original_id: original_id.map(str::to_string),
             original_question: question.to_string(),
-            answers:           answers.iter().map(|value| (*value).to_string()).collect(),
-            status:            AgentQuestionAnswerStatus::Answered,
+            answers: answers.iter().map(|value| (*value).to_string()).collect(),
+            status: AgentQuestionAnswerStatus::Answered,
         }
     }
 

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "IdpIdentityWire", into = "IdpIdentityWire")]
 pub struct IdpIdentity {
-    issuer:  String,
+    issuer: String,
     subject: String,
 }
 
@@ -55,7 +55,7 @@ impl std::error::Error for IdpIdentityError {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct IdpIdentityWire {
-    issuer:  String,
+    issuer: String,
     subject: String,
 }
 
@@ -70,7 +70,7 @@ impl TryFrom<IdpIdentityWire> for IdpIdentity {
 impl From<IdpIdentity> for IdpIdentityWire {
     fn from(value: IdpIdentity) -> Self {
         Self {
-            issuer:  value.issuer,
+            issuer: value.issuer,
             subject: value.subject,
         }
     }

@@ -44,8 +44,8 @@ pub(crate) fn docs_options_reference_root(root: &Path, check: bool) -> Result<()
 }
 
 struct Section {
-    path:    &'static str,
-    set:     OptionSet,
+    path: &'static str,
+    set: OptionSet,
     example: &'static str,
 }
 

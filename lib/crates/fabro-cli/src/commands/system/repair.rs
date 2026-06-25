@@ -71,11 +71,11 @@ async fn delete_repair_runs<'a>(
     yes: bool,
 ) -> RepairRunsDeleteSummary<'a> {
     let mut summary = RepairRunsDeleteSummary {
-        dry_run:     !yes,
+        dry_run: !yes,
         total_count: response.total_count,
-        runs:        &response.runs,
-        deleted:     Vec::new(),
-        errors:      Vec::new(),
+        runs: &response.runs,
+        deleted: Vec::new(),
+        errors: Vec::new(),
     };
 
     if !yes {
@@ -88,7 +88,7 @@ async fn delete_repair_runs<'a>(
             Err(err) => {
                 summary.errors.push(RepairRunsDeleteError {
                     run_id: run.run_id.clone(),
-                    error:  err.to_string(),
+                    error: err.to_string(),
                 });
                 continue;
             }
@@ -98,7 +98,7 @@ async fn delete_repair_runs<'a>(
             Ok(()) => summary.deleted.push(run.run_id.clone()),
             Err(err) => summary.errors.push(RepairRunsDeleteError {
                 run_id: run.run_id.clone(),
-                error:  err.to_string(),
+                error: err.to_string(),
             }),
         }
     }
@@ -159,15 +159,15 @@ fn print_unreadable_runs(response: &types::SystemRepairRunsResponse, printer: Pr
 
 #[derive(Serialize)]
 struct RepairRunsDeleteSummary<'a> {
-    dry_run:     bool,
+    dry_run: bool,
     total_count: i64,
-    runs:        &'a [types::SystemRepairRunIssue],
-    deleted:     Vec<String>,
-    errors:      Vec<RepairRunsDeleteError>,
+    runs: &'a [types::SystemRepairRunIssue],
+    deleted: Vec<String>,
+    errors: Vec<RepairRunsDeleteError>,
 }
 
 #[derive(Serialize)]
 struct RepairRunsDeleteError {
     run_id: String,
-    error:  String,
+    error: String,
 }

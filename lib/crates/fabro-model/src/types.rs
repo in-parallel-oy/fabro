@@ -32,7 +32,7 @@ pub enum ReasoningEffortFeature {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModelLimits {
     pub context_window: i64,
-    pub max_output:     Option<i64>,
+    pub max_output: Option<i64>,
 }
 
 fn default_true() -> bool {
@@ -41,21 +41,21 @@ fn default_true() -> bool {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModelFeatures {
-    pub tools:            bool,
-    pub vision:           bool,
-    pub reasoning:        bool,
+    pub tools: bool,
+    pub vision: bool,
+    pub reasoning: bool,
     /// Whether this model endpoint supports a native reasoning-effort
     /// parameter. User-facing allowed effort values live in catalog controls.
     #[serde(default)]
     pub reasoning_effort: ReasoningEffortFeature,
     /// Whether this model endpoint supports prompt caching annotations.
     #[serde(default)]
-    pub prompt_cache:     bool,
+    pub prompt_cache: bool,
     /// Whether the model endpoint accepts classic sampling parameters
     /// (`temperature`, `top_p`). Models with always-on adaptive behavior
     /// reject them.
     #[serde(default = "default_true")]
-    pub sampling_params:  bool,
+    pub sampling_params: bool,
 }
 
 impl ModelFeatures {
@@ -71,33 +71,33 @@ impl ModelFeatures {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModelCosts {
-    pub input_cost_per_mtok:       Option<f64>,
-    pub output_cost_per_mtok:      Option<f64>,
+    pub input_cost_per_mtok: Option<f64>,
+    pub output_cost_per_mtok: Option<f64>,
     pub cache_input_cost_per_mtok: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Model {
-    pub id:                   String,
-    pub provider:             ProviderId,
-    pub family:               String,
-    pub display_name:         String,
-    pub limits:               ModelLimits,
-    pub training:             Option<String>,
-    pub knowledge_cutoff:     Option<String>,
-    pub features:             ModelFeatures,
-    pub costs:                ModelCosts,
+    pub id: String,
+    pub provider: ProviderId,
+    pub family: String,
+    pub display_name: String,
+    pub limits: ModelLimits,
+    pub training: Option<String>,
+    pub knowledge_cutoff: Option<String>,
+    pub features: ModelFeatures,
+    pub costs: ModelCosts,
     pub estimated_output_tps: Option<f64>,
-    pub aliases:              Vec<String>,
+    pub aliases: Vec<String>,
     #[serde(default)]
-    pub default:              bool,
+    pub default: bool,
     #[serde(default)]
-    pub small_default:        bool,
+    pub small_default: bool,
     /// Whether the server has any credential configured for this model's
     /// provider at the time of the response. Always `false` in static catalog
     /// data; populated by `GET /models` per request.
     #[serde(default)]
-    pub configured:           bool,
+    pub configured: bool,
 }
 
 impl Model {
@@ -210,34 +210,34 @@ mod tests {
     #[test]
     fn inherent_methods_return_correct_values() {
         let info = Model {
-            id:                   "model-id".to_string(),
-            provider:             ProviderId::new("provider-id"),
-            family:               "family".to_string(),
-            display_name:         "Display Name".to_string(),
-            limits:               ModelLimits {
+            id: "model-id".to_string(),
+            provider: ProviderId::new("provider-id"),
+            family: "family".to_string(),
+            display_name: "Display Name".to_string(),
+            limits: ModelLimits {
                 context_window: 123_456,
-                max_output:     Some(7_890),
+                max_output: Some(7_890),
             },
-            training:             Some("training".to_string()),
-            knowledge_cutoff:     Some("knowledge-cutoff".to_string()),
-            features:             ModelFeatures {
-                tools:            true,
-                vision:           true,
-                reasoning:        true,
+            training: Some("training".to_string()),
+            knowledge_cutoff: Some("knowledge-cutoff".to_string()),
+            features: ModelFeatures {
+                tools: true,
+                vision: true,
+                reasoning: true,
                 reasoning_effort: ReasoningEffortFeature::Levels,
-                prompt_cache:     true,
-                sampling_params:  true,
+                prompt_cache: true,
+                sampling_params: true,
             },
-            costs:                ModelCosts {
-                input_cost_per_mtok:       Some(1.0),
-                output_cost_per_mtok:      Some(2.0),
+            costs: ModelCosts {
+                input_cost_per_mtok: Some(1.0),
+                output_cost_per_mtok: Some(2.0),
                 cache_input_cost_per_mtok: Some(0.1),
             },
             estimated_output_tps: Some(42.0),
-            aliases:              vec!["alias".to_string()],
-            default:              true,
-            small_default:        true,
-            configured:           false,
+            aliases: vec!["alias".to_string()],
+            default: true,
+            small_default: true,
+            configured: false,
         };
 
         assert_eq!(info.id(), "model-id");

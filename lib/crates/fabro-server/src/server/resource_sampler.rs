@@ -16,55 +16,55 @@ use super::{
 const FABRO_STORAGE_USAGE_CACHE_TTL: Duration = Duration::from_mins(1);
 
 pub(in crate::server) struct ResourceSampler {
-    system:              Mutex<SystemSamplerState>,
+    system: Mutex<SystemSamplerState>,
     fabro_storage_usage: AsyncMutex<Option<CachedFabroStorageUsage>>,
 }
 
 struct SystemSamplerState {
-    system:             System,
+    system: System,
     last_cpu_sample_at: Option<Instant>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct CachedFabroStorageUsage {
     sampled_at: Instant,
-    usage:      FabroStorageUsage,
+    usage: FabroStorageUsage,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct FabroStorageUsage {
-    managed_bytes:     i64,
+    managed_bytes: i64,
     reclaimable_bytes: i64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct CgroupMemory {
-    total_bytes:     u64,
+    total_bytes: u64,
     available_bytes: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct MemorySelection {
-    scope:            SystemMemoryResourceScope,
-    total_bytes:      u64,
-    used_bytes:       u64,
-    available_bytes:  u64,
+    scope: SystemMemoryResourceScope,
+    total_bytes: u64,
+    used_bytes: u64,
+    available_bytes: u64,
     host_total_bytes: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct DiskCandidate {
-    mount_point:     PathBuf,
-    filesystem:      String,
-    total_bytes:     u64,
+    mount_point: PathBuf,
+    filesystem: String,
+    total_bytes: u64,
     available_bytes: u64,
 }
 
 impl ResourceSampler {
     pub(in crate::server) fn new() -> Self {
         Self {
-            system:              Mutex::new(SystemSamplerState {
-                system:             System::new(),
+            system: Mutex::new(SystemSamplerState {
+                system: System::new(),
                 last_cpu_sample_at: None,
             }),
             fabro_storage_usage: AsyncMutex::new(None),
@@ -98,19 +98,19 @@ impl ResourceSampler {
             }
         } else {
             SystemCpuResources {
-                supported:          false,
-                scope:              SystemCpuResourceScope::ServerEnvironment,
+                supported: false,
+                scope: SystemCpuResourceScope::ServerEnvironment,
                 unavailable_reason: Some(
                     "system metrics are not supported on this platform".to_string(),
                 ),
-                logical_cpus:       None,
-                usage_percent:      None,
-                sample_window_ms:   None,
+                logical_cpus: None,
+                usage_percent: None,
+                sample_window_ms: None,
             }
         };
 
         let cgroup = state.system.cgroup_limits().map(|limits| CgroupMemory {
-            total_bytes:     limits.total_memory,
+            total_bytes: limits.total_memory,
             available_bytes: limits.free_memory,
         });
         let memory = memory_response(select_memory(
@@ -188,26 +188,26 @@ fn logical_cpu_count(system: &System) -> usize {
 fn memory_response(selection: Option<MemorySelection>) -> SystemMemoryResources {
     let Some(selection) = selection else {
         return SystemMemoryResources {
-            supported:          false,
-            scope:              SystemMemoryResourceScope::Host,
+            supported: false,
+            scope: SystemMemoryResourceScope::Host,
             unavailable_reason: Some("memory metrics reported zero total bytes".to_string()),
-            total_bytes:        None,
-            used_bytes:         None,
-            available_bytes:    None,
-            used_percent:       None,
-            host_total_bytes:   None,
+            total_bytes: None,
+            used_bytes: None,
+            available_bytes: None,
+            used_percent: None,
+            host_total_bytes: None,
         };
     };
 
     SystemMemoryResources {
-        supported:          true,
-        scope:              selection.scope,
+        supported: true,
+        scope: selection.scope,
         unavailable_reason: None,
-        total_bytes:        Some(to_i64(selection.total_bytes)),
-        used_bytes:         Some(to_i64(selection.used_bytes)),
-        available_bytes:    Some(to_i64(selection.available_bytes)),
-        used_percent:       percent(selection.used_bytes, selection.total_bytes),
-        host_total_bytes:   Some(to_i64(selection.host_total_bytes)),
+        total_bytes: Some(to_i64(selection.total_bytes)),
+        used_bytes: Some(to_i64(selection.used_bytes)),
+        available_bytes: Some(to_i64(selection.available_bytes)),
+        used_percent: percent(selection.used_bytes, selection.total_bytes),
+        host_total_bytes: Some(to_i64(selection.host_total_bytes)),
     }
 }
 
@@ -248,7 +248,7 @@ fn compute_fabro_storage_usage(
 ) -> anyhow::Result<FabroStorageUsage> {
     let usage = build_disk_usage_response(summaries, storage_path, false)?;
     Ok(FabroStorageUsage {
-        managed_bytes:     usage.total_size_bytes.unwrap_or_default(),
+        managed_bytes: usage.total_size_bytes.unwrap_or_default(),
         reclaimable_bytes: usage.total_reclaimable_bytes.unwrap_or_default(),
     })
 }
@@ -262,49 +262,49 @@ fn sample_disk_resources(
         .list()
         .iter()
         .map(|disk| DiskCandidate {
-            mount_point:     disk.mount_point().to_path_buf(),
-            filesystem:      disk.file_system().to_string_lossy().to_string(),
-            total_bytes:     disk.total_space(),
+            mount_point: disk.mount_point().to_path_buf(),
+            filesystem: disk.file_system().to_string_lossy().to_string(),
+            total_bytes: disk.total_space(),
             available_bytes: disk.available_space(),
         })
         .collect::<Vec<_>>();
 
     let Some(disk) = select_storage_disk(storage_path, &candidates) else {
         return SystemDiskResources {
-            supported:               false,
-            scope:                   SystemDiskResourceScope::StorageFilesystem,
-            unavailable_reason:      Some(format!(
+            supported: false,
+            scope: SystemDiskResourceScope::StorageFilesystem,
+            unavailable_reason: Some(format!(
                 "no filesystem mount matched storage path {}",
                 storage_path.display()
             )),
-            storage_path:            storage_path.display().to_string(),
-            mount_point:             None,
-            filesystem:              None,
-            total_bytes:             None,
-            used_bytes:              None,
-            available_bytes:         None,
-            used_percent:            None,
-            fabro_managed_bytes:     fabro_usage.managed_bytes,
+            storage_path: storage_path.display().to_string(),
+            mount_point: None,
+            filesystem: None,
+            total_bytes: None,
+            used_bytes: None,
+            available_bytes: None,
+            used_percent: None,
+            fabro_managed_bytes: fabro_usage.managed_bytes,
             fabro_reclaimable_bytes: fabro_usage.reclaimable_bytes,
         };
     };
 
     if disk.total_bytes == 0 {
         return SystemDiskResources {
-            supported:               false,
-            scope:                   SystemDiskResourceScope::StorageFilesystem,
-            unavailable_reason:      Some(format!(
+            supported: false,
+            scope: SystemDiskResourceScope::StorageFilesystem,
+            unavailable_reason: Some(format!(
                 "filesystem {} reported zero total bytes",
                 disk.mount_point.display()
             )),
-            storage_path:            storage_path.display().to_string(),
-            mount_point:             Some(disk.mount_point.display().to_string()),
-            filesystem:              Some(disk.filesystem.clone()),
-            total_bytes:             None,
-            used_bytes:              None,
-            available_bytes:         None,
-            used_percent:            None,
-            fabro_managed_bytes:     fabro_usage.managed_bytes,
+            storage_path: storage_path.display().to_string(),
+            mount_point: Some(disk.mount_point.display().to_string()),
+            filesystem: Some(disk.filesystem.clone()),
+            total_bytes: None,
+            used_bytes: None,
+            available_bytes: None,
+            used_percent: None,
+            fabro_managed_bytes: fabro_usage.managed_bytes,
             fabro_reclaimable_bytes: fabro_usage.reclaimable_bytes,
         };
     }
@@ -313,17 +313,17 @@ fn sample_disk_resources(
     let used_bytes = disk.total_bytes.saturating_sub(available_bytes);
 
     SystemDiskResources {
-        supported:               true,
-        scope:                   SystemDiskResourceScope::StorageFilesystem,
-        unavailable_reason:      None,
-        storage_path:            storage_path.display().to_string(),
-        mount_point:             Some(disk.mount_point.display().to_string()),
-        filesystem:              Some(disk.filesystem.clone()),
-        total_bytes:             Some(to_i64(disk.total_bytes)),
-        used_bytes:              Some(to_i64(used_bytes)),
-        available_bytes:         Some(to_i64(available_bytes)),
-        used_percent:            percent(used_bytes, disk.total_bytes),
-        fabro_managed_bytes:     fabro_usage.managed_bytes,
+        supported: true,
+        scope: SystemDiskResourceScope::StorageFilesystem,
+        unavailable_reason: None,
+        storage_path: storage_path.display().to_string(),
+        mount_point: Some(disk.mount_point.display().to_string()),
+        filesystem: Some(disk.filesystem.clone()),
+        total_bytes: Some(to_i64(disk.total_bytes)),
+        used_bytes: Some(to_i64(used_bytes)),
+        available_bytes: Some(to_i64(available_bytes)),
+        used_percent: percent(used_bytes, disk.total_bytes),
+        fabro_managed_bytes: fabro_usage.managed_bytes,
         fabro_reclaimable_bytes: fabro_usage.reclaimable_bytes,
     }
 }
@@ -384,7 +384,7 @@ mod tests {
             200,
             800,
             Some(CgroupMemory {
-                total_bytes:     500,
+                total_bytes: 500,
                 available_bytes: 125,
             }),
         )
@@ -414,9 +414,9 @@ mod tests {
 
     fn disk(mount_point: &str) -> DiskCandidate {
         DiskCandidate {
-            mount_point:     Path::new(mount_point).to_path_buf(),
-            filesystem:      "testfs".to_string(),
-            total_bytes:     1_000,
+            mount_point: Path::new(mount_point).to_path_buf(),
+            filesystem: "testfs".to_string(),
+            total_bytes: 1_000,
             available_bytes: 500,
         }
     }

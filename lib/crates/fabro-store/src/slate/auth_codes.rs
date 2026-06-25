@@ -9,16 +9,16 @@ use crate::{KeyedMutex, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthCode {
-    pub code:           String,
-    pub identity:       IdpIdentity,
-    pub login:          String,
-    pub name:           String,
-    pub email:          String,
+    pub code: String,
+    pub identity: IdpIdentity,
+    pub login: String,
+    pub name: String,
+    pub email: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub avatar_url:     String,
+    pub avatar_url: String,
     pub code_challenge: String,
-    pub redirect_uri:   String,
-    pub expires_at:     DateTime<Utc>,
+    pub redirect_uri: String,
+    pub expires_at: DateTime<Utc>,
 }
 
 impl Record for AuthCode {
@@ -33,7 +33,7 @@ impl Record for AuthCode {
 }
 
 pub struct AuthCodeStore {
-    repo:          Repository<AuthCode>,
+    repo: Repository<AuthCode>,
     consume_locks: KeyedMutex<String>,
 }
 
@@ -46,7 +46,7 @@ impl std::fmt::Debug for AuthCodeStore {
 impl AuthCodeStore {
     pub(crate) fn new(db: Arc<slatedb::Db>) -> Self {
         Self {
-            repo:          Repository::new(db),
+            repo: Repository::new(db),
             consume_locks: KeyedMutex::new(),
         }
     }

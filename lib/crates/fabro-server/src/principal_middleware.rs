@@ -19,19 +19,19 @@ use crate::worker_token::{self, WORKER_TOKEN_KID, WorkerScopeSet};
 
 #[derive(Clone, Debug)]
 pub(crate) struct RequestAuthContext {
-    pub principal:       Option<Principal>,
-    pub auth_status:     AuthStatus,
+    pub principal: Option<Principal>,
+    pub auth_status: AuthStatus,
     pub auth_error_code: Option<AuthErrorCode>,
-    pub user_profile:    Option<UserProfile>,
-    pub worker_scopes:   WorkerScopeSet,
+    pub user_profile: Option<UserProfile>,
+    pub worker_scopes: WorkerScopeSet,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct UserProfile {
-    pub name:       String,
-    pub email:      String,
+    pub name: String,
+    pub email: String,
     pub avatar_url: String,
-    pub user_url:   String,
+    pub user_url: String,
 }
 
 pub(crate) fn non_empty_avatar_url(avatar_url: &str) -> Option<String> {
@@ -69,18 +69,18 @@ pub(crate) struct RequireCommandLog(pub(crate) RunId, pub(crate) StageId);
 #[derive(Clone, Debug)]
 pub(crate) struct AuthenticatedUser {
     pub principal: UserPrincipal,
-    pub profile:   UserProfile,
+    pub profile: UserProfile,
 }
 
 impl RequestAuthContext {
     #[must_use]
     pub(crate) fn initial() -> Self {
         Self {
-            principal:       None,
-            auth_status:     AuthStatus::Missing,
+            principal: None,
+            auth_status: AuthStatus::Missing,
             auth_error_code: None,
-            user_profile:    None,
-            worker_scopes:   WorkerScopeSet::default(),
+            user_profile: None,
+            worker_scopes: WorkerScopeSet::default(),
         }
     }
 
@@ -98,11 +98,11 @@ impl RequestAuthContext {
     #[must_use]
     pub(crate) fn authenticated_worker(run_id: RunId, scopes: WorkerScopeSet) -> Self {
         Self {
-            principal:       Some(Principal::Worker { run_id }),
-            auth_status:     AuthStatus::Authenticated,
+            principal: Some(Principal::Worker { run_id }),
+            auth_status: AuthStatus::Authenticated,
             auth_error_code: None,
-            user_profile:    None,
-            worker_scopes:   scopes,
+            user_profile: None,
+            worker_scopes: scopes,
         }
     }
 
@@ -125,11 +125,11 @@ impl RequestAuthContext {
     #[must_use]
     pub(crate) fn rejected(status: AuthStatus, code: Option<AuthErrorCode>) -> Self {
         Self {
-            principal:       None,
-            auth_status:     status,
+            principal: None,
+            auth_status: status,
             auth_error_code: code,
-            user_profile:    None,
-            worker_scopes:   WorkerScopeSet::default(),
+            user_profile: None,
+            worker_scopes: WorkerScopeSet::default(),
         }
     }
 
@@ -148,8 +148,8 @@ impl AuthStatus {
 
 #[derive(Clone, Debug)]
 pub(crate) struct RequestAuthLogContext {
-    pub principal:       Option<Principal>,
-    pub auth_status:     AuthStatus,
+    pub principal: Option<Principal>,
+    pub auth_status: AuthStatus,
     pub auth_error_code: Option<AuthErrorCode>,
 }
 
@@ -172,8 +172,8 @@ impl AuthContextSlot {
     pub(crate) fn log_snapshot(&self) -> RequestAuthLogContext {
         let context = self.0.lock().expect("auth context lock poisoned");
         RequestAuthLogContext {
-            principal:       context.principal.clone(),
-            auth_status:     context.auth_status,
+            principal: context.principal.clone(),
+            auth_status: context.auth_status,
             auth_error_code: context.auth_error_code,
         }
     }
@@ -541,10 +541,10 @@ fn classify_user_token(token: &str, config: &ConfiguredAuth) -> RequestAuthConte
         }
     };
     let profile = UserProfile {
-        name:       auth.name,
-        email:      auth.email,
+        name: auth.name,
+        email: auth.email,
         avatar_url: auth.avatar_url,
-        user_url:   auth.user_url,
+        user_url: auth.user_url,
     };
     RequestAuthContext::authenticated_user(auth.identity, auth.login, auth.auth_method, profile)
 }
@@ -583,9 +583,9 @@ mod tests {
             .server_secret(EnvVars::SESSION_SECRET)
             .expect("test state should have session secret");
         AuthMode::Enabled(ConfiguredAuth {
-            methods:    vec![ServerAuthMethod::Github],
-            dev_token:  None,
-            jwt_key:    Some(auth::derive_jwt_key(secret.as_bytes()).unwrap()),
+            methods: vec![ServerAuthMethod::Github],
+            dev_token: None,
+            jwt_key: Some(auth::derive_jwt_key(secret.as_bytes()).unwrap()),
             jwt_issuer: Some(TEST_JWT_ISSUER.to_string()),
         })
     }
@@ -602,12 +602,12 @@ mod tests {
 
     fn user_subject() -> auth::JwtSubject {
         auth::JwtSubject {
-            identity:    IdpIdentity::new("https://github.com", "12345").unwrap(),
-            login:       "octocat".to_string(),
-            name:        "The Octocat".to_string(),
-            email:       "octocat@example.com".to_string(),
-            avatar_url:  "https://example.com/octocat.png".to_string(),
-            user_url:    "https://github.com/octocat".to_string(),
+            identity: IdpIdentity::new("https://github.com", "12345").unwrap(),
+            login: "octocat".to_string(),
+            name: "The Octocat".to_string(),
+            email: "octocat@example.com".to_string(),
+            avatar_url: "https://example.com/octocat.png".to_string(),
+            user_url: "https://github.com/octocat".to_string(),
             auth_method: AuthMethod::Github,
         }
     }

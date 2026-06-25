@@ -5,11 +5,11 @@ use crate::{IdpIdentity, RunId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserPrincipal {
-    pub identity:    IdpIdentity,
-    pub login:       String,
+    pub identity: IdpIdentity,
+    pub login: String,
     pub auth_method: AuthMethod,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub avatar_url:  Option<String>,
+    pub avatar_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, IntoStaticStr)]
@@ -24,18 +24,18 @@ pub enum Principal {
         delivery_id: String,
     },
     Slack {
-        team_id:   String,
-        user_id:   String,
+        team_id: String,
+        user_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         user_name: Option<String>,
     },
     Agent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        session_id:        Option<String>,
+        session_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent_session_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        model:             Option<String>,
+        model: Option<String>,
     },
     System {
         system_kind: SystemActorKind,
@@ -199,10 +199,10 @@ mod tests {
         assert_eq!(
             parsed,
             Principal::User(UserPrincipal {
-                identity:    identity(),
-                login:       "octocat".to_string(),
+                identity: identity(),
+                login: "octocat".to_string(),
                 auth_method: AuthMethod::Github,
-                avatar_url:  None,
+                avatar_url: None,
             })
         );
     }
@@ -260,8 +260,8 @@ mod tests {
     #[test]
     fn round_trips_slack_variant() {
         assert_round_trip(&Principal::Slack {
-            team_id:   "T1".to_string(),
-            user_id:   "U1".to_string(),
+            team_id: "T1".to_string(),
+            user_id: "U1".to_string(),
             user_name: Some("ada".to_string()),
         });
     }
@@ -269,9 +269,9 @@ mod tests {
     #[test]
     fn round_trips_agent_variant() {
         assert_round_trip(&Principal::Agent {
-            session_id:        Some("session".to_string()),
+            session_id: Some("session".to_string()),
             parent_session_id: Some("parent".to_string()),
-            model:             Some("gpt".to_string()),
+            model: Some("gpt".to_string()),
         });
     }
 
@@ -298,10 +298,10 @@ mod tests {
     #[test]
     fn user_principal_kind_is_user() {
         let principal = Principal::User(UserPrincipal {
-            identity:    identity(),
-            login:       "octocat".to_string(),
+            identity: identity(),
+            login: "octocat".to_string(),
             auth_method: AuthMethod::Github,
-            avatar_url:  None,
+            avatar_url: None,
         });
         assert_eq!(principal.kind(), "user");
     }

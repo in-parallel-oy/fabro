@@ -20,19 +20,19 @@ use crate::error::Error;
 #[derive(Debug)]
 pub(crate) struct DecodedEvent {
     pub event_type: String,
-    pub payload:    String,
+    pub payload: String,
 }
 
 /// Incremental decoder over event-stream bytes.
 pub(crate) struct FrameDecoder {
-    inner:  MessageFrameDecoder,
+    inner: MessageFrameDecoder,
     buffer: BytesMut,
 }
 
 impl FrameDecoder {
     pub(crate) fn new() -> Self {
         Self {
-            inner:  MessageFrameDecoder::new(),
+            inner: MessageFrameDecoder::new(),
             buffer: BytesMut::new(),
         }
     }
@@ -93,7 +93,7 @@ impl FrameDecoder {
                 };
                 Ok(Some(DecodedEvent {
                     event_type: event_type.to_string(),
-                    payload:    String::from_utf8_lossy(message.payload()).into_owned(),
+                    payload: String::from_utf8_lossy(message.payload()).into_owned(),
                 }))
             }
         }

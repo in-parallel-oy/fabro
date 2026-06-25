@@ -17,7 +17,7 @@ where
 }
 
 pub(crate) struct Tx {
-    batch:   WriteBatch,
+    batch: WriteBatch,
     /// SlateDB rejects empty `WriteBatch` commits; skip the write entirely
     /// when the closure produced no operations.
     has_ops: bool,
@@ -26,7 +26,7 @@ pub(crate) struct Tx {
 impl Tx {
     fn new() -> Self {
         Self {
-            batch:   WriteBatch::new(),
+            batch: WriteBatch::new(),
             has_ops: false,
         }
     }
@@ -67,8 +67,8 @@ mod tests {
 
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     struct TxRecord {
-        id:       String,
-        payload:  String,
+        id: String,
+        payload: String,
         poisoned: bool,
     }
 
@@ -85,7 +85,7 @@ mod tests {
 
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     struct FailingRecord {
-        id:       String,
+        id: String,
         poisoned: bool,
     }
 
@@ -130,8 +130,8 @@ mod tests {
         let db = db().await;
         let repo = Repository::<TxRecord>::new(Arc::clone(&db));
         let record = TxRecord {
-            id:       "record-1".to_string(),
-            payload:  "hello".to_string(),
+            id: "record-1".to_string(),
+            payload: "hello".to_string(),
             poisoned: false,
         };
 
@@ -151,11 +151,11 @@ mod tests {
         let db = db().await;
         let repo = Repository::<FailingRecord>::new(Arc::clone(&db));
         let good = FailingRecord {
-            id:       "good".to_string(),
+            id: "good".to_string(),
             poisoned: false,
         };
         let bad = FailingRecord {
-            id:       "bad".to_string(),
+            id: "bad".to_string(),
             poisoned: true,
         };
 
@@ -190,8 +190,8 @@ mod tests {
         let db = db().await;
         let repo = Repository::<TxRecord>::new(Arc::clone(&db));
         let record = TxRecord {
-            id:       "delete-me".to_string(),
-            payload:  "hello".to_string(),
+            id: "delete-me".to_string(),
+            payload: "hello".to_string(),
             poisoned: false,
         };
         repo.put(&record).await.unwrap();

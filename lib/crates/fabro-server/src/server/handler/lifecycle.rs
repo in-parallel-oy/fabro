@@ -142,12 +142,15 @@ pub(in crate::server) async fn queue_run_start(
             &actor,
             Principal::Worker { run_id } if run_state.parent_id == Some(*run_id)
         );
-    if let Err(err) =
-        workflow_event::append_event(&run_store, &id, &workflow_event::Event::RunStartRequested {
+    if let Err(err) = workflow_event::append_event(
+        &run_store,
+        &id,
+        &workflow_event::Event::RunStartRequested {
             resume,
             actor: Some(actor.clone()),
-        })
-        .await
+        },
+    )
+    .await
     {
         return Err(ApiError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -161,14 +164,17 @@ pub(in crate::server) async fn queue_run_start(
             },
             workflow_event::Event::RunPending {
                 reason: PendingReason::ApprovalRequired,
-                actor:  Some(actor),
+                actor: Some(actor),
             },
         )
     } else {
-        (RunStatus::Runnable, workflow_event::Event::RunRunnable {
-            source: RunRunnableSource::StartRequested,
-            actor:  Some(actor),
-        })
+        (
+            RunStatus::Runnable,
+            workflow_event::Event::RunRunnable {
+                source: RunRunnableSource::StartRequested,
+                actor: Some(actor),
+            },
+        )
     };
     if let Err(err) = workflow_event::append_event(&run_store, &id, &next_event).await {
         return Err(ApiError::new(
@@ -226,9 +232,12 @@ async fn approve_run(
             .into_response();
         }
     };
-    if !matches!(run_state.status, RunStatus::Pending {
-        reason: PendingReason::ApprovalRequired,
-    }) {
+    if !matches!(
+        run_state.status,
+        RunStatus::Pending {
+            reason: PendingReason::ApprovalRequired,
+        }
+    ) {
         return ApiError::new(StatusCode::CONFLICT, "Run is not pending approval.").into_response();
     }
 
@@ -308,9 +317,12 @@ async fn deny_run(
             .into_response();
         }
     };
-    if !matches!(run_state.status, RunStatus::Pending {
-        reason: PendingReason::ApprovalRequired,
-    }) {
+    if !matches!(
+        run_state.status,
+        RunStatus::Pending {
+            reason: PendingReason::ApprovalRequired,
+        }
+    ) {
         return ApiError::new(StatusCode::CONFLICT, "Run is not pending approval.").into_response();
     }
 
@@ -816,9 +828,9 @@ async fn rewind_run(
             StatusCode::OK,
             Json(RewindResponse {
                 source_run_id: source_run_id.to_string(),
-                new_run_id:    new_run_id.to_string(),
-                target:        target.response_target(),
-                archived:      true,
+                new_run_id: new_run_id.to_string(),
+                target: target.response_target(),
+                archived: true,
                 archive_error: None,
             }),
         )
@@ -832,9 +844,9 @@ async fn rewind_run(
             StatusCode::MULTI_STATUS,
             Json(RewindResponse {
                 source_run_id: source_run_id.to_string(),
-                new_run_id:    new_run_id.to_string(),
-                target:        target.response_target(),
-                archived:      false,
+                new_run_id: new_run_id.to_string(),
+                target: target.response_target(),
+                archived: false,
                 archive_error: Some(archive_error),
             }),
         )
@@ -870,8 +882,8 @@ async fn fork_run(
             StatusCode::OK,
             Json(ForkResponse {
                 source_run_id: outcome.source_run_id.to_string(),
-                new_run_id:    outcome.new_run_id.to_string(),
-                target:        outcome.target.response_target(),
+                new_run_id: outcome.new_run_id.to_string(),
+                target: outcome.target.response_target(),
             }),
         )
             .into_response(),
@@ -923,10 +935,10 @@ async fn run_timeline(
             entries
                 .into_iter()
                 .map(|entry| TimelineEntryResponse {
-                    ordinal:        std::num::NonZeroU64::new(entry.ordinal as u64)
+                    ordinal: std::num::NonZeroU64::new(entry.ordinal as u64)
                         .expect("timeline ordinals start at 1"),
-                    node_name:      entry.node_name,
-                    visit:          std::num::NonZeroU64::new(entry.visit as u64)
+                    node_name: entry.node_name,
+                    visit: std::num::NonZeroU64::new(entry.visit as u64)
                         .expect("timeline visits start at 1"),
                     checkpoint_seq: std::num::NonZeroU64::new(u64::from(entry.checkpoint_seq))
                         .expect("checkpoint event sequence starts at 1"),

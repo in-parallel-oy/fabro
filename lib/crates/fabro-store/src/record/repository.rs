@@ -81,7 +81,7 @@ use crate::{Error, Result, keys};
 /// named store such as `AuthCodeStore` or `RefreshTokenStore`, which can add
 /// domain-specific behavior on top of the generic storage primitives here.
 pub(crate) struct Repository<R: Record> {
-    db:      Arc<Db>,
+    db: Arc<Db>,
     _record: PhantomData<R>,
 }
 
@@ -312,15 +312,15 @@ mod tests {
 
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     struct TestRecord {
-        id:        TestId,
-        payload:   String,
+        id: TestId,
+        payload: String,
         delete_me: bool,
     }
 
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     struct TestId {
         bucket: String,
-        name:   String,
+        name: String,
     }
 
     impl RecordId for TestId {
@@ -337,7 +337,7 @@ mod tests {
             };
             Ok(Self {
                 bucket: (*bucket).to_string(),
-                name:   (*name).to_string(),
+                name: (*name).to_string(),
             })
         }
     }
@@ -421,7 +421,7 @@ mod tests {
         TestRecord {
             id: TestId {
                 bucket: bucket.to_string(),
-                name:   name.to_string(),
+                name: name.to_string(),
             },
             payload: format!("{bucket}/{name}"),
             delete_me,
@@ -457,10 +457,13 @@ mod tests {
             .try_collect::<Vec<_>>()
             .await
             .unwrap();
-        assert_eq!(bucket_a, vec![
-            (records[0].id(), records[0].clone()),
-            (records[1].id(), records[1].clone()),
-        ]);
+        assert_eq!(
+            bucket_a,
+            vec![
+                (records[0].id(), records[0].clone()),
+                (records[1].id(), records[1].clone()),
+            ]
+        );
 
         repo.delete(&saved.id()).await.unwrap();
         assert!(repo.get(&saved.id()).await.unwrap().is_none());
@@ -523,7 +526,7 @@ mod tests {
         db.put(
             super::key_for_id::<TestRecord>(&TestId {
                 bucket: "bucket-a".to_string(),
-                name:   "broken".to_string(),
+                name: "broken".to_string(),
             })
             .unwrap(),
             b"not-json",
@@ -534,7 +537,7 @@ mod tests {
         let error = repo
             .get(&TestId {
                 bucket: "bucket-a".to_string(),
-                name:   "broken".to_string(),
+                name: "broken".to_string(),
             })
             .await
             .unwrap_err();

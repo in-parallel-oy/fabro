@@ -110,14 +110,16 @@ mod tests {
         index.add(&later).await.unwrap();
         index.add(&early).await.unwrap();
 
-        assert_eq!(index.list(&ListRunsQuery::default()).await.unwrap(), vec![
-            early, later
-        ]);
+        assert_eq!(
+            index.list(&ListRunsQuery::default()).await.unwrap(),
+            vec![early, later]
+        );
 
         index.remove(&early).await.unwrap();
-        assert_eq!(index.list(&ListRunsQuery::default()).await.unwrap(), vec![
-            later
-        ]);
+        assert_eq!(
+            index.list(&ListRunsQuery::default()).await.unwrap(),
+            vec![later]
+        );
     }
 
     #[tokio::test]
@@ -139,8 +141,8 @@ mod tests {
         assert_eq!(
             index
                 .list(&ListRunsQuery {
-                    start:     Some(second.created_at()),
-                    end:       Some(second.created_at() + ChronoDuration::seconds(1)),
+                    start: Some(second.created_at()),
+                    end: Some(second.created_at() + ChronoDuration::seconds(1)),
                     parent_id: None,
                 })
                 .await

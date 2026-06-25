@@ -87,8 +87,8 @@ async fn get_run_billing(
         .iter()
         .map(|model| BillingByModel {
             billing: model.billing.clone(),
-            model:   model.model.clone(),
-            stages:  model.stages,
+            model: model.model.clone(),
+            stages: model.stages,
         })
         .collect::<Vec<_>>();
 
@@ -106,17 +106,17 @@ async fn get_run_billing(
         .map(|row| {
             let rollup_stage = rollup_by_node.get(row.node_id.as_str());
             RunBillingStage {
-                billing:    rollup_stage
+                billing: rollup_stage
                     .map(|stage| stage.billing.clone())
                     .unwrap_or_default(),
-                model:      rollup_stage.and_then(|stage| stage.model.as_ref()).cloned(),
-                timing:     row.timing,
-                stage:      BillingStageRef {
-                    id:   row.node_id.clone(),
+                model: rollup_stage.and_then(|stage| stage.model.as_ref()).cloned(),
+                timing: row.timing,
+                stage: BillingStageRef {
+                    id: row.node_id.clone(),
                     name: row.node_id,
                 },
                 started_at: row.started_at,
-                state:      row.state,
+                state: row.state,
             }
         })
         .collect::<Vec<_>>();
@@ -125,14 +125,14 @@ async fn get_run_billing(
         by_model,
         stages,
         totals: RunBillingTotals {
-            cache_read_tokens:  rollup.totals.cache_read_tokens,
+            cache_read_tokens: rollup.totals.cache_read_tokens,
             cache_write_tokens: rollup.totals.cache_write_tokens,
-            input_tokens:       rollup.totals.input_tokens,
-            output_tokens:      rollup.totals.output_tokens,
-            reasoning_tokens:   rollup.totals.reasoning_tokens,
-            timing:             totals_timing.into(),
-            total_tokens:       rollup.totals.total_tokens,
-            total_usd_micros:   rollup.totals.total_usd_micros,
+            input_tokens: rollup.totals.input_tokens,
+            output_tokens: rollup.totals.output_tokens,
+            reasoning_tokens: rollup.totals.reasoning_tokens,
+            timing: totals_timing.into(),
+            total_tokens: rollup.totals.total_tokens,
+            total_usd_micros: rollup.totals.total_usd_micros,
         },
     };
 
@@ -140,10 +140,10 @@ async fn get_run_billing(
 }
 
 struct LiveBillingRow {
-    node_id:      String,
-    timing:       StageTiming,
-    started_at:   Option<DateTime<Utc>>,
-    state:        Option<StageState>,
+    node_id: String,
+    timing: StageTiming,
+    started_at: Option<DateTime<Utc>>,
+    state: Option<StageState>,
     latest_visit: u32,
 }
 
@@ -160,10 +160,10 @@ fn live_billing_rows(projection: &RunProjection, now: DateTime<Utc>) -> Vec<Live
         let index = *row_indices.entry(node_id.to_string()).or_insert_with(|| {
             let index = rows.len();
             rows.push(LiveBillingRow {
-                node_id:      node_id.to_string(),
-                timing:       StageTiming::default(),
-                started_at:   None,
-                state:        None,
+                node_id: node_id.to_string(),
+                timing: StageTiming::default(),
+                started_at: None,
+                state: None,
                 latest_visit: 0,
             });
             index

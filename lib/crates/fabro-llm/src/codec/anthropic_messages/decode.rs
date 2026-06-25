@@ -17,10 +17,10 @@ pub(super) fn token_counts_from_api_usage(usage: &ApiUsage) -> TokenCounts {
     // Anthropic adds a real thinking token field, wire it through and subtract
     // it here.
     TokenCounts {
-        input_tokens:       usage.input_tokens,
-        output_tokens:      usage.output_tokens,
-        reasoning_tokens:   0,
-        cache_read_tokens:  usage.cache_read_input_tokens.unwrap_or(0),
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        reasoning_tokens: 0,
+        cache_read_tokens: usage.cache_read_input_tokens.unwrap_or(0),
         cache_write_tokens: usage.cache_creation_input_tokens.unwrap_or(0),
     }
 }
@@ -43,21 +43,21 @@ pub(super) fn parse_content_block(block: &serde_json::Value) -> Option<ContentPa
             block.get("input")?.clone(),
         ))),
         "thinking" => Some(ContentPart::Thinking(ThinkingData {
-            text:      block.get("thinking")?.as_str()?.to_string(),
+            text: block.get("thinking")?.as_str()?.to_string(),
             signature: block
                 .get("signature")
                 .and_then(serde_json::Value::as_str)
                 .map(String::from),
-            redacted:  false,
+            redacted: false,
         })),
         "redacted_thinking" => Some(ContentPart::Thinking(ThinkingData {
-            text:      block
+            text: block
                 .get("data")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("")
                 .to_string(),
             signature: None,
-            redacted:  true,
+            redacted: true,
         })),
         _ => None,
     }
@@ -107,7 +107,7 @@ pub(super) fn refusal_error(
         );
 
     Error::Provider {
-        kind:   ProviderErrorKind::ContentFilter,
+        kind: ProviderErrorKind::ContentFilter,
         detail: Box::new(ProviderErrorDetail {
             message,
             provider: provider_name.to_string(),
@@ -173,9 +173,9 @@ pub(super) fn decode_response(
         model: api_resp.model,
         provider: ctx.provider_name.to_string(),
         message: Message {
-            role:         Role::Assistant,
-            content:      content_parts,
-            name:         None,
+            role: Role::Assistant,
+            content: content_parts,
+            name: None,
             tool_call_id: None,
         },
         finish_reason,
@@ -192,7 +192,7 @@ pub(super) fn decode_count_tokens(body: &str) -> Result<i64, Error> {
     let response: CountTokensResponse =
         serde_json::from_str(body).map_err(|e| Error::Configuration {
             message: format!("failed to parse token count response: {e}"),
-            source:  None,
+            source: None,
         })?;
     Ok(response.input_tokens)
 }

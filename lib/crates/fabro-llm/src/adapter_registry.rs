@@ -23,19 +23,19 @@ use crate::providers;
 pub struct AdapterConfig {
     /// Provider ID this adapter will register under (used as the registry
     /// name on the resulting adapter).
-    pub provider_id:   String,
+    pub provider_id: String,
     /// Authentication header constructed by `fabro-auth` from the provider's
     /// catalog auth policy and resolved credential.
-    pub auth_header:   Option<ApiKeyHeader>,
+    pub auth_header: Option<ApiKeyHeader>,
     /// Provider base URL. Native adapters can use their direct-constructor
     /// defaults when this is `None`; OpenAI-compatible providers require it.
-    pub base_url:      Option<String>,
+    pub base_url: Option<String>,
     /// Extra HTTP headers attached to every outgoing request.
     pub extra_headers: HashMap<String, String>,
     /// Adapter-kind-specific options; factories for other kinds ignore
     /// options that are not theirs.
-    pub kind_options:  AdapterKindOptions,
-    pub catalog:       Option<Arc<Catalog>>,
+    pub kind_options: AdapterKindOptions,
+    pub catalog: Option<Arc<Catalog>>,
 }
 
 /// Construction options that only apply to one adapter kind, kept out of the
@@ -54,7 +54,7 @@ pub struct OpenAiAdapterOptions {
     /// Route through the ChatGPT Codex backend.
     pub codex_mode: bool,
     /// Organization ID.
-    pub org_id:     Option<String>,
+    pub org_id: Option<String>,
     /// Project ID.
     pub project_id: Option<String>,
 }
@@ -63,12 +63,12 @@ impl AdapterConfig {
     /// Construct a minimal config with just provider ID and auth header.
     pub fn new(provider_id: impl Into<String>, auth_header: ApiKeyHeader) -> Self {
         Self {
-            provider_id:   provider_id.into(),
-            auth_header:   Some(auth_header),
-            base_url:      None,
+            provider_id: provider_id.into(),
+            auth_header: Some(auth_header),
+            base_url: None,
             extra_headers: HashMap::new(),
-            kind_options:  AdapterKindOptions::None,
-            catalog:       None,
+            kind_options: AdapterKindOptions::None,
+            catalog: None,
         }
     }
 }
@@ -189,7 +189,7 @@ fn build_openai_compatible_adapter(
             "provider '{}' uses openai_compatible adapter but does not configure base_url",
             config.provider_id
         ),
-        source:  None,
+        source: None,
     })?;
     let api_key = apply_primary_auth_header(config.auth_header.take(), &mut config.extra_headers);
     let mut adapter = providers::OpenAiCompatibleAdapter::new_optional_auth(api_key, base_url)
@@ -229,17 +229,17 @@ pub fn factory_for(adapter_kind: AdapterKind) -> AdapterFactory {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Route {
     /// Canonical provider this route belongs to.
-    pub provider:       ProviderId,
+    pub provider: ProviderId,
     /// Transport + auth scheme (the adapter registry key).
-    pub transport:      AdapterKind,
+    pub transport: AdapterKind,
     /// Wire dialect spoken on this route.
-    pub codec:          CodecKind,
+    pub codec: CodecKind,
     /// Identifier sent to the provider API (the catalog `api_id`).
-    pub deployment_id:  String,
+    pub deployment_id: String,
     /// Billing family used to translate usage into billed tokens.
     pub billing_policy: BillingPolicy,
     /// Agent profile driving profile-specific behavior.
-    pub agent_profile:  AgentProfileKind,
+    pub agent_profile: AgentProfileKind,
 }
 
 /// Resolve the route for `model_id_or_alias` from the catalog's provider and
@@ -250,12 +250,12 @@ pub fn resolve_route(catalog: &Catalog, model_id_or_alias: &str) -> Option<Route
     let provider = catalog.provider(&model.provider)?;
     let settings = catalog.model_settings(&model.id)?;
     Some(Route {
-        provider:       provider.id.clone(),
-        transport:      provider.adapter,
-        codec:          settings.codec,
-        deployment_id:  settings.api_id.clone(),
+        provider: provider.id.clone(),
+        transport: provider.adapter,
+        codec: settings.codec,
+        deployment_id: settings.api_id.clone(),
         billing_policy: settings.billing_policy,
-        agent_profile:  settings.agent_profile,
+        agent_profile: settings.agent_profile,
     })
 }
 
@@ -357,20 +357,26 @@ mod tests {
 
     #[test]
     fn anthropic_factory_builds_anthropic_adapter() {
-        let config = AdapterConfig::new("anthropic", ApiKeyHeader::Custom {
-            name:  "x-api-key".to_string(),
-            value: "test-key".to_string(),
-        });
+        let config = AdapterConfig::new(
+            "anthropic",
+            ApiKeyHeader::Custom {
+                name: "x-api-key".to_string(),
+                value: "test-key".to_string(),
+            },
+        );
         let adapter = factory_for(AdapterKind::Anthropic)(config).unwrap();
         assert_eq!(adapter.name(), "anthropic");
     }
 
     #[test]
     fn custom_primary_auth_header_is_preserved() {
-        let config = AdapterConfig::new("anthropic", ApiKeyHeader::Custom {
-            name:  "x-api-key".to_string(),
-            value: "test-key".to_string(),
-        });
+        let config = AdapterConfig::new(
+            "anthropic",
+            ApiKeyHeader::Custom {
+                name: "x-api-key".to_string(),
+                value: "test-key".to_string(),
+            },
+        );
 
         let adapter = build_anthropic_adapter(config);
 
@@ -386,10 +392,13 @@ mod tests {
         let config = AdapterConfig {
             base_url: Some("https://api.custom.test/v1".to_string()),
             extra_headers: HashMap::from([("x-api-key".to_string(), "secondary-key".to_string())]),
-            ..AdapterConfig::new("custom", ApiKeyHeader::Custom {
-                name:  "x-api-key".to_string(),
-                value: "primary-key".to_string(),
-            })
+            ..AdapterConfig::new(
+                "custom",
+                ApiKeyHeader::Custom {
+                    name: "x-api-key".to_string(),
+                    value: "primary-key".to_string(),
+                },
+            )
         };
 
         let adapter = build_openai_compatible_adapter(config).unwrap();
@@ -452,10 +461,13 @@ mod tests {
                 "x-portkey-api-key".to_string(),
                 "resolved-portkey-key".to_string(),
             )]),
-            ..AdapterConfig::new("anthropic-through-portkey", ApiKeyHeader::Custom {
-                name:  "x-api-key".to_string(),
-                value: "unused-primary-key".to_string(),
-            })
+            ..AdapterConfig::new(
+                "anthropic-through-portkey",
+                ApiKeyHeader::Custom {
+                    name: "x-api-key".to_string(),
+                    value: "unused-primary-key".to_string(),
+                },
+            )
         };
 
         let adapter = build_anthropic_adapter(config);

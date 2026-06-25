@@ -30,39 +30,39 @@ pub(crate) enum WorkerRef {
 }
 
 pub(crate) struct WorkerLaunchSpec {
-    pub(crate) executable:             PathBuf,
-    pub(crate) server_target:          String,
-    pub(crate) storage_dir:            PathBuf,
-    pub(crate) run_dir:                PathBuf,
-    pub(crate) run_id:                 RunId,
-    pub(crate) mode:                   &'static str,
-    pub(crate) worker_token:           String,
-    pub(crate) log_destination:        LogDestination,
-    pub(crate) fabro_log:              Option<String>,
-    pub(crate) active_config_path:     PathBuf,
+    pub(crate) executable: PathBuf,
+    pub(crate) server_target: String,
+    pub(crate) storage_dir: PathBuf,
+    pub(crate) run_dir: PathBuf,
+    pub(crate) run_id: RunId,
+    pub(crate) mode: &'static str,
+    pub(crate) worker_token: String,
+    pub(crate) log_destination: LogDestination,
+    pub(crate) fabro_log: Option<String>,
+    pub(crate) active_config_path: PathBuf,
     pub(crate) github_app_private_key: Option<String>,
     /// Per-run ACP credentials as a JSON `InjectedAcpCredentials`. Set on the
     /// worker subprocess env (`FABRO_ACP_CREDENTIALS`); the worker reads it once
     /// and `env_remove`s it so it never reaches the shared sandbox `base_env`.
-    pub(crate) acp_credentials_json:   Option<String>,
+    pub(crate) acp_credentials_json: Option<String>,
     /// ponytail: rebase anchor — Overseer handshake. Re-exported onto the worker as
     /// OVERSEER_SESSION/OVERSEER_WORKTREE so the tmux backend + run-state publisher
     /// (which read `std::env::var`) work in the daemon-spawned worker, where Overseer's
     /// `tmux new-session -e` env never reached. Sourced from the resolved run settings.
-    pub(crate) overseer_session:       Option<String>,
-    pub(crate) overseer_worktree:      Option<String>,
+    pub(crate) overseer_session: Option<String>,
+    pub(crate) overseer_worktree: Option<String>,
 }
 
 pub(crate) struct StartedWorker {
     pub(crate) worker_ref: WorkerRef,
-    pub(crate) stderr:     Pin<Box<dyn AsyncRead + Send + 'static>>,
-    pub(crate) wait:       BoxFuture<'static, Result<WorkerExit>>,
+    pub(crate) stderr: Pin<Box<dyn AsyncRead + Send + 'static>>,
+    pub(crate) wait: BoxFuture<'static, Result<WorkerExit>>,
 }
 
 #[derive(Debug)]
 pub(crate) struct WorkerExit {
     pub(crate) success: bool,
-    pub(crate) detail:  String,
+    pub(crate) detail: String,
 }
 
 #[derive(Default)]
@@ -149,7 +149,7 @@ impl WorkerRuntime for LocalWorkerRuntime {
             let status = child.wait().await.context("worker wait failed")?;
             Ok(WorkerExit {
                 success: status.success(),
-                detail:  status.to_string(),
+                detail: status.to_string(),
             })
         });
 

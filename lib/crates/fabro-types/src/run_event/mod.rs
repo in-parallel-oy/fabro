@@ -32,19 +32,19 @@ pub enum RunNoticeLevel {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RunEvent {
-    pub id:                 String,
-    pub ts:                 DateTime<Utc>,
-    pub run_id:             RunId,
-    pub node_id:            Option<String>,
-    pub node_label:         Option<String>,
-    pub stage_id:           Option<StageId>,
-    pub parallel_group_id:  Option<StageId>,
+    pub id: String,
+    pub ts: DateTime<Utc>,
+    pub run_id: RunId,
+    pub node_id: Option<String>,
+    pub node_label: Option<String>,
+    pub stage_id: Option<StageId>,
+    pub parallel_group_id: Option<StageId>,
     pub parallel_branch_id: Option<ParallelBranchId>,
-    pub session_id:         Option<String>,
-    pub parent_session_id:  Option<String>,
-    pub tool_call_id:       Option<String>,
-    pub actor:              Option<Principal>,
-    pub body:               EventBody,
+    pub session_id: Option<String>,
+    pub parent_session_id: Option<String>,
+    pub tool_call_id: Option<String>,
+    pub actor: Option<Principal>,
+    pub body: EventBody,
 }
 
 #[allow(
@@ -371,37 +371,37 @@ pub enum EventBody {
     #[serde(rename = "pull_request.failed")]
     PullRequestFailed(PullRequestFailedProps),
     Unknown {
-        name:       String,
+        name: String,
         properties: Value,
     },
 }
 
 #[derive(Debug, Clone, Deserialize)]
 struct RunEventRaw {
-    id:                 String,
-    ts:                 DateTime<Utc>,
-    run_id:             RunId,
+    id: String,
+    ts: DateTime<Utc>,
+    run_id: RunId,
     #[serde(default)]
-    node_id:            Option<String>,
+    node_id: Option<String>,
     #[serde(default)]
-    node_label:         Option<String>,
+    node_label: Option<String>,
     #[serde(default)]
-    stage_id:           Option<StageId>,
+    stage_id: Option<StageId>,
     #[serde(default)]
-    parallel_group_id:  Option<StageId>,
+    parallel_group_id: Option<StageId>,
     #[serde(default)]
     parallel_branch_id: Option<ParallelBranchId>,
     #[serde(default)]
-    session_id:         Option<String>,
+    session_id: Option<String>,
     #[serde(default)]
-    parent_session_id:  Option<String>,
+    parent_session_id: Option<String>,
     #[serde(default)]
-    tool_call_id:       Option<String>,
+    tool_call_id: Option<String>,
     #[serde(default)]
-    actor:              Option<Principal>,
-    event:              String,
+    actor: Option<Principal>,
+    event: String,
     #[serde(default = "default_properties")]
-    properties:         Value,
+    properties: Value,
 }
 
 fn default_properties() -> Value {
@@ -409,20 +409,20 @@ fn default_properties() -> Value {
 }
 
 struct RunEventParts<'a> {
-    id:                 String,
-    ts:                 DateTime<Utc>,
-    run_id:             RunId,
-    node_id:            Option<String>,
-    node_label:         Option<String>,
-    stage_id:           Option<StageId>,
-    parallel_group_id:  Option<StageId>,
+    id: String,
+    ts: DateTime<Utc>,
+    run_id: RunId,
+    node_id: Option<String>,
+    node_label: Option<String>,
+    stage_id: Option<StageId>,
+    parallel_group_id: Option<StageId>,
     parallel_branch_id: Option<ParallelBranchId>,
-    session_id:         Option<String>,
-    parent_session_id:  Option<String>,
-    tool_call_id:       Option<String>,
-    actor:              Option<Principal>,
-    event:              &'a str,
-    properties:         &'a Value,
+    session_id: Option<String>,
+    parent_session_id: Option<String>,
+    tool_call_id: Option<String>,
+    actor: Option<Principal>,
+    event: &'a str,
+    properties: &'a Value,
 }
 
 impl EventBody {
@@ -771,20 +771,20 @@ impl RunEvent {
     pub fn from_value(value: Value) -> serde_json::Result<Self> {
         let raw: RunEventRaw = serde_json::from_value(value)?;
         Self::from_parts(RunEventParts {
-            id:                 raw.id,
-            ts:                 raw.ts,
-            run_id:             raw.run_id,
-            node_id:            raw.node_id,
-            node_label:         raw.node_label,
-            stage_id:           raw.stage_id,
-            parallel_group_id:  raw.parallel_group_id,
+            id: raw.id,
+            ts: raw.ts,
+            run_id: raw.run_id,
+            node_id: raw.node_id,
+            node_label: raw.node_label,
+            stage_id: raw.stage_id,
+            parallel_group_id: raw.parallel_group_id,
             parallel_branch_id: raw.parallel_branch_id,
-            session_id:         raw.session_id,
-            parent_session_id:  raw.parent_session_id,
-            tool_call_id:       raw.tool_call_id,
-            actor:              raw.actor,
-            event:              &raw.event,
-            properties:         &raw.properties,
+            session_id: raw.session_id,
+            parent_session_id: raw.parent_session_id,
+            tool_call_id: raw.tool_call_id,
+            actor: raw.actor,
+            event: &raw.event,
+            properties: &raw.properties,
         })
     }
 
@@ -848,7 +848,7 @@ impl RunEvent {
             Ok(body) => body,
             Err(err) if is_known_event_name(parts.event) => return Err(err),
             Err(_) => EventBody::Unknown {
-                name:       parts.event.to_string(),
+                name: parts.event.to_string(),
                 properties: parts.properties.clone(),
             },
         };
@@ -971,21 +971,21 @@ mod tests {
     #[test]
     fn run_event_round_trips_json() {
         let event = RunEvent {
-            id:                 "evt_1".to_string(),
-            ts:                 DateTime::parse_from_rfc3339("2026-04-04T12:00:00.000Z")
+            id: "evt_1".to_string(),
+            ts: DateTime::parse_from_rfc3339("2026-04-04T12:00:00.000Z")
                 .unwrap()
                 .with_timezone(&Utc),
-            run_id:             fixtures::RUN_1,
-            node_id:            Some("build".to_string()),
-            node_label:         Some("Build".to_string()),
-            stage_id:           None,
-            parallel_group_id:  None,
+            run_id: fixtures::RUN_1,
+            node_id: Some("build".to_string()),
+            node_label: Some("Build".to_string()),
+            stage_id: None,
+            parallel_group_id: None,
             parallel_branch_id: None,
-            session_id:         None,
-            parent_session_id:  None,
-            tool_call_id:       None,
-            actor:              None,
-            body:               EventBody::StageCompleted(StageCompletedProps {
+            session_id: None,
+            parent_session_id: None,
+            tool_call_id: None,
+            actor: None,
+            body: EventBody::StageCompleted(StageCompletedProps {
                 index: 1,
                 timing: crate::StageTiming::wall_only(1234),
                 status: crate::StageOutcome::Succeeded,
@@ -1017,15 +1017,18 @@ mod tests {
     fn run_event_deserializes_adjacent_layout() {
         let settings = WorkflowSettings::default();
         let graph = Graph {
-            name:  "test".to_string(),
-            nodes: HashMap::from([("start".to_string(), Node {
-                id:      "start".to_string(),
-                attrs:   HashMap::new(),
-                classes: Vec::new(),
-            })]),
+            name: "test".to_string(),
+            nodes: HashMap::from([(
+                "start".to_string(),
+                Node {
+                    id: "start".to_string(),
+                    attrs: HashMap::new(),
+                    classes: Vec::new(),
+                },
+            )]),
             edges: vec![Edge {
-                from:  "start".to_string(),
-                to:    "done".to_string(),
+                from: "start".to_string(),
+                to: "done".to_string(),
                 attrs: HashMap::new(),
             }],
             attrs: HashMap::new(),
@@ -1081,9 +1084,9 @@ mod tests {
     fn interview_interrupted_kind_matches_event_name() {
         let body = EventBody::InterviewInterrupted(InterviewInterruptedProps {
             question_id: "q-1".to_string(),
-            question:    "approve?".to_string(),
-            stage:       "gate".to_string(),
-            reason:      "interrupted".to_string(),
+            question: "approve?".to_string(),
+            stage: "gate".to_string(),
+            reason: "interrupted".to_string(),
             duration_ms: 12,
         });
 
@@ -1419,11 +1422,14 @@ mod tests {
         );
         assert_eq!(parsed.tool_call_id.as_deref(), Some("call_1"));
         let actor = parsed.actor.as_ref().expect("actor present");
-        assert_eq!(actor, &Principal::Agent {
-            session_id:        Some("ses_child".to_string()),
-            parent_session_id: Some("ses_parent".to_string()),
-            model:             Some("claude-sonnet".to_string()),
-        });
+        assert_eq!(
+            actor,
+            &Principal::Agent {
+                session_id: Some("ses_child".to_string()),
+                parent_session_id: Some("ses_parent".to_string()),
+                model: Some("claude-sonnet".to_string()),
+            }
+        );
 
         let serialized = parsed.to_value().unwrap();
         assert_eq!(serialized["stage_id"], value["stage_id"]);
@@ -1439,21 +1445,21 @@ mod tests {
     #[test]
     fn agent_session_ended_serializes_empty_properties() {
         let event = RunEvent {
-            id:                 "evt_session_ended".to_string(),
-            ts:                 DateTime::parse_from_rfc3339("2026-04-04T12:00:00.000Z")
+            id: "evt_session_ended".to_string(),
+            ts: DateTime::parse_from_rfc3339("2026-04-04T12:00:00.000Z")
                 .unwrap()
                 .with_timezone(&Utc),
-            run_id:             fixtures::RUN_1,
-            node_id:            None,
-            node_label:         None,
-            stage_id:           None,
-            parallel_group_id:  None,
+            run_id: fixtures::RUN_1,
+            node_id: None,
+            node_label: None,
+            stage_id: None,
+            parallel_group_id: None,
             parallel_branch_id: None,
-            session_id:         Some("ses_abc".to_string()),
-            parent_session_id:  None,
-            tool_call_id:       None,
-            actor:              None,
-            body:               EventBody::AgentSessionEnded(AgentSessionEndedProps {}),
+            session_id: Some("ses_abc".to_string()),
+            parent_session_id: None,
+            tool_call_id: None,
+            actor: None,
+            body: EventBody::AgentSessionEnded(AgentSessionEndedProps {}),
         };
 
         let serialized = event.to_value().unwrap();
@@ -1468,27 +1474,27 @@ mod tests {
     #[test]
     fn run_event_omits_absent_envelope_fields() {
         let event = RunEvent {
-            id:                 "evt_bare".to_string(),
-            ts:                 DateTime::parse_from_rfc3339("2026-04-04T12:00:00.000Z")
+            id: "evt_bare".to_string(),
+            ts: DateTime::parse_from_rfc3339("2026-04-04T12:00:00.000Z")
                 .unwrap()
                 .with_timezone(&Utc),
-            run_id:             fixtures::RUN_1,
-            node_id:            None,
-            node_label:         None,
-            stage_id:           None,
-            parallel_group_id:  None,
+            run_id: fixtures::RUN_1,
+            node_id: None,
+            node_label: None,
+            stage_id: None,
+            parallel_group_id: None,
             parallel_branch_id: None,
-            session_id:         None,
-            parent_session_id:  None,
-            tool_call_id:       None,
-            actor:              None,
-            body:               EventBody::RunStarted(RunStartedProps {
-                name:         "demo".to_string(),
-                base_branch:  None,
-                base_sha:     None,
-                run_branch:   None,
+            session_id: None,
+            parent_session_id: None,
+            tool_call_id: None,
+            actor: None,
+            body: EventBody::RunStarted(RunStartedProps {
+                name: "demo".to_string(),
+                base_branch: None,
+                base_sha: None,
+                run_branch: None,
                 worktree_dir: None,
-                goal:         None,
+                goal: None,
             }),
         };
 
@@ -1637,30 +1643,28 @@ mod tests {
     #[test]
     fn metadata_snapshot_events_are_known_and_round_trip_json() {
         let completed = RunEvent {
-            id:                 "evt_metadata_completed".to_string(),
-            ts:                 DateTime::parse_from_rfc3339("2026-04-29T12:00:00.000Z")
+            id: "evt_metadata_completed".to_string(),
+            ts: DateTime::parse_from_rfc3339("2026-04-29T12:00:00.000Z")
                 .unwrap()
                 .with_timezone(&Utc),
-            run_id:             fixtures::RUN_1,
-            node_id:            None,
-            node_label:         None,
-            stage_id:           None,
-            parallel_group_id:  None,
+            run_id: fixtures::RUN_1,
+            node_id: None,
+            node_label: None,
+            stage_id: None,
+            parallel_group_id: None,
             parallel_branch_id: None,
-            session_id:         None,
-            parent_session_id:  None,
-            tool_call_id:       None,
-            actor:              None,
-            body:               EventBody::MetadataSnapshotCompleted(
-                MetadataSnapshotCompletedProps {
-                    phase:       MetadataSnapshotPhase::Checkpoint,
-                    branch:      "fabro/metadata/run".to_string(),
-                    duration_ms: 2800,
-                    entry_count: 3,
-                    bytes:       42,
-                    commit_sha:  "abc123".to_string(),
-                },
-            ),
+            session_id: None,
+            parent_session_id: None,
+            tool_call_id: None,
+            actor: None,
+            body: EventBody::MetadataSnapshotCompleted(MetadataSnapshotCompletedProps {
+                phase: MetadataSnapshotPhase::Checkpoint,
+                branch: "fabro/metadata/run".to_string(),
+                duration_ms: 2800,
+                entry_count: 3,
+                bytes: 42,
+                commit_sha: "abc123".to_string(),
+            }),
         };
 
         let serialized = completed.to_value().unwrap();
@@ -1686,24 +1690,24 @@ mod tests {
     #[test]
     fn pull_request_linked_round_trips_json() {
         let event = RunEvent {
-            id:                 "evt_pr_linked".to_string(),
-            ts:                 DateTime::parse_from_rfc3339("2026-05-15T12:00:00.000Z")
+            id: "evt_pr_linked".to_string(),
+            ts: DateTime::parse_from_rfc3339("2026-05-15T12:00:00.000Z")
                 .unwrap()
                 .with_timezone(&Utc),
-            run_id:             fixtures::RUN_1,
-            node_id:            None,
-            node_label:         None,
-            stage_id:           None,
-            parallel_group_id:  None,
+            run_id: fixtures::RUN_1,
+            node_id: None,
+            node_label: None,
+            stage_id: None,
+            parallel_group_id: None,
             parallel_branch_id: None,
-            session_id:         None,
-            parent_session_id:  None,
-            tool_call_id:       None,
-            actor:              None,
-            body:               EventBody::PullRequestLinked(PullRequestLinkedProps {
+            session_id: None,
+            parent_session_id: None,
+            tool_call_id: None,
+            actor: None,
+            body: EventBody::PullRequestLinked(PullRequestLinkedProps {
                 pull_request: crate::PullRequestLink {
-                    owner:  "acme".to_string(),
-                    repo:   "widgets".to_string(),
+                    owner: "acme".to_string(),
+                    repo: "widgets".to_string(),
                     number: 42,
                 },
             }),
@@ -1723,24 +1727,24 @@ mod tests {
     #[test]
     fn pull_request_unlinked_round_trips_json() {
         let event = RunEvent {
-            id:                 "evt_pr_unlinked".to_string(),
-            ts:                 DateTime::parse_from_rfc3339("2026-05-15T12:05:00.000Z")
+            id: "evt_pr_unlinked".to_string(),
+            ts: DateTime::parse_from_rfc3339("2026-05-15T12:05:00.000Z")
                 .unwrap()
                 .with_timezone(&Utc),
-            run_id:             fixtures::RUN_1,
-            node_id:            None,
-            node_label:         None,
-            stage_id:           None,
-            parallel_group_id:  None,
+            run_id: fixtures::RUN_1,
+            node_id: None,
+            node_label: None,
+            stage_id: None,
+            parallel_group_id: None,
             parallel_branch_id: None,
-            session_id:         None,
-            parent_session_id:  None,
-            tool_call_id:       None,
-            actor:              None,
-            body:               EventBody::PullRequestUnlinked(PullRequestUnlinkedProps {
+            session_id: None,
+            parent_session_id: None,
+            tool_call_id: None,
+            actor: None,
+            body: EventBody::PullRequestUnlinked(PullRequestUnlinkedProps {
                 pull_request: crate::PullRequestLink {
-                    owner:  "acme".to_string(),
-                    repo:   "widgets".to_string(),
+                    owner: "acme".to_string(),
+                    repo: "widgets".to_string(),
                     number: 42,
                 },
             }),
@@ -1823,15 +1827,15 @@ mod tests {
     #[test]
     fn metadata_snapshot_failed_omits_empty_optional_fields() {
         let body = EventBody::MetadataSnapshotFailed(MetadataSnapshotFailedProps {
-            phase:            MetadataSnapshotPhase::Init,
-            branch:           "fabro/metadata/run".to_string(),
-            duration_ms:      15,
-            failure_kind:     MetadataSnapshotFailureKind::LoadState,
-            error:            "state unavailable".to_string(),
-            causes:           Vec::new(),
-            commit_sha:       None,
-            entry_count:      None,
-            bytes:            None,
+            phase: MetadataSnapshotPhase::Init,
+            branch: "fabro/metadata/run".to_string(),
+            duration_ms: 15,
+            failure_kind: MetadataSnapshotFailureKind::LoadState,
+            error: "state unavailable".to_string(),
+            causes: Vec::new(),
+            commit_sha: None,
+            entry_count: None,
+            bytes: None,
             exec_output_tail: None,
         });
 
@@ -1852,18 +1856,18 @@ mod tests {
     #[test]
     fn metadata_snapshot_failed_serializes_exec_output_tail_additively() {
         let body = EventBody::MetadataSnapshotFailed(MetadataSnapshotFailedProps {
-            phase:            MetadataSnapshotPhase::Checkpoint,
-            branch:           "fabro/metadata/run".to_string(),
-            duration_ms:      20,
-            failure_kind:     MetadataSnapshotFailureKind::Push,
-            error:            "push failed".to_string(),
-            causes:           Vec::new(),
-            commit_sha:       None,
-            entry_count:      None,
-            bytes:            None,
+            phase: MetadataSnapshotPhase::Checkpoint,
+            branch: "fabro/metadata/run".to_string(),
+            duration_ms: 20,
+            failure_kind: MetadataSnapshotFailureKind::Push,
+            error: "push failed".to_string(),
+            causes: Vec::new(),
+            commit_sha: None,
+            entry_count: None,
+            bytes: None,
             exec_output_tail: Some(ExecOutputTail {
-                stdout:           Some("last stdout line".to_string()),
-                stderr:           Some("last stderr line".to_string()),
+                stdout: Some("last stdout line".to_string()),
+                stderr: Some("last stderr line".to_string()),
                 stdout_truncated: false,
                 stderr_truncated: true,
             }),
@@ -1891,15 +1895,15 @@ mod tests {
         );
 
         let body_without_tail = EventBody::MetadataSnapshotFailed(MetadataSnapshotFailedProps {
-            phase:            MetadataSnapshotPhase::Checkpoint,
-            branch:           "fabro/metadata/run".to_string(),
-            duration_ms:      20,
-            failure_kind:     MetadataSnapshotFailureKind::Push,
-            error:            "push failed".to_string(),
-            causes:           Vec::new(),
-            commit_sha:       None,
-            entry_count:      None,
-            bytes:            None,
+            phase: MetadataSnapshotPhase::Checkpoint,
+            branch: "fabro/metadata/run".to_string(),
+            duration_ms: 20,
+            failure_kind: MetadataSnapshotFailureKind::Push,
+            error: "push failed".to_string(),
+            causes: Vec::new(),
+            commit_sha: None,
+            entry_count: None,
+            bytes: None,
             exec_output_tail: None,
         });
         let value_without_tail = serde_json::to_value(&body_without_tail).unwrap();
@@ -1915,26 +1919,26 @@ mod tests {
     #[test]
     fn exec_output_tail_fields_are_additive_on_failure_props() {
         let tail = ExecOutputTail {
-            stdout:           Some("last stdout line".to_string()),
-            stderr:           Some("last stderr line".to_string()),
+            stdout: Some("last stdout line".to_string()),
+            stderr: Some("last stderr line".to_string()),
             stdout_truncated: false,
             stderr_truncated: true,
         };
 
         for body in [
             EventBody::RunNotice(RunNoticeProps {
-                level:            RunNoticeLevel::Warn,
-                code:             RunNoticeCode::GitDiffFailed.to_string(),
-                message:          "git diff failed".to_string(),
+                level: RunNoticeLevel::Warn,
+                code: RunNoticeCode::GitDiffFailed.to_string(),
+                message: "git diff failed".to_string(),
                 exec_output_tail: Some(tail.clone()),
             }),
             EventBody::CheckpointFailed(CheckpointFailedProps {
-                error:            "git commit failed".to_string(),
+                error: "git commit failed".to_string(),
                 exec_output_tail: Some(tail.clone()),
             }),
             EventBody::GitPush(GitPushProps {
-                branch:           "refs/heads/run:refs/heads/run".to_string(),
-                success:          false,
+                branch: "refs/heads/run:refs/heads/run".to_string(),
+                success: false,
                 exec_output_tail: Some(tail.clone()),
             }),
         ] {
@@ -1954,18 +1958,18 @@ mod tests {
     fn absent_exec_output_tail_is_omitted_from_new_failure_props() {
         for body in [
             EventBody::RunNotice(RunNoticeProps {
-                level:            RunNoticeLevel::Warn,
-                code:             RunNoticeCode::GitDiffFailed.to_string(),
-                message:          "git diff failed".to_string(),
+                level: RunNoticeLevel::Warn,
+                code: RunNoticeCode::GitDiffFailed.to_string(),
+                message: "git diff failed".to_string(),
                 exec_output_tail: None,
             }),
             EventBody::CheckpointFailed(CheckpointFailedProps {
-                error:            "git commit failed".to_string(),
+                error: "git commit failed".to_string(),
                 exec_output_tail: None,
             }),
             EventBody::GitPush(GitPushProps {
-                branch:           "refs/heads/run:refs/heads/run".to_string(),
-                success:          false,
+                branch: "refs/heads/run:refs/heads/run".to_string(),
+                success: false,
                 exec_output_tail: None,
             }),
         ] {
@@ -1990,18 +1994,18 @@ mod tests {
     #[test]
     fn todo_created_serializes_with_canonical_name() {
         let body = EventBody::TodoCreated(TodoCreatedProps {
-            list_id:     "openai_plan:ses_1".to_string(),
-            list_kind:   crate::TodoListKind::OpenAiPlan,
-            todo_id:     "todo_1".to_string(),
-            status:      crate::TodoStatus::Pending,
-            order:       0,
-            subject:     "do the thing".to_string(),
+            list_id: "openai_plan:ses_1".to_string(),
+            list_kind: crate::TodoListKind::OpenAiPlan,
+            todo_id: "todo_1".to_string(),
+            status: crate::TodoStatus::Pending,
+            order: 0,
+            subject: "do the thing".to_string(),
             description: String::new(),
             active_form: None,
-            owner:       None,
-            blocks:      Vec::new(),
-            blocked_by:  Vec::new(),
-            metadata:    std::collections::BTreeMap::new(),
+            owner: None,
+            blocks: Vec::new(),
+            blocked_by: Vec::new(),
+            metadata: std::collections::BTreeMap::new(),
         });
 
         let value = serde_json::to_value(&body).unwrap();
@@ -2020,31 +2024,31 @@ mod tests {
     #[test]
     fn todo_envelope_includes_session_metadata() {
         let event = RunEvent {
-            id:                 "evt_todo".to_string(),
-            ts:                 DateTime::parse_from_rfc3339("2026-05-22T12:00:00.000Z")
+            id: "evt_todo".to_string(),
+            ts: DateTime::parse_from_rfc3339("2026-05-22T12:00:00.000Z")
                 .unwrap()
                 .with_timezone(&Utc),
-            run_id:             fixtures::RUN_1,
-            node_id:            Some("code".to_string()),
-            node_label:         None,
-            stage_id:           None,
-            parallel_group_id:  None,
+            run_id: fixtures::RUN_1,
+            node_id: Some("code".to_string()),
+            node_label: None,
+            stage_id: None,
+            parallel_group_id: None,
             parallel_branch_id: None,
-            session_id:         Some("ses_child".to_string()),
-            parent_session_id:  Some("ses_parent".to_string()),
-            tool_call_id:       Some("call_xyz".to_string()),
-            actor:              None,
-            body:               EventBody::TodoUpdated(TodoUpdatedProps {
-                list_id:        "anthropic_tasks:ses_root".to_string(),
-                list_kind:      crate::TodoListKind::AnthropicTasks,
-                todo_id:        "42".to_string(),
-                status:         Some(crate::TodoStatus::InProgress),
-                order:          None,
-                subject:        None,
-                description:    None,
-                active_form:    None,
-                owner:          None,
-                add_blocks:     None,
+            session_id: Some("ses_child".to_string()),
+            parent_session_id: Some("ses_parent".to_string()),
+            tool_call_id: Some("call_xyz".to_string()),
+            actor: None,
+            body: EventBody::TodoUpdated(TodoUpdatedProps {
+                list_id: "anthropic_tasks:ses_root".to_string(),
+                list_kind: crate::TodoListKind::AnthropicTasks,
+                todo_id: "42".to_string(),
+                status: Some(crate::TodoStatus::InProgress),
+                order: None,
+                subject: None,
+                description: None,
+                active_form: None,
+                owner: None,
+                add_blocks: None,
                 add_blocked_by: None,
                 metadata_patch: std::collections::BTreeMap::new(),
             }),
@@ -2070,9 +2074,9 @@ mod tests {
     #[test]
     fn todo_deleted_round_trips() {
         let body = EventBody::TodoDeleted(TodoDeletedProps {
-            list_id:   "openai_plan:ses_1".to_string(),
+            list_id: "openai_plan:ses_1".to_string(),
             list_kind: crate::TodoListKind::OpenAiPlan,
-            todo_id:   "todo_x".to_string(),
+            todo_id: "todo_x".to_string(),
         });
 
         let value = serde_json::to_value(&body).unwrap();
@@ -2089,16 +2093,16 @@ mod tests {
     #[test]
     fn agent_memory_loaded_serializes_with_canonical_name() {
         let body = EventBody::AgentMemoryLoaded(AgentMemoryLoadedProps {
-            provider_profile:   "anthropic".to_string(),
-            files:              vec![AgentMemoryFileProps {
-                path:         "/repo/AGENTS.md".to_string(),
-                byte_count:   100,
+            provider_profile: "anthropic".to_string(),
+            files: vec![AgentMemoryFileProps {
+                path: "/repo/AGENTS.md".to_string(),
+                byte_count: 100,
                 loaded_bytes: 100,
-                truncated:    false,
+                truncated: false,
             }],
             total_loaded_bytes: 100,
-            budget_bytes:       32768,
-            visit:              1,
+            budget_bytes: 32768,
+            visit: 1,
         });
         let value = serde_json::to_value(&body).unwrap();
         assert_eq!(value["event"], "agent.memory.loaded");
@@ -2120,12 +2124,12 @@ mod tests {
     fn agent_skills_discovered_serializes_with_canonical_name() {
         let body = EventBody::AgentSkillsDiscovered(AgentSkillsDiscoveredProps {
             provider_profile: "openai".to_string(),
-            source_dirs:      vec!["/repo/.fabro/skills".to_string()],
-            skills:           vec![AgentSkillSummary {
-                name:        "commit".to_string(),
+            source_dirs: vec!["/repo/.fabro/skills".to_string()],
+            skills: vec![AgentSkillSummary {
+                name: "commit".to_string(),
                 description: "Create a commit".to_string(),
             }],
-            visit:            2,
+            visit: 2,
         });
         let value = serde_json::to_value(&body).unwrap();
         assert_eq!(value["event"], "agent.skills.discovered");
@@ -2137,8 +2141,8 @@ mod tests {
     fn agent_skill_activated_serializes_source_variants() {
         let slash = EventBody::AgentSkillActivated(AgentSkillActivatedProps {
             skill_name: "commit".to_string(),
-            source:     AgentSkillActivationSource::Slash,
-            visit:      3,
+            source: AgentSkillActivationSource::Slash,
+            visit: 3,
         });
         let value = serde_json::to_value(&slash).unwrap();
         assert_eq!(value["event"], "agent.skill.activated");
@@ -2146,8 +2150,8 @@ mod tests {
 
         let tool = EventBody::AgentSkillActivated(AgentSkillActivatedProps {
             skill_name: "commit".to_string(),
-            source:     AgentSkillActivationSource::Tool,
-            visit:      4,
+            source: AgentSkillActivationSource::Tool,
+            visit: 4,
         });
         let value = serde_json::to_value(&tool).unwrap();
         assert_eq!(value["properties"]["source"], "tool");
@@ -2156,17 +2160,17 @@ mod tests {
     #[test]
     fn agent_message_omits_context_window_when_absent() {
         let body = EventBody::AgentMessage(AgentMessageProps {
-            text:            "ok".to_string(),
-            model:           crate::ModelRef {
+            text: "ok".to_string(),
+            model: crate::ModelRef {
                 provider: fabro_model::ProviderId::openai(),
                 model_id: "gpt-5.4".to_string(),
-                speed:    None,
+                speed: None,
             },
-            billing:         BilledTokenCounts::default(),
+            billing: BilledTokenCounts::default(),
             tool_call_count: 0,
-            visit:           1,
-            message:         None,
-            context_window:  None,
+            visit: 1,
+            message: None,
+            context_window: None,
         });
 
         let value = serde_json::to_value(&body).unwrap();
@@ -2185,40 +2189,39 @@ mod tests {
     #[test]
     fn agent_message_round_trips_optional_context_window() {
         let context_window = crate::StageContextWindowProjection {
-            provider:              "openai".to_string(),
-            model:                 "gpt-5.4".to_string(),
+            provider: "openai".to_string(),
+            model: "gpt-5.4".to_string(),
             context_window_tokens: 400_000,
-            input_tokens:          123_456,
-            usage_percent:         30.864,
-            count_method:
-                crate::StageContextWindowCountMethod::ResponseUsageScaledBreakdown,
-            staleness:             crate::StageContextWindowStaleness::Live,
-            generated_at:          DateTime::parse_from_rfc3339("2026-05-23T12:34:56Z")
+            input_tokens: 123_456,
+            usage_percent: 30.864,
+            count_method: crate::StageContextWindowCountMethod::ResponseUsageScaledBreakdown,
+            staleness: crate::StageContextWindowStaleness::Live,
+            generated_at: DateTime::parse_from_rfc3339("2026-05-23T12:34:56Z")
                 .unwrap()
                 .with_timezone(&Utc),
-            event_seq:             None,
-            breakdown:             vec![crate::StageContextWindowBreakdownItem {
-                category:      crate::StageContextWindowCategory::SystemPrompt,
-                tokens:        30_000,
+            event_seq: None,
+            breakdown: vec![crate::StageContextWindowBreakdownItem {
+                category: crate::StageContextWindowCategory::SystemPrompt,
+                tokens: 30_000,
                 usage_percent: 7.5,
             }],
-            warnings:              vec![crate::StageContextWindowWarning {
-                code:    "local_token_estimate".to_string(),
+            warnings: vec![crate::StageContextWindowWarning {
+                code: "local_token_estimate".to_string(),
                 message: "input token count is a local estimate".to_string(),
             }],
         };
         let body = EventBody::AgentMessage(AgentMessageProps {
-            text:            "ok".to_string(),
-            model:           crate::ModelRef {
+            text: "ok".to_string(),
+            model: crate::ModelRef {
                 provider: fabro_model::ProviderId::openai(),
                 model_id: "gpt-5.4".to_string(),
-                speed:    None,
+                speed: None,
             },
-            billing:         BilledTokenCounts::default(),
+            billing: BilledTokenCounts::default(),
             tool_call_count: 0,
-            visit:           1,
-            message:         None,
-            context_window:  Some(context_window),
+            visit: 1,
+            message: None,
+            context_window: Some(context_window),
         });
 
         let value = serde_json::to_value(&body).unwrap();
@@ -2274,12 +2277,12 @@ mod tests {
     fn agent_mcp_ready_serializes_with_tool_summaries() {
         let body = EventBody::AgentMcpReady(AgentMcpReadyProps {
             server_name: "github".to_string(),
-            tool_count:  1,
-            tools:       vec![AgentMcpToolSummary {
-                name:          "mcp__github__create_issue".to_string(),
+            tool_count: 1,
+            tools: vec![AgentMcpToolSummary {
+                name: "mcp__github__create_issue".to_string(),
                 original_name: "create_issue".to_string(),
             }],
-            visit:       1,
+            visit: 1,
         });
         let value = serde_json::to_value(&body).unwrap();
         assert_eq!(value["event"], "agent.mcp.ready");
@@ -2297,9 +2300,9 @@ mod tests {
     fn agent_mcp_ready_omits_tools_when_empty() {
         let body = EventBody::AgentMcpReady(AgentMcpReadyProps {
             server_name: "github".to_string(),
-            tool_count:  0,
-            tools:       Vec::new(),
-            visit:       1,
+            tool_count: 0,
+            tools: Vec::new(),
+            visit: 1,
         });
         let value = serde_json::to_value(&body).unwrap();
         assert!(
@@ -2317,21 +2320,21 @@ mod tests {
         let body = EventBody::AgentToolsAvailable(AgentToolsAvailableProps {
             tools: vec![
                 AgentToolSummary {
-                    name:        "apply_patch".to_string(),
+                    name: "apply_patch".to_string(),
                     description: "Apply a unified diff patch".to_string(),
-                    source:      AgentToolSource::Native,
-                    category:    AgentToolCategory::Write,
-                    invoked:     false,
+                    source: AgentToolSource::Native,
+                    category: AgentToolCategory::Write,
+                    invoked: false,
                 },
                 AgentToolSummary {
-                    name:        "mcp__filesystem__read_file".to_string(),
+                    name: "mcp__filesystem__read_file".to_string(),
                     description: "Read a file through the filesystem MCP server".to_string(),
-                    source:      AgentToolSource::Mcp {
-                        server_name:   "filesystem".to_string(),
+                    source: AgentToolSource::Mcp {
+                        server_name: "filesystem".to_string(),
                         original_name: "read_file".to_string(),
                     },
-                    category:    AgentToolCategory::Other,
-                    invoked:     false,
+                    category: AgentToolCategory::Other,
+                    invoked: false,
                 },
             ],
             visit: 1,
@@ -2372,7 +2375,7 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_value(AgentToolSource::Mcp {
-                server_name:   "github".to_string(),
+                server_name: "github".to_string(),
                 original_name: "create_issue".to_string(),
             })
             .unwrap(),

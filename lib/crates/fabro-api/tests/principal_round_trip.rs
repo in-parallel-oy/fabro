@@ -106,14 +106,14 @@ fn principal_round_trips_every_variant_through_api_type() {
             delivery_id: "delivery-1".to_string(),
         },
         Principal::Slack {
-            team_id:   "T1".to_string(),
-            user_id:   "U1".to_string(),
+            team_id: "T1".to_string(),
+            user_id: "U1".to_string(),
             user_name: Some("ada".to_string()),
         },
         Principal::Agent {
-            session_id:        Some("ses_agent".to_string()),
+            session_id: Some("ses_agent".to_string()),
             parent_session_id: Some("ses_parent".to_string()),
-            model:             Some("gpt-5.4".to_string()),
+            model: Some("gpt-5.4".to_string()),
         },
         Principal::System {
             system_kind: SystemActorKind::Watchdog,
@@ -131,13 +131,13 @@ fn principal_round_trips_every_variant_through_api_type() {
 #[test]
 fn run_provenance_subject_round_trips_as_principal() {
     let provenance = RunProvenance {
-        server:  Some(RunServerProvenance {
+        server: Some(RunServerProvenance {
             version: "0.1.0".to_string(),
         }),
-        client:  Some(RunClientProvenance {
+        client: Some(RunClientProvenance {
             user_agent: Some("fabro-cli/0.1.0".to_string()),
-            name:       Some("fabro-cli".to_string()),
-            version:    Some("0.1.0".to_string()),
+            name: Some("fabro-cli".to_string()),
+            version: Some("0.1.0".to_string()),
         }),
         subject: Principal::Worker {
             run_id: fixtures::RUN_1,

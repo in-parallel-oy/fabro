@@ -45,9 +45,9 @@ pub struct UserSettings {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct WorkflowSettings {
-    pub project:  ProjectNamespace,
+    pub project: ProjectNamespace,
     pub workflow: WorkflowNamespace,
-    pub run:      RunNamespace,
+    pub run: RunNamespace,
 }
 
 impl WorkflowSettings {

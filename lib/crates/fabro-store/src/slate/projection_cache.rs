@@ -10,10 +10,10 @@ use crate::{Error, EventEnvelope, ListRunsQuery, Result};
 
 #[derive(Debug, Clone)]
 pub struct CachedRunProjection {
-    pub run_id:     RunId,
-    pub summary:    Run,
+    pub run_id: RunId,
+    pub summary: Run,
     pub projection: Arc<RunProjection>,
-    pub last_seq:   u32,
+    pub last_seq: u32,
 }
 
 impl CachedRunProjection {
@@ -35,7 +35,7 @@ pub(crate) struct RunProjectionCache {
 
 #[derive(Debug, Default)]
 struct RunProjectionCacheState {
-    entries:            HashMap<RunId, CachedRunProjection>,
+    entries: HashMap<RunId, CachedRunProjection>,
     children_by_parent: HashMap<RunId, BTreeSet<RunId>>,
 }
 

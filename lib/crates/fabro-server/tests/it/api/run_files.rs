@@ -55,34 +55,42 @@ async fn append_completed_run_with_final_patch(
     final_patch: &str,
 ) {
     let run_store = store.create_run(run_id).await.expect("create run store");
-    workflow_event::append_event(&run_store, run_id, &workflow_event::Event::RunCreated {
-        run_id:           *run_id,
-        title:            None,
-        settings:         serde_json::to_value(WorkflowSettings::default())
-            .expect("workflow settings should serialize"),
-        graph:            serde_json::to_value(Graph::new("test")).expect("graph should serialize"),
-        workflow_source:  None,
-        workflow_config:  None,
-        labels:           std::collections::BTreeMap::default(),
-        run_dir:          "/tmp".to_string(),
-        source_directory: None,
-        workflow_slug:    None,
-        automation:       None,
-        db_prefix:        None,
-        provenance:       test_support::test_run_provenance(),
-        manifest_blob:    None,
-        git:              None,
-        fork_source_ref:  None,
-        retried_from:     None,
-        parent_id:        None,
-        web_url:          None,
-    })
+    workflow_event::append_event(
+        &run_store,
+        run_id,
+        &workflow_event::Event::RunCreated {
+            run_id: *run_id,
+            title: None,
+            settings: serde_json::to_value(WorkflowSettings::default())
+                .expect("workflow settings should serialize"),
+            graph: serde_json::to_value(Graph::new("test")).expect("graph should serialize"),
+            workflow_source: None,
+            workflow_config: None,
+            labels: std::collections::BTreeMap::default(),
+            run_dir: "/tmp".to_string(),
+            source_directory: None,
+            workflow_slug: None,
+            automation: None,
+            db_prefix: None,
+            provenance: test_support::test_run_provenance(),
+            manifest_blob: None,
+            git: None,
+            fork_source_ref: None,
+            retried_from: None,
+            parent_id: None,
+            web_url: None,
+        },
+    )
     .await
     .expect("append RunCreated");
-    workflow_event::append_event(&run_store, run_id, &workflow_event::Event::RunRunnable {
-        source: fabro_types::RunRunnableSource::StartRequested,
-        actor:  None,
-    })
+    workflow_event::append_event(
+        &run_store,
+        run_id,
+        &workflow_event::Event::RunRunnable {
+            source: fabro_types::RunRunnableSource::StartRequested,
+            actor: None,
+        },
+    )
     .await
     .expect("append RunRunnable");
     workflow_event::append_event(&run_store, run_id, &workflow_event::Event::RunStarting)
@@ -92,13 +100,13 @@ async fn append_completed_run_with_final_patch(
         &run_store,
         run_id,
         &workflow_event::Event::WorkflowRunStarted {
-            name:         "test".to_string(),
-            run_id:       *run_id,
-            base_branch:  Some("main".to_string()),
-            base_sha:     Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
-            run_branch:   Some("fabro/run/test".to_string()),
+            name: "test".to_string(),
+            run_id: *run_id,
+            base_branch: Some("main".to_string()),
+            base_sha: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+            run_branch: Some("fabro/run/test".to_string()),
             worktree_dir: None,
-            goal:         Some("Test degraded files".to_string()),
+            goal: Some("Test degraded files".to_string()),
         },
     )
     .await
@@ -110,15 +118,15 @@ async fn append_completed_run_with_final_patch(
         &run_store,
         run_id,
         &workflow_event::Event::WorkflowRunCompleted {
-            timing:               fabro_types::RunTiming::wall_only(1),
-            artifact_count:       0,
-            status:               "succeeded".to_string(),
-            reason:               SuccessReason::Completed,
-            total_usd_micros:     None,
+            timing: fabro_types::RunTiming::wall_only(1),
+            artifact_count: 0,
+            status: "succeeded".to_string(),
+            reason: SuccessReason::Completed,
+            total_usd_micros: None,
             final_git_commit_sha: Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string()),
-            final_patch:          Some(final_patch.to_string()),
-            diff_summary:         None,
-            billing:              None,
+            final_patch: Some(final_patch.to_string()),
+            diff_summary: None,
+            billing: None,
         },
     )
     .await
@@ -135,15 +143,15 @@ async fn append_local_sandbox_initialized(store: &Database, run_id: &RunId) {
                 .expect("test should run inside a source checkout")
                 .display()
                 .to_string(),
-            provider:          SandboxProviderKind::Local,
-            id:                "local:test-sandbox".to_string(),
-            image:             None,
-            snapshot:          None,
-            repo_cloned:       None,
-            clone_origin_url:  None,
-            clone_branch:      None,
-            workspace_root:    None,
-            repos_root:        None,
+            provider: SandboxProviderKind::Local,
+            id: "local:test-sandbox".to_string(),
+            image: None,
+            snapshot: None,
+            repo_cloned: None,
+            clone_origin_url: None,
+            clone_branch: None,
+            workspace_root: None,
+            repos_root: None,
             primary_repo_path: None,
             primary_repo_link: None,
         },

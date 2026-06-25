@@ -15,7 +15,7 @@ mod daytona_streaming_live {
     #[derive(Debug, Clone)]
     struct CapturedChunk {
         stream: CommandOutputStream,
-        text:   String,
+        text: String,
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

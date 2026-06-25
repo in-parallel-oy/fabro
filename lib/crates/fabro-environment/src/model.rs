@@ -21,7 +21,7 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Environment {
-    pub id:       EnvironmentId,
+    pub id: EnvironmentId,
     pub revision: EnvironmentRevision,
     #[serde(flatten)]
     pub settings: EnvironmentSettings,
@@ -91,7 +91,7 @@ impl Environment {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EnvironmentDraft {
-    pub id:       EnvironmentId,
+    pub id: EnvironmentId,
     #[serde(flatten)]
     pub settings: EnvironmentSettings,
 }
@@ -182,15 +182,15 @@ async fn inline_dense_dockerfile(
 
 fn environment_settings_to_layer(settings: &EnvironmentSettings) -> EnvironmentLayer {
     EnvironmentLayer {
-        provider:  Some(settings.provider.to_string()),
-        cwd:       settings.cwd.clone(),
-        image:     image_settings_to_layer(&settings.image),
+        provider: Some(settings.provider.to_string()),
+        cwd: settings.cwd.clone(),
+        image: image_settings_to_layer(&settings.image),
         resources: resources_settings_to_layer(&settings.resources),
-        network:   network_settings_to_layer(&settings.network),
+        network: network_settings_to_layer(&settings.network),
         lifecycle: lifecycle_settings_to_layer(&settings.lifecycle),
-        labels:    StickyMap::from(settings.labels.clone()),
-        env:       StickyMap::from(settings.env.clone()),
-        binds:     (!settings.binds.is_empty()).then(|| settings.binds.clone()),
+        labels: StickyMap::from(settings.labels.clone()),
+        env: StickyMap::from(settings.env.clone()),
+        binds: (!settings.binds.is_empty()).then(|| settings.binds.clone()),
     }
 }
 
@@ -199,7 +199,7 @@ fn image_settings_to_layer(settings: &EnvironmentImageSettings) -> Option<Enviro
         return None;
     }
     Some(EnvironmentImageLayer {
-        docker:     settings.docker.clone(),
+        docker: settings.docker.clone(),
         dockerfile: settings.dockerfile.as_ref().map(dockerfile_source_to_layer),
     })
 }
@@ -218,9 +218,9 @@ fn resources_settings_to_layer(
         return None;
     }
     Some(EnvironmentResourcesLayer {
-        cpu:    settings.cpu,
+        cpu: settings.cpu,
         memory: settings.memory,
-        disk:   settings.disk,
+        disk: settings.disk,
     })
 }
 
@@ -231,7 +231,7 @@ fn network_settings_to_layer(
         return None;
     }
     Some(EnvironmentNetworkLayer {
-        mode:  Some(settings.mode.to_string()),
+        mode: Some(settings.mode.to_string()),
         allow: settings.allow.clone(),
     })
 }
@@ -243,9 +243,9 @@ fn lifecycle_settings_to_layer(
         return None;
     }
     Some(EnvironmentLifecycleLayer {
-        preserve:         settings.preserve.then_some(true),
+        preserve: settings.preserve.then_some(true),
         stop_on_terminal: (!settings.stop_on_terminal).then_some(false),
-        auto_stop:        settings.auto_stop,
+        auto_stop: settings.auto_stop,
     })
 }
 

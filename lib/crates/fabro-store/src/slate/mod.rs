@@ -29,9 +29,9 @@ use crate::{Error, ListRunsQuery, Result, RunProjection, keys};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnreadableRun {
-    pub run_id:     RunId,
+    pub run_id: RunId,
     pub created_at: DateTime<Utc>,
-    pub error:      String,
+    pub error: String,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
@@ -546,10 +546,10 @@ mod tests {
             manifest_blob: None,
             definition_blob: None,
             git: Some(fabro_types::GitContext {
-                origin_url:   "https://github.com/in-parallel-oy/fabro".to_string(),
-                branch:       "main".to_string(),
-                sha:          None,
-                dirty:        fabro_types::DirtyStatus::Clean,
+                origin_url: "https://github.com/in-parallel-oy/fabro".to_string(),
+                branch: "main".to_string(),
+                sha: None,
+                dirty: fabro_types::DirtyStatus::Clean,
                 push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
             }),
             fork_source_ref: None,
@@ -710,9 +710,12 @@ mod tests {
         assert_eq!(summary[1].workflow.name, None);
         assert_eq!(summary[1].workflow.graph_name.as_deref(), Some("night-sky"));
         assert_eq!(summary[1].goal, "map the constellations");
-        assert_eq!(summary[1].lifecycle.status, RunStatus::Succeeded {
-            reason: SuccessReason::Completed,
-        });
+        assert_eq!(
+            summary[1].lifecycle.status,
+            RunStatus::Succeeded {
+                reason: SuccessReason::Completed,
+            }
+        );
 
         let reopened = store.open_run(&test_run_id("run-1")).await.unwrap();
         let stored = reopened.state().await.unwrap().spec;
@@ -1097,9 +1100,12 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(summary.len(), 1);
-        assert_eq!(summary[0].lifecycle.status, RunStatus::Failed {
-            reason: FailureReason::Cancelled,
-        });
+        assert_eq!(
+            summary[0].lifecycle.status,
+            RunStatus::Failed {
+                reason: FailureReason::Cancelled,
+            }
+        );
         assert_eq!(summary[0].lifecycle.pending_control, None);
     }
 
@@ -1170,9 +1176,12 @@ mod tests {
             .unwrap();
         assert_eq!(summary.len(), 1);
         assert_eq!(summary[0].id, test_run_id("run-1"));
-        assert_eq!(summary[0].lifecycle.status, RunStatus::Succeeded {
-            reason: SuccessReason::Completed,
-        });
+        assert_eq!(
+            summary[0].lifecycle.status,
+            RunStatus::Succeeded {
+                reason: SuccessReason::Completed,
+            }
+        );
     }
 
     #[tokio::test]
@@ -1201,10 +1210,8 @@ mod tests {
         let filtered = reopened
             .list_cached_runs(
                 &ListRunsQuery {
-                    start:     Some(test_run_id("run-2").created_at()),
-                    end:       Some(
-                        test_run_id("run-2").created_at() + chrono::Duration::seconds(1),
-                    ),
+                    start: Some(test_run_id("run-2").created_at()),
+                    end: Some(test_run_id("run-2").created_at() + chrono::Duration::seconds(1)),
                     parent_id: None,
                 },
                 Utc::now(),
@@ -1219,9 +1226,12 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(cached.summary.lifecycle.status, RunStatus::Succeeded {
-            reason: SuccessReason::Completed,
-        });
+        assert_eq!(
+            cached.summary.lifecycle.status,
+            RunStatus::Succeeded {
+                reason: SuccessReason::Completed,
+            }
+        );
     }
 
     #[tokio::test]
@@ -1545,14 +1555,20 @@ mod tests {
 
         let state = fresh_writer.state().await.unwrap();
         assert_eq!(state.title, "Renamed failed run");
-        assert_eq!(state.status, RunStatus::Failed {
-            reason: FailureReason::WorkflowError,
-        });
+        assert_eq!(
+            state.status,
+            RunStatus::Failed {
+                reason: FailureReason::WorkflowError,
+            }
+        );
 
         let cached = reopened.get_cached_run(&run_id).await.unwrap().unwrap();
         assert_eq!(cached.summary.title, "Renamed failed run");
-        assert_eq!(cached.summary.lifecycle.status, RunStatus::Failed {
-            reason: FailureReason::WorkflowError,
-        });
+        assert_eq!(
+            cached.summary.lifecycle.status,
+            RunStatus::Failed {
+                reason: FailureReason::WorkflowError,
+            }
+        );
     }
 }

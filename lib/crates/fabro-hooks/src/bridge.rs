@@ -11,12 +11,12 @@ use crate::types::{HookContext, HookDecision, HookEvent, HookExecutionContext};
 /// Created per-node in the workflow engine, capturing the `HookRunner` and
 /// context needed to build `HookContext` for tool-level events.
 pub struct WorkflowToolHookCallback {
-    pub hook_runner:            Arc<HookRunner>,
-    pub sandbox:                Arc<dyn Sandbox>,
-    pub run_id:                 RunId,
-    pub workflow_name:          String,
+    pub hook_runner: Arc<HookRunner>,
+    pub sandbox: Arc<dyn Sandbox>,
+    pub run_id: RunId,
+    pub workflow_name: String,
     pub hook_execution_context: HookExecutionContext,
-    pub node_id:                String,
+    pub node_id: String,
 }
 
 impl WorkflowToolHookCallback {
@@ -87,9 +87,9 @@ mod tests {
     use crate::types::{HookContext, HookResult};
 
     struct CapturingExecutor {
-        captured_contexts:           Arc<Mutex<Vec<HookContext>>>,
+        captured_contexts: Arc<Mutex<Vec<HookContext>>>,
         captured_execution_contexts: Arc<Mutex<Vec<HookExecutionContext>>>,
-        decision:                    HookDecision,
+        decision: HookDecision,
     }
 
     #[async_trait::async_trait]
@@ -109,8 +109,8 @@ mod tests {
                 .unwrap()
                 .push(execution_context.clone());
             HookResult {
-                hook_name:   None,
-                decision:    self.decision.clone(),
+                hook_name: None,
+                decision: self.decision.clone(),
                 duration_ms: 1,
             }
         }
@@ -154,9 +154,9 @@ mod tests {
     async fn pre_tool_use_builds_correct_context() {
         let captured = Arc::new(Mutex::new(Vec::new()));
         let executor = Arc::new(CapturingExecutor {
-            captured_contexts:           captured.clone(),
+            captured_contexts: captured.clone(),
             captured_execution_contexts: Arc::new(Mutex::new(Vec::new())),
-            decision:                    HookDecision::Proceed,
+            decision: HookDecision::Proceed,
         });
         let config = HookSettings {
             hooks: vec![make_hook(HookEvent::PreToolUse)],
@@ -184,9 +184,9 @@ mod tests {
     #[tokio::test]
     async fn pre_tool_use_maps_block_decision() {
         let executor = Arc::new(CapturingExecutor {
-            captured_contexts:           Arc::new(Mutex::new(Vec::new())),
+            captured_contexts: Arc::new(Mutex::new(Vec::new())),
             captured_execution_contexts: Arc::new(Mutex::new(Vec::new())),
-            decision:                    HookDecision::Block {
+            decision: HookDecision::Block {
                 reason: Some("forbidden".into()),
             },
         });
@@ -198,17 +198,20 @@ mod tests {
         let bridge = make_bridge(runner, sandbox, HookExecutionContext::default());
 
         let decision = bridge.pre_tool_use("shell", &serde_json::json!({})).await;
-        assert_eq!(decision, ToolHookDecision::Block {
-            reason: "forbidden".to_string(),
-        });
+        assert_eq!(
+            decision,
+            ToolHookDecision::Block {
+                reason: "forbidden".to_string(),
+            }
+        );
     }
 
     #[tokio::test]
     async fn pre_tool_use_maps_proceed() {
         let executor = Arc::new(CapturingExecutor {
-            captured_contexts:           Arc::new(Mutex::new(Vec::new())),
+            captured_contexts: Arc::new(Mutex::new(Vec::new())),
             captured_execution_contexts: Arc::new(Mutex::new(Vec::new())),
-            decision:                    HookDecision::Proceed,
+            decision: HookDecision::Proceed,
         });
         let config = HookSettings {
             hooks: vec![make_hook(HookEvent::PreToolUse)],
@@ -225,9 +228,9 @@ mod tests {
     async fn post_tool_use_builds_context_with_output() {
         let captured = Arc::new(Mutex::new(Vec::new()));
         let executor = Arc::new(CapturingExecutor {
-            captured_contexts:           captured.clone(),
+            captured_contexts: captured.clone(),
             captured_execution_contexts: Arc::new(Mutex::new(Vec::new())),
-            decision:                    HookDecision::Proceed,
+            decision: HookDecision::Proceed,
         });
         let config = HookSettings {
             hooks: vec![make_hook(HookEvent::PostToolUse)],
@@ -255,9 +258,9 @@ mod tests {
     async fn post_tool_use_failure_builds_context_with_error() {
         let captured = Arc::new(Mutex::new(Vec::new()));
         let executor = Arc::new(CapturingExecutor {
-            captured_contexts:           captured.clone(),
+            captured_contexts: captured.clone(),
             captured_execution_contexts: Arc::new(Mutex::new(Vec::new())),
-            decision:                    HookDecision::Proceed,
+            decision: HookDecision::Proceed,
         });
         let config = HookSettings {
             hooks: vec![make_hook(HookEvent::PostToolUseFailure)],
@@ -296,15 +299,16 @@ mod tests {
         let runner = Arc::new(HookRunner::with_executor(config, executor));
         let sandbox = make_sandbox();
         let hook_execution_context = HookExecutionContext {
-            host_source_dir:  Some(PathBuf::from("/host/source")),
+            host_source_dir: Some(PathBuf::from("/host/source")),
             sandbox_work_dir: Some(PathBuf::from("/supplied/sandbox")),
         };
         let bridge = make_bridge(runner, sandbox, hook_execution_context.clone());
 
         bridge.pre_tool_use("shell", &serde_json::json!({})).await;
 
-        assert_eq!(captured_execution_contexts.lock().unwrap().as_slice(), &[
-            hook_execution_context
-        ]);
+        assert_eq!(
+            captured_execution_contexts.lock().unwrap().as_slice(),
+            &[hook_execution_context]
+        );
     }
 }

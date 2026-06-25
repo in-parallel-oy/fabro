@@ -72,15 +72,15 @@ const PROVIDER: &str = "gcloud";
 
 /// A single-run sandbox backed by an ephemeral GCE VM.
 pub struct GcloudSandbox {
-    config:         GcloudConfig,
-    compute:        Arc<ComputeClient>,
-    keypair:        EphemeralKeypair,
-    run_id:         Option<RunId>,
-    clone_url:      Option<String>,
-    clone_branch:   Option<String>,
-    instance_name:  OnceCell<String>,
-    data_ssh:       OnceCell<OpensshRunner>,
-    origin_url:     OnceCell<String>,
+    config: GcloudConfig,
+    compute: Arc<ComputeClient>,
+    keypair: EphemeralKeypair,
+    run_id: Option<RunId>,
+    clone_url: Option<String>,
+    clone_branch: Option<String>,
+    instance_name: OnceCell<String>,
+    data_ssh: OnceCell<OpensshRunner>,
+    origin_url: OnceCell<String>,
     event_callback: Option<SandboxEventCallback>,
 }
 
@@ -133,9 +133,9 @@ impl GcloudSandbox {
     }
 
     fn data_ssh(&self) -> crate::Result<&OpensshRunner> {
-        self.data_ssh
-            .get()
-            .ok_or_else(|| crate::Error::message("gcloud sandbox not initialized — call initialize() first"))
+        self.data_ssh.get().ok_or_else(|| {
+            crate::Error::message("gcloud sandbox not initialized — call initialize() first")
+        })
     }
 
     fn resolve(&self, path: &str) -> String {
@@ -147,7 +147,12 @@ impl GcloudSandbox {
     }
 
     fn new_instance_name(&self) -> String {
-        let suffix: String = uuid::Uuid::new_v4().simple().to_string().chars().take(12).collect();
+        let suffix: String = uuid::Uuid::new_v4()
+            .simple()
+            .to_string()
+            .chars()
+            .take(12)
+            .collect();
         format!("{}{suffix}", self.config.name_prefix)
     }
 
@@ -175,7 +180,11 @@ impl GcloudSandbox {
     async fn poll_host_key(&self, name: &str) -> crate::Result<String> {
         let deadline = Instant::now() + self.config.host_key_poll_timeout;
         loop {
-            if let Some(line) = self.compute.host_key_from_guest_attributes(&self.config, name).await? {
+            if let Some(line) = self
+                .compute
+                .host_key_from_guest_attributes(&self.config, name)
+                .await?
+            {
                 return Ok(line);
             }
             if Instant::now() >= deadline {
@@ -192,7 +201,7 @@ impl GcloudSandbox {
             return Ok(());
         };
         self.emit(SandboxEvent::GitCloneStarted {
-            url:    url.clone(),
+            url: url.clone(),
             branch: self.clone_branch.clone(),
         });
         let started = Instant::now();
@@ -217,8 +226,8 @@ impl GcloudSandbox {
                 String::from_utf8_lossy(&output.stderr)
             );
             self.emit(SandboxEvent::GitCloneFailed {
-                url:    url.clone(),
-                error:  err.clone(),
+                url: url.clone(),
+                error: err.clone(),
                 causes: Vec::new(),
             });
             return Err(crate::Error::message(err));
@@ -234,7 +243,9 @@ impl GcloudSandbox {
     /// initialize-failure compensation path.
     async fn delete_vm(&self, name: &str) -> crate::Result<()> {
         let operation = self.compute.delete_instance(&self.config, name).await?;
-        self.compute.await_zonal_operation(&self.config, &operation).await
+        self.compute
+            .await_zonal_operation(&self.config, &operation)
+            .await
     }
 
     fn build_exec_script(
@@ -288,7 +299,9 @@ impl Sandbox for GcloudSandbox {
                 .compute
                 .insert_instance(&self.config, &name, &ssh_keys, &startup, run_id.as_deref())
                 .await?;
-            self.compute.await_zonal_operation(&self.config, &operation).await?;
+            self.compute
+                .await_zonal_operation(&self.config, &operation)
+                .await?;
 
             let instance = self.compute.get_instance(&self.config, &name).await?;
             let ip = instance
@@ -299,9 +312,9 @@ impl Sandbox for GcloudSandbox {
             let host_key_line = self.poll_host_key(&name).await?;
 
             let runner = OpensshRunner::connect(&SshConnectParams {
-                host:            ip,
-                user:            self.config.ssh_user.clone(),
-                private_key:     self.keypair.private_openssh().to_string(),
+                host: ip,
+                user: self.config.ssh_user.clone(),
+                private_key: self.keypair.private_openssh().to_string(),
                 host_key_line,
                 connect_timeout: self.config.ssh_connect_timeout,
             })
@@ -318,12 +331,12 @@ impl Sandbox for GcloudSandbox {
                 let _ = self.data_ssh.set(runner);
                 let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
                 self.emit(SandboxEvent::Ready {
-                    provider:    PROVIDER.into(),
+                    provider: PROVIDER.into(),
                     duration_ms,
-                    name:        Some(name),
-                    cpu:         None,
-                    memory:      None,
-                    url:         None,
+                    name: Some(name),
+                    cpu: None,
+                    memory: None,
+                    url: None,
                 });
                 Ok(())
             }
@@ -340,9 +353,9 @@ impl Sandbox for GcloudSandbox {
                 }
                 let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
                 self.emit(SandboxEvent::InitializeFailed {
-                    provider:    PROVIDER.into(),
-                    error:       err.to_string(),
-                    causes:      Vec::new(),
+                    provider: PROVIDER.into(),
+                    error: err.to_string(),
+                    causes: Vec::new(),
                     duration_ms,
                 });
                 Err(err)
@@ -359,8 +372,8 @@ impl Sandbox for GcloudSandbox {
             if let Err(err) = self.delete_vm(name).await {
                 self.emit(SandboxEvent::CleanupFailed {
                     provider: PROVIDER.into(),
-                    error:    err.to_string(),
-                    causes:   Vec::new(),
+                    error: err.to_string(),
+                    causes: Vec::new(),
                 });
                 return Err(err);
             }
@@ -376,7 +389,9 @@ impl Sandbox for GcloudSandbox {
     async fn read_file_bytes(&self, path: &str) -> crate::Result<Vec<u8>> {
         let ssh = self.data_ssh()?;
         let resolved = self.resolve(path);
-        let output = ssh.run_command(&format!("cat {}", shell_quote(&resolved))).await?;
+        let output = ssh
+            .run_command(&format!("cat {}", shell_quote(&resolved)))
+            .await?;
         if output.exit_code != 0 {
             return Err(crate::Error::message(format!(
                 "Failed to read {resolved}: {}",
@@ -392,7 +407,8 @@ impl Sandbox for GcloudSandbox {
         if let Some(parent) = Path::new(&resolved).parent() {
             let parent = parent.to_string_lossy();
             if parent != "/" && !parent.is_empty() {
-                ssh.run_command(&format!("mkdir -p {}", shell_quote(&parent))).await?;
+                ssh.run_command(&format!("mkdir -p {}", shell_quote(&parent)))
+                    .await?;
             }
         }
         ssh.upload_file(&resolved, content.as_bytes()).await
@@ -401,7 +417,9 @@ impl Sandbox for GcloudSandbox {
     async fn delete_file(&self, path: &str) -> crate::Result<()> {
         let ssh = self.data_ssh()?;
         let resolved = self.resolve(path);
-        let output = ssh.run_command(&format!("rm -f {}", shell_quote(&resolved))).await?;
+        let output = ssh
+            .run_command(&format!("rm -f {}", shell_quote(&resolved)))
+            .await?;
         if output.exit_code != 0 {
             return Err(crate::Error::message(format!(
                 "Failed to delete {resolved}: {}",
@@ -414,11 +432,17 @@ impl Sandbox for GcloudSandbox {
     async fn file_exists(&self, path: &str) -> crate::Result<bool> {
         let ssh = self.data_ssh()?;
         let resolved = self.resolve(path);
-        let output = ssh.run_command(&format!("test -e {}", shell_quote(&resolved))).await?;
+        let output = ssh
+            .run_command(&format!("test -e {}", shell_quote(&resolved)))
+            .await?;
         Ok(output.exit_code == 0)
     }
 
-    async fn list_directory(&self, path: &str, depth: Option<usize>) -> crate::Result<Vec<DirEntry>> {
+    async fn list_directory(
+        &self,
+        path: &str,
+        depth: Option<usize>,
+    ) -> crate::Result<Vec<DirEntry>> {
         let resolved = self.resolve(path);
         let max_depth = depth.unwrap_or(1);
         let cmd = format!(
@@ -621,14 +645,19 @@ impl Sandbox for GcloudSandbox {
         }
 
         Ok(StdioProcess {
-            stdin:  Box::pin(stdin),
+            stdin: Box::pin(stdin),
             stdout: Box::pin(stdout),
             stderr: stderr_collector,
             handle: StdioProcessHandle::new(GcloudStdioHandle { control }),
         })
     }
 
-    async fn grep(&self, pattern: &str, path: &str, options: &GrepOptions) -> crate::Result<Vec<String>> {
+    async fn grep(
+        &self,
+        pattern: &str,
+        path: &str,
+        options: &GrepOptions,
+    ) -> crate::Result<Vec<String>> {
         let resolved = self.resolve(path);
         let mut cmd = "grep -rn".to_string();
         if options.case_insensitive {
@@ -640,7 +669,12 @@ impl Sandbox for GcloudSandbox {
         if let Some(max) = options.max_results {
             let _ = write!(cmd, " -m {max}");
         }
-        let _ = write!(cmd, " -- {} {}", shell_quote(pattern), shell_quote(&resolved));
+        let _ = write!(
+            cmd,
+            " -- {} {}",
+            shell_quote(pattern),
+            shell_quote(&resolved)
+        );
         let result = self.exec_command(&cmd, 30_000, None, None, None).await?;
         if result.exit_code == Some(1) {
             return Ok(Vec::new());
@@ -670,10 +704,19 @@ impl Sandbox for GcloudSandbox {
                 result.stderr
             )));
         }
-        Ok(result.stdout.lines().filter(|l| !l.is_empty()).map(String::from).collect())
+        Ok(result
+            .stdout
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(String::from)
+            .collect())
     }
 
-    async fn download_file_to_local(&self, remote_path: &str, local_path: &Path) -> crate::Result<()> {
+    async fn download_file_to_local(
+        &self,
+        remote_path: &str,
+        local_path: &Path,
+    ) -> crate::Result<()> {
         let ssh = self.data_ssh()?;
         let resolved = self.resolve(remote_path);
         let bytes = ssh.download_file(&resolved).await?;
@@ -687,7 +730,11 @@ impl Sandbox for GcloudSandbox {
             .map_err(|err| crate::Error::context("Failed to write downloaded file", err))
     }
 
-    async fn upload_file_from_local(&self, local_path: &Path, remote_path: &str) -> crate::Result<()> {
+    async fn upload_file_from_local(
+        &self,
+        local_path: &Path,
+        remote_path: &str,
+    ) -> crate::Result<()> {
         let ssh = self.data_ssh()?;
         let resolved = self.resolve(remote_path);
         let bytes = tokio::fs::read(local_path)
@@ -720,7 +767,10 @@ impl Sandbox for GcloudSandbox {
         self.origin_url.get().map(String::as_str)
     }
 
-    async fn setup_git(&self, intent: &crate::GitSetupIntent) -> crate::Result<Option<crate::GitRunInfo>> {
+    async fn setup_git(
+        &self,
+        intent: &crate::GitSetupIntent,
+    ) -> crate::Result<Option<crate::GitRunInfo>> {
         crate::setup_git_via_exec(self, intent).await.map(Some)
     }
 
@@ -732,7 +782,9 @@ impl Sandbox for GcloudSandbox {
     }
 
     fn resume_setup_commands(&self, run_branch: &str) -> Vec<String> {
-        vec![format!("git fetch origin {run_branch} && git checkout {run_branch}")]
+        vec![format!(
+            "git fetch origin {run_branch} && git checkout {run_branch}"
+        )]
     }
 }
 
@@ -744,10 +796,9 @@ struct GcloudStdioControl {
 impl GcloudStdioControl {
     async fn terminate_inner(&self) -> crate::Result<()> {
         if let Some(child) = self.child.lock().await.take() {
-            child
-                .disconnect()
-                .await
-                .map_err(|err| crate::Error::context("Failed to terminate gcloud stdio process", err))?;
+            child.disconnect().await.map_err(|err| {
+                crate::Error::context("Failed to terminate gcloud stdio process", err)
+            })?;
         }
         Ok(())
     }
@@ -767,10 +818,9 @@ impl crate::sandbox::StdioProcessControl for GcloudStdioHandle {
         let child = self.control.child.lock().await.take();
         match child {
             Some(child) => {
-                let status = child
-                    .wait()
-                    .await
-                    .map_err(|err| crate::Error::context("gcloud stdio process wait failed", err))?;
+                let status = child.wait().await.map_err(|err| {
+                    crate::Error::context("gcloud stdio process wait failed", err)
+                })?;
                 Ok(StdioProcessTermination::exited(status.code()))
             }
             None => Ok(StdioProcessTermination::cancelled()),
@@ -785,10 +835,10 @@ mod tests {
 
     fn sandbox() -> GcloudSandbox {
         let settings = GcloudSettings {
-            project:      Some("proj".to_string()),
-            zone:         Some("us-central1-a".to_string()),
-            subnetwork:   Some("default".to_string()),
-            vm_image:     Some("img".to_string()),
+            project: Some("proj".to_string()),
+            zone: Some("us-central1-a".to_string()),
+            subnetwork: Some("default".to_string()),
+            vm_image: Some("img".to_string()),
             machine_type: Some("e2-standard-4".to_string()),
             ..Default::default()
         };

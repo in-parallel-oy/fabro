@@ -34,7 +34,7 @@ struct ArtifactFilenameParams {
     #[serde(default)]
     filename: Option<String>,
     #[serde(default)]
-    retry:    Option<u32>,
+    retry: Option<u32>,
 }
 
 const MAX_SINGLE_ARTIFACT_BYTES: u64 = 10 * 1024 * 1024;
@@ -49,14 +49,14 @@ struct ArtifactBatchUploadManifest {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct ArtifactBatchUploadEntry {
-    part:           String,
-    path:           String,
+    part: String,
+    path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    sha256:         Option<String>,
+    sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     expected_bytes: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    content_type:   Option<String>,
+    content_type: Option<String>,
 }
 
 async fn get_checkpoint(
@@ -156,19 +156,19 @@ async fn list_run_artifacts(
 
 fn run_artifact_entry_from(entry: NodeArtifact) -> RunArtifactEntry {
     RunArtifactEntry {
-        stage_id:      entry.node.to_string(),
-        node_slug:     entry.node.node_id().to_string(),
-        retry:         entry.retry.cast_signed(),
+        stage_id: entry.node.to_string(),
+        node_slug: entry.node.node_id().to_string(),
+        retry: entry.retry.cast_signed(),
         relative_path: entry.filename,
-        size:          entry.size.cast_signed(),
+        size: entry.size.cast_signed(),
     }
 }
 
 fn artifact_entry_from(entry: StageArtifactEntry) -> ArtifactEntry {
     ArtifactEntry {
         filename: entry.filename,
-        retry:    entry.retry.cast_signed(),
-        size:     entry.size.cast_signed(),
+        retry: entry.retry.cast_signed(),
+        size: entry.size.cast_signed(),
     }
 }
 
@@ -206,8 +206,8 @@ enum ArtifactUploadContentType {
 }
 
 struct ValidatedArtifactBatchEntry {
-    path:           String,
-    sha256:         Option<String>,
+    path: String,
+    sha256: Option<String>,
     expected_bytes: Option<u64>,
 }
 
@@ -351,11 +351,14 @@ fn validate_artifact_batch_manifest(
             }
         }
         if entries
-            .insert(entry.part.clone(), ValidatedArtifactBatchEntry {
-                path,
-                sha256: entry.sha256.map(|value| value.to_ascii_lowercase()),
-                expected_bytes: entry.expected_bytes,
-            })
+            .insert(
+                entry.part.clone(),
+                ValidatedArtifactBatchEntry {
+                    path,
+                    sha256: entry.sha256.map(|value| value.to_ascii_lowercase()),
+                    expected_bytes: entry.expected_bytes,
+                },
+            )
             .is_some()
         {
             return Err(bad_request_response(format!(

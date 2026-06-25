@@ -24,13 +24,13 @@ use crate::types::{
 enum BlockState {
     Text(String),
     Reasoning {
-        text:      String,
+        text: String,
         signature: Option<String>,
-        redacted:  Option<String>,
+        redacted: Option<String>,
     },
     ToolUse {
-        id:    String,
-        name:  String,
+        id: String,
+        name: String,
         input: String,
     },
 }
@@ -38,15 +38,15 @@ enum BlockState {
 /// Accumulated state while decoding one ConverseStream response.
 pub(super) struct ConverseStreamDecoder {
     provider_name: String,
-    model:         String,
-    blocks:        BTreeMap<u64, BlockState>,
+    model: String,
+    blocks: BTreeMap<u64, BlockState>,
     /// Completed blocks in arrival order, for the final response message.
-    parts:         Vec<ContentPart>,
+    parts: Vec<ContentPart>,
     finish_reason: FinishReason,
-    usage:         TokenCounts,
-    text_started:  bool,
-    finished:      bool,
-    rate_limit:    Option<RateLimitInfo>,
+    usage: TokenCounts,
+    text_started: bool,
+    finished: bool,
+    rate_limit: Option<RateLimitInfo>,
 }
 
 impl ConverseStreamDecoder {
@@ -85,11 +85,14 @@ impl ConverseStreamDecoder {
                 .unwrap_or_default()
                 .to_string();
             let started = ToolCall::new(&id, &name, Value::Null);
-            self.blocks.insert(index, BlockState::ToolUse {
-                id,
-                name,
-                input: String::new(),
-            });
+            self.blocks.insert(
+                index,
+                BlockState::ToolUse {
+                    id,
+                    name,
+                    input: String::new(),
+                },
+            );
             return vec![StreamEvent::ToolCallStart { tool_call: started }];
         }
         Vec::new()
@@ -143,9 +146,9 @@ impl ConverseStreamDecoder {
                 .blocks
                 .entry(index)
                 .or_insert_with(|| BlockState::Reasoning {
-                    text:      String::new(),
+                    text: String::new(),
                     signature: None,
-                    redacted:  None,
+                    redacted: None,
                 });
             let BlockState::Reasoning {
                 text,
@@ -203,9 +206,9 @@ impl ConverseStreamDecoder {
             } => {
                 let part = if let Some(blob) = redacted {
                     ThinkingData {
-                        text:      blob,
+                        text: blob,
                         signature: None,
-                        redacted:  true,
+                        redacted: true,
                     }
                 } else {
                     ThinkingData {
@@ -241,22 +244,22 @@ impl ConverseStreamDecoder {
         }
 
         let response = Response {
-            id:            uuid::Uuid::new_v4().to_string(),
-            model:         self.model.clone(),
-            provider:      self.provider_name.clone(),
-            message:       Message {
-                role:         Role::Assistant,
-                content:      std::mem::take(&mut self.parts),
-                name:         None,
+            id: uuid::Uuid::new_v4().to_string(),
+            model: self.model.clone(),
+            provider: self.provider_name.clone(),
+            message: Message {
+                role: Role::Assistant,
+                content: std::mem::take(&mut self.parts),
+                name: None,
                 tool_call_id: None,
             },
             finish_reason: self.finish_reason.clone(),
-            usage:         self.usage.clone(),
-            raw:           None,
-            warnings:      vec![],
-            rate_limit:    self.rate_limit.clone(),
-            cost_usd:      None,
-            cost_source:   None,
+            usage: self.usage.clone(),
+            raw: None,
+            warnings: vec![],
+            rate_limit: self.rate_limit.clone(),
+            cost_usd: None,
+            cost_source: None,
         };
         StreamEvent::finish(self.finish_reason.clone(), self.usage.clone(), response)
     }
@@ -309,28 +312,28 @@ mod tests {
 
     fn decoder() -> ConverseStreamDecoder {
         let request = Request {
-            model:            "us.anthropic.claude-sonnet-4-6".to_string(),
-            messages:         vec![RequestMessage::user("hi")],
-            provider:         Some("bedrock".to_string()),
-            tools:            None,
-            tool_choice:      None,
-            response_format:  None,
-            temperature:      None,
-            top_p:            None,
-            max_tokens:       None,
-            stop_sequences:   None,
+            model: "us.anthropic.claude-sonnet-4-6".to_string(),
+            messages: vec![RequestMessage::user("hi")],
+            provider: Some("bedrock".to_string()),
+            tools: None,
+            tool_choice: None,
+            response_format: None,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            stop_sequences: None,
             reasoning_effort: None,
-            speed:            None,
-            metadata:         None,
+            speed: None,
+            metadata: None,
             provider_options: None,
         };
         let params = CodecParams::default();
         let ctx = CodecCtx {
-            request:       &request,
+            request: &request,
             provider_name: "bedrock",
             deployment_id: "us.anthropic.claude-sonnet-4-6",
-            model:         None,
-            params:        &params,
+            model: None,
+            params: &params,
         };
         ConverseStreamDecoder::new(&ctx, None)
     }
@@ -503,7 +506,7 @@ mod tests {
         assert!(
             d.on_event(RawEvent {
                 event: None,
-                data:  "{}",
+                data: "{}",
             })
             .unwrap()
             .is_empty()

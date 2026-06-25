@@ -719,12 +719,10 @@ async fn mcp_explicit_unix_target_auto_spawns_like_cli() {
     let socket_arg = socket_path.display().to_string();
 
     assert!(!socket_path.exists());
-    let client = spawn_mcp_client(&context, &[
-        "--storage-dir",
-        &storage_arg,
-        "--server",
-        &socket_arg,
-    ])
+    let client = spawn_mcp_client(
+        &context,
+        &["--storage-dir", &storage_arg, "--server", &socket_arg],
+    )
     .await;
     let run_id = create_mcp_run(&client, workflow, false).await;
     let search = call_tool_json(
@@ -993,7 +991,7 @@ async fn mcp_search_uses_fabro_auth_file_override() {
         .put(
             &target,
             AuthEntry::DevToken(DevTokenEntry {
-                token:        TEST_DEV_TOKEN.to_string(),
+                token: TEST_DEV_TOKEN.to_string(),
                 logged_in_at: Utc::now(),
             }),
         )
@@ -2353,8 +2351,8 @@ fn expected_claude_desktop_config_path(home_dir: &Path) -> PathBuf {
 }
 
 struct McpStdioFixture {
-    command:     Vec<String>,
-    env:         HashMap<String, String>,
+    command: Vec<String>,
+    env: HashMap<String, String>,
     current_dir: PathBuf,
 }
 
@@ -2418,15 +2416,15 @@ async fn spawn_mcp_client(context: &fabro_test::TestContext, extra_args: &[&str]
 
 async fn spawn_mcp_client_from_fixture(fixture: McpStdioFixture) -> McpClient {
     let config = McpServerSettings {
-        name:                 "fabro-under-test".to_string(),
-        transport:            McpTransport::Stdio {
+        name: "fabro-under-test".to_string(),
+        transport: McpTransport::Stdio {
             command: fixture.command,
-            env:     fixture.env,
+            env: fixture.env,
         },
-        current_dir:          Some(fixture.current_dir),
-        clear_env:            true,
+        current_dir: Some(fixture.current_dir),
+        clear_env: true,
         startup_timeout_secs: 10,
-        tool_timeout_secs:    30,
+        tool_timeout_secs: 30,
     };
     let client = McpClient::new(&config).expect("MCP client should build");
     client
@@ -2545,18 +2543,18 @@ fn seed_oauth_auth(
         .put(
             target,
             AuthEntry::OAuth(OAuthEntry {
-                access_token:             access_token.to_string(),
-                access_token_expires_at:  now - ChronoDuration::minutes(1),
-                refresh_token:            refresh_token.to_string(),
+                access_token: access_token.to_string(),
+                access_token_expires_at: now - ChronoDuration::minutes(1),
+                refresh_token: refresh_token.to_string(),
                 refresh_token_expires_at: now + ChronoDuration::days(30),
-                subject:                  StoredSubject {
-                    idp_issuer:  "https://github.com".to_string(),
+                subject: StoredSubject {
+                    idp_issuer: "https://github.com".to_string(),
                     idp_subject: "12345".to_string(),
-                    login:       "octocat".to_string(),
-                    name:        "The Octocat".to_string(),
-                    email:       "octocat@example.com".to_string(),
+                    login: "octocat".to_string(),
+                    name: "The Octocat".to_string(),
+                    email: "octocat@example.com".to_string(),
                 },
-                logged_in_at:             now,
+                logged_in_at: now,
             }),
         )
         .unwrap_or_else(|err| panic!("failed to seed OAuth auth: {err}"));

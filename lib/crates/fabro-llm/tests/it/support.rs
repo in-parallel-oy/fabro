@@ -19,10 +19,10 @@ use httpmock::prelude::*;
 /// One captured wire request, normalized for snapshot stability.
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct WireCapture {
-    pub(crate) method:  String,
-    pub(crate) path:    String,
+    pub(crate) method: String,
+    pub(crate) path: String,
     pub(crate) headers: Vec<(String, String)>,
-    pub(crate) body:    serde_json::Value,
+    pub(crate) body: serde_json::Value,
 }
 
 /// Shared slot the matcher closure writes the captured request into.
@@ -193,19 +193,19 @@ pub(crate) fn sse_data_transcript(lines: &[&str]) -> String {
 
 pub(crate) fn base_request(model: &str) -> Request {
     Request {
-        model:            model.to_string(),
-        messages:         vec![Message::user("Hello")],
-        provider:         None,
-        tools:            None,
-        tool_choice:      None,
-        response_format:  None,
-        temperature:      None,
-        top_p:            None,
-        max_tokens:       Some(128),
-        stop_sequences:   None,
+        model: model.to_string(),
+        messages: vec![Message::user("Hello")],
+        provider: None,
+        tools: None,
+        tool_choice: None,
+        response_format: None,
+        temperature: None,
+        top_p: None,
+        max_tokens: Some(128),
+        stop_sequences: None,
         reasoning_effort: None,
-        speed:            None,
-        metadata:         None,
+        speed: None,
+        metadata: None,
         provider_options: None,
     }
 }
@@ -261,8 +261,8 @@ pub(crate) fn corpus_tool_round_trip(model: &str) -> Request {
     request.messages = vec![
         Message::user("Find foo and read /tmp/x"),
         Message {
-            role:         Role::Assistant,
-            content:      vec![
+            role: Role::Assistant,
+            content: vec![
                 ContentPart::text("Let me check."),
                 ContentPart::ToolCall(ToolCall::new(
                     "call_1",
@@ -275,13 +275,13 @@ pub(crate) fn corpus_tool_round_trip(model: &str) -> Request {
                     serde_json::json!({"path": "/tmp/x"}),
                 )),
             ],
-            name:         None,
+            name: None,
             tool_call_id: None,
         },
         Message {
-            role:         Role::Tool,
-            content:      vec![ContentPart::ToolResult(image_result)],
-            name:         None,
+            role: Role::Tool,
+            content: vec![ContentPart::ToolResult(image_result)],
+            name: None,
             tool_call_id: Some("call_1".to_string()),
         },
         Message::tool_result(
@@ -299,16 +299,16 @@ pub(crate) fn corpus_thinking_round_trip(model: &str) -> Request {
         messages: vec![
             Message::user("Think step by step: what is 2+2?"),
             Message {
-                role:         Role::Assistant,
-                content:      vec![
+                role: Role::Assistant,
+                content: vec![
                     ContentPart::Thinking(ThinkingData {
-                        text:      "The user wants 2+2, which is 4.".to_string(),
+                        text: "The user wants 2+2, which is 4.".to_string(),
                         signature: Some("sig_test_abc123".to_string()),
-                        redacted:  false,
+                        redacted: false,
                     }),
                     ContentPart::text("4."),
                 ],
-                name:         None,
+                name: None,
                 tool_call_id: None,
             },
             Message::user("Now 3+3?"),
@@ -321,23 +321,23 @@ pub(crate) fn corpus_thinking_round_trip(model: &str) -> Request {
 pub(crate) fn corpus_inline_attachments(model: &str) -> Request {
     Request {
         messages: vec![Message {
-            role:         Role::User,
-            content:      vec![
+            role: Role::User,
+            content: vec![
                 ContentPart::text("Describe these attachments."),
                 ContentPart::Image(ImageData {
-                    url:        None,
-                    data:       Some(b"fake-png-bytes".to_vec()),
+                    url: None,
+                    data: Some(b"fake-png-bytes".to_vec()),
                     media_type: Some("image/png".to_string()),
-                    detail:     None,
+                    detail: None,
                 }),
                 ContentPart::Document(DocumentData {
-                    url:        None,
-                    data:       Some(b"fake-pdf-bytes".to_vec()),
+                    url: None,
+                    data: Some(b"fake-pdf-bytes".to_vec()),
                     media_type: Some("application/pdf".to_string()),
-                    file_name:  Some("report.pdf".to_string()),
+                    file_name: Some("report.pdf".to_string()),
                 }),
             ],
-            name:         None,
+            name: None,
             tool_call_id: None,
         }],
         ..base_request(model)
@@ -350,23 +350,23 @@ pub(crate) fn corpus_inline_attachments(model: &str) -> Request {
 pub(crate) fn corpus_url_attachments(model: &str) -> Request {
     Request {
         messages: vec![Message {
-            role:         Role::User,
-            content:      vec![
+            role: Role::User,
+            content: vec![
                 ContentPart::text("Describe these attachments."),
                 ContentPart::Image(ImageData {
-                    url:        Some("https://example.com/picture.png".to_string()),
-                    data:       None,
+                    url: Some("https://example.com/picture.png".to_string()),
+                    data: None,
                     media_type: Some("image/png".to_string()),
-                    detail:     None,
+                    detail: None,
                 }),
                 ContentPart::Document(DocumentData {
-                    url:        Some("https://example.com/report.pdf".to_string()),
-                    data:       None,
+                    url: Some("https://example.com/report.pdf".to_string()),
+                    data: None,
                     media_type: Some("application/pdf".to_string()),
-                    file_name:  Some("report.pdf".to_string()),
+                    file_name: Some("report.pdf".to_string()),
                 }),
             ],
-            name:         None,
+            name: None,
             tool_call_id: None,
         }],
         ..base_request(model)
@@ -379,23 +379,23 @@ pub(crate) fn corpus_url_attachments(model: &str) -> Request {
 pub(crate) fn corpus_bad_file_path_attachments(model: &str) -> Request {
     Request {
         messages: vec![Message {
-            role:         Role::User,
-            content:      vec![
+            role: Role::User,
+            content: vec![
                 ContentPart::text("Describe these attachments."),
                 ContentPart::Image(ImageData {
-                    url:        Some("/nonexistent/fabro-wire-pin.png".to_string()),
-                    data:       None,
+                    url: Some("/nonexistent/fabro-wire-pin.png".to_string()),
+                    data: None,
                     media_type: Some("image/png".to_string()),
-                    detail:     None,
+                    detail: None,
                 }),
                 ContentPart::Document(DocumentData {
-                    url:        Some("/nonexistent/fabro-wire-pin.pdf".to_string()),
-                    data:       None,
+                    url: Some("/nonexistent/fabro-wire-pin.pdf".to_string()),
+                    data: None,
                     media_type: Some("application/pdf".to_string()),
-                    file_name:  Some("missing.pdf".to_string()),
+                    file_name: Some("missing.pdf".to_string()),
                 }),
             ],
-            name:         None,
+            name: None,
             tool_call_id: None,
         }],
         ..base_request(model)
@@ -407,16 +407,16 @@ pub(crate) fn corpus_bad_file_path_attachments(model: &str) -> Request {
 pub(crate) fn corpus_audio_attachment(model: &str) -> Request {
     Request {
         messages: vec![Message {
-            role:         Role::User,
-            content:      vec![
+            role: Role::User,
+            content: vec![
                 ContentPart::text("Transcribe this."),
                 ContentPart::Audio(AudioData {
-                    url:        None,
-                    data:       Some(b"fake-wav-bytes".to_vec()),
+                    url: None,
+                    data: Some(b"fake-wav-bytes".to_vec()),
                     media_type: Some("audio/wav".to_string()),
                 }),
             ],
-            name:         None,
+            name: None,
             tool_call_id: None,
         }],
         ..base_request(model)
@@ -435,13 +435,13 @@ pub(crate) fn corpus_response_format(model: &str, format: ResponseFormat) -> Req
 /// (no name/schema wrapper) — the shape `generate_object` produces.
 pub(crate) fn json_schema_format() -> ResponseFormat {
     ResponseFormat {
-        kind:        fabro_llm::types::ResponseFormatType::JsonSchema,
+        kind: fabro_llm::types::ResponseFormatType::JsonSchema,
         json_schema: Some(serde_json::json!({
             "type": "object",
             "properties": {"answer": {"type": "string"}},
             "required": ["answer"]
         })),
-        strict:      true,
+        strict: true,
     }
 }
 

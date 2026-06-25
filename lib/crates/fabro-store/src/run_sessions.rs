@@ -9,9 +9,9 @@ use serde_json::json;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProjectedRunSession {
-    pub record:          SessionRecord,
+    pub record: SessionRecord,
     pub runtime_context: Vec<SessionMessage>,
-    pub last_seq:        u32,
+    pub last_seq: u32,
 }
 
 pub fn project_run_sessions(run_id: RunId, events: &[EventEnvelope]) -> Vec<SessionSummary> {
@@ -44,7 +44,7 @@ pub fn project_run_session_with_context(
 
 struct RunSessionProjection {
     sessions: BTreeMap<SessionId, ProjectedRunSession>,
-    context:  RuntimeContextProjection,
+    context: RuntimeContextProjection,
 }
 
 enum RuntimeContextProjection {
@@ -56,14 +56,14 @@ impl RunSessionProjection {
     fn metadata_only() -> Self {
         Self {
             sessions: BTreeMap::new(),
-            context:  RuntimeContextProjection::None,
+            context: RuntimeContextProjection::None,
         }
     }
 
     fn with_context_for(session_id: SessionId) -> Self {
         Self {
             sessions: BTreeMap::new(),
-            context:  RuntimeContextProjection::Session(session_id),
+            context: RuntimeContextProjection::Session(session_id),
         }
     }
 
@@ -89,9 +89,9 @@ impl RunSessionProjection {
                         session.last_seq = envelope.seq;
                         session.record.status = SessionStatus::Running;
                         session.record.active_turn = Some(SessionTurn {
-                            id:         props.turn_id,
+                            id: props.turn_id,
                             started_at: envelope.event.ts,
-                            input:      props.input.clone(),
+                            input: props.input.clone(),
                         });
                         session.record.updated_at = envelope.event.ts;
                     }
@@ -114,12 +114,12 @@ impl RunSessionProjection {
                         session.last_seq = envelope.seq;
                         if project_context {
                             session.runtime_context.push(SessionMessage::Assistant {
-                                content:        props.text.clone(),
-                                tool_calls:     Vec::new(),
+                                content: props.text.clone(),
+                                tool_calls: Vec::new(),
                                 provider_parts: Vec::new(),
-                                usage:          props.usage.clone(),
-                                response_id:    String::new(),
-                                timestamp:      envelope.event.ts,
+                                usage: props.usage.clone(),
+                                response_id: String::new(),
+                                timestamp: envelope.event.ts,
                             });
                         }
                         session.record.updated_at = envelope.event.ts;

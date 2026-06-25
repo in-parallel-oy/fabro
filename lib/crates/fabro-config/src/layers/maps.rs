@@ -178,21 +178,30 @@ mod tests {
 
     #[test]
     fn merge_map_recursively_combines_values_for_matching_keys() {
-        let this = MergeMap(HashMap::from([("ops".to_string(), ValueLayer {
-            a: Some("this".to_string()),
-            b: None,
-        })]));
-        let fallback = MergeMap(HashMap::from([("ops".to_string(), ValueLayer {
-            a: Some("fallback".to_string()),
-            b: Some("fallback".to_string()),
-        })]));
+        let this = MergeMap(HashMap::from([(
+            "ops".to_string(),
+            ValueLayer {
+                a: Some("this".to_string()),
+                b: None,
+            },
+        )]));
+        let fallback = MergeMap(HashMap::from([(
+            "ops".to_string(),
+            ValueLayer {
+                a: Some("fallback".to_string()),
+                b: Some("fallback".to_string()),
+            },
+        )]));
 
         assert_eq!(
             this.combine(fallback),
-            MergeMap(HashMap::from([("ops".to_string(), ValueLayer {
-                a: Some("this".to_string()),
-                b: Some("fallback".to_string()),
-            },)]))
+            MergeMap(HashMap::from([(
+                "ops".to_string(),
+                ValueLayer {
+                    a: Some("this".to_string()),
+                    b: Some("fallback".to_string()),
+                },
+            )]))
         );
     }
 }

@@ -14,8 +14,8 @@ use crate::{
 
 #[derive(Debug)]
 pub struct AutomationStore {
-    dir:         PathBuf,
-    mutations:   Mutex<()>,
+    dir: PathBuf,
+    mutations: Mutex<()>,
     automations: RwLock<HashMap<AutomationId, Automation>>,
 }
 
@@ -78,9 +78,9 @@ impl AutomationStore {
                 .ok_or_else(|| AutomationStoreError::NotFound { id: id.clone() })?;
             if &current.revision != expected {
                 return Err(AutomationStoreError::StaleRevision {
-                    id:       id.clone(),
+                    id: id.clone(),
                     expected: expected.clone(),
-                    actual:   current.revision.clone(),
+                    actual: current.revision.clone(),
                 });
             }
         }
@@ -104,9 +104,9 @@ impl AutomationStore {
                 .ok_or_else(|| AutomationStoreError::NotFound { id: id.clone() })?;
             if &current.revision != expected {
                 return Err(AutomationStoreError::StaleRevision {
-                    id:       id.clone(),
+                    id: id.clone(),
                     expected: expected.clone(),
-                    actual:   current.revision.clone(),
+                    actual: current.revision.clone(),
                 });
             }
         }
@@ -163,11 +163,11 @@ fn id_from_path(path: &Path) -> Result<AutomationId, AutomationStoreError> {
         .file_stem()
         .and_then(|stem| stem.to_str())
         .ok_or_else(|| AutomationStoreError::InvalidFilename {
-            path:   path.to_path_buf(),
+            path: path.to_path_buf(),
             reason: "filename is not valid UTF-8".to_string(),
         })?;
     AutomationId::new(stem).map_err(|source| AutomationStoreError::InvalidFilename {
-        path:   path.to_path_buf(),
+        path: path.to_path_buf(),
         reason: source.to_string(),
     })
 }
@@ -279,26 +279,26 @@ mod tests {
 
     fn target() -> AutomationTarget {
         AutomationTarget {
-            repository:   "in-parallel-oy/fabro".to_string(),
+            repository: "in-parallel-oy/fabro".to_string(),
             ref_selector: "main".to_string(),
-            workflow:     "release".to_string(),
+            workflow: "release".to_string(),
         }
     }
 
     fn draft(id: &str, name: &str) -> AutomationDraft {
         AutomationDraft {
-            id:          AutomationId::new(id).unwrap(),
-            name:        name.to_string(),
+            id: AutomationId::new(id).unwrap(),
+            name: name.to_string(),
             description: None,
-            target:      target(),
-            triggers:    vec![
+            target: target(),
+            triggers: vec![
                 AutomationTrigger::Api(ApiTrigger {
-                    id:      AutomationTriggerId::new("manual").unwrap(),
+                    id: AutomationTriggerId::new("manual").unwrap(),
                     enabled: true,
                 }),
                 AutomationTrigger::Schedule(ScheduleTrigger {
-                    id:         AutomationTriggerId::new("nightly").unwrap(),
-                    enabled:    true,
+                    id: AutomationTriggerId::new("nightly").unwrap(),
+                    enabled: true,
                     expression: "0 0 * * *".to_string(),
                 }),
             ],
@@ -307,11 +307,11 @@ mod tests {
 
     fn replacement(name: &str) -> AutomationReplace {
         AutomationReplace {
-            name:        name.to_string(),
+            name: name.to_string(),
             description: Some("updated".to_string()),
-            target:      target(),
-            triggers:    vec![AutomationTrigger::Api(ApiTrigger {
-                id:      AutomationTriggerId::new("manual").unwrap(),
+            target: target(),
+            triggers: vec![AutomationTrigger::Api(ApiTrigger {
+                id: AutomationTriggerId::new("manual").unwrap(),
                 enabled: false,
             })],
         }

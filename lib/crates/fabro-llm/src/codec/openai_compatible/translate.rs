@@ -65,11 +65,11 @@ pub(super) fn translate_messages(messages: &[Message]) -> Vec<ChatMessage> {
                                 .as_str()
                                 .map_or_else(|| tr.content.to_string(), str::to_string);
                             Some(ChatMessage {
-                                role:              "tool".to_string(),
-                                content:           Some(output),
+                                role: "tool".to_string(),
+                                content: Some(output),
                                 reasoning_content: None,
-                                tool_call_id:      Some(tr.tool_call_id.clone()),
-                                tool_calls:        None,
+                                tool_call_id: Some(tr.tool_call_id.clone()),
+                                tool_calls: None,
                             })
                         } else {
                             None
@@ -96,8 +96,8 @@ pub(super) fn translate_messages(messages: &[Message]) -> Vec<ChatMessage> {
                             .clone()
                             .unwrap_or_else(|| tc.arguments.to_string());
                         tool_calls.push(ChatToolCall {
-                            id:       tc.id.clone(),
-                            kind:     "function".to_string(),
+                            id: tc.id.clone(),
+                            kind: "function".to_string(),
                             function: ChatFunction {
                                 name: tc.name.clone(),
                                 arguments,
@@ -227,13 +227,13 @@ mod tests {
     #[test]
     fn translate_assistant_message_with_tool_calls_only() {
         let msg = Message {
-            role:         Role::Assistant,
-            content:      vec![ContentPart::ToolCall(ToolCall::new(
+            role: Role::Assistant,
+            content: vec![ContentPart::ToolCall(ToolCall::new(
                 "call_1",
                 "get_weather",
                 serde_json::json!({"city": "SF"}),
             ))],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let translated = translate_messages(&[msg]);
@@ -251,8 +251,8 @@ mod tests {
     #[test]
     fn translate_assistant_message_with_text_and_tool_calls() {
         let msg = Message {
-            role:         Role::Assistant,
-            content:      vec![
+            role: Role::Assistant,
+            content: vec![
                 ContentPart::text("Let me check the weather"),
                 ContentPart::ToolCall(ToolCall::new(
                     "call_2",
@@ -260,7 +260,7 @@ mod tests {
                     serde_json::json!({"city": "NYC"}),
                 )),
             ],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let translated = translate_messages(&[msg]);
@@ -278,9 +278,9 @@ mod tests {
         let mut tc = ToolCall::new("call_3", "search", serde_json::json!({"q": "rust"}));
         tc.raw_arguments = Some(r#"{"q": "rust"}"#.to_string());
         let msg = Message {
-            role:         Role::Assistant,
-            content:      vec![ContentPart::ToolCall(tc)],
-            name:         None,
+            role: Role::Assistant,
+            content: vec![ContentPart::ToolCall(tc)],
+            name: None,
             tool_call_id: None,
         };
         let translated = translate_messages(&[msg]);
@@ -314,13 +314,13 @@ mod tests {
     #[test]
     fn assistant_tool_calls_serialize_correctly() {
         let msg = Message {
-            role:         Role::Assistant,
-            content:      vec![ContentPart::ToolCall(ToolCall::new(
+            role: Role::Assistant,
+            content: vec![ContentPart::ToolCall(ToolCall::new(
                 "call_1",
                 "get_weather",
                 serde_json::json!({"city": "SF"}),
             ))],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let translated = translate_messages(&[msg]);
@@ -337,13 +337,13 @@ mod tests {
     #[test]
     fn audio_content_produces_text_fallback() {
         let msg = Message {
-            role:         Role::User,
-            content:      vec![ContentPart::Audio(AudioData {
-                url:        Some("https://example.com/audio.wav".to_string()),
-                data:       None,
+            role: Role::User,
+            content: vec![ContentPart::Audio(AudioData {
+                url: Some("https://example.com/audio.wav".to_string()),
+                data: None,
                 media_type: None,
             })],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let translated = translate_messages(&[msg]);
@@ -356,14 +356,14 @@ mod tests {
     #[test]
     fn document_content_produces_text_fallback_with_filename() {
         let msg = Message {
-            role:         Role::User,
-            content:      vec![ContentPart::Document(DocumentData {
-                url:        Some("https://example.com/doc.pdf".to_string()),
-                data:       None,
+            role: Role::User,
+            content: vec![ContentPart::Document(DocumentData {
+                url: Some("https://example.com/doc.pdf".to_string()),
+                data: None,
                 media_type: None,
-                file_name:  Some("report.pdf".to_string()),
+                file_name: Some("report.pdf".to_string()),
             })],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let translated = translate_messages(&[msg]);
@@ -376,14 +376,14 @@ mod tests {
     #[test]
     fn document_content_produces_text_fallback_without_filename() {
         let msg = Message {
-            role:         Role::User,
-            content:      vec![ContentPart::Document(DocumentData {
-                url:        None,
-                data:       Some(vec![1, 2, 3]),
+            role: Role::User,
+            content: vec![ContentPart::Document(DocumentData {
+                url: None,
+                data: Some(vec![1, 2, 3]),
                 media_type: None,
-                file_name:  None,
+                file_name: None,
             })],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let translated = translate_messages(&[msg]);
@@ -396,16 +396,16 @@ mod tests {
     #[test]
     fn mixed_text_and_audio_content_concatenates() {
         let msg = Message {
-            role:         Role::User,
-            content:      vec![
+            role: Role::User,
+            content: vec![
                 ContentPart::text("Check this: "),
                 ContentPart::Audio(AudioData {
-                    url:        None,
-                    data:       Some(vec![1, 2]),
+                    url: None,
+                    data: Some(vec![1, 2]),
                     media_type: None,
                 }),
             ],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let translated = translate_messages(&[msg]);

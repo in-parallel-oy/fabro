@@ -15,7 +15,7 @@ pub enum Error {
     Context {
         message: String,
         #[source]
-        source:  Box<dyn std::error::Error + Send + Sync + 'static>,
+        source: Box<dyn std::error::Error + Send + Sync + 'static>,
     },
 
     #[cfg(feature = "docker")]
@@ -28,7 +28,7 @@ pub enum Error {
     #[cfg(feature = "docker")]
     #[error("Failed to inspect Docker image {image}")]
     DockerImageInspect {
-        image:  String,
+        image: String,
         #[source]
         source: BollardError,
     },
@@ -36,7 +36,7 @@ pub enum Error {
     #[cfg(feature = "docker")]
     #[error("Failed to pull Docker image {image}")]
     DockerImagePull {
-        image:  String,
+        image: String,
         #[source]
         source: BollardError,
     },
@@ -64,7 +64,7 @@ impl Error {
     ) -> Self {
         Self::Context {
             message: message.into(),
-            source:  Box::new(source),
+            source: Box::new(source),
         }
     }
 
@@ -214,13 +214,16 @@ mod tests {
                       'https://x-access-token:ghs_xK9mZ2vL8nQ5rT1wY4bC7dF0gH3jE6pA@github.com/owner/repo/':\n\
                       remote: Permission to owner/repo.git denied\n\
                       identity ~/.ssh/id_rsa_work";
-        let error = Error::exec("git push origin refs/heads/run", crate::ExecResult {
-            stdout:      String::new(),
-            stderr:      stderr.to_string(),
-            exit_code:   Some(128),
-            termination: CommandTermination::Exited,
-            duration_ms: 210,
-        });
+        let error = Error::exec(
+            "git push origin refs/heads/run",
+            crate::ExecResult {
+                stdout: String::new(),
+                stderr: stderr.to_string(),
+                exit_code: Some(128),
+                termination: CommandTermination::Exited,
+                duration_ms: 210,
+            },
+        );
         let rendered = error.to_string();
 
         assert_exec_rendering_is_safe(&rendered);
@@ -237,13 +240,16 @@ mod tests {
                       'https://x-access-token:ghs_xK9mZ2vL8nQ5rT1wY4bC7dF0gH3jE6pA@github.com/owner/repo/':\n\
                       remote: Permission to owner/repo.git denied\n\
                       identity ~/.ssh/id_rsa_work";
-        let exec_error = Error::exec("git push origin refs/heads/run", crate::ExecResult {
-            stdout:      "stdout secret ghs_xK9mZ2vL8nQ5rT1wY4bC7dF0gH3jE6pA".to_string(),
-            stderr:      stderr.to_string(),
-            exit_code:   Some(128),
-            termination: CommandTermination::Exited,
-            duration_ms: 210,
-        });
+        let exec_error = Error::exec(
+            "git push origin refs/heads/run",
+            crate::ExecResult {
+                stdout: "stdout secret ghs_xK9mZ2vL8nQ5rT1wY4bC7dF0gH3jE6pA".to_string(),
+                stderr: stderr.to_string(),
+                exit_code: Some(128),
+                termination: CommandTermination::Exited,
+                duration_ms: 210,
+            },
+        );
         let error = Error::context("metadata push failed", exec_error);
         let rendered = error.display_with_causes();
 
@@ -255,13 +261,16 @@ mod tests {
 
     #[test]
     fn display_for_log_walks_context_chain_and_emits_tail() {
-        let exec_error = Error::exec("git push origin refs/heads/run", crate::ExecResult {
-            stdout:      "last stdout line".to_string(),
-            stderr:      "last stderr line".to_string(),
-            exit_code:   Some(128),
-            termination: CommandTermination::Exited,
-            duration_ms: 210,
-        });
+        let exec_error = Error::exec(
+            "git push origin refs/heads/run",
+            crate::ExecResult {
+                stdout: "last stdout line".to_string(),
+                stderr: "last stderr line".to_string(),
+                exit_code: Some(128),
+                termination: CommandTermination::Exited,
+                duration_ms: 210,
+            },
+        );
         let error = Error::context("metadata push failed", exec_error);
 
         let rendered = display_for_log(&error);
@@ -276,13 +285,16 @@ mod tests {
 
     #[test]
     fn display_for_log_redacts_secrets() {
-        let error = Error::exec("git push origin refs/heads/run", crate::ExecResult {
-            stdout:      "stdout secret ghs_xK9mZ2vL8nQ5rT1wY4bC7dF0gH3jE6pA".to_string(),
-            stderr:      "stderr secret ghs_xK9mZ2vL8nQ5rT1wY4bC7dF0gH3jE6pA".to_string(),
-            exit_code:   Some(128),
-            termination: CommandTermination::Exited,
-            duration_ms: 210,
-        });
+        let error = Error::exec(
+            "git push origin refs/heads/run",
+            crate::ExecResult {
+                stdout: "stdout secret ghs_xK9mZ2vL8nQ5rT1wY4bC7dF0gH3jE6pA".to_string(),
+                stderr: "stderr secret ghs_xK9mZ2vL8nQ5rT1wY4bC7dF0gH3jE6pA".to_string(),
+                exit_code: Some(128),
+                termination: CommandTermination::Exited,
+                duration_ms: 210,
+            },
+        );
 
         let rendered = display_for_log(&error);
 
@@ -323,13 +335,16 @@ mod tests {
     #[test]
     fn exec_error_exposes_default_redacted_output_tail() {
         let stderr = "stderr secret ghs_xK9mZ2vL8nQ5rT1wY4bC7dF0gH3jE6pA";
-        let error = Error::exec("git push origin refs/heads/run", crate::ExecResult {
-            stdout:      "last stdout line".to_string(),
-            stderr:      stderr.to_string(),
-            exit_code:   Some(128),
-            termination: CommandTermination::Exited,
-            duration_ms: 210,
-        });
+        let error = Error::exec(
+            "git push origin refs/heads/run",
+            crate::ExecResult {
+                stdout: "last stdout line".to_string(),
+                stderr: stderr.to_string(),
+                exit_code: Some(128),
+                termination: CommandTermination::Exited,
+                duration_ms: 210,
+            },
+        );
 
         let tail = error.default_redacted_output_tail().expect("tail present");
         assert_eq!(tail.stdout.as_deref(), Some("last stdout line"));
@@ -343,13 +358,16 @@ mod tests {
 
     #[test]
     fn free_tail_helper_walks_context_chain() {
-        let exec_error = Error::exec("git push origin refs/heads/run", crate::ExecResult {
-            stdout:      "last stdout line".to_string(),
-            stderr:      "last stderr line".to_string(),
-            exit_code:   Some(128),
-            termination: CommandTermination::Exited,
-            duration_ms: 210,
-        });
+        let exec_error = Error::exec(
+            "git push origin refs/heads/run",
+            crate::ExecResult {
+                stdout: "last stdout line".to_string(),
+                stderr: "last stderr line".to_string(),
+                exit_code: Some(128),
+                termination: CommandTermination::Exited,
+                duration_ms: 210,
+            },
+        );
         let error = Error::context("metadata push failed", exec_error);
 
         let tail = default_redacted_output_tail(&error).expect("tail present");

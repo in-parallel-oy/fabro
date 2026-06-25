@@ -21,15 +21,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StageTiming {
     /// Wall-clock time from stage start to terminal event.
-    pub wall_time_ms:      u64,
+    pub wall_time_ms: u64,
     /// Fabro-observed LLM request/stream elapsed time.
     #[serde(default)]
     pub inference_time_ms: u64,
     /// Tool or command execution elapsed time.
     #[serde(default)]
-    pub tool_time_ms:      u64,
+    pub tool_time_ms: u64,
     /// `inference_time_ms + tool_time_ms`.
-    pub active_time_ms:    u64,
+    pub active_time_ms: u64,
 }
 
 impl StageTiming {
@@ -82,15 +82,15 @@ impl StageTiming {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunTiming {
     /// Wall-clock time from run start to terminal event.
-    pub wall_time_ms:      u64,
+    pub wall_time_ms: u64,
     /// Sum of inference time across every stage visit.
     #[serde(default)]
     pub inference_time_ms: u64,
     /// Sum of tool time across every stage visit.
     #[serde(default)]
-    pub tool_time_ms:      u64,
+    pub tool_time_ms: u64,
     /// `inference_time_ms + tool_time_ms`.
-    pub active_time_ms:    u64,
+    pub active_time_ms: u64,
 }
 
 impl RunTiming {
@@ -140,10 +140,10 @@ impl RunTiming {
 impl From<StageTiming> for RunTiming {
     fn from(stage: StageTiming) -> Self {
         Self {
-            wall_time_ms:      stage.wall_time_ms,
+            wall_time_ms: stage.wall_time_ms,
             inference_time_ms: stage.inference_time_ms,
-            tool_time_ms:      stage.tool_time_ms,
-            active_time_ms:    stage.active_time_ms,
+            tool_time_ms: stage.tool_time_ms,
+            active_time_ms: stage.active_time_ms,
         }
     }
 }

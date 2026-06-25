@@ -28,27 +28,27 @@ pub enum SandboxCreateSpec {
     Local,
     #[cfg(feature = "docker")]
     Docker {
-        config:           DockerSandboxOptions,
-        github_app:       Option<GitHubCredentials>,
-        run_id:           Option<RunId>,
+        config: DockerSandboxOptions,
+        github_app: Option<GitHubCredentials>,
+        run_id: Option<RunId>,
         clone_origin_url: Option<String>,
-        clone_branch:     Option<String>,
+        clone_branch: Option<String>,
     },
     #[cfg(feature = "daytona")]
     Daytona {
-        config:           Box<DaytonaConfig>,
-        github_app:       Option<GitHubCredentials>,
-        run_id:           Option<RunId>,
+        config: Box<DaytonaConfig>,
+        github_app: Option<GitHubCredentials>,
+        run_id: Option<RunId>,
         clone_origin_url: Option<String>,
-        clone_branch:     Option<String>,
-        api_key:          Option<String>,
+        clone_branch: Option<String>,
+        api_key: Option<String>,
     },
     #[cfg(feature = "gcloud")]
     Gcloud {
-        config:           Box<crate::gcloud::GcloudConfig>,
-        run_id:           Option<RunId>,
+        config: Box<crate::gcloud::GcloudConfig>,
+        run_id: Option<RunId>,
         clone_origin_url: Option<String>,
-        clone_branch:     Option<String>,
+        clone_branch: Option<String>,
     },
 }
 
@@ -134,7 +134,7 @@ impl SandboxProviderRegistry {
                 provider_errors,
             }),
             _ => Err(SandboxLookupError::Conflict {
-                id:        id.to_string(),
+                id: id.to_string(),
                 providers: matches
                     .into_iter()
                     .map(|sandbox| sandbox.provider)
@@ -150,12 +150,12 @@ pub enum SandboxLookupError {
     NotFound { id: String },
     #[error("sandbox '{id}' matched more than one configured provider")]
     Conflict {
-        id:        String,
+        id: String,
         providers: Vec<SandboxProviderKind>,
     },
     #[error("sandbox '{id}' could not be found definitively because one or more providers failed")]
     ProviderUnavailable {
-        id:              String,
+        id: String,
         provider_errors: Vec<SandboxProviderLookupError>,
     },
 }
@@ -247,12 +247,13 @@ mod tests {
         let response = registry.list_managed().await;
 
         assert_eq!(response.data, vec![docker]);
-        assert_eq!(response.meta.provider_errors, vec![
-            SandboxProviderLookupError {
+        assert_eq!(
+            response.meta.provider_errors,
+            vec![SandboxProviderLookupError {
                 provider: SandboxProviderKind::Daytona,
-                message:  "daytona unavailable".to_string(),
-            }
-        ]);
+                message: "daytona unavailable".to_string(),
+            }]
+        );
     }
 
     #[tokio::test]

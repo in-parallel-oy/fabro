@@ -119,10 +119,13 @@ mod tests {
     #[test]
     fn rejects_short_master_secret() {
         let err = derive_jwt_key(&[0x61; 31]).expect_err("short secret should fail");
-        assert_eq!(err, KeyDeriveError::TooShort {
-            got_bytes: 31,
-            min_bytes: 32,
-        });
+        assert_eq!(
+            err,
+            KeyDeriveError::TooShort {
+                got_bytes: 31,
+                min_bytes: 32,
+            }
+        );
     }
 
     #[test]
@@ -134,10 +137,13 @@ mod tests {
     #[test]
     fn worker_derivation_rejects_short_master_secret() {
         let err = derive_worker_jwt_key(&[0x61; 31]).expect_err("short secret should fail");
-        assert_eq!(err, KeyDeriveError::TooShort {
-            got_bytes: 31,
-            min_bytes: 32,
-        });
+        assert_eq!(
+            err,
+            KeyDeriveError::TooShort {
+                got_bytes: 31,
+                min_bytes: 32,
+            }
+        );
     }
 
     #[test]

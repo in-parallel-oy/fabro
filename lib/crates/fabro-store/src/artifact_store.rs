@@ -18,8 +18,8 @@ const STREAM_BUFFER_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ArtifactKey {
-    pub stage_id:      StageId,
-    pub retry:         u32,
+    pub stage_id: StageId,
+    pub retry: u32,
     pub relative_path: String,
 }
 
@@ -36,23 +36,23 @@ impl ArtifactKey {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NodeArtifact {
-    pub node:     StageId,
-    pub retry:    u32,
+    pub node: StageId,
+    pub retry: u32,
     pub filename: String,
-    pub size:     u64,
+    pub size: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StageArtifactEntry {
-    pub retry:    u32,
+    pub retry: u32,
     pub filename: String,
-    pub size:     u64,
+    pub size: u64,
 }
 
 #[derive(Clone)]
 pub struct ArtifactStore {
     object_store: Arc<dyn ObjectStore>,
-    prefix:       ObjectPath,
+    prefix: ObjectPath,
 }
 
 impl std::fmt::Debug for ArtifactStore {
@@ -417,21 +417,23 @@ mod tests {
             store.get(&run_id, &key).await.unwrap(),
             Some(Bytes::from_static(b"hello"))
         );
-        assert_eq!(store.list_for_node(&run_id, &node).await.unwrap(), vec![
-            StageArtifactEntry {
-                retry:    3,
+        assert_eq!(
+            store.list_for_node(&run_id, &node).await.unwrap(),
+            vec![StageArtifactEntry {
+                retry: 3,
                 filename: filename.to_string(),
-                size:     5,
-            }
-        ]);
-        assert_eq!(store.list_for_run(&run_id).await.unwrap(), vec![
-            NodeArtifact {
+                size: 5,
+            }]
+        );
+        assert_eq!(
+            store.list_for_run(&run_id).await.unwrap(),
+            vec![NodeArtifact {
                 node,
                 retry: 3,
                 filename: filename.to_string(),
                 size: 5,
-            }
-        ]);
+            }]
+        );
     }
 
     #[tokio::test]
@@ -513,9 +515,9 @@ mod tests {
         assert_eq!(
             store.list_for_node(&other_run_id, &node).await.unwrap(),
             vec![StageArtifactEntry {
-                retry:    1,
+                retry: 1,
                 filename: "keep.txt".to_string(),
-                size:     4,
+                size: 4,
             }]
         );
     }
@@ -539,32 +541,38 @@ mod tests {
             store.get(&run_id, &second).await.unwrap(),
             Some(Bytes::from_static(b"second"))
         );
-        assert_eq!(store.list_for_node(&run_id, &node).await.unwrap(), vec![
-            StageArtifactEntry {
-                retry:    1,
-                filename: "logs/output.txt".to_string(),
-                size:     5,
-            },
-            StageArtifactEntry {
-                retry:    2,
-                filename: "logs/output.txt".to_string(),
-                size:     6,
-            },
-        ]);
-        assert_eq!(store.list_for_run(&run_id).await.unwrap(), vec![
-            NodeArtifact {
-                node:     node.clone(),
-                retry:    1,
-                filename: "logs/output.txt".to_string(),
-                size:     5,
-            },
-            NodeArtifact {
-                node,
-                retry: 2,
-                filename: "logs/output.txt".to_string(),
-                size: 6,
-            },
-        ]);
+        assert_eq!(
+            store.list_for_node(&run_id, &node).await.unwrap(),
+            vec![
+                StageArtifactEntry {
+                    retry: 1,
+                    filename: "logs/output.txt".to_string(),
+                    size: 5,
+                },
+                StageArtifactEntry {
+                    retry: 2,
+                    filename: "logs/output.txt".to_string(),
+                    size: 6,
+                },
+            ]
+        );
+        assert_eq!(
+            store.list_for_run(&run_id).await.unwrap(),
+            vec![
+                NodeArtifact {
+                    node: node.clone(),
+                    retry: 1,
+                    filename: "logs/output.txt".to_string(),
+                    size: 5,
+                },
+                NodeArtifact {
+                    node,
+                    retry: 2,
+                    filename: "logs/output.txt".to_string(),
+                    size: 6,
+                },
+            ]
+        );
     }
 
     #[tokio::test]

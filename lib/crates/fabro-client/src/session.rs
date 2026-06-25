@@ -5,9 +5,9 @@ use crate::{AuthStore, Credential, CredentialFallback, ServerTarget};
 
 #[derive(Clone)]
 pub struct OAuthSession {
-    pub target:     ServerTarget,
+    pub target: ServerTarget,
     pub auth_store: AuthStore,
-    pub fallback:   Option<Arc<dyn CredentialFallback>>,
+    pub fallback: Option<Arc<dyn CredentialFallback>>,
 }
 
 impl OAuthSession {

@@ -76,16 +76,16 @@ stop_on_terminal = true
 
 #[derive(Debug)]
 pub struct EnvironmentStore {
-    dir:              PathBuf,
+    dir: PathBuf,
     request_base_dir: PathBuf,
-    mutations:        Mutex<()>,
-    state:            std::sync::RwLock<CatalogState>,
+    mutations: Mutex<()>,
+    state: std::sync::RwLock<CatalogState>,
 }
 
 #[derive(Debug, Clone)]
 struct CatalogState {
     environments: HashMap<EnvironmentId, Environment>,
-    catalog:      Arc<MergeMap<EnvironmentLayer>>,
+    catalog: Arc<MergeMap<EnvironmentLayer>>,
 }
 
 impl CatalogState {
@@ -259,9 +259,9 @@ fn check_revision(
         .ok_or_else(|| EnvironmentStoreError::NotFound { id: id.clone() })?;
     if &current.revision != expected {
         return Err(EnvironmentStoreError::StaleRevision {
-            id:       id.clone(),
+            id: id.clone(),
             expected: expected.clone(),
-            actual:   current.revision.clone(),
+            actual: current.revision.clone(),
         });
     }
     Ok(())
@@ -362,11 +362,11 @@ fn id_from_path(path: &Path) -> Result<EnvironmentId, EnvironmentStoreError> {
         .file_stem()
         .and_then(|stem| stem.to_str())
         .ok_or_else(|| EnvironmentStoreError::InvalidFilename {
-            path:   path.to_path_buf(),
+            path: path.to_path_buf(),
             reason: "filename is not valid UTF-8".to_string(),
         })?;
     EnvironmentId::new(stem).map_err(|source| EnvironmentStoreError::InvalidFilename {
-        path:   path.to_path_buf(),
+        path: path.to_path_buf(),
         reason: source.to_string(),
     })
 }
@@ -492,7 +492,7 @@ mod tests {
 
     fn draft(id: &str, provider: EnvironmentProvider) -> EnvironmentDraft {
         EnvironmentDraft {
-            id:       EnvironmentId::new(id).unwrap(),
+            id: EnvironmentId::new(id).unwrap(),
             settings: settings(provider),
         }
     }

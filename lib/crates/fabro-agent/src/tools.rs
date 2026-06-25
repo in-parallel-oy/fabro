@@ -18,7 +18,7 @@ const MAX_READ_MANY_FILES_CONCURRENCY: usize = 8;
 /// Configuration for the optional LLM-based summarizer used by `web_fetch`.
 #[derive(Clone)]
 pub struct WebFetchSummarizer {
-    pub client:   Client,
+    pub client: Client,
     pub model_id: ModelHandle,
 }
 
@@ -380,9 +380,9 @@ pub fn make_glob_tool() -> RegisteredTool {
 pub(crate) fn make_read_many_files_tool() -> RegisteredTool {
     RegisteredTool {
         definition: ToolDefinition {
-            name:        "read_many_files".into(),
+            name: "read_many_files".into(),
             description: "Read multiple files at once".into(),
-            parameters:  serde_json::json!({
+            parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "paths": {
@@ -394,7 +394,7 @@ pub(crate) fn make_read_many_files_tool() -> RegisteredTool {
                 "required": ["paths"]
             }),
         },
-        executor:   Arc::new(|args, ctx| {
+        executor: Arc::new(|args, ctx| {
             Box::pin(async move {
                 let paths: Vec<String> = args["paths"]
                     .as_array()
@@ -434,7 +434,7 @@ pub(crate) fn make_read_many_files_tool() -> RegisteredTool {
                 Ok(output)
             })
         }),
-        source:     ToolSource::Native,
+        source: ToolSource::Native,
     }
 }
 
@@ -442,9 +442,9 @@ pub(crate) fn make_read_many_files_tool() -> RegisteredTool {
 pub(crate) fn make_list_dir_tool() -> RegisteredTool {
     RegisteredTool {
         definition: ToolDefinition {
-            name:        "list_dir".into(),
+            name: "list_dir".into(),
             description: "List directory contents with depth control".into(),
-            parameters:  serde_json::json!({
+            parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "Directory path to list"},
@@ -453,7 +453,7 @@ pub(crate) fn make_list_dir_tool() -> RegisteredTool {
                 "required": ["path"]
             }),
         },
-        executor:   Arc::new(|args, ctx| {
+        executor: Arc::new(|args, ctx| {
             Box::pin(async move {
                 let path = required_str(&args, "path")?;
                 let depth = optional_usize_arg(&args, "depth")?;
@@ -476,7 +476,7 @@ pub(crate) fn make_list_dir_tool() -> RegisteredTool {
                 Ok(lines.join("\n"))
             })
         }),
-        source:     ToolSource::Native,
+        source: ToolSource::Native,
     }
 }
 
@@ -757,15 +757,18 @@ mod tests {
             files,
             ..Default::default()
         });
-        let result = (tool.executor)(serde_json::json!({"file_path": "/test.txt"}), ToolContext {
-            env,
-            cancel: CancellationToken::new(),
-            tool_env_provider: None,
-            session_id: None,
-            root_session_id: None,
-            tool_call_id: None,
-            agent_event_emitter: None,
-        })
+        let result = (tool.executor)(
+            serde_json::json!({"file_path": "/test.txt"}),
+            ToolContext {
+                env,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
+                agent_event_emitter: None,
+            },
+        )
         .await;
         assert_eq!(result.unwrap(), "1 | hello\n2 | world\n");
     }
@@ -803,12 +806,12 @@ mod tests {
         let result = (tool.executor)(
             serde_json::json!({"file_path": "/out.txt", "content": "hello"}),
             ToolContext {
-                env:                 env_clone,
-                cancel:              CancellationToken::new(),
-                tool_env_provider:   None,
-                session_id:          None,
-                root_session_id:     None,
-                tool_call_id:        None,
+                env: env_clone,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
                 agent_event_emitter: None,
             },
         )
@@ -837,12 +840,12 @@ mod tests {
                 "new_string": "goodbye"
             }),
             ToolContext {
-                env:                 env_clone,
-                cancel:              CancellationToken::new(),
-                tool_env_provider:   None,
-                session_id:          None,
-                root_session_id:     None,
-                tool_call_id:        None,
+                env: env_clone,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
                 agent_event_emitter: None,
             },
         )
@@ -931,12 +934,12 @@ mod tests {
                 "replace_all": true
             }),
             ToolContext {
-                env:                 env_clone,
-                cancel:              CancellationToken::new(),
-                tool_env_provider:   None,
-                session_id:          None,
-                root_session_id:     None,
-                tool_call_id:        None,
+                env: env_clone,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
                 agent_event_emitter: None,
             },
         )
@@ -964,12 +967,12 @@ mod tests {
                 "new_string": "goodbye"
             }),
             ToolContext {
-                env:                 env_clone,
-                cancel:              CancellationToken::new(),
-                tool_env_provider:   None,
-                session_id:          None,
-                root_session_id:     None,
-                tool_call_id:        None,
+                env: env_clone,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
                 agent_event_emitter: None,
             },
         )
@@ -985,23 +988,26 @@ mod tests {
         let tool = make_shell_tool();
         let env: Arc<dyn Sandbox> = Arc::new(MockSandbox {
             exec_result: ExecResult {
-                stdout:      "hello".into(),
-                stderr:      String::new(),
-                exit_code:   Some(0),
+                stdout: "hello".into(),
+                stderr: String::new(),
+                exit_code: Some(0),
                 termination: CommandTermination::Exited,
                 duration_ms: 10,
             },
             ..Default::default()
         });
-        let result = (tool.executor)(serde_json::json!({"command": "echo hello"}), ToolContext {
-            env,
-            cancel: CancellationToken::new(),
-            tool_env_provider: None,
-            session_id: None,
-            root_session_id: None,
-            tool_call_id: None,
-            agent_event_emitter: None,
-        })
+        let result = (tool.executor)(
+            serde_json::json!({"command": "echo hello"}),
+            ToolContext {
+                env,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
+                agent_event_emitter: None,
+            },
+        )
         .await;
         let output = result.unwrap();
         assert!(output.contains("Exit code: 0"));
@@ -1016,12 +1022,12 @@ mod tests {
         let _result = (tool.executor)(
             serde_json::json!({"command": "sleep 1", "timeout_ms": 5000}),
             ToolContext {
-                env:                 env_clone,
-                cancel:              CancellationToken::new(),
-                tool_env_provider:   None,
-                session_id:          None,
-                root_session_id:     None,
-                tool_call_id:        None,
+                env: env_clone,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
                 agent_event_emitter: None,
             },
         )
@@ -1034,23 +1040,26 @@ mod tests {
         let tool = make_shell_tool();
         let env: Arc<dyn Sandbox> = Arc::new(MockSandbox {
             exec_result: ExecResult {
-                stdout:      "error".into(),
-                stderr:      String::new(),
-                exit_code:   Some(1),
+                stdout: "error".into(),
+                stderr: String::new(),
+                exit_code: Some(1),
                 termination: CommandTermination::Exited,
                 duration_ms: 10,
             },
             ..Default::default()
         });
-        let result = (tool.executor)(serde_json::json!({"command": "false"}), ToolContext {
-            env,
-            cancel: CancellationToken::new(),
-            tool_env_provider: None,
-            session_id: None,
-            root_session_id: None,
-            tool_call_id: None,
-            agent_event_emitter: None,
-        })
+        let result = (tool.executor)(
+            serde_json::json!({"command": "false"}),
+            ToolContext {
+                env,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
+                agent_event_emitter: None,
+            },
+        )
         .await;
         let output = result.unwrap();
         assert!(output.contains("Exit code: 1"));
@@ -1062,23 +1071,26 @@ mod tests {
         let tool = make_shell_tool();
         let env: Arc<dyn Sandbox> = Arc::new(MockSandbox {
             exec_result: ExecResult {
-                stdout:      String::new(),
-                stderr:      String::new(),
-                exit_code:   None,
+                stdout: String::new(),
+                stderr: String::new(),
+                exit_code: None,
                 termination: CommandTermination::TimedOut,
                 duration_ms: 10000,
             },
             ..Default::default()
         });
-        let result = (tool.executor)(serde_json::json!({"command": "sleep 100"}), ToolContext {
-            env,
-            cancel: CancellationToken::new(),
-            tool_env_provider: None,
-            session_id: None,
-            root_session_id: None,
-            tool_call_id: None,
-            agent_event_emitter: None,
-        })
+        let result = (tool.executor)(
+            serde_json::json!({"command": "sleep 100"}),
+            ToolContext {
+                env,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
+                agent_event_emitter: None,
+            },
+        )
         .await;
         let output = result.unwrap();
         assert!(output.starts_with("Command timed out.\n"));
@@ -1094,12 +1106,12 @@ mod tests {
         let _result = (tool.executor)(
             serde_json::json!({"command": "echo $MY_KEY"}),
             ToolContext {
-                env:                 env_clone,
-                cancel:              CancellationToken::new(),
-                tool_env_provider:   Some(Arc::new(crate::StaticEnvProvider(tool_env.clone()))),
-                session_id:          None,
-                root_session_id:     None,
-                tool_call_id:        None,
+                env: env_clone,
+                cancel: CancellationToken::new(),
+                tool_env_provider: Some(Arc::new(crate::StaticEnvProvider(tool_env.clone()))),
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
                 agent_event_emitter: None,
             },
         )
@@ -1142,12 +1154,12 @@ mod tests {
         let _result = (tool.executor)(
             serde_json::json!({"command": "echo $GITHUB_TOKEN"}),
             ToolContext {
-                env:                 env.clone(),
-                cancel:              CancellationToken::new(),
-                tool_env_provider:   Some(provider.clone()),
-                session_id:          None,
-                root_session_id:     None,
-                tool_call_id:        None,
+                env: env.clone(),
+                cancel: CancellationToken::new(),
+                tool_env_provider: Some(provider.clone()),
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
                 agent_event_emitter: None,
             },
         )
@@ -1163,12 +1175,12 @@ mod tests {
         let _result = (tool.executor)(
             serde_json::json!({"command": "echo $GITHUB_TOKEN"}),
             ToolContext {
-                env:                 env.clone(),
-                cancel:              CancellationToken::new(),
-                tool_env_provider:   Some(provider),
-                session_id:          None,
-                root_session_id:     None,
-                tool_call_id:        None,
+                env: env.clone(),
+                cancel: CancellationToken::new(),
+                tool_env_provider: Some(provider),
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
                 agent_event_emitter: None,
             },
         )
@@ -1218,15 +1230,18 @@ mod tests {
             ..Default::default()
         });
 
-        let result = (tool.executor)(serde_json::json!({"file_path": "/test.txt"}), ToolContext {
-            env,
-            cancel: CancellationToken::new(),
-            tool_env_provider: Some(Arc::new(FailingToolEnvProvider)),
-            session_id: None,
-            root_session_id: None,
-            tool_call_id: None,
-            agent_event_emitter: None,
-        })
+        let result = (tool.executor)(
+            serde_json::json!({"file_path": "/test.txt"}),
+            ToolContext {
+                env,
+                cancel: CancellationToken::new(),
+                tool_env_provider: Some(Arc::new(FailingToolEnvProvider)),
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
+                agent_event_emitter: None,
+            },
+        )
         .await;
 
         assert_eq!(result.unwrap(), "1 | hello\n");
@@ -1237,15 +1252,18 @@ mod tests {
         let tool = make_shell_tool();
         let env = Arc::new(MockSandbox::default());
         let env_clone: Arc<dyn Sandbox> = env.clone();
-        let _result = (tool.executor)(serde_json::json!({"command": "echo hello"}), ToolContext {
-            env:                 env_clone,
-            cancel:              CancellationToken::new(),
-            tool_env_provider:   None,
-            session_id:          None,
-            root_session_id:     None,
-            tool_call_id:        None,
-            agent_event_emitter: None,
-        })
+        let _result = (tool.executor)(
+            serde_json::json!({"command": "echo hello"}),
+            ToolContext {
+                env: env_clone,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
+                agent_event_emitter: None,
+            },
+        )
         .await;
         let captured = env.captured_env_vars.lock().unwrap().clone();
         assert_eq!(captured, None);
@@ -1256,9 +1274,9 @@ mod tests {
         let tool = make_web_fetch_tool(None);
         let env = Arc::new(MockSandbox {
             exec_result: ExecResult {
-                stdout:      "fetched content".into(),
-                stderr:      String::new(),
-                exit_code:   Some(0),
+                stdout: "fetched content".into(),
+                stderr: String::new(),
+                exit_code: Some(0),
                 termination: CommandTermination::Exited,
                 duration_ms: 100,
             },
@@ -1270,12 +1288,12 @@ mod tests {
         let _result = (tool.executor)(
             serde_json::json!({"url": "https://example.com"}),
             ToolContext {
-                env:                 env_clone,
-                cancel:              CancellationToken::new(),
-                tool_env_provider:   Some(Arc::new(crate::StaticEnvProvider(tool_env.clone()))),
-                session_id:          None,
-                root_session_id:     None,
-                tool_call_id:        None,
+                env: env_clone,
+                cancel: CancellationToken::new(),
+                tool_env_provider: Some(Arc::new(crate::StaticEnvProvider(tool_env.clone()))),
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
                 agent_event_emitter: None,
             },
         )
@@ -1294,15 +1312,18 @@ mod tests {
             ],
             ..Default::default()
         });
-        let result = (tool.executor)(serde_json::json!({"pattern": "fn"}), ToolContext {
-            env,
-            cancel: CancellationToken::new(),
-            tool_env_provider: None,
-            session_id: None,
-            root_session_id: None,
-            tool_call_id: None,
-            agent_event_emitter: None,
-        })
+        let result = (tool.executor)(
+            serde_json::json!({"pattern": "fn"}),
+            ToolContext {
+                env,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
+                agent_event_emitter: None,
+            },
+        )
         .await;
         let output = result.unwrap();
         assert!(output.contains("src/main.rs:10:fn main()"));
@@ -1316,15 +1337,18 @@ mod tests {
             glob_results: vec!["src/main.rs".into(), "src/lib.rs".into()],
             ..Default::default()
         });
-        let result = (tool.executor)(serde_json::json!({"pattern": "src/**/*.rs"}), ToolContext {
-            env,
-            cancel: CancellationToken::new(),
-            tool_env_provider: None,
-            session_id: None,
-            root_session_id: None,
-            tool_call_id: None,
-            agent_event_emitter: None,
-        })
+        let result = (tool.executor)(
+            serde_json::json!({"pattern": "src/**/*.rs"}),
+            ToolContext {
+                env,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
+                agent_event_emitter: None,
+            },
+        )
         .await;
         let output = result.unwrap();
         assert!(output.contains("src/main.rs"));
@@ -1335,15 +1359,18 @@ mod tests {
     async fn web_search_missing_api_key_returns_error() {
         let tool = make_web_search_tool_with_api_key(None);
         let env: Arc<dyn Sandbox> = Arc::new(MockSandbox::default());
-        let result = (tool.executor)(serde_json::json!({"query": "test"}), ToolContext {
-            env,
-            cancel: CancellationToken::new(),
-            tool_env_provider: None,
-            session_id: None,
-            root_session_id: None,
-            tool_call_id: None,
-            agent_event_emitter: None,
-        })
+        let result = (tool.executor)(
+            serde_json::json!({"query": "test"}),
+            ToolContext {
+                env,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
+                agent_event_emitter: None,
+            },
+        )
         .await;
         let err = result.unwrap_err();
         assert_eq!(err, "BRAVE_SEARCH_API_KEY is not configured");
@@ -1353,15 +1380,18 @@ mod tests {
     async fn web_search_missing_query_returns_error() {
         let tool = make_web_search_tool_with_api_key(Some("fake-key".into()));
         let env: Arc<dyn Sandbox> = Arc::new(MockSandbox::default());
-        let result = (tool.executor)(serde_json::json!({}), ToolContext {
-            env,
-            cancel: CancellationToken::new(),
-            tool_env_provider: None,
-            session_id: None,
-            root_session_id: None,
-            tool_call_id: None,
-            agent_event_emitter: None,
-        })
+        let result = (tool.executor)(
+            serde_json::json!({}),
+            ToolContext {
+                env,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
+                agent_event_emitter: None,
+            },
+        )
         .await;
         let err = result.unwrap_err();
         assert!(
@@ -1386,15 +1416,18 @@ mod tests {
             .get("web_search")
             .expect("web_search should be registered");
         let env: Arc<dyn Sandbox> = Arc::new(MockSandbox::default());
-        let result = (tool.executor)(serde_json::json!({}), ToolContext {
-            env,
-            cancel: CancellationToken::new(),
-            tool_env_provider: None,
-            session_id: None,
-            root_session_id: None,
-            tool_call_id: None,
-            agent_event_emitter: None,
-        })
+        let result = (tool.executor)(
+            serde_json::json!({}),
+            ToolContext {
+                env,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
+                agent_event_emitter: None,
+            },
+        )
         .await;
 
         let err = result.unwrap_err();
@@ -1432,9 +1465,9 @@ mod tests {
         let tool = make_web_fetch_tool(None);
         let env = Arc::new(MockSandbox {
             exec_result: ExecResult {
-                stdout:      "<html><body><h1>hello</h1></body></html>".into(),
-                stderr:      String::new(),
-                exit_code:   Some(0),
+                stdout: "<html><body><h1>hello</h1></body></html>".into(),
+                stderr: String::new(),
+                exit_code: Some(0),
                 termination: CommandTermination::Exited,
                 duration_ms: 100,
             },
@@ -1444,12 +1477,12 @@ mod tests {
         let result = (tool.executor)(
             serde_json::json!({"url": "https://example.com"}),
             ToolContext {
-                env:                 env_clone,
-                cancel:              CancellationToken::new(),
-                tool_env_provider:   None,
-                session_id:          None,
-                root_session_id:     None,
-                tool_call_id:        None,
+                env: env_clone,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
                 agent_event_emitter: None,
             },
         )
@@ -1510,12 +1543,12 @@ mod tests {
         let _result = (tool.executor)(
             serde_json::json!({"url": "https://example.com", "timeout_ms": 15000}),
             ToolContext {
-                env:                 env_clone,
-                cancel:              CancellationToken::new(),
-                tool_env_provider:   None,
-                session_id:          None,
-                root_session_id:     None,
-                tool_call_id:        None,
+                env: env_clone,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
                 agent_event_emitter: None,
             },
         )
@@ -1536,12 +1569,12 @@ mod tests {
         let _result = (tool.executor)(
             serde_json::json!({"url": "https://example.com", "timeout_ms": 120_000}),
             ToolContext {
-                env:                 env_clone,
-                cancel:              CancellationToken::new(),
-                tool_env_provider:   None,
-                session_id:          None,
-                root_session_id:     None,
-                tool_call_id:        None,
+                env: env_clone,
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
                 agent_event_emitter: None,
             },
         )
@@ -1560,9 +1593,9 @@ mod tests {
         let tool = make_web_fetch_tool(None);
         let env: Arc<dyn Sandbox> = Arc::new(MockSandbox {
             exec_result: ExecResult {
-                stdout:      large_content,
-                stderr:      String::new(),
-                exit_code:   Some(0),
+                stdout: large_content,
+                stderr: String::new(),
+                exit_code: Some(0),
                 termination: CommandTermination::Exited,
                 duration_ms: 100,
             },
@@ -1591,9 +1624,9 @@ mod tests {
         let tool = make_web_fetch_tool(None);
         let env: Arc<dyn Sandbox> = Arc::new(MockSandbox {
             exec_result: ExecResult {
-                stdout:      String::new(),
-                stderr:      "curl: (6) Could not resolve host".into(),
-                exit_code:   Some(6),
+                stdout: String::new(),
+                stderr: "curl: (6) Could not resolve host".into(),
+                exit_code: Some(6),
                 termination: CommandTermination::Exited,
                 duration_ms: 100,
             },
@@ -1635,17 +1668,16 @@ mod tests {
             client,
             model_id: ModelHandle::ByName {
                 provider: ProviderId::anthropic(),
-                model:    "mock-model".to_string(),
+                model: "mock-model".to_string(),
             },
         };
 
         let tool = make_web_fetch_tool(Some(summarizer));
         let env: Arc<dyn Sandbox> = Arc::new(MockSandbox {
             exec_result: ExecResult {
-                stdout:      "<html><body><p>Lots of content about Rust...</p></body></html>"
-                    .into(),
-                stderr:      String::new(),
-                exit_code:   Some(0),
+                stdout: "<html><body><p>Lots of content about Rust...</p></body></html>".into(),
+                stderr: String::new(),
+                exit_code: Some(0),
                 termination: CommandTermination::Exited,
                 duration_ms: 100,
             },
@@ -1676,11 +1708,10 @@ mod tests {
         let tool = make_web_fetch_tool(None);
         let env: Arc<dyn Sandbox> = Arc::new(MockSandbox {
             exec_result: ExecResult {
-                stdout:
-                    "<html><body><p>Rust is a systems programming language.</p></body></html>"
-                        .into(),
-                stderr:      String::new(),
-                exit_code:   Some(0),
+                stdout: "<html><body><p>Rust is a systems programming language.</p></body></html>"
+                    .into(),
+                stderr: String::new(),
+                exit_code: Some(0),
                 termination: CommandTermination::Exited,
                 duration_ms: 100,
             },
@@ -1720,7 +1751,7 @@ mod tests {
         // "other_provider" is the default — it rejects all requests.
         let default_provider: Arc<dyn ProviderAdapter> = Arc::new(MockErrorProvider {
             error: LlmError::Provider {
-                kind:   ProviderErrorKind::NotFound,
+                kind: ProviderErrorKind::NotFound,
                 detail: Box::new(ProviderErrorDetail::new(
                     "model not found",
                     "other_provider",
@@ -1744,16 +1775,16 @@ mod tests {
             client,
             model_id: ModelHandle::ByName {
                 provider: ProviderId::anthropic(),
-                model:    "target-model".to_string(),
+                model: "target-model".to_string(),
             },
         };
 
         let tool = make_web_fetch_tool(Some(summarizer));
         let env: Arc<dyn Sandbox> = Arc::new(MockSandbox {
             exec_result: ExecResult {
-                stdout:      "<html><body><p>Page content</p></body></html>".into(),
-                stderr:      String::new(),
-                exit_code:   Some(0),
+                stdout: "<html><body><p>Page content</p></body></html>".into(),
+                stderr: String::new(),
+                exit_code: Some(0),
                 termination: CommandTermination::Exited,
                 duration_ms: 100,
             },
@@ -1849,15 +1880,18 @@ mod tests {
 
         // read_file tool should mark the file as agent-read
         let tool = make_read_file_tool();
-        (tool.executor)(serde_json::json!({"file_path": "a.ts"}), ToolContext {
-            env:                 Arc::clone(&env),
-            cancel:              CancellationToken::new(),
-            tool_env_provider:   None,
-            session_id:          None,
-            root_session_id:     None,
-            tool_call_id:        None,
-            agent_event_emitter: None,
-        })
+        (tool.executor)(
+            serde_json::json!({"file_path": "a.ts"}),
+            ToolContext {
+                env: Arc::clone(&env),
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
+                agent_event_emitter: None,
+            },
+        )
         .await
         .unwrap();
 
@@ -1882,15 +1916,18 @@ mod tests {
 
         // grep tool should mark matched files as agent-read
         let tool = make_grep_tool();
-        (tool.executor)(serde_json::json!({"pattern": "content"}), ToolContext {
-            env:                 Arc::clone(&env),
-            cancel:              CancellationToken::new(),
-            tool_env_provider:   None,
-            session_id:          None,
-            root_session_id:     None,
-            tool_call_id:        None,
-            agent_event_emitter: None,
-        })
+        (tool.executor)(
+            serde_json::json!({"pattern": "content"}),
+            ToolContext {
+                env: Arc::clone(&env),
+                cancel: CancellationToken::new(),
+                tool_env_provider: None,
+                session_id: None,
+                root_session_id: None,
+                tool_call_id: None,
+                agent_event_emitter: None,
+            },
+        )
         .await
         .unwrap();
 

@@ -24,16 +24,16 @@ const GIT_REV_PARSE_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AutomationRunMaterializeInput {
-    pub automation_id:      AutomationId,
-    pub target:             AutomationTarget,
-    pub run_id:             RunId,
+    pub automation_id: AutomationId,
+    pub target: AutomationTarget,
+    pub run_id: RunId,
     pub user_settings_path: PathBuf,
-    pub temp_root:          PathBuf,
+    pub temp_root: PathBuf,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct AutomationRunMaterialized {
-    pub manifest:                 RunManifest,
+    pub manifest: RunManifest,
     pub submitted_manifest_bytes: Vec<u8>,
 }
 
@@ -59,11 +59,11 @@ pub(crate) trait AutomationRunMaterializer: Send + Sync {
 
 #[derive(Clone)]
 pub(crate) struct ProductionAutomationRunMaterializer {
-    github_credentials:   Option<fabro_github::GitHubCredentials>,
-    github_api_base_url:  String,
-    http_client:          Option<fabro_http::HttpClient>,
+    github_credentials: Option<fabro_github::GitHubCredentials>,
+    github_api_base_url: String,
+    http_client: Option<fabro_http::HttpClient>,
     environment_defaults: MergeMap<EnvironmentLayer>,
-    repo_cache:           Arc<GitRepoCache>,
+    repo_cache: Arc<GitRepoCache>,
 }
 
 impl ProductionAutomationRunMaterializer {
@@ -95,7 +95,7 @@ impl ProductionAutomationRunMaterializer {
 #[derive(Debug)]
 pub(crate) struct GitRepoCache {
     cache_root: PathBuf,
-    locks:      KeyedMutex<(String, String)>,
+    locks: KeyedMutex<(String, String)>,
 }
 
 impl GitRepoCache {
@@ -155,10 +155,10 @@ impl AutomationRunMaterializer for ProductionAutomationRunMaterializer {
         let checked_out_sha = self
             .repo_cache
             .prepare_worktree(WorktreePrepareInput {
-                repo:         &repo,
-                clone_url:    &clone_url,
+                repo: &repo,
+                clone_url: &clone_url,
                 ref_selector: &input.target.ref_selector,
-                auth:         auth.as_ref(),
+                auth: auth.as_ref(),
                 worktree_dir: &checkout_dir,
             })
             .await?;
@@ -181,10 +181,10 @@ impl AutomationRunMaterializer for ProductionAutomationRunMaterializer {
 }
 
 pub(crate) struct WorktreePrepareInput<'a> {
-    pub repo:         &'a GithubRepository,
-    pub clone_url:    &'a str,
+    pub repo: &'a GithubRepository,
+    pub clone_url: &'a str,
     pub ref_selector: &'a str,
-    pub auth:         Option<&'a GitAuthConfig>,
+    pub auth: Option<&'a GitAuthConfig>,
     pub worktree_dir: &'a Path,
 }
 
@@ -277,7 +277,7 @@ async fn bare_clone_may_be_corrupt(bare_dir: &Path) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct GithubRepository {
     owner: String,
-    name:  String,
+    name: String,
 }
 
 fn parse_github_repository_slug(
@@ -295,7 +295,7 @@ fn parse_github_repository_slug(
     }
     Ok(GithubRepository {
         owner: owner.to_string(),
-        name:  repo.to_string(),
+        name: repo.to_string(),
     })
 }
 
@@ -333,7 +333,7 @@ fn github_metadata_url(repo: &GithubRepository) -> String {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GitAuthConfig {
-    extraheader:      Option<String>,
+    extraheader: Option<String>,
     sensitive_values: Vec<String>,
 }
 
@@ -341,7 +341,7 @@ impl GitAuthConfig {
     fn new(username: Option<String>, password: Option<String>) -> Self {
         let Some(password) = password.filter(|value| !value.is_empty()) else {
             return Self {
-                extraheader:      None,
+                extraheader: None,
                 sensitive_values: Vec::new(),
             };
         };
@@ -352,7 +352,7 @@ impl GitAuthConfig {
         let extraheader = basic_auth_header_from_encoded(&encoded_credentials);
         Self {
             sensitive_values: vec![password, encoded_credentials, extraheader.clone()],
-            extraheader:      Some(extraheader),
+            extraheader: Some(extraheader),
         }
     }
 
@@ -405,11 +405,11 @@ fn basic_auth_header_from_encoded(encoded_credentials: &str) -> String {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct GitCommandPlan {
-    program:          String,
-    args:             Vec<String>,
-    env:              Vec<(String, String)>,
-    current_dir:      Option<PathBuf>,
-    timeout:          Duration,
+    program: String,
+    args: Vec<String>,
+    env: Vec<(String, String)>,
+    current_dir: Option<PathBuf>,
+    timeout: Duration,
     sensitive_values: Vec<String>,
 }
 
@@ -584,10 +584,10 @@ fn render_error_chain(error: &(dyn std::error::Error + 'static)) -> String {
 
 #[derive(Debug)]
 pub(crate) struct ManifestFromCheckoutInput {
-    input:                AutomationRunMaterializeInput,
-    checkout_dir:         PathBuf,
-    repo:                 GithubRepository,
-    checked_out_sha:      Option<String>,
+    input: AutomationRunMaterializeInput,
+    checkout_dir: PathBuf,
+    repo: GithubRepository,
+    checked_out_sha: Option<String>,
     environment_defaults: MergeMap<EnvironmentLayer>,
 }
 
@@ -613,10 +613,10 @@ fn build_manifest_from_checkout(
 
     let mut manifest = built.manifest;
     manifest.git = Some(GitContext {
-        origin_url:   github_metadata_url(&repo),
-        branch:       input.target.ref_selector,
-        sha:          checked_out_sha,
-        dirty:        DirtyStatus::Clean,
+        origin_url: github_metadata_url(&repo),
+        branch: input.target.ref_selector,
+        sha: checked_out_sha,
+        dirty: DirtyStatus::Clean,
         push_outcome: PreRunPushOutcome::NotAttempted,
     });
     let submitted_manifest_bytes = serde_json::to_vec(&manifest)
@@ -654,7 +654,7 @@ pub struct TestAutomationRunMaterializer {
 #[cfg(any(test, feature = "test-support"))]
 struct TestAutomationRunMaterializerState {
     captured_inputs: Vec<AutomationRunMaterializeInput>,
-    response:        Result<AutomationRunMaterialized, AutomationRunMaterializeError>,
+    response: Result<AutomationRunMaterialized, AutomationRunMaterializeError>,
 }
 
 #[cfg(any(test, feature = "test-support"))]
@@ -729,17 +729,20 @@ mod tests {
 
     fn target(repository: &str, ref_selector: &str, workflow: &str) -> AutomationTarget {
         AutomationTarget {
-            repository:   repository.to_string(),
+            repository: repository.to_string(),
             ref_selector: ref_selector.to_string(),
-            workflow:     workflow.to_string(),
+            workflow: workflow.to_string(),
         }
     }
 
     fn test_environment_defaults() -> MergeMap<EnvironmentLayer> {
-        MergeMap::from(HashMap::from([("default".to_string(), EnvironmentLayer {
-            provider: Some("local".to_string()),
-            ..EnvironmentLayer::default()
-        })]))
+        MergeMap::from(HashMap::from([(
+            "default".to_string(),
+            EnvironmentLayer {
+                provider: Some("local".to_string()),
+                ..EnvironmentLayer::default()
+            },
+        )]))
     }
 
     #[test]
@@ -786,39 +789,48 @@ mod tests {
 
         let clone = build_bare_clone_plan(&clone_url, &bare_dir, None);
         assert_eq!(clone.program, "git");
-        assert_eq!(clone.args, vec![
-            "clone",
-            "--bare",
-            "--depth",
-            "1",
-            "https://github.com/in-parallel-oy/fabro.git",
-            bare_dir.to_str().unwrap(),
-        ]);
+        assert_eq!(
+            clone.args,
+            vec![
+                "clone",
+                "--bare",
+                "--depth",
+                "1",
+                "https://github.com/in-parallel-oy/fabro.git",
+                bare_dir.to_str().unwrap(),
+            ]
+        );
         assert_eq!(clone.timeout, Duration::from_mins(2));
         assert_eq!(clone.env_value("GIT_TERMINAL_PROMPT"), Some("0"));
 
         let fetch = build_bare_fetch_plan(&bare_dir, &clone_url, "feature/materialize", None);
-        assert_eq!(fetch.args, vec![
-            "fetch",
-            "--depth",
-            "1",
-            "origin",
-            "--",
-            "feature/materialize",
-        ]);
+        assert_eq!(
+            fetch.args,
+            vec![
+                "fetch",
+                "--depth",
+                "1",
+                "origin",
+                "--",
+                "feature/materialize",
+            ]
+        );
         assert_eq!(fetch.current_dir.as_deref(), Some(bare_dir.as_path()));
         assert_eq!(fetch.timeout, Duration::from_mins(1));
         assert_eq!(fetch.env_value("GIT_TERMINAL_PROMPT"), Some("0"));
 
         let worktree = build_worktree_add_plan(&bare_dir, &worktree_dir);
-        assert_eq!(worktree.args, vec![
-            "worktree",
-            "add",
-            "--detach",
-            "--force",
-            worktree_dir.to_str().unwrap(),
-            "FETCH_HEAD",
-        ]);
+        assert_eq!(
+            worktree.args,
+            vec![
+                "worktree",
+                "add",
+                "--detach",
+                "--force",
+                worktree_dir.to_str().unwrap(),
+                "FETCH_HEAD",
+            ]
+        );
         assert_eq!(worktree.current_dir.as_deref(), Some(bare_dir.as_path()));
         assert_eq!(worktree.timeout, Duration::from_secs(30));
         assert_eq!(worktree.env_value("GIT_TERMINAL_PROMPT"), Some("0"));
@@ -1045,17 +1057,17 @@ mod tests {
         let cache = GitRepoCache::new(temp.path().join("cache"));
         let repo = GithubRepository {
             owner: "fabro-sh".to_string(),
-            name:  "fabro".to_string(),
+            name: "fabro".to_string(),
         };
         let upstream_url = upstream.to_str().unwrap().to_string();
 
         let worktree_a = temp.path().join("wt-a");
         let sha_a = cache
             .prepare_worktree(WorktreePrepareInput {
-                repo:         &repo,
-                clone_url:    &upstream_url,
+                repo: &repo,
+                clone_url: &upstream_url,
                 ref_selector: "main",
-                auth:         None,
+                auth: None,
                 worktree_dir: &worktree_a,
             })
             .await
@@ -1072,10 +1084,10 @@ mod tests {
         let worktree_b = temp.path().join("wt-b");
         let sha_b = cache
             .prepare_worktree(WorktreePrepareInput {
-                repo:         &repo,
-                clone_url:    &upstream_url,
+                repo: &repo,
+                clone_url: &upstream_url,
                 ref_selector: "main",
-                auth:         None,
+                auth: None,
                 worktree_dir: &worktree_b,
             })
             .await
@@ -1096,17 +1108,17 @@ mod tests {
         let cache = GitRepoCache::new(temp.path().join("cache"));
         let repo = GithubRepository {
             owner: "fabro-sh".to_string(),
-            name:  "fabro".to_string(),
+            name: "fabro".to_string(),
         };
         let upstream_url = upstream.to_str().unwrap().to_string();
 
         let worktree_a = temp.path().join("wt-a");
         cache
             .prepare_worktree(WorktreePrepareInput {
-                repo:         &repo,
-                clone_url:    &upstream_url,
+                repo: &repo,
+                clone_url: &upstream_url,
                 ref_selector: "main",
-                auth:         None,
+                auth: None,
                 worktree_dir: &worktree_a,
             })
             .await
@@ -1119,10 +1131,10 @@ mod tests {
         let worktree_b = temp.path().join("wt-b");
         let sha = cache
             .prepare_worktree(WorktreePrepareInput {
-                repo:         &repo,
-                clone_url:    &upstream_url,
+                repo: &repo,
+                clone_url: &upstream_url,
                 ref_selector: "main",
-                auth:         None,
+                auth: None,
                 worktree_dir: &worktree_b,
             })
             .await

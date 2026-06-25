@@ -5,17 +5,17 @@ pub(crate) enum CloneDecision {
     },
     GitHub {
         origin_url: String,
-        branch:     Option<String>,
+        branch: Option<String>,
     },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GitHubRepoLayout {
-    pub(crate) owner:               String,
-    pub(crate) repo:                String,
-    pub(crate) repos_owner_path:    String,
-    pub(crate) primary_repo_path:   String,
-    pub(crate) primary_repo_link:   String,
+    pub(crate) owner: String,
+    pub(crate) repo: String,
+    pub(crate) repos_owner_path: String,
+    pub(crate) primary_repo_path: String,
+    pub(crate) primary_repo_link: String,
     pub(crate) execution_directory: String,
 }
 
@@ -164,7 +164,7 @@ mod tests {
             .unwrap(),
             CloneDecision::GitHub {
                 origin_url: "https://github.com/acme/widgets".to_string(),
-                branch:     Some("feature/work".to_string()),
+                branch: Some("feature/work".to_string()),
             }
         );
     }

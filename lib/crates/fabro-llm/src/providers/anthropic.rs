@@ -22,8 +22,8 @@ const DEFAULT_BASE_URL: &str = "https://api.anthropic.com/v1";
 /// translation lives in the codec.
 pub struct Adapter {
     pub(crate) http: HttpTransport,
-    provider_name:   String,
-    catalog:         Option<Arc<Catalog>>,
+    provider_name: String,
+    catalog: Option<Arc<Catalog>>,
 }
 
 impl Adapter {
@@ -35,9 +35,9 @@ impl Adapter {
     #[must_use]
     pub fn new_optional_auth(api_key: Option<String>) -> Self {
         Self {
-            http:          HttpTransport::new_optional(api_key, DEFAULT_BASE_URL),
+            http: HttpTransport::new_optional(api_key, DEFAULT_BASE_URL),
             provider_name: "anthropic".to_string(),
-            catalog:       None,
+            catalog: None,
         }
     }
 
@@ -87,21 +87,21 @@ impl Adapter {
     fn route_config(&self) -> RouteConfig {
         if self.provider_name == "anthropic" {
             RouteConfig {
-                auth:                  AuthScheme::ApiKey,
-                codec_params:          CodecParams {
+                auth: AuthScheme::ApiKey,
+                codec_params: CodecParams {
                     anthropic_version: AnthropicVersion::Header("2023-06-01"),
                     anthropic_beta: true,
                     ..CodecParams::default()
                 },
                 supports_count_tokens: true,
-                force_streaming:       false,
+                force_streaming: false,
             }
         } else {
             RouteConfig {
-                auth:                  AuthScheme::Bearer,
-                codec_params:          CodecParams::default(),
+                auth: AuthScheme::Bearer,
+                codec_params: CodecParams::default(),
                 supports_count_tokens: false,
-                force_streaming:       true,
+                force_streaming: true,
             }
         }
     }
@@ -129,9 +129,9 @@ impl Adapter {
         // Anthropic loads images and documents inline; audio falls back to a
         // text placeholder in the codec, so it is not loaded here.
         let policy = AttachmentPolicy {
-            images:    true,
+            images: true,
             documents: true,
-            audio:     false,
+            audio: false,
         };
         attachments::resolve(request, policy).await
     }
@@ -184,7 +184,7 @@ impl Adapter {
 
         response.ok_or_else(|| Error::Stream {
             message: "complete_via_stream: stream ended without a Finish event".to_string(),
-            source:  None,
+            source: None,
         })
     }
 }
@@ -192,10 +192,10 @@ impl Adapter {
 /// Resolved per-request routing decisions (auth, dialect headers, optional
 /// routes) that used to be inline `provider_name == "anthropic"` branches.
 struct RouteConfig {
-    auth:                  AuthScheme,
-    codec_params:          CodecParams,
+    auth: AuthScheme,
+    codec_params: CodecParams,
     supports_count_tokens: bool,
-    force_streaming:       bool,
+    force_streaming: bool,
 }
 
 enum AuthScheme {
@@ -319,7 +319,7 @@ impl ProviderAdapter for Adapter {
                         "{} uses always-on adaptive thinking; provider_options.anthropic.thinking.type = \"{kind}\" is not supported. Omit thinking or set only display options.",
                         model.display_name()
                     ),
-                    source:  None,
+                    source: None,
                 });
             }
         }
@@ -338,19 +338,19 @@ mod tests {
 
     fn make_base_request() -> Request {
         Request {
-            model:            "claude-sonnet-4-20250514".to_string(),
-            messages:         vec![Message::user("Hello")],
-            provider:         Some("anthropic".to_string()),
-            tools:            None,
-            tool_choice:      None,
-            response_format:  None,
-            temperature:      None,
-            top_p:            None,
-            max_tokens:       Some(128),
-            stop_sequences:   None,
+            model: "claude-sonnet-4-20250514".to_string(),
+            messages: vec![Message::user("Hello")],
+            provider: Some("anthropic".to_string()),
+            tools: None,
+            tool_choice: None,
+            response_format: None,
+            temperature: None,
+            top_p: None,
+            max_tokens: Some(128),
+            stop_sequences: None,
             reasoning_effort: None,
-            speed:            None,
-            metadata:         None,
+            speed: None,
+            metadata: None,
             provider_options: None,
         }
     }

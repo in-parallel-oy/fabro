@@ -61,15 +61,15 @@ fn init_settings(
     connection: &ServerConnectionArgs,
 ) -> Result<fabro_mcp_server::McpInitSettings> {
     Ok(fabro_mcp_server::McpInitSettings {
-        agent:    McpAgentForServer(agent).into(),
-        config:   config_settings(connection),
+        agent: McpAgentForServer(agent).into(),
+        config: config_settings(connection),
         home_dir: home_dir()?,
     })
 }
 
 fn config_settings(connection: &ServerConnectionArgs) -> fabro_mcp_server::McpConfigSettings {
     fabro_mcp_server::McpConfigSettings {
-        server:      connection.target.server.clone(),
+        server: connection.target.server.clone(),
         storage_dir: connection.storage_dir.clone_path(),
     }
 }

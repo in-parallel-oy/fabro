@@ -32,12 +32,12 @@ fn sample_run_spec() -> RunSpec {
         manifest_blob: None,
         definition_blob: None,
         git: Some(GitContext {
-            origin_url:   "https://github.com/in-parallel-oy/fabro.git".to_string(),
-            branch:       "main".to_string(),
-            sha:          Some("abc123".to_string()),
-            dirty:        DirtyStatus::Dirty,
+            origin_url: "https://github.com/in-parallel-oy/fabro.git".to_string(),
+            branch: "main".to_string(),
+            sha: Some("abc123".to_string()),
+            dirty: DirtyStatus::Dirty,
             push_outcome: PreRunPushOutcome::SkippedRemoteMismatch {
-                remote:          "https://github.com/user/fork.git".to_string(),
+                remote: "https://github.com/user/fork.git".to_string(),
                 repo_origin_url: "https://github.com/in-parallel-oy/fabro.git".to_string(),
             },
         }),

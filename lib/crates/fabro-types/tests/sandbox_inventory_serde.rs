@@ -13,38 +13,35 @@ fn sandbox_inventory_serializes_provider_backed_shape() {
     let created_at = Utc.with_ymd_and_hms(2026, 5, 25, 12, 0, 0).unwrap();
     let response = SandboxListResponse {
         data: vec![SandboxInfo {
-            provider:          SandboxProviderKind::Docker,
-            id:                "container-abc123".to_string(),
-            display_name:      Some("fabro-run-abc".to_string()),
-            state:             SandboxState::Running,
-            native_state:      Some("running".to_string()),
-            image:             Some("buildpack-deps:noble".to_string()),
-            snapshot:          None,
-            region:            None,
-            web_url:           None,
+            provider: SandboxProviderKind::Docker,
+            id: "container-abc123".to_string(),
+            display_name: Some("fabro-run-abc".to_string()),
+            state: SandboxState::Running,
+            native_state: Some("running".to_string()),
+            image: Some("buildpack-deps:noble".to_string()),
+            snapshot: None,
+            region: None,
+            web_url: None,
             working_directory: Some("/workspace".to_string()),
-            resources:         SandboxResources {
-                cpu_cores:    Some(2.0),
+            resources: SandboxResources {
+                cpu_cores: Some(2.0),
                 memory_bytes: Some(4 * 1024 * 1024 * 1024),
-                disk_bytes:   None,
+                disk_bytes: None,
             },
-            network:           SandboxNetwork {
-                egress:  SandboxNetworkPolicy::open(),
+            network: SandboxNetwork {
+                egress: SandboxNetworkPolicy::open(),
                 ingress: SandboxNetworkPolicy::blocked(),
             },
-            labels:            BTreeMap::from([(
-                "sh.fabro.managed".to_string(),
-                "true".to_string(),
-            )]),
-            timestamps:        SandboxTimestamps {
-                created_at:       Some(created_at),
+            labels: BTreeMap::from([("sh.fabro.managed".to_string(), "true".to_string())]),
+            timestamps: SandboxTimestamps {
+                created_at: Some(created_at),
                 last_activity_at: None,
             },
         }],
         meta: SandboxListMeta {
             provider_errors: vec![SandboxProviderLookupError {
                 provider: SandboxProviderKind::Daytona,
-                message:  "Daytona API key is not configured".to_string(),
+                message: "Daytona API key is not configured".to_string(),
             }],
         },
     };

@@ -19,7 +19,7 @@ use crate::server::AppState;
 
 #[derive(Clone)]
 pub(crate) struct Config {
-    pub(crate) state:       Arc<AppState>,
+    pub(crate) state: Arc<AppState>,
     pub(crate) web_enabled: bool,
 }
 

@@ -87,9 +87,9 @@ pub(super) fn decode_response(
         model: ctx.request.model.clone(),
         provider: ctx.provider_name.to_string(),
         message: Message {
-            role:         Role::Assistant,
-            content:      content_parts,
-            name:         None,
+            role: Role::Assistant,
+            content: content_parts,
+            name: None,
             tool_call_id: None,
         },
         finish_reason,
@@ -126,7 +126,7 @@ pub(super) fn decode_content_block(block: &Value) -> Option<ContentPart> {
     if let Some(reasoning) = block.get("reasoningContent") {
         if let Some(text_block) = reasoning.get("reasoningText") {
             return Some(ContentPart::Thinking(ThinkingData {
-                text:      text_block
+                text: text_block
                     .get("text")
                     .and_then(Value::as_str)
                     .unwrap_or_default()
@@ -135,14 +135,14 @@ pub(super) fn decode_content_block(block: &Value) -> Option<ContentPart> {
                     .get("signature")
                     .and_then(Value::as_str)
                     .map(str::to_string),
-                redacted:  false,
+                redacted: false,
             }));
         }
         if let Some(redacted) = reasoning.get("redactedContent").and_then(Value::as_str) {
             return Some(ContentPart::Thinking(ThinkingData {
-                text:      redacted.to_string(),
+                text: redacted.to_string(),
                 signature: None,
-                redacted:  true,
+                redacted: true,
             }));
         }
     }
@@ -172,10 +172,10 @@ pub(super) fn token_counts_from_usage(usage: Option<&Value>) -> TokenCounts {
     };
     let count = |key: &str| usage.get(key).and_then(Value::as_i64).unwrap_or(0);
     TokenCounts {
-        input_tokens:       count("inputTokens"),
-        output_tokens:      count("outputTokens"),
-        reasoning_tokens:   0,
-        cache_read_tokens:  count("cacheReadInputTokens"),
+        input_tokens: count("inputTokens"),
+        output_tokens: count("outputTokens"),
+        reasoning_tokens: 0,
+        cache_read_tokens: count("cacheReadInputTokens"),
         cache_write_tokens: count("cacheWriteInputTokens"),
     }
 }

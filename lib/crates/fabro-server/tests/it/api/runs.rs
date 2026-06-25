@@ -360,12 +360,15 @@ async fn link_relink_and_unlink_parent_are_idempotent() {
         .iter()
         .map(|event| event["event"].as_str().unwrap())
         .collect::<Vec<_>>();
-    assert_eq!(event_names, vec![
-        "run.created",
-        "run.submitted",
-        "run.parent.linked",
-        "run.parent.linked"
-    ]);
+    assert_eq!(
+        event_names,
+        vec![
+            "run.created",
+            "run.submitted",
+            "run.parent.linked",
+            "run.parent.linked"
+        ]
+    );
 
     let unlink_request = Request::builder()
         .method("DELETE")

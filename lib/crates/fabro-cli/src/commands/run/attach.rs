@@ -68,7 +68,7 @@ enum LineRead {
 
 #[cfg(unix)]
 struct NonblockingStdin {
-    stdin:          std::io::Stdin,
+    stdin: std::io::Stdin,
     original_flags: OFlag,
 }
 
@@ -218,10 +218,10 @@ pub(crate) async fn attach_run_with_client(
 }
 
 struct AttachOptions {
-    auto_approve:   bool,
-    verbose:        bool,
+    auto_approve: bool,
+    verbose: bool,
     kill_on_detach: bool,
-    json_output:    bool,
+    json_output: bool,
 }
 
 fn replay_run_with_client(
@@ -426,10 +426,10 @@ fn api_question_to_question(question: &types::ApiQuestion) -> Question {
         .options
         .iter()
         .map(|option| InterviewOption {
-            key:         option.key.clone(),
-            label:       option.label.clone(),
+            key: option.key.clone(),
+            label: option.label.clone(),
             description: option.description.clone(),
-            preview:     option.preview.clone(),
+            preview: option.preview.clone(),
         })
         .collect();
     converted.allow_freeform = question.allow_freeform;
@@ -616,9 +616,9 @@ fn find_matching_option(response: &str, options: &[InterviewOption]) -> Option<A
     for opt in options {
         if opt.key.eq_ignore_ascii_case(trimmed) {
             return Some(Answer {
-                value:           AnswerValue::Selected(opt.key.clone()),
+                value: AnswerValue::Selected(opt.key.clone()),
                 selected_option: Some(opt.clone()),
-                text:            None,
+                text: None,
             });
         }
     }
@@ -626,9 +626,9 @@ fn find_matching_option(response: &str, options: &[InterviewOption]) -> Option<A
         if idx >= 1 && idx <= options.len() {
             let opt = &options[idx - 1];
             return Some(Answer {
-                value:           AnswerValue::Selected(opt.key.clone()),
+                value: AnswerValue::Selected(opt.key.clone()),
                 selected_option: Some(opt.clone()),
-                text:            None,
+                text: None,
             });
         }
     }
@@ -648,12 +648,12 @@ async fn submit_server_interview_answer(
         }
         .into(),
         AnswerValue::Selected(key) => types::SubmitAnswerSelectedRequest {
-            kind:       types::SubmitAnswerSelectedRequestKind::Selected,
+            kind: types::SubmitAnswerSelectedRequestKind::Selected,
             option_key: key.clone(),
         }
         .into(),
         AnswerValue::MultiSelected(keys) => types::SubmitAnswerMultiSelectedRequest {
-            kind:        types::SubmitAnswerMultiSelectedRequestKind::MultiSelected,
+            kind: types::SubmitAnswerMultiSelectedRequestKind::MultiSelected,
             option_keys: keys.clone(),
         }
         .into(),
@@ -936,14 +936,14 @@ mod tests {
     #[test]
     fn answer_requires_reattach_for_interrupted_and_skipped_answers() {
         let interrupted = Answer {
-            value:           AnswerValue::Interrupted,
+            value: AnswerValue::Interrupted,
             selected_option: None,
-            text:            None,
+            text: None,
         };
         let skipped = Answer {
-            value:           AnswerValue::Skipped,
+            value: AnswerValue::Skipped,
             selected_option: None,
-            text:            None,
+            text: None,
         };
         let answered = Answer::yes();
 
@@ -970,10 +970,10 @@ mod tests {
     fn invalid_multiple_choice_without_freeform_is_user_correctable() {
         let mut question = Question::new("Pick one.", QuestionType::MultipleChoice);
         question.options = vec![InterviewOption {
-            key:         "A".to_string(),
-            label:       "Approve".to_string(),
+            key: "A".to_string(),
+            label: "Approve".to_string(),
             description: None,
-            preview:     None,
+            preview: None,
         }];
 
         let response = parse_choice_response(&question, PromptRead::Line("bogus".to_string()));
@@ -985,10 +985,10 @@ mod tests {
     fn unmatched_multiple_choice_with_freeform_remains_text() {
         let mut question = Question::new("Pick one.", QuestionType::MultipleChoice);
         question.options = vec![InterviewOption {
-            key:         "A".to_string(),
-            label:       "Approve".to_string(),
+            key: "A".to_string(),
+            label: "Approve".to_string(),
             description: None,
-            preview:     None,
+            preview: None,
         }];
         question.allow_freeform = true;
 
@@ -1008,16 +1008,16 @@ mod tests {
         let mut question = Question::new("Pick many.", QuestionType::MultiSelect);
         question.options = vec![
             InterviewOption {
-                key:         "A".to_string(),
-                label:       "Approve".to_string(),
+                key: "A".to_string(),
+                label: "Approve".to_string(),
                 description: None,
-                preview:     None,
+                preview: None,
             },
             InterviewOption {
-                key:         "N".to_string(),
-                label:       "Notify".to_string(),
+                key: "N".to_string(),
+                label: "Notify".to_string(),
                 description: None,
-                preview:     None,
+                preview: None,
             },
         ];
 

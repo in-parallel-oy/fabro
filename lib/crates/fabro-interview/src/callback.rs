@@ -6,7 +6,7 @@ use crate::{Answer, AnswerSubmission, Interviewer, Question};
 /// Delegates question answering to a provided callback function.
 pub struct CallbackInterviewer {
     callback: Box<dyn Fn(Question) -> Answer + Send + Sync>,
-    actor:    Principal,
+    actor: Principal,
 }
 
 impl CallbackInterviewer {

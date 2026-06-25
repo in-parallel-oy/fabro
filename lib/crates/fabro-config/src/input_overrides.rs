@@ -140,10 +140,13 @@ mod tests {
     #[test]
     fn datetime_is_rejected() {
         let err = parse_one("foo", "2026-05-06").unwrap_err();
-        assert_eq!(err, InputOverrideParseError::UnsupportedValue {
-            key:  "foo".to_string(),
-            kind: "datetime",
-        });
+        assert_eq!(
+            err,
+            InputOverrideParseError::UnsupportedValue {
+                key: "foo".to_string(),
+                kind: "datetime",
+            }
+        );
         assert!(err.to_string().contains("foo"));
         assert!(!err.to_string().contains("2026-05-06"));
     }
@@ -151,29 +154,38 @@ mod tests {
     #[test]
     fn array_is_rejected() {
         let err = parse_one("foo", "[1]").unwrap_err();
-        assert_eq!(err, InputOverrideParseError::UnsupportedValue {
-            key:  "foo".to_string(),
-            kind: "array",
-        });
+        assert_eq!(
+            err,
+            InputOverrideParseError::UnsupportedValue {
+                key: "foo".to_string(),
+                kind: "array",
+            }
+        );
         assert!(!err.to_string().contains("[1]"));
     }
 
     #[test]
     fn inline_table_is_rejected() {
         let err = parse_one("foo", "{a=1}").unwrap_err();
-        assert_eq!(err, InputOverrideParseError::UnsupportedValue {
-            key:  "foo".to_string(),
-            kind: "inline table",
-        });
+        assert_eq!(
+            err,
+            InputOverrideParseError::UnsupportedValue {
+                key: "foo".to_string(),
+                kind: "inline table",
+            }
+        );
         assert!(!err.to_string().contains("{a=1}"));
     }
 
     #[test]
     fn missing_equals_is_rejected() {
         let err = parse_input_overrides(&["foo".to_string()]).unwrap_err();
-        assert_eq!(err, InputOverrideParseError::MissingEquals {
-            raw: "foo".to_string(),
-        });
+        assert_eq!(
+            err,
+            InputOverrideParseError::MissingEquals {
+                raw: "foo".to_string(),
+            }
+        );
     }
 
     #[test]

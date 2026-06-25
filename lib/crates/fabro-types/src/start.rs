@@ -7,5 +7,5 @@ pub struct StartRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_branch: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub base_sha:   Option<String>,
+    pub base_sha: Option<String>,
 }

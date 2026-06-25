@@ -55,7 +55,7 @@ pub(crate) struct CodecCtx<'a> {
     /// The canonical request being translated. Decoders read it too
     /// (e.g. tool-argument parsing keys off the request's tool definitions;
     /// the stream model fallback uses `request.model`).
-    pub request:       &'a Request,
+    pub request: &'a Request,
     /// Identity stamped into `Response.provider`, and the `provider_options`
     /// namespace key for the openai_compatible codec (kimi/zai/…).
     pub provider_name: &'a str,
@@ -64,10 +64,10 @@ pub(crate) struct CodecCtx<'a> {
     pub deployment_id: &'a str,
     /// Model row for capability lookups (prompt_cache, reasoning levels,
     /// max_output). `None` when no catalog is injected.
-    pub model:         Option<&'a Model>,
+    pub model: Option<&'a Model>,
     /// Per-route dialect data (model/version placement, …). Defaulted to
     /// today's direct-route values; Bedrock/OpenRouter add variants later.
-    pub params:        &'a CodecParams,
+    pub params: &'a CodecParams,
 }
 
 /// Per-route dialect knobs, expressed as data so one codec can serve several
@@ -83,13 +83,13 @@ pub(crate) struct CodecParams {
     pub anthropic_version: AnthropicVersion,
     /// Whether to emit Anthropic beta headers (prompt-caching / fast-mode /
     /// 1M-context). True on the direct route, false for Kimi-over-anthropic.
-    pub anthropic_beta:    bool,
+    pub anthropic_beta: bool,
     /// Codex-endpoint dialect for the openai_responses codec: omit the
     /// sampling params (`temperature`/`top_p`/`max_output_tokens`) the Codex
     /// endpoint rejects and always send `instructions` (empty string when the
     /// request has none). The transport-side half of codex mode (forced
     /// streaming) is route config, not codec data.
-    pub openai_codex:      bool,
+    pub openai_codex: bool,
 }
 
 /// Placement of the Anthropic API version on the wire.
@@ -108,7 +108,7 @@ pub(crate) enum AnthropicVersion {
 /// HTTP.
 pub(crate) struct EncodedRequest {
     /// Request body.
-    pub body:     serde_json::Value,
+    pub body: serde_json::Value,
     /// Path appended to the route base URL, fully formed by the codec
     /// (incl. model-in-path and `?alt=sse` for gemini). e.g.
     /// `/chat/completions`.
@@ -116,7 +116,7 @@ pub(crate) struct EncodedRequest {
     /// Dialect headers as data (e.g. `anthropic-version`, beta headers).
     /// NOT auth or `content-type` — those are the transport's job. Empty for
     /// the openai_compatible codec.
-    pub headers:  Vec<(String, String)>,
+    pub headers: Vec<(String, String)>,
 }
 
 /// One framed item off the byte stream, handed to a [`StreamDecoder`].
@@ -127,7 +127,7 @@ pub(crate) struct RawEvent<'a> {
     pub event: Option<&'a str>,
     /// The `data:` payload, or a bare JSON line. The sentinel `[DONE]` is
     /// passed through verbatim for the decoder to recognize.
-    pub data:  &'a str,
+    pub data: &'a str,
 }
 
 /// Stateless translator for one wire dialect.
@@ -171,7 +171,7 @@ pub(crate) trait Codec: Send + Sync {
     fn decode_count_tokens(&self, _body: &str) -> Result<i64, Error> {
         Err(Error::Configuration {
             message: "codec has no count_tokens route".to_string(),
-            source:  None,
+            source: None,
         })
     }
 
@@ -359,9 +359,9 @@ mod tests {
     #[test]
     fn extract_system_prompt_developer_role() {
         let dev = Message {
-            role:         Role::Developer,
-            content:      vec![ContentPart::text("dev instructions")],
-            name:         None,
+            role: Role::Developer,
+            content: vec![ContentPart::text("dev instructions")],
+            name: None,
             tool_call_id: None,
         };
         let msgs = vec![dev, Message::user("hi")];
@@ -373,9 +373,9 @@ mod tests {
     #[test]
     fn extract_system_prompt_ignores_whitespace_system_and_developer() {
         let dev = Message {
-            role:         Role::Developer,
-            content:      vec![ContentPart::text(" \n\t ")],
-            name:         None,
+            role: Role::Developer,
+            content: vec![ContentPart::text(" \n\t ")],
+            name: None,
             tool_call_id: None,
         };
         let msgs = vec![Message::system("   "), dev, Message::user("hi")];

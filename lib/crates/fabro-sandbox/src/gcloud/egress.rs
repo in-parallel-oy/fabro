@@ -65,7 +65,11 @@ impl EgressPolicy {
                     // `iptables` (or a v4 CIDR to `ip6tables`) is rejected, so
                     // without family routing the allow rule silently never takes
                     // effect and the traffic is dropped by the default policy.
-                    let bin = if cidr.contains(':') { "ip6tables" } else { "iptables" };
+                    let bin = if cidr.contains(':') {
+                        "ip6tables"
+                    } else {
+                        "iptables"
+                    };
                     lines.push(format!("{bin} -A OUTPUT -d {cidr} -j ACCEPT || true"));
                 }
                 for bin in FIREWALL_BINS {
@@ -116,7 +120,8 @@ mod tests {
 
     #[test]
     fn allow_list_rejects_injection() {
-        let script = EgressPolicy::AllowList(vec!["10.0.0.0/8; rm -rf /".to_string()]).iptables_script();
+        let script =
+            EgressPolicy::AllowList(vec!["10.0.0.0/8; rm -rf /".to_string()]).iptables_script();
         assert!(!script.contains("rm -rf"));
     }
 
@@ -132,11 +137,9 @@ mod tests {
 
     #[test]
     fn allow_list_routes_each_cidr_to_its_family() {
-        let script = EgressPolicy::AllowList(vec![
-            "10.0.0.0/8".to_string(),
-            "2001:db8::/32".to_string(),
-        ])
-        .iptables_script();
+        let script =
+            EgressPolicy::AllowList(vec!["10.0.0.0/8".to_string(), "2001:db8::/32".to_string()])
+                .iptables_script();
         assert!(script.contains("iptables -A OUTPUT -d 10.0.0.0/8 -j ACCEPT"));
         assert!(script.contains("ip6tables -A OUTPUT -d 2001:db8::/32 -j ACCEPT"));
         // The v6 CIDR must NOT be handed to iptables (it would be rejected).

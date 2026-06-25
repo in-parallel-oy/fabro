@@ -165,9 +165,9 @@ pub(super) fn decode_response(
         model: api_resp.model.unwrap_or_else(|| ctx.request.model.clone()),
         provider: ctx.provider_name.to_string(),
         message: Message {
-            role:         Role::Assistant,
-            content:      content_parts,
-            name:         None,
+            role: Role::Assistant,
+            content: content_parts,
+            name: None,
             tool_call_id: None,
         },
         finish_reason,
@@ -184,7 +184,7 @@ pub(super) fn decode_count_tokens(body: &str) -> Result<i64, Error> {
     let response: InputTokensResponse =
         serde_json::from_str(body).map_err(|e| Error::Configuration {
             message: format!("failed to parse OpenAI input token response: {e}"),
-            source:  None,
+            source: None,
         })?;
 
     if response.object != "response.input_tokens" {
@@ -193,7 +193,7 @@ pub(super) fn decode_count_tokens(body: &str) -> Result<i64, Error> {
                 "failed to parse OpenAI input token response: unexpected object '{}'",
                 response.object
             ),
-            source:  None,
+            source: None,
         });
     }
 
@@ -347,9 +347,9 @@ mod tests {
 
         // Now translate back to input format
         let msg = Message {
-            role:         Role::Assistant,
-            content:      parts,
-            name:         None,
+            role: Role::Assistant,
+            content: parts,
+            name: None,
             tool_call_id: None,
         };
         let (_, input) = encode::translate_input(&[msg]);

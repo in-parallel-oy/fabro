@@ -14,10 +14,10 @@ const DAYTONA_LIST_PAGE_SIZE: i32 = 100;
 
 #[derive(Clone)]
 pub struct DaytonaSandboxProvider {
-    api_key:         Option<String>,
-    api_url:         Option<String>,
+    api_key: Option<String>,
+    api_url: Option<String>,
     organization_id: Option<String>,
-    http_client:     Option<fabro_http::HttpClient>,
+    http_client: Option<fabro_http::HttpClient>,
 }
 
 impl DaytonaSandboxProvider {

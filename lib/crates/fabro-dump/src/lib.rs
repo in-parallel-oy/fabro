@@ -38,14 +38,14 @@ fn stage_dir_name(rank: u32, stage_id: &StageId) -> String {
 
 #[derive(Debug, Clone)]
 pub struct RunDump {
-    entries:        Vec<RunDumpEntry>,
-    stage_ranks:    HashMap<StageId, u32>,
+    entries: Vec<RunDumpEntry>,
+    stage_ranks: HashMap<StageId, u32>,
     dump_log_index: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
 pub struct RunDumpEntry {
-    path:     String,
+    path: String,
     contents: RunDumpContents,
 }
 
@@ -281,42 +281,42 @@ impl RunDumpEntry {
 
     fn text(path: impl Into<String>, contents: String) -> Self {
         Self {
-            path:     path.into(),
+            path: path.into(),
             contents: RunDumpContents::Text(contents),
         }
     }
 
     fn text_path(path: &Path, contents: String) -> Self {
         Self {
-            path:     path_to_string(path),
+            path: path_to_string(path),
             contents: RunDumpContents::Text(contents),
         }
     }
 
     fn json(path: impl Into<String>, contents: serde_json::Value) -> Self {
         Self {
-            path:     path.into(),
+            path: path.into(),
             contents: RunDumpContents::Json(contents),
         }
     }
 
     fn json_path(path: &Path, contents: serde_json::Value) -> Self {
         Self {
-            path:     path_to_string(path),
+            path: path_to_string(path),
             contents: RunDumpContents::Json(contents),
         }
     }
 
     fn bytes(path: impl Into<String>, contents: Vec<u8>) -> Self {
         Self {
-            path:     path.into(),
+            path: path.into(),
             contents: RunDumpContents::Bytes(contents),
         }
     }
 
     fn bytes_path(path: &Path, contents: Vec<u8>) -> Self {
         Self {
-            path:     path_to_string(path),
+            path: path_to_string(path),
             contents: RunDumpContents::Bytes(contents),
         }
     }
@@ -484,44 +484,44 @@ mod tests {
 
     fn sample_run_spec() -> RunSpec {
         RunSpec {
-            run_id:           fixtures::RUN_1,
-            settings:         WorkflowSettings::default(),
-            graph:            Graph::new("ship"),
-            graph_source:     Some("digraph Ship {}".to_string()),
-            workflow_slug:    Some("demo".to_string()),
-            automation:       None,
+            run_id: fixtures::RUN_1,
+            settings: WorkflowSettings::default(),
+            graph: Graph::new("ship"),
+            graph_source: Some("digraph Ship {}".to_string()),
+            workflow_slug: Some("demo".to_string()),
+            automation: None,
             source_directory: Some("/tmp/project".to_string()),
-            git:              Some(fabro_types::GitContext {
-                origin_url:   "https://github.com/in-parallel-oy/fabro.git".to_string(),
-                branch:       "main".to_string(),
-                sha:          None,
-                dirty:        fabro_types::DirtyStatus::Clean,
+            git: Some(fabro_types::GitContext {
+                origin_url: "https://github.com/in-parallel-oy/fabro.git".to_string(),
+                branch: "main".to_string(),
+                sha: None,
+                dirty: fabro_types::DirtyStatus::Clean,
                 push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
             }),
-            labels:           HashMap::from([("team".to_string(), "platform".to_string())]),
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            definition_blob:  None,
-            fork_source_ref:  None,
+            labels: HashMap::from([("team".to_string(), "platform".to_string())]),
+            provenance: test_support::test_run_provenance(),
+            manifest_blob: None,
+            definition_blob: None,
+            fork_source_ref: None,
         }
     }
 
     fn sample_checkpoint() -> Checkpoint {
         Checkpoint {
-            timestamp:                  Utc
+            timestamp: Utc
                 .with_ymd_and_hms(2026, 4, 20, 12, 0, 0)
                 .single()
                 .unwrap(),
-            current_node:               "build".to_string(),
-            completed_nodes:            vec!["build".to_string()],
-            node_retries:               HashMap::new(),
-            context_values:             HashMap::new(),
-            node_outcomes:              HashMap::new(),
-            next_node_id:               Some("ship".to_string()),
-            git_commit_sha:             Some("abc123".to_string()),
-            loop_failure_signatures:    HashMap::new(),
+            current_node: "build".to_string(),
+            completed_nodes: vec!["build".to_string()],
+            node_retries: HashMap::new(),
+            context_values: HashMap::new(),
+            node_outcomes: HashMap::new(),
+            next_node_id: Some("ship".to_string()),
+            git_commit_sha: Some("abc123".to_string()),
+            loop_failure_signatures: HashMap::new(),
             restart_failure_signatures: HashMap::new(),
-            node_visits:                HashMap::from([("build".to_string(), 2usize)]),
+            node_visits: HashMap::from([("build".to_string(), 2usize)]),
         }
     }
 
@@ -535,48 +535,48 @@ mod tests {
                 .single()
                 .unwrap(),
             run_branch: Some("fabro/run/demo".to_string()),
-            base_sha:   Some("deadbeef".to_string()),
+            base_sha: Some("deadbeef".to_string()),
         });
         projection.status = RunStatus::Succeeded {
             reason: SuccessReason::Completed,
         };
         projection.checkpoints.push(CheckpointRecord {
-            seq:        7,
+            seq: 7,
             checkpoint: sample_checkpoint(),
-            diff:       RunDiff::default(),
+            diff: RunDiff::default(),
         });
         projection.conclusion = Some(Conclusion {
-            timestamp:            Utc
+            timestamp: Utc
                 .with_ymd_and_hms(2026, 4, 20, 12, 5, 0)
                 .single()
                 .unwrap(),
-            status:               StageOutcome::Succeeded,
-            timing:               fabro_types::RunTiming::wall_only(5),
-            failure:              None,
+            status: StageOutcome::Succeeded,
+            timing: fabro_types::RunTiming::wall_only(5),
+            failure: None,
             final_git_commit_sha: Some("abc123".to_string()),
-            stages:               Vec::new(),
-            billing:              None,
-            total_retries:        0,
-            diff:                 RunDiff::default(),
+            stages: Vec::new(),
+            billing: None,
+            total_retries: 0,
+            diff: RunDiff::default(),
         });
         projection.sandbox = Some(RunSandbox::ready(
             RunSandboxPlan {
                 provider: SandboxProviderKind::Local,
-                image:    None,
+                image: None,
                 snapshot: None,
             },
             RunSandboxInstance {
                 provider: SandboxProviderKind::Local,
-                image:    None,
+                image: None,
                 snapshot: None,
-                runtime:  fabro_types::RunSandboxRuntime {
-                    id:                "sandbox-1".to_string(),
+                runtime: fabro_types::RunSandboxRuntime {
+                    id: "sandbox-1".to_string(),
                     working_directory: "/tmp/project".to_string(),
-                    repo_cloned:       None,
-                    clone_origin_url:  None,
-                    clone_branch:      None,
-                    workspace_root:    None,
-                    repos_root:        None,
+                    repo_cloned: None,
+                    clone_origin_url: None,
+                    clone_branch: None,
+                    workspace_root: None,
+                    repos_root: None,
                     primary_repo_path: None,
                     primary_repo_link: None,
                 },
@@ -587,20 +587,20 @@ mod tests {
         stage.prompt = Some("plan".to_string());
         stage.response = Some("done".to_string());
         stage.completion = Some(StageCompletion {
-            outcome:        StageOutcome::Succeeded,
-            notes:          Some("ok".to_string()),
+            outcome: StageOutcome::Succeeded,
+            notes: Some("ok".to_string()),
             failure_reason: None,
-            timestamp:      Utc
+            timestamp: Utc
                 .with_ymd_and_hms(2026, 4, 20, 12, 1, 0)
                 .single()
                 .unwrap(),
         });
         stage.provider_used = Some(StageModelUsage {
-            mode:             StageModelUsage::MODE_PROMPT.to_string(),
-            provider:         Some("openai".to_string()),
-            model:            None,
+            mode: StageModelUsage::MODE_PROMPT.to_string(),
+            provider: Some("openai".to_string()),
+            model: None,
             reasoning_effort: None,
-            speed:            None,
+            speed: None,
         });
         stage.diff = Some("diff --git a/a b/a".to_string());
         stage.script_invocation = Some(serde_json::json!({ "command": "cargo test" }));
@@ -719,11 +719,11 @@ mod tests {
         let blob_id = fabro_types::RunBlobId::new(&blob);
         let legacy_ref = format!("file:///sandbox/.fabro/artifacts/{blob_id}.json");
         let mut dump = RunDump {
-            entries:        vec![RunDumpEntry::json(
+            entries: vec![RunDumpEntry::json(
                 "run.json",
                 serde_json::json!({ "stdout": legacy_ref }),
             )],
-            stage_ranks:    HashMap::new(),
+            stage_ranks: HashMap::new(),
             dump_log_index: None,
         };
 

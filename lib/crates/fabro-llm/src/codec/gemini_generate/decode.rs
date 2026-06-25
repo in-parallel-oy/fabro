@@ -34,9 +34,9 @@ pub(super) fn parse_part(part: &serde_json::Value) -> Option<ContentPart> {
             .unwrap_or(false);
         if is_thought {
             return Some(ContentPart::Thinking(ThinkingData {
-                text:      text.to_string(),
+                text: text.to_string(),
                 signature: None,
-                redacted:  false,
+                redacted: false,
             }));
         }
         return Some(ContentPart::text(text));
@@ -128,7 +128,7 @@ pub(super) fn decode_response(
         .as_ref()
         .and_then(|c| c.first())
         .ok_or_else(|| Error::Provider {
-            kind:   ProviderErrorKind::Server,
+            kind: ProviderErrorKind::Server,
             detail: Box::new(ProviderErrorDetail::new(
                 "no candidates in Gemini response",
                 ctx.provider_name,
@@ -152,9 +152,9 @@ pub(super) fn decode_response(
         model: ctx.request.model.clone(),
         provider: ctx.provider_name.to_string(),
         message: Message {
-            role:         Role::Assistant,
-            content:      content_parts,
-            name:         None,
+            role: Role::Assistant,
+            content: content_parts,
+            name: None,
             tool_call_id: None,
         },
         finish_reason,
@@ -171,7 +171,7 @@ pub(super) fn decode_count_tokens(body: &str) -> Result<i64, Error> {
     let response: CountTokensResponse =
         serde_json::from_str(body).map_err(|e| Error::Configuration {
             message: format!("failed to parse Gemini token count: {e}"),
-            source:  None,
+            source: None,
         })?;
     Ok(response.total_tokens)
 }
@@ -210,10 +210,13 @@ mod tests {
             None,
             None,
         );
-        assert!(matches!(err, Error::Provider {
-            kind: ProviderErrorKind::NotFound,
-            ..
-        }));
+        assert!(matches!(
+            err,
+            Error::Provider {
+                kind: ProviderErrorKind::NotFound,
+                ..
+            }
+        ));
 
         let err = gemini_error(
             400,
@@ -223,10 +226,13 @@ mod tests {
             None,
             None,
         );
-        assert!(matches!(err, Error::Provider {
-            kind: ProviderErrorKind::InvalidRequest,
-            ..
-        }));
+        assert!(matches!(
+            err,
+            Error::Provider {
+                kind: ProviderErrorKind::InvalidRequest,
+                ..
+            }
+        ));
 
         let err = gemini_error(
             429,
@@ -236,10 +242,13 @@ mod tests {
             None,
             None,
         );
-        assert!(matches!(err, Error::Provider {
-            kind: ProviderErrorKind::RateLimit,
-            ..
-        }));
+        assert!(matches!(
+            err,
+            Error::Provider {
+                kind: ProviderErrorKind::RateLimit,
+                ..
+            }
+        ));
 
         let err = gemini_error(
             401,
@@ -249,10 +258,13 @@ mod tests {
             None,
             None,
         );
-        assert!(matches!(err, Error::Provider {
-            kind: ProviderErrorKind::Authentication,
-            ..
-        }));
+        assert!(matches!(
+            err,
+            Error::Provider {
+                kind: ProviderErrorKind::Authentication,
+                ..
+            }
+        ));
 
         let err = gemini_error(
             403,
@@ -262,10 +274,13 @@ mod tests {
             None,
             None,
         );
-        assert!(matches!(err, Error::Provider {
-            kind: ProviderErrorKind::AccessDenied,
-            ..
-        }));
+        assert!(matches!(
+            err,
+            Error::Provider {
+                kind: ProviderErrorKind::AccessDenied,
+                ..
+            }
+        ));
 
         let err = gemini_error(
             504,
@@ -281,16 +296,22 @@ mod tests {
     #[test]
     fn gemini_error_falls_back_to_http_status_without_grpc() {
         let err = gemini_error(429, "rate limited".into(), "gemini", None, None, None);
-        assert!(matches!(err, Error::Provider {
-            kind: ProviderErrorKind::RateLimit,
-            ..
-        }));
+        assert!(matches!(
+            err,
+            Error::Provider {
+                kind: ProviderErrorKind::RateLimit,
+                ..
+            }
+        ));
 
         let err = gemini_error(500, "internal".into(), "gemini", None, None, None);
-        assert!(matches!(err, Error::Provider {
-            kind: ProviderErrorKind::Server,
-            ..
-        }));
+        assert!(matches!(
+            err,
+            Error::Provider {
+                kind: ProviderErrorKind::Server,
+                ..
+            }
+        ));
     }
 
     #[test]

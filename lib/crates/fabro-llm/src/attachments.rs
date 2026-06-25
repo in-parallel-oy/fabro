@@ -20,9 +20,9 @@ use crate::types::{AudioData, ContentPart, DocumentData, ImageData, Request};
 /// audio for Anthropic, which renders audio as a text placeholder).
 #[derive(Clone, Copy)]
 pub(crate) struct AttachmentPolicy {
-    pub images:    bool,
+    pub images: bool,
     pub documents: bool,
-    pub audio:     bool,
+    pub audio: bool,
 }
 
 /// Resolve file-path attachments (per `policy`) to inline data. Parts whose
@@ -69,10 +69,10 @@ async fn resolve_part(part: ContentPart, policy: AttachmentPolicy) -> Option<Con
             let url = img.url.as_deref().unwrap_or_default();
             match common::load_file_bytes(url).await {
                 Ok((data, mime)) => Some(ContentPart::Image(ImageData {
-                    url:        None,
-                    data:       Some(data),
+                    url: None,
+                    data: Some(data),
                     media_type: Some(mime),
-                    detail:     img.detail,
+                    detail: img.detail,
                 })),
                 Err(_) => None,
             }
@@ -81,10 +81,10 @@ async fn resolve_part(part: ContentPart, policy: AttachmentPolicy) -> Option<Con
             let url = doc.url.as_deref().unwrap_or_default();
             match common::load_file_bytes(url).await {
                 Ok((data, mime)) => Some(ContentPart::Document(DocumentData {
-                    url:        None,
-                    data:       Some(data),
+                    url: None,
+                    data: Some(data),
                     media_type: Some(mime),
-                    file_name:  doc.file_name,
+                    file_name: doc.file_name,
                 })),
                 Err(_) => None,
             }
@@ -93,8 +93,8 @@ async fn resolve_part(part: ContentPart, policy: AttachmentPolicy) -> Option<Con
             let url = audio.url.as_deref().unwrap_or_default();
             match common::load_file_bytes(url).await {
                 Ok((data, mime)) => Some(ContentPart::Audio(AudioData {
-                    url:        None,
-                    data:       Some(data),
+                    url: None,
+                    data: Some(data),
                     media_type: Some(mime),
                 })),
                 Err(_) => None,

@@ -82,19 +82,19 @@ pub struct ListRunFilesParams {
         dead_code,
         reason = "These pagination fields are parsed for API compatibility before server-side support lands."
     )]
-    page_limit:   Option<u32>,
+    page_limit: Option<u32>,
     #[serde(rename = "page[offset]")]
     #[allow(
         dead_code,
         reason = "These pagination fields are parsed for API compatibility before server-side support lands."
     )]
-    page_offset:  Option<u32>,
+    page_offset: Option<u32>,
     #[serde(default)]
     pub from_sha: Option<String>,
     #[serde(default)]
-    pub to_sha:   Option<String>,
+    pub to_sha: Option<String>,
     #[serde(default)]
-    pub scope:    Option<ListRunFilesScope>,
+    pub scope: Option<ListRunFilesScope>,
 }
 
 /// Query parameters accepted by `GET /runs/{id}/commits`.
@@ -107,7 +107,7 @@ pub struct ListRunCommitsParams {
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub(crate) struct RunFilesMaterializationKey {
     run_id: RunId,
-    scope:  ListRunFilesScope,
+    scope: ListRunFilesScope,
 }
 
 /// Shared outcome of a single materialization. Wrapped in [`Arc`] so every
@@ -412,7 +412,7 @@ fn parse_git_log_commit(record: &str) -> std::result::Result<RunCommit, ApiError
         .split_whitespace()
         .map(|parent| {
             Ok(RunCommitParent {
-                sha:       sha_newtype::<RunCommitParentSha>(parent)?,
+                sha: sha_newtype::<RunCommitParentSha>(parent)?,
                 short_sha: short_sha_newtype::<RunCommitParentShortSha>(parent)?,
             })
         })
@@ -423,14 +423,14 @@ fn parse_git_log_commit(record: &str) -> std::result::Result<RunCommit, ApiError
         short_sha: short_sha_newtype::<RunCommitShortSha>(sha)?,
         parents,
         author: RunCommitPerson {
-            name:  author_name.to_string(),
+            name: author_name.to_string(),
             email: author_email.to_string(),
-            date:  parse_git_date(author_date),
+            date: parse_git_date(author_date),
         },
         committer: RunCommitPerson {
-            name:  committer_name.to_string(),
+            name: committer_name.to_string(),
             email: committer_email.to_string(),
-            date:  parse_git_date(committer_date),
+            date: parse_git_date(committer_date),
         },
         subject,
         body,
@@ -839,11 +839,11 @@ fn build_fallback_response(
 }
 
 struct PatchBackedResponseMeta {
-    source:              RunFilesMetaSource,
-    scope:               RunFilesMetaScope,
-    degraded:            bool,
-    degraded_reason:     Option<RunFilesMetaDegradedReason>,
-    to_sha:              Option<RunFilesMetaToSha>,
+    source: RunFilesMetaSource,
+    scope: RunFilesMetaScope,
+    degraded: bool,
+    degraded_reason: Option<RunFilesMetaDegradedReason>,
+    to_sha: Option<RunFilesMetaToSha>,
     to_sha_committed_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -955,8 +955,8 @@ fn build_patch_backed_response(
 #[derive(Debug, Clone, Copy)]
 struct PatchSection<'a> {
     header_line: &'a str,
-    body:        &'a str,
-    text:        &'a str,
+    body: &'a str,
+    text: &'a str,
 }
 
 fn split_patch_sections(patch: &str) -> Vec<PatchSection<'_>> {
@@ -1140,20 +1140,20 @@ fn degraded_file_diff(
     change_kind: FileDiffChangeKind,
 ) -> FileDiff {
     FileDiff {
-        binary:            None,
-        change_kind:       Some(change_kind),
-        new_file:          DiffFile {
-            name:     new_name,
+        binary: None,
+        change_kind: Some(change_kind),
+        new_file: DiffFile {
+            name: new_name,
             contents: None,
         },
-        old_file:          DiffFile {
-            name:     old_name,
+        old_file: DiffFile {
+            name: old_name,
             contents: None,
         },
-        sensitive:         None,
-        truncated:         None,
+        sensitive: None,
+        truncated: None,
         truncation_reason: None,
-        unified_patch:     None,
+        unified_patch: None,
     }
 }
 
@@ -1298,7 +1298,7 @@ enum ClassifiedEntry {
 
 struct ClassifiedEntries {
     entries: Vec<ClassifiedEntry>,
-    stats:   DiffStats,
+    stats: DiffStats,
 }
 
 /// Classify every raw entry against the denylist + binary flags. Runs before
@@ -1383,23 +1383,23 @@ enum PlaceholderKind {
 fn build_placeholder_file_diff(entry: &RawDiffEntry, kind: PlaceholderKind) -> FileDiff {
     let (old_name, new_name, change_kind) = names_and_kind(entry);
     FileDiff {
-        binary:            match kind {
+        binary: match kind {
             PlaceholderKind::Binary => Some(true),
             _ => None,
         },
-        change_kind:       Some(change_kind),
-        new_file:          DiffFile {
-            name:     new_name,
+        change_kind: Some(change_kind),
+        new_file: DiffFile {
+            name: new_name,
             contents: Some(String::new()),
         },
-        old_file:          DiffFile {
-            name:     old_name,
+        old_file: DiffFile {
+            name: old_name,
             contents: Some(String::new()),
         },
-        sensitive:         matches!(kind, PlaceholderKind::Sensitive).then_some(true),
-        truncated:         None,
+        sensitive: matches!(kind, PlaceholderKind::Sensitive).then_some(true),
+        truncated: None,
         truncation_reason: None,
-        unified_patch:     None,
+        unified_patch: None,
     }
 }
 
@@ -1527,20 +1527,20 @@ fn stitch_file_diff(
     *aggregate_bytes = new_total;
 
     FileDiff {
-        binary:            None,
-        change_kind:       Some(change_kind),
-        new_file:          DiffFile {
-            name:     new_name,
+        binary: None,
+        change_kind: Some(change_kind),
+        new_file: DiffFile {
+            name: new_name,
             contents: Some(new_contents_ref.to_string()),
         },
-        old_file:          DiffFile {
-            name:     old_name,
+        old_file: DiffFile {
+            name: old_name,
             contents: Some(old_contents_ref.to_string()),
         },
-        sensitive:         None,
-        truncated:         None,
+        sensitive: None,
+        truncated: None,
         truncation_reason: None,
-        unified_patch:     None,
+        unified_patch: None,
     }
 }
 
@@ -1551,20 +1551,20 @@ fn truncated_file_diff(
     reason: FileDiffTruncationReason,
 ) -> FileDiff {
     FileDiff {
-        binary:            None,
-        change_kind:       Some(change_kind),
-        new_file:          DiffFile {
-            name:     new_name,
+        binary: None,
+        change_kind: Some(change_kind),
+        new_file: DiffFile {
+            name: new_name,
             contents: Some(String::new()),
         },
-        old_file:          DiffFile {
-            name:     old_name,
+        old_file: DiffFile {
+            name: old_name,
             contents: Some(String::new()),
         },
-        sensitive:         None,
-        truncated:         Some(true),
+        sensitive: None,
+        truncated: Some(true),
         truncation_reason: Some(reason),
-        unified_patch:     None,
+        unified_patch: None,
     }
 }
 
@@ -1736,19 +1736,19 @@ mod tests {
         PaginatedRunFileList {
             data: Vec::new(),
             meta: fabro_api::types::RunFilesMeta {
-                source:                  RunFilesMetaSource::Sandbox,
-                scope:                   RunFilesMetaScope::Committed,
-                truncated:               false,
+                source: RunFilesMetaSource::Sandbox,
+                scope: RunFilesMetaScope::Committed,
+                truncated: false,
                 files_omitted_by_budget: None,
-                total_changed:           0,
-                stats:                   DiffStats {
+                total_changed: 0,
+                stats: DiffStats {
                     additions: 0,
                     deletions: 0,
                 },
-                to_sha:                  None,
-                to_sha_committed_at:     None,
-                degraded:                None,
-                degraded_reason:         None,
+                to_sha: None,
+                to_sha_committed_at: None,
+                degraded: None,
+                degraded_reason: None,
             },
         }
     }
@@ -2191,13 +2191,13 @@ diff --git a/src/live.rs b/src/live.rs
         captured.lock().unwrap().clear();
 
         let metrics = crate::run_files_security::RunFilesMetrics {
-            file_count:      3,
-            bytes_total:     1024,
-            duration_ms:     42,
-            truncated:       false,
-            binary_count:    1,
+            file_count: 3,
+            bytes_total: 1024,
+            duration_ms: 42,
+            truncated: false,
+            binary_count: 1,
             sensitive_count: 1,
-            symlink_count:   0,
+            symlink_count: 0,
             submodule_count: 0,
         };
         metrics.emit(&RunId::new());
@@ -2381,33 +2381,33 @@ index 1111111..2222222 160000
         let mut projection = fabro_store::RunProjection::new(
             "Test run".to_string(),
             fabro_types::RunSpec {
-                run_id:           fabro_types::fixtures::RUN_1,
-                settings:         fabro_types::WorkflowSettings::default(),
-                graph:            fabro_types::Graph::new("test"),
-                graph_source:     None,
-                workflow_slug:    None,
-                automation:       None,
+                run_id: fabro_types::fixtures::RUN_1,
+                settings: fabro_types::WorkflowSettings::default(),
+                graph: fabro_types::Graph::new("test"),
+                graph_source: None,
+                workflow_slug: None,
+                automation: None,
                 source_directory: None,
-                labels:           HashMap::default(),
-                provenance:       test_support::test_run_provenance(),
-                manifest_blob:    None,
-                definition_blob:  None,
-                git:              None,
-                fork_source_ref:  None,
+                labels: HashMap::default(),
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                definition_blob: None,
+                git: None,
+                fork_source_ref: None,
             },
             chrono::Utc::now(),
         );
         projection.conclusion = Some(fabro_types::Conclusion {
-            timestamp:            chrono::Utc::now(),
-            status:               fabro_types::StageOutcome::Succeeded,
-            timing:               fabro_types::RunTiming::wall_only(1),
-            failure:              None,
+            timestamp: chrono::Utc::now(),
+            status: fabro_types::StageOutcome::Succeeded,
+            timing: fabro_types::RunTiming::wall_only(1),
+            failure: None,
             final_git_commit_sha: None,
-            stages:               Vec::new(),
-            billing:              None,
-            total_retries:        0,
-            diff:                 fabro_types::RunDiff {
-                patch:   Some(patch.to_string()),
+            stages: Vec::new(),
+            billing: None,
+            total_retries: 0,
+            diff: fabro_types::RunDiff {
+                patch: Some(patch.to_string()),
                 summary: None,
             },
         });
@@ -2428,13 +2428,11 @@ index 1111111..2222222 160000
         serde_json::to_value(build_patch_backed_response(
             entries,
             PatchBackedResponseMeta {
-                source:              RunFilesMetaSource::Sandbox,
-                scope:               RunFilesMetaScope::Committed,
-                degraded:            false,
-                degraded_reason:     None,
-                to_sha:              Some(to_sha_wrapper(
-                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                )),
+                source: RunFilesMetaSource::Sandbox,
+                scope: RunFilesMetaScope::Committed,
+                degraded: false,
+                degraded_reason: None,
+                to_sha: Some(to_sha_wrapper("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
                 to_sha_committed_at: None,
             },
             &RunId::new(),
@@ -2691,30 +2689,30 @@ diff --git a/src/regular.rs b/src/regular.rs
     fn classify_entries_sums_only_displayable_text_stats() {
         let raw = vec![
             RawDiffEntry::Added {
-                path:     "src/visible.rs".to_string(),
+                path: "src/visible.rs".to_string(),
                 new_blob: "a1".to_string(),
                 new_mode: "100644".to_string(),
             },
             RawDiffEntry::Modified {
-                path:     ".env".to_string(),
+                path: ".env".to_string(),
                 old_blob: "b1".to_string(),
                 new_blob: "b2".to_string(),
                 new_mode: "100644".to_string(),
             },
             RawDiffEntry::Modified {
-                path:     "image.png".to_string(),
+                path: "image.png".to_string(),
                 old_blob: "c1".to_string(),
                 new_blob: "c2".to_string(),
                 new_mode: "100644".to_string(),
             },
             RawDiffEntry::Symlink {
-                path:        "link".to_string(),
+                path: "link".to_string(),
                 change_kind: SymlinkChange::Added,
-                old_blob:    None,
-                new_blob:    Some("d1".to_string()),
+                old_blob: None,
+                new_blob: Some("d1".to_string()),
             },
             RawDiffEntry::Submodule {
-                path:        "vendor/lib".to_string(),
+                path: "vendor/lib".to_string(),
                 change_kind: SubmoduleChange::Modified,
             },
         ];
@@ -2726,12 +2724,13 @@ diff --git a/src/regular.rs b/src/regular.rs
             ("link", 1, 0),
             ("vendor/lib", 1, 1),
         ] {
-            numstat
-                .line_stats_by_path
-                .insert(path.to_string(), DiffStats {
+            numstat.line_stats_by_path.insert(
+                path.to_string(),
+                DiffStats {
                     additions,
                     deletions,
-                });
+                },
+            );
         }
         numstat.binary_paths.insert("image.png".to_string());
 
@@ -2846,7 +2845,7 @@ rename to .env.production
         // only the new_blob and duplicating it would render as a no-op
         // diff in `MultiFileDiff`.
         let entry = RawDiffEntry::Modified {
-            path:     "src/main.rs".to_string(),
+            path: "src/main.rs".to_string(),
             old_blob: "aaaa000000000000000000000000000000000000".to_string(),
             new_blob: "bbbb000000000000000000000000000000000000".to_string(),
             new_mode: "100644".to_string(),
@@ -2878,11 +2877,11 @@ rename to .env.production
     #[test]
     fn stitch_file_diff_rename_uses_old_and_new_blobs() {
         let entry = RawDiffEntry::Renamed {
-            old_path:   "src/old.rs".to_string(),
-            new_path:   "src/new.rs".to_string(),
-            old_blob:   "1111000000000000000000000000000000000000".to_string(),
-            new_blob:   "2222000000000000000000000000000000000000".to_string(),
-            new_mode:   "100644".to_string(),
+            old_path: "src/old.rs".to_string(),
+            new_path: "src/new.rs".to_string(),
+            old_blob: "1111000000000000000000000000000000000000".to_string(),
+            new_blob: "2222000000000000000000000000000000000000".to_string(),
+            new_mode: "100644".to_string(),
             similarity: 80,
         };
         let mut table = HashMap::new();
@@ -2907,22 +2906,22 @@ rename to .env.production
     fn collect_blob_shas_deduplicates_and_covers_both_sides() {
         let entries = vec![
             ClassifiedEntry::NeedsFetch(RawDiffEntry::Modified {
-                path:     "a.rs".to_string(),
+                path: "a.rs".to_string(),
                 old_blob: "a1".to_string(),
                 new_blob: "a2".to_string(),
                 new_mode: "100644".to_string(),
             }),
             ClassifiedEntry::NeedsFetch(RawDiffEntry::Renamed {
-                old_path:   "b.rs".to_string(),
-                new_path:   "c.rs".to_string(),
-                old_blob:   "b1".to_string(),
-                new_blob:   "b2".to_string(),
-                new_mode:   "100644".to_string(),
+                old_path: "b.rs".to_string(),
+                new_path: "c.rs".to_string(),
+                old_blob: "b1".to_string(),
+                new_blob: "b2".to_string(),
+                new_mode: "100644".to_string(),
                 similarity: 80,
             }),
             // Duplicate-SHA entry — should only appear once in output.
             ClassifiedEntry::NeedsFetch(RawDiffEntry::Added {
-                path:     "d.rs".to_string(),
+                path: "d.rs".to_string(),
                 new_blob: "a2".to_string(),
                 new_mode: "100644".to_string(),
             }),
@@ -2954,7 +2953,7 @@ rename to .env.production
     /// `fetch_blob_table` only uses `exec_command`.
     struct ScriptedBlobSandbox {
         batch_check_result: ExecResult,
-        batch_result:       ExecResult,
+        batch_result: ExecResult,
     }
 
     #[async_trait]
@@ -3043,9 +3042,9 @@ rename to .env.production
 
     fn ok_exec(stdout: &str) -> ExecResult {
         ExecResult {
-            stdout:      stdout.to_string(),
-            stderr:      String::new(),
-            exit_code:   Some(0),
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            exit_code: Some(0),
             termination: CommandTermination::Exited,
             duration_ms: 0,
         }
@@ -3053,9 +3052,9 @@ rename to .env.production
 
     fn fail_exec(stderr: &str) -> ExecResult {
         ExecResult {
-            stdout:      String::new(),
-            stderr:      stderr.to_string(),
-            exit_code:   Some(1),
+            stdout: String::new(),
+            stderr: stderr.to_string(),
+            exit_code: Some(1),
             termination: CommandTermination::Exited,
             duration_ms: 0,
         }
@@ -3093,7 +3092,7 @@ rename to .env.production
 
         let sandbox = ScriptedBlobSandbox {
             batch_check_result: ok_exec(&batch_check_stdout),
-            batch_result:       ok_exec(&batch_stdout),
+            batch_result: ok_exec(&batch_stdout),
         };
 
         let table = fetch_blob_table(&sandbox, &shas)
@@ -3132,7 +3131,7 @@ rename to .env.production
             // If phase 1 ran this would surface as a transient 503 and
             // break the test.
             batch_check_result: fail_exec("phase 1 should not have been called"),
-            batch_result:       ok_exec(&batch_stdout),
+            batch_result: ok_exec(&batch_stdout),
         };
 
         let table = fetch_blob_table(&sandbox, &shas)

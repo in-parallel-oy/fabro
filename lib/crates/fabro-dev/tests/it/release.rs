@@ -36,11 +36,10 @@ version = "0.1.0"
     );
     git(fixture.path(), &["init"]);
     git(fixture.path(), &["config", "user.name", "Release Test"]);
-    git(fixture.path(), &[
-        "config",
-        "user.email",
-        "release-test@example.com",
-    ]);
+    git(
+        fixture.path(),
+        &["config", "user.email", "release-test@example.com"],
+    );
     git(fixture.path(), &["add", "Cargo.toml"]);
     git(fixture.path(), &["commit", "-m", "initial"]);
     fixture

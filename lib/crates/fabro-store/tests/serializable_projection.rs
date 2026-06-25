@@ -14,44 +14,44 @@ use serde_json::json;
 
 fn sample_run_spec() -> RunSpec {
     RunSpec {
-        run_id:           fixtures::RUN_1,
-        settings:         WorkflowSettings::default(),
-        graph:            Graph::new("ship"),
-        graph_source:     None,
-        workflow_slug:    Some("demo".to_string()),
-        automation:       None,
+        run_id: fixtures::RUN_1,
+        settings: WorkflowSettings::default(),
+        graph: Graph::new("ship"),
+        graph_source: None,
+        workflow_slug: Some("demo".to_string()),
+        automation: None,
         source_directory: Some("/tmp/project".to_string()),
-        labels:           HashMap::from([("team".to_string(), "platform".to_string())]),
-        provenance:       test_support::test_run_provenance(),
-        manifest_blob:    None,
-        definition_blob:  None,
-        git:              Some(fabro_types::GitContext {
-            origin_url:   "https://github.com/in-parallel-oy/fabro.git".to_string(),
-            branch:       "main".to_string(),
-            sha:          None,
-            dirty:        fabro_types::DirtyStatus::Clean,
+        labels: HashMap::from([("team".to_string(), "platform".to_string())]),
+        provenance: test_support::test_run_provenance(),
+        manifest_blob: None,
+        definition_blob: None,
+        git: Some(fabro_types::GitContext {
+            origin_url: "https://github.com/in-parallel-oy/fabro.git".to_string(),
+            branch: "main".to_string(),
+            sha: None,
+            dirty: fabro_types::DirtyStatus::Clean,
             push_outcome: fabro_types::PreRunPushOutcome::NotAttempted,
         }),
-        fork_source_ref:  None,
+        fork_source_ref: None,
     }
 }
 
 fn sample_checkpoint() -> Checkpoint {
     Checkpoint {
-        timestamp:                  Utc
+        timestamp: Utc
             .with_ymd_and_hms(2026, 4, 20, 12, 0, 0)
             .single()
             .expect("timestamp should be representable"),
-        current_node:               "build".to_string(),
-        completed_nodes:            vec!["build".to_string()],
-        node_retries:               HashMap::new(),
-        context_values:             HashMap::new(),
-        node_outcomes:              HashMap::new(),
-        next_node_id:               Some("ship".to_string()),
-        git_commit_sha:             Some("abc123".to_string()),
-        loop_failure_signatures:    HashMap::new(),
+        current_node: "build".to_string(),
+        completed_nodes: vec!["build".to_string()],
+        node_retries: HashMap::new(),
+        context_values: HashMap::new(),
+        node_outcomes: HashMap::new(),
+        next_node_id: Some("ship".to_string()),
+        git_commit_sha: Some("abc123".to_string()),
+        loop_failure_signatures: HashMap::new(),
         restart_failure_signatures: HashMap::new(),
-        node_visits:                HashMap::from([("build".to_string(), 2usize)]),
+        node_visits: HashMap::from([("build".to_string(), 2usize)]),
     }
 }
 
@@ -91,54 +91,57 @@ fn serializable_projection_round_trips_and_trims_bulky_node_fields() {
             .single()
             .expect("start_time should be representable"),
         run_branch: Some("fabro/run/demo".to_string()),
-        base_sha:   Some("deadbeef".to_string()),
+        base_sha: Some("deadbeef".to_string()),
     });
     projection.status = RunStatus::Running;
     projection.checkpoints.push(CheckpointRecord {
-        seq:        7,
+        seq: 7,
         checkpoint: sample_checkpoint(),
-        diff:       RunDiff::default(),
+        diff: RunDiff::default(),
     });
     let sandbox_plan = RunSandboxPlan {
         provider: SandboxProviderKind::Local,
-        image:    None,
+        image: None,
         snapshot: None,
     };
-    projection.sandbox = Some(RunSandbox::ready(sandbox_plan, RunSandboxInstance {
-        provider: SandboxProviderKind::Local,
-        image:    None,
-        snapshot: None,
-        runtime:  RunSandboxRuntime {
-            id:                "sandbox-1".to_string(),
-            working_directory: "/tmp/project".to_string(),
-            repo_cloned:       None,
-            clone_origin_url:  None,
-            clone_branch:      None,
-            workspace_root:    None,
-            repos_root:        None,
-            primary_repo_path: None,
-            primary_repo_link: None,
+    projection.sandbox = Some(RunSandbox::ready(
+        sandbox_plan,
+        RunSandboxInstance {
+            provider: SandboxProviderKind::Local,
+            image: None,
+            snapshot: None,
+            runtime: RunSandboxRuntime {
+                id: "sandbox-1".to_string(),
+                working_directory: "/tmp/project".to_string(),
+                repo_cloned: None,
+                clone_origin_url: None,
+                clone_branch: None,
+                workspace_root: None,
+                repos_root: None,
+                primary_repo_path: None,
+                primary_repo_link: None,
+            },
         },
-    }));
+    ));
     projection.pending_interviews = BTreeMap::new();
     let stage = projection.stage_entry(stage_id.node_id(), stage_id.visit(), first_event_seq(2));
     stage.prompt = Some("plan the work".to_string());
     stage.response = Some("done".to_string());
     stage.completion = Some(StageCompletion {
-        outcome:        StageOutcome::Succeeded,
-        notes:          Some("ok".to_string()),
+        outcome: StageOutcome::Succeeded,
+        notes: Some("ok".to_string()),
         failure_reason: None,
-        timestamp:      Utc
+        timestamp: Utc
             .with_ymd_and_hms(2026, 4, 20, 12, 1, 0)
             .single()
             .expect("timestamp should be representable"),
     });
     stage.provider_used = Some(StageModelUsage {
-        mode:             StageModelUsage::MODE_PROMPT.to_string(),
-        provider:         Some("openai".to_string()),
-        model:            Some("gpt-5.4".to_string()),
+        mode: StageModelUsage::MODE_PROMPT.to_string(),
+        provider: Some("openai".to_string()),
+        model: Some("gpt-5.4".to_string()),
         reasoning_effort: None,
-        speed:            None,
+        speed: None,
     });
     stage.diff = Some("diff --git a/a b/a".to_string());
     stage.script_invocation = Some(json!({ "command": "cargo test" }));
@@ -218,24 +221,26 @@ fn projection_query_methods_expose_common_state() {
     projection.status = RunStatus::Dead;
     projection.archived_at = Some(Utc::now());
     projection.checkpoints.push(CheckpointRecord {
-        seq:        7,
+        seq: 7,
         checkpoint: sample_checkpoint(),
-        diff:       RunDiff::default(),
+        diff: RunDiff::default(),
     });
-    projection.pending_interviews =
-        BTreeMap::from([("q-1".to_string(), fabro_store::PendingInterviewRecord {
-            question:   InterviewQuestionRecord {
-                id:              "q-1".to_string(),
-                text:            "Approve?".to_string(),
-                stage:           "build".to_string(),
-                question_type:   QuestionType::Freeform,
-                options:         Vec::new(),
-                allow_freeform:  true,
+    projection.pending_interviews = BTreeMap::from([(
+        "q-1".to_string(),
+        fabro_store::PendingInterviewRecord {
+            question: InterviewQuestionRecord {
+                id: "q-1".to_string(),
+                text: "Approve?".to_string(),
+                stage: "build".to_string(),
+                question_type: QuestionType::Freeform,
+                options: Vec::new(),
+                allow_freeform: true,
                 timeout_seconds: None,
                 context_display: None,
             },
             started_at: Utc::now(),
-        })]);
+        },
+    )]);
 
     assert_eq!(projection.spec().workflow_slug(), Some("demo"));
     assert_eq!(projection.status(), RunStatus::Dead);

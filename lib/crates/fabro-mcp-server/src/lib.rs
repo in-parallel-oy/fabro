@@ -19,8 +19,8 @@ pub type FabroClientFactory = Arc<dyn Fn() -> FabroClientFuture + Send + Sync>;
 #[derive(Clone)]
 pub struct FabroMcpServerSettings {
     pub client_factory: FabroClientFactory,
-    pub config_path:    PathBuf,
-    pub cwd:            PathBuf,
+    pub config_path: PathBuf,
+    pub cwd: PathBuf,
 }
 
 impl std::fmt::Debug for FabroMcpServerSettings {
@@ -36,14 +36,14 @@ impl std::fmt::Debug for FabroMcpServerSettings {
 
 #[derive(Debug, Clone, Default)]
 pub struct McpConfigSettings {
-    pub server:      Option<String>,
+    pub server: Option<String>,
     pub storage_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
 pub struct McpInitSettings {
-    pub agent:    McpAgent,
-    pub config:   McpConfigSettings,
+    pub agent: McpAgent,
+    pub config: McpConfigSettings,
     pub home_dir: PathBuf,
 }
 

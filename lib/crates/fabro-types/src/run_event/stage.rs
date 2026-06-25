@@ -9,9 +9,9 @@ use crate::{BilledModelUsage, DiffSummary, FailureDetail, Outcome, StageOutcome,
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StageStartedProps {
-    pub index:        usize,
+    pub index: usize,
     pub handler_type: String,
-    pub attempt:      usize,
+    pub attempt: usize,
     pub max_attempts: usize,
 }
 
@@ -53,48 +53,48 @@ pub struct StageCompletedProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StageFailedProps {
-    pub index:      usize,
+    pub index: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub failure:    Option<FailureDetail>,
+    pub failure: Option<FailureDetail>,
     pub will_retry: bool,
     /// Per-attempt timing breakdown for this stage visit.
     #[serde(default)]
-    pub timing:     StageTiming,
+    pub timing: StageTiming,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub billing:    Option<BilledModelUsage>,
+    pub billing: Option<BilledModelUsage>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StageRetryingProps {
-    pub index:        usize,
-    pub attempt:      usize,
+    pub index: usize,
+    pub attempt: usize,
     pub max_attempts: usize,
-    pub delay_ms:     u64,
+    pub delay_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StagePromptProps {
-    pub visit:            u32,
-    pub text:             String,
+    pub visit: u32,
+    pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode:             Option<String>,
+    pub mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider:         Option<String>,
+    pub provider: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model:            Option<String>,
+    pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<ReasoningEffort>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub speed:            Option<Speed>,
+    pub speed: Option<Speed>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PromptCompletedProps {
     pub response: String,
-    pub model:    String,
+    pub model: String,
     pub provider: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub billing:  Option<BilledModelUsage>,
+    pub billing: Option<BilledModelUsage>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -127,7 +127,7 @@ pub struct CheckpointCompletedProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CheckpointFailedProps {
-    pub error:            String,
+    pub error: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exec_output_tail: Option<ExecOutputTail>,
 }

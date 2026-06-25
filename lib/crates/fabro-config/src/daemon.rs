@@ -16,9 +16,9 @@ use crate::bind::Bind;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ServerDaemon {
-    pub pid:        u32,
-    pub bind:       Bind,
-    pub log_path:   PathBuf,
+    pub pid: u32,
+    pub bind: Bind,
+    pub log_path: PathBuf,
     pub started_at: DateTime<Utc>,
 }
 

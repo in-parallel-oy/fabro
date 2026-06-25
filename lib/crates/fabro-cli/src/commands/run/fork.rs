@@ -25,9 +25,12 @@ pub(crate) async fn run(args: &ForkArgs, styles: &Styles, base_ctx: &CommandCont
     }
 
     let response = client
-        .fork_run(&run_id, ForkRequest {
-            target: args.target.clone(),
-        })
+        .fork_run(
+            &run_id,
+            ForkRequest {
+                target: args.target.clone(),
+            },
+        )
         .await?;
 
     if ctx.json_output() {

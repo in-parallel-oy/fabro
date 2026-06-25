@@ -34,13 +34,13 @@ pub const RUN_ID_LABEL_KEY: &str = "sh_fabro_run_id";
 /// A minimal projection of a Compute instance resource.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Instance {
-    pub name:               String,
+    pub name: String,
     #[serde(default)]
-    pub status:             Option<String>,
+    pub status: Option<String>,
     #[serde(default, rename = "creationTimestamp")]
     pub creation_timestamp: Option<String>,
     #[serde(default)]
-    pub labels:             HashMap<String, String>,
+    pub labels: HashMap<String, String>,
     #[serde(default, rename = "networkInterfaces")]
     pub network_interfaces: Vec<NetworkInterface>,
 }
@@ -70,11 +70,11 @@ impl Instance {
 #[derive(Deserialize)]
 struct Operation {
     #[serde(default)]
-    name:   Option<String>,
+    name: Option<String>,
     #[serde(default)]
     status: Option<String>,
     #[serde(default)]
-    error:  Option<Value>,
+    error: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -151,11 +151,7 @@ impl ComputeClient {
     }
 
     /// `instances.get`.
-    pub async fn get_instance(
-        &self,
-        config: &GcloudConfig,
-        name: &str,
-    ) -> crate::Result<Instance> {
+    pub async fn get_instance(&self, config: &GcloudConfig, name: &str) -> crate::Result<Instance> {
         let url = format!(
             "{COMPUTE_BASE}/projects/{}/zones/{}/instances/{}",
             config.project, config.zone, name
@@ -188,7 +184,11 @@ impl ComputeClient {
             urlencode(&filter)
         );
         let list: InstanceList = self.get_json(&url).await?;
-        Ok(list.items.into_iter().filter(Instance::is_managed).collect())
+        Ok(list
+            .items
+            .into_iter()
+            .filter(Instance::is_managed)
+            .collect())
     }
 
     /// Read the VM's SSH host key from guest attributes, written by the VM
@@ -299,8 +299,12 @@ impl ComputeClient {
                 "GCE request to {url} returned {status}: {text}"
             )));
         }
-        serde_json::from_str(&text)
-            .map_err(|err| crate::Error::context(format!("GCE response from {url} was not the expected JSON"), err))
+        serde_json::from_str(&text).map_err(|err| {
+            crate::Error::context(
+                format!("GCE response from {url} was not the expected JSON"),
+                err,
+            )
+        })
     }
 }
 
@@ -319,7 +323,10 @@ pub fn build_insert_body(
         MANAGED_LABEL_KEY: MANAGED_LABEL_VALUE,
     });
     if let (Some(run_id), Value::Object(map)) = (run_id, &mut labels) {
-        map.insert(RUN_ID_LABEL_KEY.to_string(), Value::String(sanitize_label(run_id)));
+        map.insert(
+            RUN_ID_LABEL_KEY.to_string(),
+            Value::String(sanitize_label(run_id)),
+        );
     }
 
     let mut metadata_items = vec![
@@ -384,7 +391,10 @@ fn build_scheduling(config: &GcloudConfig) -> Option<Value> {
     }
 
     let mut map = serde_json::Map::new();
-    map.insert("provisioningModel".to_string(), json!(config.provisioning_model));
+    map.insert(
+        "provisioningModel".to_string(),
+        json!(config.provisioning_model),
+    );
     if spot {
         map.insert("automaticRestart".to_string(), json!(false));
         map.insert("onHostMaintenance".to_string(), json!("TERMINATE"));
@@ -393,7 +403,10 @@ fn build_scheduling(config: &GcloudConfig) -> Option<Value> {
     if let Some(secs) = config.max_run_duration_secs {
         // Compute's Duration is {seconds: string, nanos: int}, NOT the protobuf
         // well-known "3600s" form — seconds MUST be serialized as a string.
-        map.insert("maxRunDuration".to_string(), json!({ "seconds": secs.to_string() }));
+        map.insert(
+            "maxRunDuration".to_string(),
+            json!({ "seconds": secs.to_string() }),
+        );
     }
     Some(Value::Object(map))
 }
@@ -416,7 +429,10 @@ fn parse_host_key(body: &Value) -> Option<String> {
     let mut fallback: Option<String> = None;
     for item in items {
         let key = item.get("key").and_then(Value::as_str).unwrap_or_default();
-        let value = item.get("value").and_then(Value::as_str).unwrap_or_default();
+        let value = item
+            .get("value")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         if value.is_empty() {
             continue;
         }
@@ -438,7 +454,13 @@ fn parse_host_key(body: &Value) -> Option<String> {
 fn sanitize_label(value: &str) -> String {
     value
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c.to_ascii_lowercase() } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
         .take(63)
         .collect()
 }
@@ -463,12 +485,12 @@ mod tests {
 
     fn config() -> GcloudConfig {
         let settings = GcloudSettings {
-            project:      Some("proj".to_string()),
-            zone:         Some("us-central1-a".to_string()),
-            subnetwork:   Some("default".to_string()),
-            vm_image:     Some("projects/proj/global/images/fabro".to_string()),
+            project: Some("proj".to_string()),
+            zone: Some("us-central1-a".to_string()),
+            subnetwork: Some("default".to_string()),
+            vm_image: Some("projects/proj/global/images/fabro".to_string()),
             machine_type: Some("e2-standard-4".to_string()),
-            egress_tag:   Some("fabro-run".to_string()),
+            egress_tag: Some("fabro-run".to_string()),
             ..Default::default()
         };
         GcloudConfig::resolve(&settings, EgressPolicy::Block).unwrap()
@@ -476,18 +498,27 @@ mod tests {
 
     #[test]
     fn insert_body_has_no_attached_service_account() {
-        let body = build_insert_body(&config(), "fabro-run-x", "fabro:ssh-ed25519 AAAA", "#!/bin/sh", Some("01HY"));
+        let body = build_insert_body(
+            &config(),
+            "fabro-run-x",
+            "fabro:ssh-ed25519 AAAA",
+            "#!/bin/sh",
+            Some("01HY"),
+        );
         assert_eq!(body["serviceAccounts"], json!([]));
     }
 
     #[test]
     fn insert_body_injects_ssh_key_and_labels() {
-        let body = build_insert_body(&config(), "fabro-run-x", "fabro:ssh-ed25519 AAAA", "#!/bin/sh", Some("01HY"));
+        let body = build_insert_body(
+            &config(),
+            "fabro-run-x",
+            "fabro:ssh-ed25519 AAAA",
+            "#!/bin/sh",
+            Some("01HY"),
+        );
         let items = body["metadata"]["items"].as_array().unwrap();
-        let ssh = items
-            .iter()
-            .find(|i| i["key"] == "ssh-keys")
-            .unwrap();
+        let ssh = items.iter().find(|i| i["key"] == "ssh-keys").unwrap();
         assert_eq!(ssh["value"], "fabro:ssh-ed25519 AAAA");
         assert_eq!(body["labels"][MANAGED_LABEL_KEY], MANAGED_LABEL_VALUE);
         assert_eq!(body["labels"][RUN_ID_LABEL_KEY], "01hy");
@@ -498,19 +529,27 @@ mod tests {
     fn insert_body_blocks_project_keys_and_enables_guest_attributes() {
         let body = build_insert_body(&config(), "n", "k", "s", None);
         let items = body["metadata"]["items"].as_array().unwrap();
-        assert!(items.iter().any(|i| i["key"] == "block-project-ssh-keys" && i["value"] == "TRUE"));
-        assert!(items.iter().any(|i| i["key"] == "enable-guest-attributes" && i["value"] == "TRUE"));
+        assert!(
+            items
+                .iter()
+                .any(|i| i["key"] == "block-project-ssh-keys" && i["value"] == "TRUE")
+        );
+        assert!(
+            items
+                .iter()
+                .any(|i| i["key"] == "enable-guest-attributes" && i["value"] == "TRUE")
+        );
     }
 
     fn config_with(provisioning_model: &str, max_run_duration_secs: Option<&str>) -> GcloudConfig {
         let settings = GcloudSettings {
-            project:               Some("proj".to_string()),
-            zone:                  Some("us-central1-a".to_string()),
-            subnetwork:            Some("default".to_string()),
-            vm_image:              Some("projects/proj/global/images/fabro".to_string()),
-            machine_type:          Some("e2-standard-4".to_string()),
-            egress_tag:            Some("fabro-run".to_string()),
-            provisioning_model:    Some(provisioning_model.to_string()),
+            project: Some("proj".to_string()),
+            zone: Some("us-central1-a".to_string()),
+            subnetwork: Some("default".to_string()),
+            vm_image: Some("projects/proj/global/images/fabro".to_string()),
+            machine_type: Some("e2-standard-4".to_string()),
+            egress_tag: Some("fabro-run".to_string()),
+            provisioning_model: Some(provisioning_model.to_string()),
             max_run_duration_secs: max_run_duration_secs.map(ToString::to_string),
             ..Default::default()
         };
@@ -519,7 +558,13 @@ mod tests {
 
     #[test]
     fn standard_no_ttl_emits_no_scheduling_key() {
-        let body = build_insert_body(&config(), "fabro-run-x", "fabro:ssh-ed25519 AAAA", "#!/bin/sh", Some("01HY"));
+        let body = build_insert_body(
+            &config(),
+            "fabro-run-x",
+            "fabro:ssh-ed25519 AAAA",
+            "#!/bin/sh",
+            Some("01HY"),
+        );
         // Conditional emit keeps the default body unperturbed.
         assert_eq!(body.get("scheduling"), None);
         // Existing security/identity assertions remain intact.
@@ -577,17 +622,17 @@ mod tests {
     #[test]
     fn managed_filter_excludes_unmanaged_instances() {
         let managed = Instance {
-            name:               "a".to_string(),
-            status:             None,
+            name: "a".to_string(),
+            status: None,
             creation_timestamp: None,
-            labels:             HashMap::from([(MANAGED_LABEL_KEY.to_string(), "true".to_string())]),
+            labels: HashMap::from([(MANAGED_LABEL_KEY.to_string(), "true".to_string())]),
             network_interfaces: vec![],
         };
         let unmanaged = Instance {
-            name:               "b".to_string(),
-            status:             None,
+            name: "b".to_string(),
+            status: None,
             creation_timestamp: None,
-            labels:             HashMap::new(),
+            labels: HashMap::new(),
             network_interfaces: vec![],
         };
         assert!(managed.is_managed());

@@ -29,30 +29,30 @@ pub enum SandboxSpec {
     },
     #[cfg(feature = "docker")]
     Docker {
-        config:           DockerSandboxOptions,
-        github_app:       Option<GitHubCredentials>,
-        run_id:           Option<RunId>,
+        config: DockerSandboxOptions,
+        github_app: Option<GitHubCredentials>,
+        run_id: Option<RunId>,
         clone_origin_url: Option<String>,
-        clone_branch:     Option<String>,
+        clone_branch: Option<String>,
     },
     #[cfg(feature = "daytona")]
     Daytona {
-        config:           Box<DaytonaConfig>,
-        github_app:       Option<GitHubCredentials>,
-        run_id:           Option<RunId>,
+        config: Box<DaytonaConfig>,
+        github_app: Option<GitHubCredentials>,
+        run_id: Option<RunId>,
         clone_origin_url: Option<String>,
-        clone_branch:     Option<String>,
-        api_key:          Option<String>,
+        clone_branch: Option<String>,
+        api_key: Option<String>,
     },
     #[cfg(feature = "gcloud")]
     Gcloud {
-        config:           Box<GcloudConfig>,
-        run_id:           Option<RunId>,
+        config: Box<GcloudConfig>,
+        run_id: Option<RunId>,
         clone_origin_url: Option<String>,
-        clone_branch:     Option<String>,
+        clone_branch: Option<String>,
         /// SA key JSON for the JWT auth fallback; `None` selects metadata
         /// workload identity. A secret, so it lives only in the transient spec.
-        sa_key_json:      Option<String>,
+        sa_key_json: Option<String>,
     },
 }
 
@@ -114,9 +114,9 @@ impl SandboxSpec {
                 );
                 RunSandboxInstance {
                     provider: self.provider(),
-                    image:    (!config.image.is_empty()).then(|| config.image.clone()),
+                    image: (!config.image.is_empty()).then(|| config.image.clone()),
                     snapshot: None,
-                    runtime:  RunSandboxRuntime {
+                    runtime: RunSandboxRuntime {
                         id,
                         working_directory: working_directory.clone(),
                         repo_cloned,
@@ -154,9 +154,9 @@ impl SandboxSpec {
                 );
                 RunSandboxInstance {
                     provider: self.provider(),
-                    image:    None,
+                    image: None,
                     snapshot: sandbox.snapshot_info(),
-                    runtime:  RunSandboxRuntime {
+                    runtime: RunSandboxRuntime {
                         id,
                         working_directory: working_directory.clone(),
                         repo_cloned,
@@ -177,9 +177,9 @@ impl SandboxSpec {
             }
             _ => RunSandboxInstance {
                 provider: self.provider(),
-                image:    None,
+                image: None,
                 snapshot: None,
-                runtime:  RunSandboxRuntime {
+                runtime: RunSandboxRuntime {
                     id,
                     working_directory,
                     repo_cloned: None,
@@ -310,11 +310,11 @@ mod tests {
     #[test]
     fn docker_run_sandbox_persists_layout_metadata_for_cloned_repo() {
         let spec = SandboxSpec::Docker {
-            config:           DockerSandboxOptions::default(),
-            github_app:       None,
-            run_id:           None,
+            config: DockerSandboxOptions::default(),
+            github_app: None,
+            run_id: None,
             clone_origin_url: Some("git@github.com:brynary/rack-test.git".to_string()),
-            clone_branch:     Some("main".to_string()),
+            clone_branch: Some("main".to_string()),
         };
         let mut sandbox = MockSandbox::linux();
         sandbox.working_dir = "/workspace/rack-test";
@@ -345,14 +345,14 @@ mod tests {
     #[test]
     fn docker_run_sandbox_omits_primary_repo_metadata_for_empty_workspace() {
         let spec = SandboxSpec::Docker {
-            config:           DockerSandboxOptions {
+            config: DockerSandboxOptions {
                 skip_clone: true,
                 ..DockerSandboxOptions::default()
             },
-            github_app:       None,
-            run_id:           None,
+            github_app: None,
+            run_id: None,
             clone_origin_url: Some("https://gitlab.com/acme/widgets".to_string()),
-            clone_branch:     None,
+            clone_branch: None,
         };
         let mut sandbox = MockSandbox::linux();
         sandbox.working_dir = "/workspace";

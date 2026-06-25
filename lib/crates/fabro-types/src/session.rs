@@ -50,22 +50,22 @@ impl SessionStatus {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionTurn {
-    pub id:         TurnId,
+    pub id: TurnId,
     pub started_at: DateTime<Utc>,
-    pub input:      String,
+    pub input: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionRecord {
-    pub id:          SessionId,
-    pub run_id:      RunId,
-    pub title:       Option<String>,
-    pub status:      SessionStatus,
-    pub model:       Option<String>,
+    pub id: SessionId,
+    pub run_id: RunId,
+    pub title: Option<String>,
+    pub status: SessionStatus,
+    pub model: Option<String>,
     #[serde(default)]
     pub active_turn: Option<SessionTurn>,
-    pub created_at:  DateTime<Utc>,
-    pub updated_at:  DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 impl SessionRecord {
@@ -85,28 +85,28 @@ impl SessionRecord {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionSummary {
-    pub id:          SessionId,
-    pub run_id:      RunId,
-    pub title:       Option<String>,
-    pub status:      SessionStatus,
-    pub model:       Option<String>,
+    pub id: SessionId,
+    pub run_id: RunId,
+    pub title: Option<String>,
+    pub status: SessionStatus,
+    pub model: Option<String>,
     #[serde(default)]
     pub active_turn: Option<SessionTurn>,
-    pub created_at:  DateTime<Utc>,
-    pub updated_at:  DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 impl From<&SessionRecord> for SessionSummary {
     fn from(record: &SessionRecord) -> Self {
         Self {
-            id:          record.id,
-            run_id:      record.run_id,
-            title:       record.title.clone(),
-            status:      record.status,
-            model:       record.model.clone(),
+            id: record.id,
+            run_id: record.run_id,
+            title: record.title.clone(),
+            status: record.status,
+            model: record.model.clone(),
             active_turn: record.active_turn.clone(),
-            created_at:  record.created_at,
-            updated_at:  record.updated_at,
+            created_at: record.created_at,
+            updated_at: record.updated_at,
         }
     }
 }
@@ -114,7 +114,7 @@ impl From<&SessionRecord> for SessionSummary {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionDetail {
     #[serde(flatten)]
-    pub record:   SessionRecord,
+    pub record: SessionRecord,
     #[serde(default)]
     pub messages: Vec<SessionMessage>,
     pub last_seq: u32,
@@ -134,31 +134,31 @@ impl SessionDetail {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SessionMessage {
     User {
-        content:   String,
+        content: String,
         timestamp: DateTime<Utc>,
     },
     Assistant {
-        content:        String,
+        content: String,
         #[serde(default)]
-        tool_calls:     Vec<serde_json::Value>,
+        tool_calls: Vec<serde_json::Value>,
         #[serde(default)]
         provider_parts: Vec<serde_json::Value>,
         #[serde(default)]
-        usage:          serde_json::Value,
-        response_id:    String,
-        timestamp:      DateTime<Utc>,
+        usage: serde_json::Value,
+        response_id: String,
+        timestamp: DateTime<Utc>,
     },
     ToolResults {
         #[serde(default)]
-        results:   Vec<serde_json::Value>,
+        results: Vec<serde_json::Value>,
         timestamp: DateTime<Utc>,
     },
     System {
-        content:   String,
+        content: String,
         timestamp: DateTime<Utc>,
     },
     Steering {
-        content:   String,
+        content: String,
         timestamp: DateTime<Utc>,
     },
 }

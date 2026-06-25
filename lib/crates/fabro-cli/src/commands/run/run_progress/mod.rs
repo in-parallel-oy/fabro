@@ -510,27 +510,30 @@ mod tests {
 
     fn stage_started(node_id: &str, name: &str) -> Event {
         Event::StageStarted {
-            node_id:      node_id.into(),
-            name:         name.into(),
-            index:        0,
+            node_id: node_id.into(),
+            name: name.into(),
+            index: 0,
             handler_type: String::new(),
-            attempt:      1,
+            attempt: 1,
             max_attempts: 1,
         }
     }
 
     fn assistant_message(stage: &str, model: &str) -> Event {
-        agent_event(stage, AgentEvent::AssistantMessage {
-            text:            "done".into(),
-            model:           ModelRef {
-                provider: ProviderId::openai(),
-                model_id: model.into(),
-                speed:    None,
+        agent_event(
+            stage,
+            AgentEvent::AssistantMessage {
+                text: "done".into(),
+                model: ModelRef {
+                    provider: ProviderId::openai(),
+                    model_id: model.into(),
+                    speed: None,
+                },
+                usage: TokenCounts::default(),
+                tool_call_count: 0,
+                context_window: None,
             },
-            usage:           TokenCounts::default(),
-            tool_call_count: 0,
-            context_window:  None,
-        })
+        )
     }
 
     fn stage_completed(node_id: &str, name: &str) -> Event {
@@ -548,7 +551,7 @@ mod tests {
                     &ModelRef {
                         provider: ProviderId::openai(),
                         model_id: "gpt-5-mini".into(),
-                        speed:    None,
+                        speed: None,
                     },
                     &TokenCounts {
                         input_tokens: 1200,
@@ -581,20 +584,26 @@ mod tests {
         assert!(ui.stage.active_stages.contains_key("fork1"));
         assert!(ui.stage.parallel_parent.is_none());
 
-        emit(&mut ui, Event::ParallelStarted {
-            node_id:      "fork1".into(),
-            visit:        1,
-            branch_count: 2,
-            join_policy:  "wait_all".into(),
-        });
+        emit(
+            &mut ui,
+            Event::ParallelStarted {
+                node_id: "fork1".into(),
+                visit: 1,
+                branch_count: 2,
+                join_policy: "wait_all".into(),
+            },
+        );
         assert_eq!(ui.stage.parallel_parent.as_deref(), Some("fork1"));
 
-        emit(&mut ui, Event::ParallelBranchStarted {
-            parallel_group_id:  StageId::new("fork1", 1),
-            parallel_branch_id: ParallelBranchId::new(StageId::new("fork1", 1), 0),
-            branch:             "security".into(),
-            index:              0,
-        });
+        emit(
+            &mut ui,
+            Event::ParallelBranchStarted {
+                parallel_group_id: StageId::new("fork1", 1),
+                parallel_branch_id: ParallelBranchId::new(StageId::new("fork1", 1), 0),
+                branch: "security".into(),
+                index: 0,
+            },
+        );
         let stage = &ui.stage.active_stages["fork1"];
         assert_eq!(stage.tool_calls.len(), 1);
         assert_eq!(stage.tool_calls[0].tool_call_id, "security");
@@ -603,15 +612,18 @@ mod tests {
             ToolCallStatus::Running
         ));
 
-        emit(&mut ui, Event::ParallelBranchCompleted {
-            parallel_group_id:  StageId::new("fork1", 1),
-            parallel_branch_id: ParallelBranchId::new(StageId::new("fork1", 1), 0),
-            branch:             "security".into(),
-            index:              0,
-            duration_ms:        2000,
-            status:             "succeeded".into(),
-            head_sha:           None,
-        });
+        emit(
+            &mut ui,
+            Event::ParallelBranchCompleted {
+                parallel_group_id: StageId::new("fork1", 1),
+                parallel_branch_id: ParallelBranchId::new(StageId::new("fork1", 1), 0),
+                branch: "security".into(),
+                index: 0,
+                duration_ms: 2000,
+                status: "succeeded".into(),
+                head_sha: None,
+            },
+        );
         let stage = &ui.stage.active_stages["fork1"];
         assert!(matches!(
             stage.tool_calls[0].status,
@@ -624,18 +636,24 @@ mod tests {
         let mut ui = ProgressUI::new(true, false);
 
         emit(&mut ui, stage_started("fork1", "Fork"));
-        emit(&mut ui, Event::ParallelStarted {
-            node_id:      "fork1".into(),
-            visit:        1,
-            branch_count: 1,
-            join_policy:  "wait_all".into(),
-        });
-        emit(&mut ui, Event::ParallelBranchStarted {
-            parallel_group_id:  StageId::new("fork1", 1),
-            parallel_branch_id: ParallelBranchId::new(StageId::new("fork1", 1), 0),
-            branch:             "security".into(),
-            index:              0,
-        });
+        emit(
+            &mut ui,
+            Event::ParallelStarted {
+                node_id: "fork1".into(),
+                visit: 1,
+                branch_count: 1,
+                join_policy: "wait_all".into(),
+            },
+        );
+        emit(
+            &mut ui,
+            Event::ParallelBranchStarted {
+                parallel_group_id: StageId::new("fork1", 1),
+                parallel_branch_id: ParallelBranchId::new(StageId::new("fork1", 1), 0),
+                branch: "security".into(),
+                index: 0,
+            },
+        );
 
         let stage = &ui.stage.active_stages["fork1"];
         let message = stage.tool_calls[0].bar.message();
@@ -654,21 +672,27 @@ mod tests {
 
         emit(
             &mut ui,
-            agent_event("s1", AgentEvent::CompactionStarted {
-                estimated_tokens:    5000,
-                context_window_size: 8000,
-            }),
+            agent_event(
+                "s1",
+                AgentEvent::CompactionStarted {
+                    estimated_tokens: 5000,
+                    context_window_size: 8000,
+                },
+            ),
         );
         assert!(ui.stage.active_stages["s1"].compaction_bar.is_some());
 
         emit(
             &mut ui,
-            agent_event("s1", AgentEvent::CompactionCompleted {
-                original_turn_count:    20,
-                preserved_turn_count:   6,
-                summary_token_estimate: 500,
-                tracked_file_count:     3,
-            }),
+            agent_event(
+                "s1",
+                AgentEvent::CompactionCompleted {
+                    original_turn_count: 20,
+                    preserved_turn_count: 6,
+                    summary_token_estimate: 500,
+                    tracked_file_count: 3,
+                },
+            ),
         );
         assert!(ui.stage.active_stages["s1"].compaction_bar.is_none());
     }
@@ -688,76 +712,91 @@ mod tests {
             stage_started("code", "Code"),
             Event::SandboxInitialized {
                 working_directory: "/home/daytona/workspace".into(),
-                provider:          SandboxProviderKind::Daytona,
-                id:                "daytona:sandbox-id".into(),
-                repo_cloned:       None,
-                clone_origin_url:  None,
-                clone_branch:      None,
-                workspace_root:    None,
-                repos_root:        None,
+                provider: SandboxProviderKind::Daytona,
+                id: "daytona:sandbox-id".into(),
+                repo_cloned: None,
+                clone_origin_url: None,
+                clone_branch: None,
+                workspace_root: None,
+                repos_root: None,
                 primary_repo_path: None,
                 primary_repo_link: None,
-                image:             None,
-                snapshot:          None,
+                image: None,
+                snapshot: None,
             },
-            agent_event("code", AgentEvent::ToolCallStarted {
-                tool_name:    "read_file".into(),
-                tool_call_id: "tc1".into(),
-                arguments:    serde_json::json!({
-                    "file_path": "/home/daytona/workspace/src/main.rs"
-                }),
-            }),
+            agent_event(
+                "code",
+                AgentEvent::ToolCallStarted {
+                    tool_name: "read_file".into(),
+                    tool_call_id: "tc1".into(),
+                    arguments: serde_json::json!({
+                        "file_path": "/home/daytona/workspace/src/main.rs"
+                    }),
+                },
+            ),
             assistant_message("code", "gpt-5-mini"),
             Event::EdgeSelected {
-                from_node:          "code".into(),
-                to_node:            "review".into(),
-                label:              Some("ship".into()),
-                condition:          None,
-                reason:             "condition".into(),
-                preferred_label:    None,
+                from_node: "code".into(),
+                to_node: "review".into(),
+                label: Some("ship".into()),
+                condition: None,
+                reason: "condition".into(),
+                preferred_label: None,
                 suggested_next_ids: Vec::new(),
-                stage_status:       "succeeded".into(),
-                is_jump:            false,
+                stage_status: "succeeded".into(),
+                is_jump: false,
             },
             Event::StageRetrying {
-                node_id:      "code".into(),
-                name:         "Code".into(),
-                index:        0,
-                attempt:      2,
+                node_id: "code".into(),
+                name: "Code".into(),
+                index: 0,
+                attempt: 2,
                 max_attempts: 3,
-                delay_ms:     1500,
+                delay_ms: 1500,
             },
-            agent_event("code", AgentEvent::Warning {
-                kind:    "context_window".into(),
-                message: "high usage".into(),
-                details: serde_json::json!({"usage_percent": 92}),
-            }),
-            agent_event("code", AgentEvent::LlmRetry {
-                provider:   "openai".into(),
-                model:      "gpt-5-mini".into(),
-                attempt:    2,
-                delay_secs: 1.5,
-                error:      fabro_llm::Error::Configuration {
-                    message: "busy".into(),
-                    source:  None,
+            agent_event(
+                "code",
+                AgentEvent::Warning {
+                    kind: "context_window".into(),
+                    message: "high usage".into(),
+                    details: serde_json::json!({"usage_percent": 92}),
                 },
-            }),
-            agent_event("code", AgentEvent::SubAgentSpawned {
-                agent_id: "a1".into(),
-                depth:    1,
-                task:     "review recent changes".into(),
-            }),
-            agent_event("code", AgentEvent::SubAgentCompleted {
-                agent_id:   "a1".into(),
-                depth:      1,
-                success:    true,
-                turns_used: 3,
-            }),
+            ),
+            agent_event(
+                "code",
+                AgentEvent::LlmRetry {
+                    provider: "openai".into(),
+                    model: "gpt-5-mini".into(),
+                    attempt: 2,
+                    delay_secs: 1.5,
+                    error: fabro_llm::Error::Configuration {
+                        message: "busy".into(),
+                        source: None,
+                    },
+                },
+            ),
+            agent_event(
+                "code",
+                AgentEvent::SubAgentSpawned {
+                    agent_id: "a1".into(),
+                    depth: 1,
+                    task: "review recent changes".into(),
+                },
+            ),
+            agent_event(
+                "code",
+                AgentEvent::SubAgentCompleted {
+                    agent_id: "a1".into(),
+                    depth: 1,
+                    success: true,
+                    turns_used: 3,
+                },
+            ),
             Event::SetupStarted { command_count: 1 },
             Event::SetupCommandCompleted {
-                command:     "bun install".into(),
-                index:       0,
-                exit_code:   0,
+                command: "bun install".into(),
+                index: 0,
+                exit_code: 0,
                 duration_ms: 2200,
             },
             Event::SetupCompleted { duration_ms: 2200 },
@@ -785,20 +824,26 @@ mod tests {
         emit(&mut ui, assistant_message("plan", "gpt-5-mini"));
         emit(
             &mut ui,
-            agent_event("plan", AgentEvent::ToolCallStarted {
-                tool_name:    "read_file".into(),
-                tool_call_id: "tc1".into(),
-                arguments:    serde_json::json!({"path": "src/main.rs"}),
-            }),
+            agent_event(
+                "plan",
+                AgentEvent::ToolCallStarted {
+                    tool_name: "read_file".into(),
+                    tool_call_id: "tc1".into(),
+                    arguments: serde_json::json!({"path": "src/main.rs"}),
+                },
+            ),
         );
         emit(
             &mut ui,
-            agent_event("plan", AgentEvent::ToolCallCompleted {
-                tool_name:    "read_file".into(),
-                tool_call_id: "tc1".into(),
-                output:       serde_json::json!({"ok": true}),
-                is_error:     false,
-            }),
+            agent_event(
+                "plan",
+                AgentEvent::ToolCallCompleted {
+                    tool_name: "read_file".into(),
+                    tool_call_id: "tc1".into(),
+                    output: serde_json::json!({"ok": true}),
+                    is_error: false,
+                },
+            ),
         );
         emit(&mut ui, stage_completed("plan", "Plan"));
 
@@ -809,34 +854,43 @@ mod tests {
     fn plain_default_setup_snapshot() {
         let (mut ui, buffer) = capture_ui(false);
 
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::Initializing {
-                provider: "daytona".into(),
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::Initializing {
+                    provider: "daytona".into(),
+                },
             },
-        });
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::Ready {
-                provider:    "daytona".into(),
-                duration_ms: 2500,
-                name:        Some("sandbox-1".into()),
-                cpu:         Some(4.0),
-                memory:      Some(8.0),
-                url:         None,
+        );
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::Ready {
+                    provider: "daytona".into(),
+                    duration_ms: 2500,
+                    name: Some("sandbox-1".into()),
+                    cpu: Some(4.0),
+                    memory: Some(8.0),
+                    url: None,
+                },
             },
-        });
-        emit(&mut ui, Event::SshAccessReady {
-            ssh_command: "ssh daytona@example".into(),
-        });
+        );
+        emit(
+            &mut ui,
+            Event::SshAccessReady {
+                ssh_command: "ssh daytona@example".into(),
+            },
+        );
         emit(&mut ui, Event::SetupStarted { command_count: 2 });
         emit(&mut ui, Event::SetupCompleted { duration_ms: 8200 });
         emit_body(
             &mut ui,
             fabro_types::EventBody::CliEnsureCompleted(CliEnsureCompletedProps {
-                cli_name:          "gh".into(),
-                provider:          "github".into(),
+                cli_name: "gh".into(),
+                provider: "github".into(),
                 already_installed: false,
-                node_installed:    false,
-                duration_ms:       600,
+                node_installed: false,
+                duration_ms: 600,
             }),
         );
         insta::assert_snapshot!(rendered(&buffer), @r"
@@ -852,32 +906,44 @@ mod tests {
     fn plain_daytona_snapshot_creation_snapshot() {
         let (mut ui, buffer) = capture_ui(false);
 
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::Initializing {
-                provider: "daytona".into(),
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::Initializing {
+                    provider: "daytona".into(),
+                },
             },
-        });
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::SnapshotCreating {
-                name: "fabro-v9-test".into(),
+        );
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::SnapshotCreating {
+                    name: "fabro-v9-test".into(),
+                },
             },
-        });
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::SnapshotReady {
-                name:        "fabro-v9-test".into(),
-                duration_ms: 210_000,
+        );
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::SnapshotReady {
+                    name: "fabro-v9-test".into(),
+                    duration_ms: 210_000,
+                },
             },
-        });
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::Ready {
-                provider:    "daytona".into(),
-                duration_ms: 212_000,
-                name:        Some("sandbox-1".into()),
-                cpu:         Some(4.0),
-                memory:      Some(8.0),
-                url:         None,
+        );
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::Ready {
+                    provider: "daytona".into(),
+                    duration_ms: 212_000,
+                    name: Some("sandbox-1".into()),
+                    cpu: Some(4.0),
+                    memory: Some(8.0),
+                    url: None,
+                },
             },
-        });
+        );
 
         insta::assert_snapshot!(rendered(&buffer), @r"
             Sandbox: building fabro-v9-test...
@@ -890,32 +956,44 @@ mod tests {
     fn plain_docker_snapshot_pull_snapshot() {
         let (mut ui, buffer) = capture_ui(false);
 
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::Initializing {
-                provider: "docker".into(),
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::Initializing {
+                    provider: "docker".into(),
+                },
             },
-        });
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::SnapshotPulling {
-                name: "buildpack-deps:noble".into(),
+        );
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::SnapshotPulling {
+                    name: "buildpack-deps:noble".into(),
+                },
             },
-        });
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::SnapshotReady {
-                name:        "buildpack-deps:noble".into(),
-                duration_ms: 8_200,
+        );
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::SnapshotReady {
+                    name: "buildpack-deps:noble".into(),
+                    duration_ms: 8_200,
+                },
             },
-        });
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::Ready {
-                provider:    "docker".into(),
-                duration_ms: 9_000,
-                name:        None,
-                cpu:         None,
-                memory:      None,
-                url:         None,
+        );
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::Ready {
+                    provider: "docker".into(),
+                    duration_ms: 9_000,
+                    name: None,
+                    cpu: None,
+                    memory: None,
+                    url: None,
+                },
             },
-        });
+        );
 
         insta::assert_snapshot!(rendered(&buffer), @r"
             Sandbox: pulling buildpack-deps:noble...
@@ -927,21 +1005,27 @@ mod tests {
     fn plain_docker_skipped_snapshot_phase_snapshot() {
         let (mut ui, buffer) = capture_ui(false);
 
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::Initializing {
-                provider: "docker".into(),
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::Initializing {
+                    provider: "docker".into(),
+                },
             },
-        });
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::Ready {
-                provider:    "docker".into(),
-                duration_ms: 20,
-                name:        None,
-                cpu:         None,
-                memory:      None,
-                url:         None,
+        );
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::Ready {
+                    provider: "docker".into(),
+                    duration_ms: 20,
+                    name: None,
+                    cpu: None,
+                    memory: None,
+                    url: None,
+                },
             },
-        });
+        );
 
         insta::assert_snapshot!(rendered(&buffer), @"    Sandbox: docker (ready in 20ms)");
     }
@@ -950,26 +1034,35 @@ mod tests {
     fn plain_snapshot_failure_snapshot() {
         let (mut ui, buffer) = capture_ui(false);
 
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::Initializing {
-                provider: "docker".into(),
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::Initializing {
+                    provider: "docker".into(),
+                },
             },
-        });
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::SnapshotFailed {
-                name:   "buildpack-deps:noble".into(),
-                error:  "pull failed".into(),
-                causes: Vec::new(),
+        );
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::SnapshotFailed {
+                    name: "buildpack-deps:noble".into(),
+                    error: "pull failed".into(),
+                    causes: Vec::new(),
+                },
             },
-        });
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::InitializeFailed {
-                provider:    "docker".into(),
-                error:       "pull failed".into(),
-                causes:      Vec::new(),
-                duration_ms: 900,
+        );
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::InitializeFailed {
+                    provider: "docker".into(),
+                    error: "pull failed".into(),
+                    causes: Vec::new(),
+                    duration_ms: 900,
+                },
             },
-        });
+        );
 
         insta::assert_snapshot!(rendered(&buffer), @r"
             Sandbox: Snapshot buildpack-deps:noble failed: pull failed
@@ -981,31 +1074,40 @@ mod tests {
     fn tty_snapshot_ready_keeps_sandbox_bar_until_sandbox_ready() {
         let mut ui = ProgressUI::new(true, false);
 
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::Initializing {
-                provider: "docker".into(),
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::Initializing {
+                    provider: "docker".into(),
+                },
             },
-        });
+        );
         assert!(ui.setup.sandbox_bar.is_some());
 
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::SnapshotReady {
-                name:        "buildpack-deps:noble".into(),
-                duration_ms: 10,
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::SnapshotReady {
+                    name: "buildpack-deps:noble".into(),
+                    duration_ms: 10,
+                },
             },
-        });
+        );
         assert!(ui.setup.sandbox_bar.is_some());
 
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::Ready {
-                provider:    "docker".into(),
-                duration_ms: 20,
-                name:        None,
-                cpu:         None,
-                memory:      None,
-                url:         None,
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::Ready {
+                    provider: "docker".into(),
+                    duration_ms: 20,
+                    name: None,
+                    cpu: None,
+                    memory: None,
+                    url: None,
+                },
             },
-        });
+        );
         assert!(ui.setup.sandbox_bar.is_none());
     }
 
@@ -1013,21 +1115,27 @@ mod tests {
     fn tty_sandbox_failed_finishes_sandbox_bar() {
         let mut ui = ProgressUI::new(true, false);
 
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::Initializing {
-                provider: "docker".into(),
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::Initializing {
+                    provider: "docker".into(),
+                },
             },
-        });
+        );
         assert!(ui.setup.sandbox_bar.is_some());
 
-        emit(&mut ui, Event::Sandbox {
-            event: SandboxEvent::InitializeFailed {
-                provider:    "docker".into(),
-                error:       "pull failed".into(),
-                causes:      Vec::new(),
-                duration_ms: 900,
+        emit(
+            &mut ui,
+            Event::Sandbox {
+                event: SandboxEvent::InitializeFailed {
+                    provider: "docker".into(),
+                    error: "pull failed".into(),
+                    causes: Vec::new(),
+                    duration_ms: 900,
+                },
             },
-        });
+        );
         assert!(ui.setup.sandbox_bar.is_none());
     }
 
@@ -1036,95 +1144,122 @@ mod tests {
         let (mut ui, buffer) = capture_ui(true);
 
         emit(&mut ui, stage_started("code", "Code"));
-        emit(&mut ui, Event::SandboxInitialized {
-            working_directory: "/home/daytona/workspace".into(),
-            provider:          SandboxProviderKind::Daytona,
-            id:                "daytona:sandbox-id".into(),
-            repo_cloned:       None,
-            clone_origin_url:  None,
-            clone_branch:      None,
-            workspace_root:    None,
-            repos_root:        None,
-            primary_repo_path: None,
-            primary_repo_link: None,
-            image:             None,
-            snapshot:          None,
-        });
         emit(
             &mut ui,
-            agent_event("code", AgentEvent::ToolCallStarted {
-                tool_name:    "read_file".into(),
-                tool_call_id: "tc1".into(),
-                arguments:    serde_json::json!({
-                    "file_path": "/home/daytona/workspace/src/main.rs"
-                }),
-            }),
+            Event::SandboxInitialized {
+                working_directory: "/home/daytona/workspace".into(),
+                provider: SandboxProviderKind::Daytona,
+                id: "daytona:sandbox-id".into(),
+                repo_cloned: None,
+                clone_origin_url: None,
+                clone_branch: None,
+                workspace_root: None,
+                repos_root: None,
+                primary_repo_path: None,
+                primary_repo_link: None,
+                image: None,
+                snapshot: None,
+            },
+        );
+        emit(
+            &mut ui,
+            agent_event(
+                "code",
+                AgentEvent::ToolCallStarted {
+                    tool_name: "read_file".into(),
+                    tool_call_id: "tc1".into(),
+                    arguments: serde_json::json!({
+                        "file_path": "/home/daytona/workspace/src/main.rs"
+                    }),
+                },
+            ),
         );
         emit(&mut ui, assistant_message("code", "gpt-5-mini"));
-        emit(&mut ui, Event::EdgeSelected {
-            from_node:          "code".into(),
-            to_node:            "review".into(),
-            label:              Some("ship".into()),
-            condition:          None,
-            reason:             "condition".into(),
-            preferred_label:    None,
-            suggested_next_ids: Vec::new(),
-            stage_status:       "succeeded".into(),
-            is_jump:            false,
-        });
-        emit(&mut ui, Event::StageRetrying {
-            node_id:      "code".into(),
-            name:         "Code".into(),
-            index:        0,
-            attempt:      2,
-            max_attempts: 3,
-            delay_ms:     1500,
-        });
         emit(
             &mut ui,
-            agent_event("code", AgentEvent::Warning {
-                kind:    "context_window".into(),
-                message: "high usage".into(),
-                details: serde_json::json!({"usage_percent": 92}),
-            }),
+            Event::EdgeSelected {
+                from_node: "code".into(),
+                to_node: "review".into(),
+                label: Some("ship".into()),
+                condition: None,
+                reason: "condition".into(),
+                preferred_label: None,
+                suggested_next_ids: Vec::new(),
+                stage_status: "succeeded".into(),
+                is_jump: false,
+            },
         );
         emit(
             &mut ui,
-            agent_event("code", AgentEvent::LlmRetry {
-                provider:   "openai".into(),
-                model:      "gpt-5-mini".into(),
-                attempt:    2,
-                delay_secs: 1.5,
-                error:      fabro_llm::Error::Configuration {
-                    message: "busy".into(),
-                    source:  None,
+            Event::StageRetrying {
+                node_id: "code".into(),
+                name: "Code".into(),
+                index: 0,
+                attempt: 2,
+                max_attempts: 3,
+                delay_ms: 1500,
+            },
+        );
+        emit(
+            &mut ui,
+            agent_event(
+                "code",
+                AgentEvent::Warning {
+                    kind: "context_window".into(),
+                    message: "high usage".into(),
+                    details: serde_json::json!({"usage_percent": 92}),
                 },
-            }),
+            ),
         );
         emit(
             &mut ui,
-            agent_event("code", AgentEvent::SubAgentSpawned {
-                agent_id: "a1".into(),
-                depth:    1,
-                task:     "review recent changes".into(),
-            }),
+            agent_event(
+                "code",
+                AgentEvent::LlmRetry {
+                    provider: "openai".into(),
+                    model: "gpt-5-mini".into(),
+                    attempt: 2,
+                    delay_secs: 1.5,
+                    error: fabro_llm::Error::Configuration {
+                        message: "busy".into(),
+                        source: None,
+                    },
+                },
+            ),
         );
         emit(
             &mut ui,
-            agent_event("code", AgentEvent::SubAgentCompleted {
-                agent_id:   "a1".into(),
-                depth:      1,
-                success:    true,
-                turns_used: 3,
-            }),
+            agent_event(
+                "code",
+                AgentEvent::SubAgentSpawned {
+                    agent_id: "a1".into(),
+                    depth: 1,
+                    task: "review recent changes".into(),
+                },
+            ),
+        );
+        emit(
+            &mut ui,
+            agent_event(
+                "code",
+                AgentEvent::SubAgentCompleted {
+                    agent_id: "a1".into(),
+                    depth: 1,
+                    success: true,
+                    turns_used: 3,
+                },
+            ),
         );
         emit(&mut ui, Event::SetupStarted { command_count: 1 });
-        emit(&mut ui, Event::SetupCommandCompleted {
-            command:     "bun install".into(),
-            index:       0,
-            exit_code:   0,
-            duration_ms: 2200,
-        });
+        emit(
+            &mut ui,
+            Event::SetupCommandCompleted {
+                command: "bun install".into(),
+                index: 0,
+                exit_code: 0,
+                duration_ms: 2200,
+            },
+        );
         emit(&mut ui, Event::SetupCompleted { duration_ms: 2200 });
         emit(&mut ui, stage_completed("code", "Code"));
 
@@ -1145,25 +1280,34 @@ mod tests {
     fn plain_notice_snapshot() {
         let (mut ui, buffer) = capture_ui(false);
 
-        emit(&mut ui, Event::RunNotice {
-            level:            RunNoticeLevel::Warn,
-            code:             RunNoticeCode::SandboxCleanupFailed.to_string(),
-            message:          "sandbox cleanup failed".into(),
-            exec_output_tail: None,
-        });
-        emit(&mut ui, Event::PullRequestCreated {
-            pr_url:      "https://github.com/in-parallel-oy/fabro/pull/42".into(),
-            pr_number:   42,
-            owner:       "fabro-sh".into(),
-            repo:        "fabro".into(),
-            base_branch: "main".into(),
-            head_branch: "fabro/run/42".into(),
-            title:       "Ship the change".into(),
-            draft:       true,
-        });
-        emit(&mut ui, Event::PullRequestFailed {
-            error: "auth token expired".into(),
-        });
+        emit(
+            &mut ui,
+            Event::RunNotice {
+                level: RunNoticeLevel::Warn,
+                code: RunNoticeCode::SandboxCleanupFailed.to_string(),
+                message: "sandbox cleanup failed".into(),
+                exec_output_tail: None,
+            },
+        );
+        emit(
+            &mut ui,
+            Event::PullRequestCreated {
+                pr_url: "https://github.com/in-parallel-oy/fabro/pull/42".into(),
+                pr_number: 42,
+                owner: "fabro-sh".into(),
+                repo: "fabro".into(),
+                base_branch: "main".into(),
+                head_branch: "fabro/run/42".into(),
+                title: "Ship the change".into(),
+                draft: true,
+            },
+        );
+        emit(
+            &mut ui,
+            Event::PullRequestFailed {
+                error: "auth token expired".into(),
+            },
+        );
 
         insta::assert_snapshot!(rendered(&buffer), @r"
             Warning: sandbox cleanup failed [sandbox_cleanup_failed]
@@ -1176,26 +1320,32 @@ mod tests {
     fn plain_metadata_snapshot_snapshot() {
         let (mut ui, buffer) = capture_ui(false);
 
-        emit(&mut ui, Event::MetadataSnapshotCompleted {
-            phase:       MetadataSnapshotPhase::Checkpoint,
-            branch:      "fabro/meta".into(),
-            duration_ms: 2000,
-            entry_count: 2,
-            bytes:       42,
-            commit_sha:  "abc123".into(),
-        });
-        emit(&mut ui, Event::MetadataSnapshotFailed {
-            phase:            MetadataSnapshotPhase::Finalize,
-            branch:           "fabro/meta".into(),
-            duration_ms:      900,
-            failure_kind:     MetadataSnapshotFailureKind::Push,
-            error:            "push rejected".into(),
-            causes:           Vec::new(),
-            commit_sha:       Some("abc123".into()),
-            entry_count:      Some(2),
-            bytes:            Some(42),
-            exec_output_tail: None,
-        });
+        emit(
+            &mut ui,
+            Event::MetadataSnapshotCompleted {
+                phase: MetadataSnapshotPhase::Checkpoint,
+                branch: "fabro/meta".into(),
+                duration_ms: 2000,
+                entry_count: 2,
+                bytes: 42,
+                commit_sha: "abc123".into(),
+            },
+        );
+        emit(
+            &mut ui,
+            Event::MetadataSnapshotFailed {
+                phase: MetadataSnapshotPhase::Finalize,
+                branch: "fabro/meta".into(),
+                duration_ms: 900,
+                failure_kind: MetadataSnapshotFailureKind::Push,
+                error: "push rejected".into(),
+                causes: Vec::new(),
+                commit_sha: Some("abc123".into()),
+                entry_count: Some(2),
+                bytes: Some(42),
+                exec_output_tail: None,
+            },
+        );
 
         insta::assert_snapshot!(rendered(&buffer), @"Warning: Metadata finalize failed: push rejected [push]");
     }
@@ -1204,30 +1354,39 @@ mod tests {
     fn metadata_snapshot_failure_suppresses_compat_notice_only() {
         let (mut ui, buffer) = capture_ui(false);
 
-        emit(&mut ui, Event::MetadataSnapshotFailed {
-            phase:            MetadataSnapshotPhase::Checkpoint,
-            branch:           "fabro/meta".into(),
-            duration_ms:      900,
-            failure_kind:     MetadataSnapshotFailureKind::Write,
-            error:            "write failed".into(),
-            causes:           Vec::new(),
-            commit_sha:       None,
-            entry_count:      None,
-            bytes:            None,
-            exec_output_tail: None,
-        });
-        emit(&mut ui, Event::RunNotice {
-            level:            RunNoticeLevel::Warn,
-            code:             RunNoticeCode::CheckpointMetadataWriteFailed.to_string(),
-            message:          "legacy metadata warning".into(),
-            exec_output_tail: None,
-        });
-        emit(&mut ui, Event::RunNotice {
-            level:            RunNoticeLevel::Warn,
-            code:             RunNoticeCode::CheckpointMetadataDegraded.to_string(),
-            message:          "metadata snapshots are disabled for this run".into(),
-            exec_output_tail: None,
-        });
+        emit(
+            &mut ui,
+            Event::MetadataSnapshotFailed {
+                phase: MetadataSnapshotPhase::Checkpoint,
+                branch: "fabro/meta".into(),
+                duration_ms: 900,
+                failure_kind: MetadataSnapshotFailureKind::Write,
+                error: "write failed".into(),
+                causes: Vec::new(),
+                commit_sha: None,
+                entry_count: None,
+                bytes: None,
+                exec_output_tail: None,
+            },
+        );
+        emit(
+            &mut ui,
+            Event::RunNotice {
+                level: RunNoticeLevel::Warn,
+                code: RunNoticeCode::CheckpointMetadataWriteFailed.to_string(),
+                message: "legacy metadata warning".into(),
+                exec_output_tail: None,
+            },
+        );
+        emit(
+            &mut ui,
+            Event::RunNotice {
+                level: RunNoticeLevel::Warn,
+                code: RunNoticeCode::CheckpointMetadataDegraded.to_string(),
+                message: "metadata snapshots are disabled for this run".into(),
+                exec_output_tail: None,
+            },
+        );
 
         insta::assert_snapshot!(rendered(&buffer), @r"
             Warning: Metadata checkpoint failed: write failed [write]
@@ -1240,27 +1399,36 @@ mod tests {
         let mut ui = ProgressUI::new(true, false);
 
         emit(&mut ui, stage_started("fork1", "Fork"));
-        emit(&mut ui, Event::ParallelStarted {
-            node_id:      "fork1".into(),
-            visit:        1,
-            branch_count: 1,
-            join_policy:  "wait_all".into(),
-        });
-        emit(&mut ui, Event::ParallelBranchStarted {
-            parallel_group_id:  StageId::new("fork1", 1),
-            parallel_branch_id: ParallelBranchId::new(StageId::new("fork1", 1), 0),
-            branch:             "security".into(),
-            index:              0,
-        });
-        emit(&mut ui, Event::ParallelBranchCompleted {
-            parallel_group_id:  StageId::new("fork1", 1),
-            parallel_branch_id: ParallelBranchId::new(StageId::new("fork1", 1), 0),
-            branch:             "security".into(),
-            index:              0,
-            duration_ms:        500,
-            status:             "succeeded".into(),
-            head_sha:           None,
-        });
+        emit(
+            &mut ui,
+            Event::ParallelStarted {
+                node_id: "fork1".into(),
+                visit: 1,
+                branch_count: 1,
+                join_policy: "wait_all".into(),
+            },
+        );
+        emit(
+            &mut ui,
+            Event::ParallelBranchStarted {
+                parallel_group_id: StageId::new("fork1", 1),
+                parallel_branch_id: ParallelBranchId::new(StageId::new("fork1", 1), 0),
+                branch: "security".into(),
+                index: 0,
+            },
+        );
+        emit(
+            &mut ui,
+            Event::ParallelBranchCompleted {
+                parallel_group_id: StageId::new("fork1", 1),
+                parallel_branch_id: ParallelBranchId::new(StageId::new("fork1", 1), 0),
+                branch: "security".into(),
+                index: 0,
+                duration_ms: 500,
+                status: "succeeded".into(),
+                head_sha: None,
+            },
+        );
 
         let stage = &ui.stage.active_stages["fork1"];
         assert_eq!(stage.tool_calls[0].bar.prefix(), "500ms");
@@ -1280,11 +1448,11 @@ mod tests {
         let stage_started = serde_json::to_string(&to_run_event_at(
             &fixtures::RUN_1,
             &Event::StageStarted {
-                node_id:      "code".into(),
-                name:         "Code".into(),
-                index:        0,
+                node_id: "code".into(),
+                name: "Code".into(),
+                index: 0,
                 handler_type: "agent".into(),
-                attempt:      1,
+                attempt: 1,
                 max_attempts: 1,
             },
             started_ts,
@@ -1293,23 +1461,29 @@ mod tests {
         .unwrap();
         let tool_started = serde_json::to_string(&to_run_event_at(
             &fixtures::RUN_1,
-            &agent_event("code", AgentEvent::ToolCallStarted {
-                tool_name:    "read_file".into(),
-                tool_call_id: "tc1".into(),
-                arguments:    serde_json::json!({"path": "src/main.rs"}),
-            }),
+            &agent_event(
+                "code",
+                AgentEvent::ToolCallStarted {
+                    tool_name: "read_file".into(),
+                    tool_call_id: "tc1".into(),
+                    arguments: serde_json::json!({"path": "src/main.rs"}),
+                },
+            ),
             started_ts,
             None,
         ))
         .unwrap();
         let tool_completed = serde_json::to_string(&to_run_event_at(
             &fixtures::RUN_1,
-            &agent_event("code", AgentEvent::ToolCallCompleted {
-                tool_name:    "read_file".into(),
-                tool_call_id: "tc1".into(),
-                output:       serde_json::json!({"ok": true}),
-                is_error:     false,
-            }),
+            &agent_event(
+                "code",
+                AgentEvent::ToolCallCompleted {
+                    tool_name: "read_file".into(),
+                    tool_call_id: "tc1".into(),
+                    output: serde_json::json!({"ok": true}),
+                    is_error: false,
+                },
+            ),
             completed_ts,
             None,
         ))

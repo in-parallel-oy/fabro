@@ -14,19 +14,19 @@ const REPLAY_REVOCATION_TTL_SECONDS: i64 = 60;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RefreshToken {
-    pub token_hash:   [u8; 32],
-    pub chain_id:     Uuid,
-    pub identity:     IdpIdentity,
-    pub login:        String,
-    pub name:         String,
-    pub email:        String,
+    pub token_hash: [u8; 32],
+    pub chain_id: Uuid,
+    pub identity: IdpIdentity,
+    pub login: String,
+    pub name: String,
+    pub email: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub avatar_url:   String,
-    pub issued_at:    DateTime<Utc>,
-    pub expires_at:   DateTime<Utc>,
+    pub avatar_url: String,
+    pub issued_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
     pub last_used_at: DateTime<Utc>,
-    pub used:         bool,
-    pub user_agent:   String,
+    pub used: bool,
+    pub user_agent: String,
 }
 
 impl Record for RefreshToken {
@@ -49,9 +49,9 @@ pub enum ConsumeOutcome {
 }
 
 pub struct RefreshTokenStore {
-    db:                 Arc<slatedb::Db>,
-    repo:               Repository<RefreshToken>,
-    consume_locks:      KeyedMutex<[u8; 32]>,
+    db: Arc<slatedb::Db>,
+    repo: Repository<RefreshToken>,
+    consume_locks: KeyedMutex<[u8; 32]>,
     /// In-memory only: persisting attacker-supplied hashes would be an
     /// unbounded-growth surface under a token-stuffing attack.
     replay_revocations: DashMap<[u8; 32], DateTime<Utc>>,

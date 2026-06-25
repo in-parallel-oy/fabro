@@ -7,7 +7,7 @@ use crate::{AnswerSubmission, Interviewer, Question};
 
 /// Wraps another interviewer and records all question-answer pairs.
 pub struct RecordingInterviewer {
-    inner:       Box<dyn Interviewer>,
+    inner: Box<dyn Interviewer>,
     submissions: Mutex<Vec<(Question, AnswerSubmission)>>,
 }
 

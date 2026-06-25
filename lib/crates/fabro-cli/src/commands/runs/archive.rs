@@ -12,7 +12,7 @@ pub(crate) async fn archive_command(
     let ctx = base_ctx.with_target(&args.server)?;
     run_resolved_run_batch(
         RunBatchAction {
-            past:     "archived",
+            past: "archived",
             json_key: "archived",
         },
         &args.runs,
@@ -29,7 +29,7 @@ pub(crate) async fn unarchive_command(
     let ctx = base_ctx.with_target(&args.server)?;
     run_resolved_run_batch(
         RunBatchAction {
-            past:     "unarchived",
+            past: "unarchived",
             json_key: "unarchived",
         },
         &args.runs,

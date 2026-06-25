@@ -11,12 +11,12 @@ fn model_features_reuses_canonical_type() {
 #[test]
 fn model_features_json_matches_openapi_shape() {
     let features = ModelFeatures {
-        tools:            true,
-        vision:           true,
-        reasoning:        true,
+        tools: true,
+        vision: true,
+        reasoning: true,
         reasoning_effort: ReasoningEffortFeature::Levels,
-        prompt_cache:     false,
-        sampling_params:  true,
+        prompt_cache: false,
+        sampling_params: true,
     };
 
     let json = serde_json::to_value(&features).unwrap();

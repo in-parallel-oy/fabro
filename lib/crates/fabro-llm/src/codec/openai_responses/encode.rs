@@ -19,17 +19,17 @@ use crate::types::{
 
 pub(super) fn encode(ctx: &CodecCtx<'_>, stream: bool) -> EncodedRequest {
     EncodedRequest {
-        body:     build_body(ctx, stream),
+        body: build_body(ctx, stream),
         endpoint: "/responses".to_string(),
-        headers:  Vec::new(),
+        headers: Vec::new(),
     }
 }
 
 pub(super) fn encode_count_tokens(ctx: &CodecCtx<'_>) -> EncodedRequest {
     EncodedRequest {
-        body:     filter_input_tokens_request_body(build_body(ctx, false)),
+        body: filter_input_tokens_request_body(build_body(ctx, false)),
         endpoint: "/responses/input_tokens".to_string(),
-        headers:  Vec::new(),
+        headers: Vec::new(),
     }
 }
 
@@ -367,19 +367,19 @@ mod tests {
 
     fn minimal_request() -> Request {
         Request {
-            model:            "gpt-4o".to_string(),
-            messages:         vec![Message::user("Hello")],
-            provider:         None,
-            tools:            None,
-            tool_choice:      None,
-            response_format:  None,
-            temperature:      None,
-            top_p:            None,
-            max_tokens:       None,
-            stop_sequences:   None,
+            model: "gpt-4o".to_string(),
+            messages: vec![Message::user("Hello")],
+            provider: None,
+            tools: None,
+            tool_choice: None,
+            response_format: None,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            stop_sequences: None,
             reasoning_effort: None,
-            speed:            None,
-            metadata:         None,
+            speed: None,
+            metadata: None,
             provider_options: None,
         }
     }
@@ -489,9 +489,9 @@ mod tests {
         )]);
         request.reasoning_effort = Some(ReasoningEffort::Low);
         request.response_format = Some(ResponseFormat {
-            kind:        ResponseFormatType::JsonSchema,
+            kind: ResponseFormatType::JsonSchema,
             json_schema: Some(serde_json::json!({"type": "object"})),
-            strict:      true,
+            strict: true,
         });
         request.temperature = Some(0.2);
         request.top_p = Some(0.9);
@@ -539,11 +539,11 @@ mod tests {
         let request = minimal_request();
         let params = CodecParams::default();
         let ctx = CodecCtx {
-            request:       &request,
+            request: &request,
             provider_name: "openai",
             deployment_id: &request.model,
-            model:         None,
-            params:        &params,
+            model: None,
+            params: &params,
         };
 
         let encoded = encode_count_tokens(&ctx);
@@ -656,13 +656,13 @@ mod tests {
     #[test]
     fn audio_content_produces_text_fallback() {
         let msg = Message {
-            role:         Role::User,
-            content:      vec![ContentPart::Audio(AudioData {
-                url:        Some("https://example.com/audio.wav".to_string()),
-                data:       None,
+            role: Role::User,
+            content: vec![ContentPart::Audio(AudioData {
+                url: Some("https://example.com/audio.wav".to_string()),
+                data: None,
                 media_type: None,
             })],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let (_, input) = translate_input(&[msg]);
@@ -679,14 +679,14 @@ mod tests {
     #[test]
     fn document_content_produces_text_fallback_with_filename() {
         let msg = Message {
-            role:         Role::User,
-            content:      vec![ContentPart::Document(DocumentData {
-                url:        Some("https://example.com/doc.pdf".to_string()),
-                data:       None,
+            role: Role::User,
+            content: vec![ContentPart::Document(DocumentData {
+                url: Some("https://example.com/doc.pdf".to_string()),
+                data: None,
                 media_type: None,
-                file_name:  Some("report.pdf".to_string()),
+                file_name: Some("report.pdf".to_string()),
             })],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let (_, input) = translate_input(&[msg]);
@@ -703,14 +703,14 @@ mod tests {
     #[test]
     fn document_content_produces_text_fallback_without_filename() {
         let msg = Message {
-            role:         Role::User,
-            content:      vec![ContentPart::Document(DocumentData {
-                url:        None,
-                data:       Some(vec![1, 2, 3]),
+            role: Role::User,
+            content: vec![ContentPart::Document(DocumentData {
+                url: None,
+                data: Some(vec![1, 2, 3]),
                 media_type: None,
-                file_name:  None,
+                file_name: None,
             })],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let (_, input) = translate_input(&[msg]);
@@ -734,9 +734,9 @@ mod tests {
         tc.provider_metadata = Some(serde_json::json!({"id": "fc_abc123"}));
 
         let msg = Message {
-            role:         Role::Assistant,
-            content:      vec![ContentPart::ToolCall(tc)],
-            name:         None,
+            role: Role::Assistant,
+            content: vec![ContentPart::ToolCall(tc)],
+            name: None,
             tool_call_id: None,
         };
         let (_, input) = translate_input(&[msg]);
@@ -753,9 +753,9 @@ mod tests {
         let tc = ToolCall::new("call_xyz789", "get_weather", serde_json::json!({}));
 
         let msg = Message {
-            role:         Role::Assistant,
-            content:      vec![ContentPart::ToolCall(tc)],
-            name:         None,
+            role: Role::Assistant,
+            content: vec![ContentPart::ToolCall(tc)],
+            name: None,
             tool_call_id: None,
         };
         let (_, input) = translate_input(&[msg]);
@@ -776,15 +776,15 @@ mod tests {
         tc.provider_metadata = Some(serde_json::json!({"id": "fc_def456"}));
 
         let msg = Message {
-            role:         Role::Assistant,
-            content:      vec![
+            role: Role::Assistant,
+            content: vec![
                 ContentPart::Other {
                     kind: ContentPart::OPENAI_REASONING.to_string(),
                     data: reasoning,
                 },
                 ContentPart::ToolCall(tc),
             ],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let (_, input) = translate_input(&[msg]);
@@ -820,8 +820,8 @@ mod tests {
         tc.provider_metadata = Some(serde_json::json!({"id": "fc_def456"}));
 
         let msg = Message {
-            role:         Role::Assistant,
-            content:      vec![
+            role: Role::Assistant,
+            content: vec![
                 ContentPart::Other {
                     kind: ContentPart::OPENAI_REASONING.to_string(),
                     data: reasoning,
@@ -833,7 +833,7 @@ mod tests {
                 ContentPart::text("Checking now."),
                 ContentPart::ToolCall(tc),
             ],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let (_, input) = translate_input(&[msg]);
@@ -855,9 +855,9 @@ mod tests {
         // For non-OpenAI turns or turns without preserved message items,
         // Text parts should still produce a constructed message.
         let msg = Message {
-            role:         Role::Assistant,
-            content:      vec![ContentPart::text("Hello")],
-            name:         None,
+            role: Role::Assistant,
+            content: vec![ContentPart::text("Hello")],
+            name: None,
             tool_call_id: None,
         };
         let (_, input) = translate_input(&[msg]);
@@ -877,9 +877,9 @@ mod tests {
         tc.provider_metadata = Some(serde_json::json!({"id": "ctc_def456"}));
 
         let msg = Message {
-            role:         Role::Assistant,
-            content:      vec![ContentPart::ToolCall(tc)],
-            name:         None,
+            role: Role::Assistant,
+            content: vec![ContentPart::ToolCall(tc)],
+            name: None,
             tool_call_id: None,
         };
 
@@ -896,12 +896,12 @@ mod tests {
     #[test]
     fn custom_tool_result_history_round_trips_through_translate_input() {
         let msg = Message {
-            role:         Role::Tool,
-            content:      vec![ContentPart::ToolResult(ToolResult::success(
+            role: Role::Tool,
+            content: vec![ContentPart::ToolResult(ToolResult::success(
                 "call_001",
                 serde_json::json!("Success. Updated the following files:\nA hello.txt\n"),
             ))],
-            name:         Some("apply_patch".to_string()),
+            name: Some("apply_patch".to_string()),
             tool_call_id: Some("call_001".to_string()),
         };
 
@@ -925,9 +925,9 @@ mod tests {
         tc.provider_metadata = Some(serde_json::json!({"id": "ctc_def456"}));
 
         let assistant_msg = Message {
-            role:         Role::Assistant,
-            content:      vec![ContentPart::ToolCall(tc)],
-            name:         None,
+            role: Role::Assistant,
+            content: vec![ContentPart::ToolCall(tc)],
+            name: None,
             tool_call_id: None,
         };
         let tool_msg = Message::tool_result(

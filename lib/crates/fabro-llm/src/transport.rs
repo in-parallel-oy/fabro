@@ -32,11 +32,11 @@ use crate::types::{AdapterTimeout, RateLimitInfo, Response, StreamEvent};
 /// configuration that every provider needs. Provider-specific fields live on
 /// the adapter struct itself.
 pub(crate) struct HttpTransport {
-    pub(crate) api_key:             Option<String>,
-    pub(crate) base_url:            String,
-    pub(crate) default_headers:     HashMap<String, String>,
-    pub(crate) client:              fabro_http::HttpClient,
-    pub(crate) request_timeout:     Option<Duration>,
+    pub(crate) api_key: Option<String>,
+    pub(crate) base_url: String,
+    pub(crate) default_headers: HashMap<String, String>,
+    pub(crate) client: fabro_http::HttpClient,
+    pub(crate) request_timeout: Option<Duration>,
     pub(crate) stream_read_timeout: Option<Duration>,
 }
 
@@ -245,12 +245,12 @@ pub(crate) async fn stream_via_http(
 /// State driving the streaming byte loop: the codec's decoder plus the line
 /// reader, with a buffer that flattens batched events into individual items.
 struct StreamLoop {
-    decoder:          Box<dyn StreamDecoder>,
-    line_reader:      LineReader,
+    decoder: Box<dyn StreamDecoder>,
+    line_reader: LineReader,
     /// Events decoded but not yet yielded.
-    pending:          VecDeque<StreamEvent>,
+    pending: VecDeque<StreamEvent>,
     /// Byte stream exhausted.
-    done:             bool,
+    done: bool,
     /// `finish()` already drained.
     finished_emitted: bool,
 }
@@ -365,8 +365,8 @@ pub(crate) fn parse_sse_block(block: &str) -> Option<(Option<&str>, Cow<'_, str>
 /// configurable delimiter (e.g. `"\n"` for Gemini/OpenAI-compatible, `"\n\n"`
 /// for Anthropic/OpenAI SSE event blocks).
 pub struct LineReader {
-    response:            fabro_http::Response,
-    buffer:              String,
+    response: fabro_http::Response,
+    buffer: String,
     stream_read_timeout: Option<Duration>,
 }
 
@@ -416,7 +416,7 @@ impl LineReader {
                     warn!("Stream read timed out waiting for next event");
                     return Err(Error::Stream {
                         message: "stream read timed out waiting for next event".to_string(),
-                        source:  None,
+                        source: None,
                     });
                 }
             }

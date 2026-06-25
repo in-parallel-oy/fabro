@@ -62,15 +62,15 @@ const INVALID_CONFIRMATION_REQUEST: &str =
 
 #[derive(Serialize)]
 struct OAuthErrorResponse<'a> {
-    error:             &'a str,
+    error: &'a str,
     error_description: &'a str,
 }
 
 #[derive(Deserialize)]
 struct CliStartParams {
-    redirect_uri:          Option<String>,
-    state:                 Option<String>,
-    code_challenge:        Option<String>,
+    redirect_uri: Option<String>,
+    state: Option<String>,
+    code_challenge: Option<String>,
     code_challenge_method: Option<String>,
 }
 
@@ -81,35 +81,35 @@ struct CliResumeParams {
 
 #[derive(Deserialize)]
 struct CliTokenRequest {
-    grant_type:    Option<String>,
-    code:          Option<String>,
+    grant_type: Option<String>,
+    code: Option<String>,
     code_verifier: Option<String>,
-    redirect_uri:  Option<String>,
+    redirect_uri: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct CliFlowCookie {
-    redirect_uri:   String,
-    state:          String,
+    redirect_uri: String,
+    state: String,
     code_challenge: String,
 }
 
 #[derive(Serialize)]
 struct CliAuthSubjectResponse {
-    idp_issuer:  String,
+    idp_issuer: String,
     idp_subject: String,
-    login:       String,
-    name:        String,
-    email:       String,
+    login: String,
+    name: String,
+    email: String,
 }
 
 #[derive(Serialize)]
 struct CliTokenResponse {
-    access_token:             String,
-    access_token_expires_at:  chrono::DateTime<chrono::Utc>,
-    refresh_token:            String,
+    access_token: String,
+    access_token_expires_at: chrono::DateTime<chrono::Utc>,
+    refresh_token: String,
     refresh_token_expires_at: chrono::DateTime<chrono::Utc>,
-    subject:                  CliAuthSubjectResponse,
+    subject: CliAuthSubjectResponse,
 }
 
 pub(crate) fn web_routes() -> Router<Arc<AppState>> {
@@ -467,18 +467,18 @@ async fn token(
     let refresh_secret = random_secret();
     let refresh_token = format!("{REFRESH_TOKEN_PREFIX}{refresh_secret}");
     let refresh_row = RefreshToken {
-        token_hash:   hash_refresh_secret(&refresh_secret),
-        chain_id:     uuid::Uuid::new_v4(),
-        identity:     entry.identity.clone(),
-        login:        entry.login.clone(),
-        name:         entry.name.clone(),
-        email:        entry.email.clone(),
-        avatar_url:   entry.avatar_url.clone(),
-        issued_at:    now,
-        expires_at:   refresh_expires_at,
+        token_hash: hash_refresh_secret(&refresh_secret),
+        chain_id: uuid::Uuid::new_v4(),
+        identity: entry.identity.clone(),
+        login: entry.login.clone(),
+        name: entry.name.clone(),
+        email: entry.email.clone(),
+        avatar_url: entry.avatar_url.clone(),
+        issued_at: now,
+        expires_at: refresh_expires_at,
         last_used_at: now,
-        used:         false,
-        user_agent:   sanitize_user_agent(request_user_agent(&headers)),
+        used: false,
+        user_agent: sanitize_user_agent(request_user_agent(&headers)),
     };
     let auth_tokens = match state.store_ref().refresh_tokens().await {
         Ok(store) => store,
@@ -504,12 +504,12 @@ async fn token(
         jwt_key,
         jwt_issuer,
         &JwtSubject {
-            identity:    entry.identity,
-            login:       entry.login.clone(),
-            name:        entry.name.clone(),
-            email:       entry.email.clone(),
-            avatar_url:  entry.avatar_url.clone(),
-            user_url:    String::new(),
+            identity: entry.identity,
+            login: entry.login.clone(),
+            name: entry.name.clone(),
+            email: entry.email.clone(),
+            avatar_url: entry.avatar_url.clone(),
+            user_url: String::new(),
             auth_method: AuthMethod::Github,
         },
         chrono::Duration::minutes(ACCESS_TOKEN_TTL_MINUTES),
@@ -661,12 +661,12 @@ async fn refresh(
         jwt_key,
         jwt_issuer,
         &JwtSubject {
-            identity:    old.identity.clone(),
-            login:       old.login.clone(),
-            name:        old.name.clone(),
-            email:       old.email.clone(),
-            avatar_url:  old.avatar_url.clone(),
-            user_url:    String::new(),
+            identity: old.identity.clone(),
+            login: old.login.clone(),
+            name: old.name.clone(),
+            email: old.email.clone(),
+            avatar_url: old.avatar_url.clone(),
+            user_url: String::new(),
             auth_method: AuthMethod::Github,
         },
         chrono::Duration::minutes(ACCESS_TOKEN_TTL_MINUTES),
@@ -981,19 +981,19 @@ fn next_refresh_row(
     let fallback_identity = fabro_types::IdpIdentity::new("https://github.com", "0")
         .expect("static identity should be valid");
     RefreshToken {
-        token_hash:   hash_refresh_secret(next_secret),
-        chain_id:     existing.map_or_else(uuid::Uuid::new_v4, |token| token.chain_id),
-        identity:     existing
+        token_hash: hash_refresh_secret(next_secret),
+        chain_id: existing.map_or_else(uuid::Uuid::new_v4, |token| token.chain_id),
+        identity: existing
             .map_or_else(|| fallback_identity.clone(), |token| token.identity.clone()),
-        login:        existing.map_or_else(String::new, |token| token.login.clone()),
-        name:         existing.map_or_else(String::new, |token| token.name.clone()),
-        email:        existing.map_or_else(String::new, |token| token.email.clone()),
-        avatar_url:   existing.map_or_else(String::new, |token| token.avatar_url.clone()),
-        issued_at:    now,
-        expires_at:   now + chrono::Duration::days(REFRESH_TOKEN_TTL_DAYS),
+        login: existing.map_or_else(String::new, |token| token.login.clone()),
+        name: existing.map_or_else(String::new, |token| token.name.clone()),
+        email: existing.map_or_else(String::new, |token| token.email.clone()),
+        avatar_url: existing.map_or_else(String::new, |token| token.avatar_url.clone()),
+        issued_at: now,
+        expires_at: now + chrono::Duration::days(REFRESH_TOKEN_TTL_DAYS),
         last_used_at: now,
-        used:         false,
-        user_agent:   user_agent.to_string(),
+        used: false,
+        user_agent: user_agent.to_string(),
     }
 }
 
@@ -1062,11 +1062,11 @@ fn subject_response(
     email: &str,
 ) -> CliAuthSubjectResponse {
     CliAuthSubjectResponse {
-        idp_issuer:  identity.issuer().to_string(),
+        idp_issuer: identity.issuer().to_string(),
         idp_subject: identity.subject().to_string(),
-        login:       login.to_string(),
-        name:        name.to_string(),
-        email:       email.to_string(),
+        login: login.to_string(),
+        name: name.to_string(),
+        email: email.to_string(),
     }
 }
 
@@ -1083,11 +1083,14 @@ fn redirect_with_error(
     error: &str,
     error_description: &str,
 ) -> Response {
-    match redirect_uri_with_query(redirect_uri, &[
-        ("error", error),
-        ("error_description", error_description),
-        ("state", state),
-    ]) {
+    match redirect_uri_with_query(
+        redirect_uri,
+        &[
+            ("error", error),
+            ("error_description", error_description),
+            ("state", state),
+        ],
+    ) {
         Some(location) => Redirect::to(&location).into_response(),
         None => static_error_page(INVALID_REDIRECT_URI),
     }
@@ -1343,17 +1346,17 @@ client_id = "github-client-id"
 
     fn github_session_cookie(key: &Key) -> String {
         let session = SessionCookie {
-            v:           2,
-            login:       "octocat".to_string(),
+            v: 2,
+            login: "octocat".to_string(),
             auth_method: AuthMethod::Github,
-            identity:    fabro_types::IdpIdentity::new("https://github.com", "12345")
+            identity: fabro_types::IdpIdentity::new("https://github.com", "12345")
                 .expect("identity should be valid"),
-            name:        "The Octocat".to_string(),
-            email:       "octocat@example.com".to_string(),
-            avatar_url:  "https://example.com/octocat.png".to_string(),
-            user_url:    "https://github.com/octocat".to_string(),
-            iat:         chrono::Utc::now().timestamp(),
-            exp:         (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp(),
+            name: "The Octocat".to_string(),
+            email: "octocat@example.com".to_string(),
+            avatar_url: "https://example.com/octocat.png".to_string(),
+            user_url: "https://github.com/octocat".to_string(),
+            iat: chrono::Utc::now().timestamp(),
+            exp: (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp(),
         };
         let mut jar = cookie::CookieJar::new();
         jar.private_mut(key).add(cookie::Cookie::new(
@@ -1373,8 +1376,8 @@ client_id = "github-client-id"
             &mut jar,
             key,
             &CliFlowCookie {
-                redirect_uri:   "http://127.0.0.1:4444/callback".to_string(),
-                state:          "abcdefghijklmnop".to_string(),
+                redirect_uri: "http://127.0.0.1:4444/callback".to_string(),
+                state: "abcdefghijklmnop".to_string(),
                 code_challenge: "challenge".to_string(),
             },
             true,
@@ -1394,16 +1397,16 @@ client_id = "github-client-id"
         let auth_codes = state.store_ref().auth_codes().await.unwrap();
         auth_codes
             .insert(AuthCode {
-                code:           code.to_string(),
-                identity:       fabro_types::IdpIdentity::new("https://github.com", "12345")
+                code: code.to_string(),
+                identity: fabro_types::IdpIdentity::new("https://github.com", "12345")
                     .expect("identity should be valid"),
-                login:          "octocat".to_string(),
-                name:           "The Octocat".to_string(),
-                email:          "octocat@example.com".to_string(),
-                avatar_url:     "https://example.com/octocat.png".to_string(),
+                login: "octocat".to_string(),
+                name: "The Octocat".to_string(),
+                email: "octocat@example.com".to_string(),
+                avatar_url: "https://example.com/octocat.png".to_string(),
                 code_challenge: pkce_challenge(verifier),
-                redirect_uri:   "http://127.0.0.1:4444/callback".to_string(),
-                expires_at:     chrono::Utc::now() + chrono::Duration::seconds(60),
+                redirect_uri: "http://127.0.0.1:4444/callback".to_string(),
+                expires_at: chrono::Utc::now() + chrono::Duration::seconds(60),
             })
             .await
             .unwrap();
@@ -1416,19 +1419,19 @@ client_id = "github-client-id"
     fn refresh_row(secret: &str) -> RefreshToken {
         let now = chrono::Utc::now();
         RefreshToken {
-            token_hash:   hash_refresh_secret(secret),
-            chain_id:     Uuid::new_v4(),
-            identity:     fabro_types::IdpIdentity::new("https://github.com", "12345")
+            token_hash: hash_refresh_secret(secret),
+            chain_id: Uuid::new_v4(),
+            identity: fabro_types::IdpIdentity::new("https://github.com", "12345")
                 .expect("identity should be valid"),
-            login:        "octocat".to_string(),
-            name:         "The Octocat".to_string(),
-            email:        "octocat@example.com".to_string(),
-            avatar_url:   "https://example.com/octocat.png".to_string(),
-            issued_at:    now,
-            expires_at:   now + chrono::Duration::days(30),
+            login: "octocat".to_string(),
+            name: "The Octocat".to_string(),
+            email: "octocat@example.com".to_string(),
+            avatar_url: "https://example.com/octocat.png".to_string(),
+            issued_at: now,
+            expires_at: now + chrono::Duration::days(30),
             last_used_at: now,
-            used:         false,
-            user_agent:   "fabro-test".to_string(),
+            used: false,
+            user_agent: "fabro-test".to_string(),
         }
     }
 
@@ -1524,11 +1527,14 @@ client_id = "github-client-id"
         let mut headers = HeaderMap::new();
         headers.insert(header::COOKIE, cookie.parse().unwrap());
         let flow = read_private_cli_flow(&headers, &key).expect("flow cookie should decode");
-        assert_eq!(flow, CliFlowCookie {
-            redirect_uri:   "http://127.0.0.1:4444/callback".to_string(),
-            state:          "abcdefghijklmnop".to_string(),
-            code_challenge: "challenge".to_string(),
-        });
+        assert_eq!(
+            flow,
+            CliFlowCookie {
+                redirect_uri: "http://127.0.0.1:4444/callback".to_string(),
+                state: "abcdefghijklmnop".to_string(),
+                code_challenge: "challenge".to_string(),
+            }
+        );
     }
 
     #[tokio::test]
@@ -1607,11 +1613,14 @@ client_id = "github-client-id"
         let mut headers = HeaderMap::new();
         headers.insert(header::COOKIE, cookie.parse().unwrap());
         let flow = read_private_cli_flow(&headers, &key).expect("flow cookie should decode");
-        assert_eq!(flow, CliFlowCookie {
-            redirect_uri:   "http://127.0.0.1:4444/callback".to_string(),
-            state:          "abcdefghijklmnop".to_string(),
-            code_challenge: "challenge".to_string(),
-        });
+        assert_eq!(
+            flow,
+            CliFlowCookie {
+                redirect_uri: "http://127.0.0.1:4444/callback".to_string(),
+                state: "abcdefghijklmnop".to_string(),
+                code_challenge: "challenge".to_string(),
+            }
+        );
     }
 
     #[tokio::test]
@@ -1685,8 +1694,8 @@ client_id = "github-client-id"
             &mut jar,
             &key,
             &CliFlowCookie {
-                redirect_uri:   "http://127.0.0.1:4444/callback".to_string(),
-                state:          "abcdefghijklmnop".to_string(),
+                redirect_uri: "http://127.0.0.1:4444/callback".to_string(),
+                state: "abcdefghijklmnop".to_string(),
                 code_challenge: "challenge".to_string(),
             },
             true,
@@ -1728,8 +1737,8 @@ client_id = "github-client-id"
             &mut jar,
             &key,
             &CliFlowCookie {
-                redirect_uri:   "http://127.0.0.1:4444/callback".to_string(),
-                state:          "abcdefghijklmnop".to_string(),
+                redirect_uri: "http://127.0.0.1:4444/callback".to_string(),
+                state: "abcdefghijklmnop".to_string(),
                 code_challenge: "challenge".to_string(),
             },
             true,
@@ -1789,8 +1798,8 @@ client_id = "github-client-id"
             &mut jar,
             &key,
             &CliFlowCookie {
-                redirect_uri:   "http://127.0.0.1:4444/callback".to_string(),
-                state:          "abcdefghijklmnop".to_string(),
+                redirect_uri: "http://127.0.0.1:4444/callback".to_string(),
+                state: "abcdefghijklmnop".to_string(),
                 code_challenge: "challenge".to_string(),
             },
             true,
@@ -1831,8 +1840,8 @@ client_id = "github-client-id"
             &mut jar,
             &key,
             &CliFlowCookie {
-                redirect_uri:   "http://127.0.0.1:4444/callback".to_string(),
-                state:          "abcdefghijklmnop".to_string(),
+                redirect_uri: "http://127.0.0.1:4444/callback".to_string(),
+                state: "abcdefghijklmnop".to_string(),
                 code_challenge: "challenge".to_string(),
             },
             true,
@@ -1878,8 +1887,8 @@ client_id = "github-client-id"
             &mut jar,
             &key,
             &CliFlowCookie {
-                redirect_uri:   "http://127.0.0.1:4444/callback".to_string(),
-                state:          "abcdefghijklmnop".to_string(),
+                redirect_uri: "http://127.0.0.1:4444/callback".to_string(),
+                state: "abcdefghijklmnop".to_string(),
                 code_challenge: "challenge".to_string(),
             },
             true,

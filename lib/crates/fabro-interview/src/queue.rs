@@ -9,15 +9,18 @@ use crate::{Answer, AnswerSubmission, Interviewer, Question};
 /// Reads answers from a pre-filled queue. Returns Interrupted when empty.
 pub struct QueueInterviewer {
     answers: Mutex<VecDeque<Answer>>,
-    actor:   Principal,
+    actor: Principal,
 }
 
 impl QueueInterviewer {
     #[must_use]
     pub fn new(answers: VecDeque<Answer>) -> Self {
-        Self::with_actor(answers, Principal::System {
-            system_kind: SystemActorKind::Engine,
-        })
+        Self::with_actor(
+            answers,
+            Principal::System {
+                system_kind: SystemActorKind::Engine,
+            },
+        )
     }
 
     #[must_use]

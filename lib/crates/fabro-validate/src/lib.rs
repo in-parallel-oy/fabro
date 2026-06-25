@@ -15,46 +15,46 @@ pub enum Severity {
 /// A validation diagnostic produced by a lint rule.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagnostic {
-    pub rule:        String,
-    pub severity:    Severity,
-    pub message:     String,
-    pub node_id:     Option<String>,
-    pub edge:        Option<(String, String)>,
-    pub fix:         Option<String>,
+    pub rule: String,
+    pub severity: Severity,
+    pub message: String,
+    pub node_id: Option<String>,
+    pub edge: Option<(String, String)>,
+    pub fix: Option<String>,
     pub source_path: Option<String>,
-    pub line:        Option<u32>,
-    pub column:      Option<u32>,
-    pub span_start:  Option<usize>,
-    pub span_len:    Option<usize>,
+    pub line: Option<u32>,
+    pub column: Option<u32>,
+    pub span_start: Option<usize>,
+    pub span_len: Option<usize>,
     #[serde(default)]
-    pub related:     Vec<RelatedDiagnostic>,
+    pub related: Vec<RelatedDiagnostic>,
 }
 
 impl Default for Diagnostic {
     fn default() -> Self {
         Self {
-            rule:        String::new(),
-            severity:    Severity::Info,
-            message:     String::new(),
-            node_id:     None,
-            edge:        None,
-            fix:         None,
+            rule: String::new(),
+            severity: Severity::Info,
+            message: String::new(),
+            node_id: None,
+            edge: None,
+            fix: None,
             source_path: None,
-            line:        None,
-            column:      None,
-            span_start:  None,
-            span_len:    None,
-            related:     Vec::new(),
+            line: None,
+            column: None,
+            span_start: None,
+            span_len: None,
+            related: Vec::new(),
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelatedDiagnostic {
-    pub message:     String,
+    pub message: String,
     pub source_path: Option<String>,
-    pub line:        Option<u32>,
-    pub column:      Option<u32>,
+    pub line: Option<u32>,
+    pub column: Option<u32>,
 }
 
 /// A lint rule that validates a graph.

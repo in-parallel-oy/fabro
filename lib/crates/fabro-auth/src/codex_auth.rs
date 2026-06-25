@@ -137,19 +137,19 @@ mod tests {
 
     fn credential(expires_at: chrono::DateTime<Utc>, id_token: Option<&str>) -> OAuthCredential {
         OAuthCredential {
-            tokens:     OAuthTokens {
+            tokens: OAuthTokens {
                 access_token: "stored-access".to_string(),
                 refresh_token: Some("stored-refresh".to_string()),
                 expires_at,
                 id_token: id_token.map(str::to_string),
             },
-            config:     OAuthConfig {
-                auth_url:     "https://auth.openai.com".to_string(),
-                token_url:    "https://auth.openai.com/oauth/token".to_string(),
-                client_id:    "client".to_string(),
-                scopes:       vec!["openid".to_string()],
+            config: OAuthConfig {
+                auth_url: "https://auth.openai.com".to_string(),
+                token_url: "https://auth.openai.com/oauth/token".to_string(),
+                client_id: "client".to_string(),
+                scopes: vec!["openid".to_string()],
                 redirect_uri: None,
-                use_pkce:     true,
+                use_pkce: true,
             },
             account_id: Some("acct_123".to_string()),
         }

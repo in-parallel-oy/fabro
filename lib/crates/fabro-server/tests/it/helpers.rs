@@ -31,7 +31,7 @@ pub(crate) const POLL_ATTEMPTS: usize = 500;
 
 #[derive(Clone)]
 pub(crate) struct TestAppSettings {
-    pub server_settings:       ServerSettings,
+    pub server_settings: ServerSettings,
     pub manifest_run_defaults: RunLayer,
 }
 

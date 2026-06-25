@@ -100,7 +100,7 @@ struct ListRunSessionsParams {
     #[serde(flatten)]
     pagination: PaginationParams,
     #[serde(default)]
-    order:      RunSessionListOrder,
+    order: RunSessionListOrder,
 }
 
 async fn list_run_sessions(
@@ -738,9 +738,9 @@ async fn build_agent_session(
         .map_err(AskFabroBuildError::Agent)?;
     let backend = ClientBackend::new(Arc::new(api_client)).with_run_scope(run_id);
     let services = FabroRunToolServices {
-        backend:            Arc::new(backend),
-        current_run_id:     run_id,
-        base_cwd:           PathBuf::new(),
+        backend: Arc::new(backend),
+        current_run_id: run_id,
+        base_cwd: PathBuf::new(),
         user_settings_path: PathBuf::new(),
     };
     register_named_fabro_run_tools(
@@ -884,7 +884,7 @@ fn build_profile(
     catalog: Arc<Catalog>,
 ) -> Box<dyn AgentProfile> {
     let summarizer = Some(WebFetchSummarizer {
-        client:   llm_client.clone(),
+        client: llm_client.clone(),
         model_id: summarizer_model_id(&provider_id, profile_kind, &catalog, model),
     });
     match profile_kind {
@@ -914,7 +914,7 @@ fn summarizer_model_id(
 ) -> ModelHandle {
     ModelHandle::ByName {
         provider: provider_id.clone(),
-        model:    catalog
+        model: catalog
             .default_for_provider(provider_id)
             .map_or_else(
                 || match profile_kind {
@@ -1112,7 +1112,7 @@ User question:
 }
 
 struct AskFabroProfile {
-    inner:  Box<dyn AgentProfile>,
+    inner: Box<dyn AgentProfile>,
     policy: Arc<dyn ToolAccessPolicy>,
 }
 
@@ -1513,14 +1513,12 @@ mod tests {
     fn stub_tool(name: &str) -> RegisteredTool {
         RegisteredTool {
             definition: ToolDefinition {
-                name:        name.to_string(),
+                name: name.to_string(),
                 description: format!("{name} test tool"),
-                parameters:  serde_json::json!({"type": "object"}),
+                parameters: serde_json::json!({"type": "object"}),
             },
-            executor:   Arc::new(|_args, _ctx: ToolContext| {
-                Box::pin(async { Ok("ok".to_string()) })
-            }),
-            source:     ToolSource::Native,
+            executor: Arc::new(|_args, _ctx: ToolContext| Box::pin(async { Ok("ok".to_string()) })),
+            source: ToolSource::Native,
         }
     }
 
@@ -1549,9 +1547,12 @@ mod tests {
     #[test]
     fn agent_event_payload_maps_text_delta_to_session_assistant_delta() {
         let turn_id = TurnId::new();
-        let body = agent_event_payload(turn_id, AgentEvent::TextDelta {
-            delta: "Hello".to_string(),
-        });
+        let body = agent_event_payload(
+            turn_id,
+            AgentEvent::TextDelta {
+                delta: "Hello".to_string(),
+            },
+        );
 
         match body {
             Some(EventBody::RunSessionAssistantDelta(props)) => {
@@ -1565,9 +1566,12 @@ mod tests {
     #[test]
     fn agent_event_payload_drops_reasoning_delta() {
         let turn_id = TurnId::new();
-        let body = agent_event_payload(turn_id, AgentEvent::ReasoningDelta {
-            delta: "The user just said hello.".to_string(),
-        });
+        let body = agent_event_payload(
+            turn_id,
+            AgentEvent::ReasoningDelta {
+                delta: "The user just said hello.".to_string(),
+            },
+        );
 
         assert!(body.is_none(), "reasoning delta should not be visible");
     }
@@ -1610,13 +1614,16 @@ mod tests {
             .collect();
         names.sort();
 
-        assert_eq!(names, vec![
-            "fabro_run_events",
-            "fabro_run_get",
-            "glob",
-            "grep",
-            "read_file",
-        ]);
+        assert_eq!(
+            names,
+            vec![
+                "fabro_run_events",
+                "fabro_run_get",
+                "glob",
+                "grep",
+                "read_file",
+            ]
+        );
     }
 
     #[test]
@@ -1732,12 +1739,12 @@ mod tests {
             };
             if *node_id == "test" {
                 stage.completion = Some(fabro_types::StageCompletion {
-                    outcome:        fabro_types::StageOutcome::Failed {
+                    outcome: fabro_types::StageOutcome::Failed {
                         retry_requested: false,
                     },
-                    notes:          None,
+                    notes: None,
                     failure_reason: Some("tests failed".to_string()),
-                    timestamp:      now,
+                    timestamp: now,
                 });
                 stage.state = fabro_types::StageState::Failed;
             }
@@ -1781,18 +1788,18 @@ mod tests {
             let executions = Arc::clone(&executions);
             registry.register(RegisteredTool {
                 definition: ToolDefinition {
-                    name:        tool_name.to_string(),
+                    name: tool_name.to_string(),
                     description: format!("{tool_name} test tool"),
-                    parameters:  serde_json::json!({"type": "object"}),
+                    parameters: serde_json::json!({"type": "object"}),
                 },
-                executor:   Arc::new(move |_args, _ctx: ToolContext| {
+                executor: Arc::new(move |_args, _ctx: ToolContext| {
                     let executions = Arc::clone(&executions);
                     Box::pin(async move {
                         executions.fetch_add(1, Ordering::SeqCst);
                         Ok("executed".to_string())
                     })
                 }),
-                source:     ToolSource::Native,
+                source: ToolSource::Native,
             });
         }
         let config = SessionOptions {

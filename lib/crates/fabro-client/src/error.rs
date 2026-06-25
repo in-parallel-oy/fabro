@@ -5,7 +5,7 @@ use serde::de::DeserializeOwned;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApiFailure {
     pub status: fabro_http::StatusCode,
-    pub code:   Option<String>,
+    pub code: Option<String>,
 }
 
 // Transparent wrapper that attaches an ApiFailure to an anyhow error while
@@ -13,7 +13,7 @@ pub struct ApiFailure {
 // so callers can branch on HTTP status without substring matching.
 struct TaggedFailure {
     failure: ApiFailure,
-    inner:   anyhow::Error,
+    inner: anyhow::Error,
 }
 
 impl std::fmt::Debug for TaggedFailure {
@@ -48,15 +48,15 @@ pub fn api_failure_for(err: &anyhow::Error) -> Option<&ApiFailure> {
 }
 
 pub struct StructuredApiError {
-    pub error:   anyhow::Error,
+    pub error: anyhow::Error,
     pub failure: Option<ApiFailure>,
 }
 
 pub struct ApiError {
-    pub status:  fabro_http::StatusCode,
+    pub status: fabro_http::StatusCode,
     pub headers: fabro_http::HeaderMap,
-    pub body:    String,
-    failure:     ApiFailure,
+    pub body: String,
+    failure: ApiFailure,
 }
 
 impl ApiError {
@@ -97,7 +97,7 @@ fn build_structured_error(
     let failure = ApiFailure { status, code };
     let tagged = tag_with_failure(error, failure.clone());
     StructuredApiError {
-        error:   classify_from_status(tagged, status),
+        error: classify_from_status(tagged, status),
         failure: Some(failure),
     }
 }
@@ -151,7 +151,7 @@ where
             build_structured_error(anyhow!("request failed with status {status}"), status, None)
         }
         other => StructuredApiError {
-            error:   anyhow::Error::new(other),
+            error: anyhow::Error::new(other),
             failure: None,
         },
     }

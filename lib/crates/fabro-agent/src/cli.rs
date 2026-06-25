@@ -198,7 +198,7 @@ fn summarizer_model_id(
 ) -> ModelHandle {
     ModelHandle::ByName {
         provider: provider_id.clone(),
-        model:    catalog
+        model: catalog
             .default_for_provider(provider_id)
             .map_or_else(
                 || match provider_id.as_str() {
@@ -219,7 +219,7 @@ fn build_summarizer(
     llm_client: Client,
 ) -> WebFetchSummarizer {
     WebFetchSummarizer {
-        client:   llm_client,
+        client: llm_client,
         model_id: summarizer_model_id(provider_id, catalog, model),
     }
 }
@@ -1014,25 +1014,26 @@ mod tests {
     #[test]
     fn profile_kind_accepts_custom_catalog_provider() {
         let mut settings = LlmCatalogSettings::default();
-        settings
-            .providers
-            .insert("acme-aws".to_string(), ProviderCatalogSettings {
+        settings.providers.insert(
+            "acme-aws".to_string(),
+            ProviderCatalogSettings {
                 display_name: Some("Acme AWS".to_string()),
                 adapter: Some("openai_compatible".to_string()),
                 base_url: Some("https://example.invalid/v1".to_string()),
                 agent_profile: Some(AgentProfileKind::OpenAi),
                 ..ProviderCatalogSettings::default()
-            });
+            },
+        );
         let catalog = Catalog::from_builtin_with_overrides(&settings).unwrap();
         let args = AgentArgs {
-            prompt:        "test".to_string(),
-            provider:      Some("acme-aws".to_string()),
-            model:         None,
-            permissions:   None,
-            auto_approve:  false,
-            debug:         false,
-            verbose:       false,
-            skills_dir:    None,
+            prompt: "test".to_string(),
+            provider: Some("acme-aws".to_string()),
+            model: None,
+            permissions: None,
+            auto_approve: false,
+            debug: false,
+            verbose: false,
+            skills_dir: None,
             output_format: None,
         };
 
@@ -1047,46 +1048,48 @@ mod tests {
     #[test]
     fn standalone_provider_resolution_uses_catalog_model_provider_when_provider_omitted() {
         let mut settings = LlmCatalogSettings::default();
-        settings
-            .providers
-            .insert("acme-aws".to_string(), ProviderCatalogSettings {
+        settings.providers.insert(
+            "acme-aws".to_string(),
+            ProviderCatalogSettings {
                 display_name: Some("Acme AWS".to_string()),
                 adapter: Some("openai_compatible".to_string()),
                 base_url: Some("https://example.invalid/v1".to_string()),
                 agent_profile: Some(AgentProfileKind::OpenAi),
                 ..ProviderCatalogSettings::default()
-            });
-        settings
-            .models
-            .insert("acme-aws-claude".to_string(), ModelCatalogSettings {
+            },
+        );
+        settings.models.insert(
+            "acme-aws-claude".to_string(),
+            ModelCatalogSettings {
                 provider: Some("acme-aws".to_string()),
                 display_name: Some("Acme AWS Claude".to_string()),
                 family: Some("claude".to_string()),
                 default: Some(true),
                 limits: Some(SettingsModelLimits {
                     context_window: Some(1000),
-                    max_output:     None,
+                    max_output: None,
                 }),
                 features: Some(SettingsModelFeatures {
-                    tools:            Some(true),
-                    vision:           Some(false),
-                    reasoning:        Some(false),
+                    tools: Some(true),
+                    vision: Some(false),
+                    reasoning: Some(false),
                     reasoning_effort: None,
-                    prompt_cache:     None,
-                    sampling_params:  None,
+                    prompt_cache: None,
+                    sampling_params: None,
                 }),
                 ..ModelCatalogSettings::default()
-            });
+            },
+        );
         let catalog = Catalog::from_builtin_with_overrides(&settings).unwrap();
         let args = AgentArgs {
-            prompt:        "test".to_string(),
-            provider:      None,
-            model:         Some("acme-aws-claude".to_string()),
-            permissions:   None,
-            auto_approve:  false,
-            debug:         false,
-            verbose:       false,
-            skills_dir:    None,
+            prompt: "test".to_string(),
+            provider: None,
+            model: Some("acme-aws-claude".to_string()),
+            permissions: None,
+            auto_approve: false,
+            debug: false,
+            verbose: false,
+            skills_dir: None,
             output_format: None,
         };
 
@@ -1099,26 +1102,27 @@ mod tests {
     #[test]
     fn standalone_provider_resolution_canonicalizes_explicit_provider_alias() {
         let mut settings = LlmCatalogSettings::default();
-        settings
-            .providers
-            .insert("acme-aws".to_string(), ProviderCatalogSettings {
+        settings.providers.insert(
+            "acme-aws".to_string(),
+            ProviderCatalogSettings {
                 display_name: Some("Acme AWS".to_string()),
                 adapter: Some("openai_compatible".to_string()),
                 base_url: Some("https://example.invalid/v1".to_string()),
                 agent_profile: Some(AgentProfileKind::OpenAi),
                 aliases: Some(vec!["br".to_string()]),
                 ..ProviderCatalogSettings::default()
-            });
+            },
+        );
         let catalog = Catalog::from_builtin_with_overrides(&settings).unwrap();
         let args = AgentArgs {
-            prompt:        "test".to_string(),
-            provider:      Some("br".to_string()),
-            model:         None,
-            permissions:   None,
-            auto_approve:  false,
-            debug:         false,
-            verbose:       false,
-            skills_dir:    None,
+            prompt: "test".to_string(),
+            provider: Some("br".to_string()),
+            model: None,
+            permissions: None,
+            auto_approve: false,
+            debug: false,
+            verbose: false,
+            skills_dir: None,
             output_format: None,
         };
 
@@ -1131,18 +1135,19 @@ mod tests {
     #[test]
     fn standalone_profile_kind_uses_model_agent_profile_override() {
         let mut settings = LlmCatalogSettings::default();
-        settings
-            .providers
-            .insert("acme-aws".to_string(), ProviderCatalogSettings {
+        settings.providers.insert(
+            "acme-aws".to_string(),
+            ProviderCatalogSettings {
                 display_name: Some("Acme AWS".to_string()),
                 adapter: Some("openai_compatible".to_string()),
                 base_url: Some("https://example.invalid/v1".to_string()),
                 agent_profile: Some(AgentProfileKind::OpenAi),
                 ..ProviderCatalogSettings::default()
-            });
-        settings
-            .models
-            .insert("acme-aws-claude".to_string(), ModelCatalogSettings {
+            },
+        );
+        settings.models.insert(
+            "acme-aws-claude".to_string(),
+            ModelCatalogSettings {
                 provider: Some("acme-aws".to_string()),
                 display_name: Some("Acme AWS Claude".to_string()),
                 family: Some("claude".to_string()),
@@ -1150,18 +1155,19 @@ mod tests {
                 agent_profile: Some(AgentProfileKind::Anthropic),
                 limits: Some(SettingsModelLimits {
                     context_window: Some(1000),
-                    max_output:     None,
+                    max_output: None,
                 }),
                 features: Some(SettingsModelFeatures {
-                    tools:            Some(true),
-                    vision:           Some(false),
-                    reasoning:        Some(false),
+                    tools: Some(true),
+                    vision: Some(false),
+                    reasoning: Some(false),
                     reasoning_effort: None,
-                    prompt_cache:     None,
-                    sampling_params:  None,
+                    prompt_cache: None,
+                    sampling_params: None,
                 }),
                 ..ModelCatalogSettings::default()
-            });
+            },
+        );
         let catalog = Catalog::from_builtin_with_overrides(&settings).unwrap();
 
         assert_eq!(
@@ -1178,15 +1184,16 @@ mod tests {
     #[test]
     fn summarizer_model_id_uses_selected_model_for_custom_provider_without_default() {
         let mut settings = LlmCatalogSettings::default();
-        settings
-            .providers
-            .insert("acme-aws".to_string(), ProviderCatalogSettings {
+        settings.providers.insert(
+            "acme-aws".to_string(),
+            ProviderCatalogSettings {
                 display_name: Some("Acme AWS".to_string()),
                 adapter: Some("openai_compatible".to_string()),
                 base_url: Some("https://example.invalid/v1".to_string()),
                 agent_profile: Some(AgentProfileKind::OpenAi),
                 ..ProviderCatalogSettings::default()
-            });
+            },
+        );
         let catalog = Catalog::from_builtin_with_overrides(&settings).unwrap();
         let provider_id = ProviderId::new("acme-aws");
 
@@ -1199,15 +1206,16 @@ mod tests {
     #[test]
     fn summarizer_model_id_ignores_profile_for_custom_provider_without_default() {
         let mut settings = LlmCatalogSettings::default();
-        settings
-            .providers
-            .insert("acme-aws".to_string(), ProviderCatalogSettings {
+        settings.providers.insert(
+            "acme-aws".to_string(),
+            ProviderCatalogSettings {
                 display_name: Some("Acme AWS".to_string()),
                 adapter: Some("openai_compatible".to_string()),
                 base_url: Some("https://example.invalid/v1".to_string()),
                 agent_profile: Some(AgentProfileKind::Anthropic),
                 ..ProviderCatalogSettings::default()
-            });
+            },
+        );
         let catalog = Catalog::from_builtin_with_overrides(&settings).unwrap();
         let provider_id = ProviderId::new("acme-aws");
 

@@ -39,19 +39,19 @@ pub(crate) fn build_local_snapshot(input: ContextWindowInput<'_>) -> StageContex
 
     if input.activated_skill_context_observed {
         warnings.push(StageContextWindowWarning {
-            code:    "activated_skill_context_counted_as_conversation".to_string(),
+            code: "activated_skill_context_counted_as_conversation".to_string(),
             message: "Activated skill instructions are counted as conversation in this version."
                 .to_string(),
         });
     }
 
     builder.into_snapshot(SnapshotMeta {
-        provider:              input.provider.to_string(),
-        model:                 input.model.to_string(),
+        provider: input.provider.to_string(),
+        model: input.model.to_string(),
         context_window_tokens: u64::try_from(input.context_window_tokens).unwrap_or(u64::MAX),
-        count_method:          StageContextWindowCountMethod::LocalEstimate,
-        staleness:             StageContextWindowStaleness::Live,
-        warnings:              dedupe_warnings_by_code(warnings),
+        count_method: StageContextWindowCountMethod::LocalEstimate,
+        staleness: StageContextWindowStaleness::Live,
+        warnings: dedupe_warnings_by_code(warnings),
     })
 }
 
@@ -143,7 +143,7 @@ fn warnings_from_llm(warnings: &[LlmWarning]) -> Vec<StageContextWindowWarning> 
     warnings
         .iter()
         .map(|warning| StageContextWindowWarning {
-            code:    warning
+            code: warning
                 .code
                 .clone()
                 .unwrap_or_else(|| "token_count_warning".to_string()),
@@ -274,12 +274,12 @@ impl BreakdownBuilder {
 }
 
 struct SnapshotMeta {
-    provider:              String,
-    model:                 String,
+    provider: String,
+    model: String,
     context_window_tokens: u64,
-    count_method:          StageContextWindowCountMethod,
-    staleness:             StageContextWindowStaleness,
-    warnings:              Vec<StageContextWindowWarning>,
+    count_method: StageContextWindowCountMethod,
+    staleness: StageContextWindowStaleness,
+    warnings: Vec<StageContextWindowWarning>,
 }
 
 /// Proportionally scale a local breakdown so it sums to `target_total`. Any
@@ -294,8 +294,8 @@ fn scale_breakdown(
     if breakdown.is_empty() || local_total == 0 {
         return (target_total > 0)
             .then(|| StageContextWindowBreakdownItem {
-                category:      StageContextWindowCategory::Other,
-                tokens:        target_total,
+                category: StageContextWindowCategory::Other,
+                tokens: target_total,
                 usage_percent: usage_percent(target_total, context_window_tokens),
             })
             .into_iter()
@@ -376,16 +376,16 @@ mod tests {
     #[test]
     fn local_breakdown_buckets_system_memory_skills_tools_and_conversation() {
         let memory = vec![MemoryDocument {
-            path:         "/repo/AGENTS.md".to_string(),
-            content:      "memory instructions".to_string(),
-            byte_count:   19,
+            path: "/repo/AGENTS.md".to_string(),
+            content: "memory instructions".to_string(),
+            byte_count: 19,
             loaded_bytes: 19,
-            truncated:    false,
+            truncated: false,
         }];
         let skills = vec![Skill {
-            name:        "commit".to_string(),
+            name: "commit".to_string(),
             description: "Commit changes".to_string(),
-            template:    "commit template".to_string(),
+            template: "commit template".to_string(),
         }];
         let system_prompt = format!(
             "core prompt{}{}",
@@ -394,10 +394,13 @@ mod tests {
         );
         let tools = vec![
             tool("read_file", ToolSource::Native),
-            tool("mcp__server__search", ToolSource::Mcp {
-                server_name:   "server".to_string(),
-                original_name: "search".to_string(),
-            }),
+            tool(
+                "mcp__server__search",
+                ToolSource::Mcp {
+                    server_name: "server".to_string(),
+                    original_name: "search".to_string(),
+                },
+            ),
             tool("use_skill", ToolSource::Skill),
         ];
         let req = request(
@@ -449,28 +452,28 @@ mod tests {
     #[test]
     fn scaled_breakdown_totals_provider_count() {
         let local = StageContextWindowProjection {
-            provider:              "test".to_string(),
-            model:                 "model-a".to_string(),
+            provider: "test".to_string(),
+            model: "model-a".to_string(),
             context_window_tokens: 1000,
-            input_tokens:          30,
-            usage_percent:         3.0,
-            count_method:          StageContextWindowCountMethod::LocalEstimate,
-            staleness:             StageContextWindowStaleness::Live,
-            generated_at:          Utc::now(),
-            event_seq:             None,
-            breakdown:             vec![
+            input_tokens: 30,
+            usage_percent: 3.0,
+            count_method: StageContextWindowCountMethod::LocalEstimate,
+            staleness: StageContextWindowStaleness::Live,
+            generated_at: Utc::now(),
+            event_seq: None,
+            breakdown: vec![
                 StageContextWindowBreakdownItem {
-                    category:      StageContextWindowCategory::SystemPrompt,
-                    tokens:        10,
+                    category: StageContextWindowCategory::SystemPrompt,
+                    tokens: 10,
                     usage_percent: 0.0,
                 },
                 StageContextWindowBreakdownItem {
-                    category:      StageContextWindowCategory::Conversation,
-                    tokens:        20,
+                    category: StageContextWindowCategory::Conversation,
+                    tokens: 20,
                     usage_percent: 0.0,
                 },
             ],
-            warnings:              Vec::new(),
+            warnings: Vec::new(),
         };
 
         let scaled = scaled_snapshot(
@@ -491,21 +494,21 @@ mod tests {
     /// semantic warning, used by the warning-suppression assertions below.
     fn snapshot_for_warning_test() -> StageContextWindowProjection {
         StageContextWindowProjection {
-            provider:              "test".to_string(),
-            model:                 "model-a".to_string(),
+            provider: "test".to_string(),
+            model: "model-a".to_string(),
             context_window_tokens: 1000,
-            input_tokens:          50,
-            usage_percent:         5.0,
-            count_method:          StageContextWindowCountMethod::LocalEstimate,
-            staleness:             StageContextWindowStaleness::Live,
-            generated_at:          Utc::now(),
-            event_seq:             None,
-            breakdown:             vec![StageContextWindowBreakdownItem {
-                category:      StageContextWindowCategory::Conversation,
-                tokens:        50,
+            input_tokens: 50,
+            usage_percent: 5.0,
+            count_method: StageContextWindowCountMethod::LocalEstimate,
+            staleness: StageContextWindowStaleness::Live,
+            generated_at: Utc::now(),
+            event_seq: None,
+            breakdown: vec![StageContextWindowBreakdownItem {
+                category: StageContextWindowCategory::Conversation,
+                tokens: 50,
                 usage_percent: 5.0,
             }],
-            warnings:              Vec::new(),
+            warnings: Vec::new(),
         }
     }
 
@@ -513,15 +516,15 @@ mod tests {
         use fabro_llm::token_count::{MEDIA_ESTIMATE_WARNING, OPAQUE_CONTEXT_ESTIMATE_WARNING};
         vec![
             StageContextWindowWarning {
-                code:    OPAQUE_CONTEXT_ESTIMATE_WARNING.to_string(),
+                code: OPAQUE_CONTEXT_ESTIMATE_WARNING.to_string(),
                 message: "noise".to_string(),
             },
             StageContextWindowWarning {
-                code:    MEDIA_ESTIMATE_WARNING.to_string(),
+                code: MEDIA_ESTIMATE_WARNING.to_string(),
                 message: "noise".to_string(),
             },
             StageContextWindowWarning {
-                code:    "activated_skill_context_counted_as_conversation".to_string(),
+                code: "activated_skill_context_counted_as_conversation".to_string(),
                 message: "kept".to_string(),
             },
         ]
@@ -537,9 +540,10 @@ mod tests {
             warnings_in(),
         );
         let codes: Vec<_> = scaled.warnings.iter().map(|w| w.code.as_str()).collect();
-        assert_eq!(codes, vec![
-            "activated_skill_context_counted_as_conversation"
-        ]);
+        assert_eq!(
+            codes,
+            vec!["activated_skill_context_counted_as_conversation"]
+        );
     }
 
     #[test]
@@ -552,9 +556,10 @@ mod tests {
             warnings_in(),
         );
         let codes: Vec<_> = scaled.warnings.iter().map(|w| w.code.as_str()).collect();
-        assert_eq!(codes, vec![
-            "activated_skill_context_counted_as_conversation"
-        ]);
+        assert_eq!(
+            codes,
+            vec!["activated_skill_context_counted_as_conversation"]
+        );
     }
 
     #[test]
@@ -569,11 +574,14 @@ mod tests {
         let codes: Vec<_> = scaled.warnings.iter().map(|w| w.code.as_str()).collect();
         // When the total itself is locally estimated, the estimator-noise
         // warnings remain meaningful and must surface.
-        assert_eq!(codes, vec![
-            "opaque_context_estimate",
-            "media_token_estimate",
-            "activated_skill_context_counted_as_conversation",
-        ]);
+        assert_eq!(
+            codes,
+            vec![
+                "opaque_context_estimate",
+                "media_token_estimate",
+                "activated_skill_context_counted_as_conversation",
+            ]
+        );
     }
 
     #[test]
@@ -585,7 +593,7 @@ mod tests {
         // had an opaque block, so a long conversation accumulates many copies.
         let repeated: Vec<_> = (0..5)
             .map(|i| StageContextWindowWarning {
-                code:    OPAQUE_CONTEXT_ESTIMATE_WARNING.to_string(),
+                code: OPAQUE_CONTEXT_ESTIMATE_WARNING.to_string(),
                 message: format!("turn {i}"),
             })
             .collect();

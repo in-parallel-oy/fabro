@@ -8,16 +8,16 @@ use crate::server::SharedState;
 
 #[derive(Debug, Deserialize)]
 pub struct AuthorizeParams {
-    pub client_id:    String,
+    pub client_id: String,
     pub redirect_uri: String,
-    pub state:        String,
+    pub state: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct TokenRequest {
-    pub client_id:     String,
+    pub client_id: String,
     pub client_secret: String,
-    pub code:          String,
+    pub code: String,
 }
 
 pub async fn authorize(
@@ -28,12 +28,13 @@ pub async fn authorize(
     let redirect_url = if state.allow_authorize {
         let code = format!("oauth-code-{}", uuid::Uuid::new_v4());
         let subject = state.oauth_subject();
-        state
-            .oauth_codes
-            .insert(code.clone(), crate::state::OauthCode {
+        state.oauth_codes.insert(
+            code.clone(),
+            crate::state::OauthCode {
                 client_id: params.client_id.clone(),
                 subject,
-            });
+            },
+        );
         format!(
             "{}?code={}&state={}",
             params.redirect_uri, code, params.state

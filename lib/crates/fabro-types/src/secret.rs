@@ -17,13 +17,13 @@ pub enum SecretType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecretMetadata {
-    pub name:        String,
+    pub name: String,
     #[serde(rename = "type")]
     pub secret_type: SecretType,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    pub created_at:  DateTime<Utc>,
-    pub updated_at:  DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[cfg(test)]

@@ -12,7 +12,7 @@ fn model_limits_reuses_canonical_type() {
 fn model_limits_json_matches_openapi_shape() {
     let limits = ModelLimits {
         context_window: 1_000_000,
-        max_output:     Some(128_000),
+        max_output: Some(128_000),
     };
 
     let json = serde_json::to_value(&limits).unwrap();

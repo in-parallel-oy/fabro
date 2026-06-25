@@ -19,7 +19,7 @@ use tokio::task::JoinHandle;
 const MAX_SSE_MESSAGE_BYTES: usize = 1024 * 1024;
 
 pub(crate) struct SseClientTransport {
-    client:      fabro_http::HttpClient,
+    client: fabro_http::HttpClient,
     endpoint_rx: watch::Receiver<Option<String>>,
     messages_rx: mpsc::Receiver<ServerJsonRpcMessage>,
     stream_task: Option<JoinHandle<()>>,
@@ -199,7 +199,7 @@ fn resolve_endpoint_url(sse_url: &Url, endpoint: &str) -> Result<Url> {
 #[derive(Default)]
 struct SseSizeGuard {
     current_event_bytes: usize,
-    current_line_bytes:  usize,
+    current_line_bytes: usize,
 }
 
 impl SseSizeGuard {

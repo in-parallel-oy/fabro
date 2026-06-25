@@ -2,7 +2,7 @@ use crate::Principal;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SteeringMessage {
-    pub text:  String,
+    pub text: String,
     pub actor: Option<Principal>,
 }
 

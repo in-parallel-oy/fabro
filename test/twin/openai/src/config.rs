@@ -5,7 +5,7 @@ use fabro_static::EnvVars;
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub bind_addr:    SocketAddr,
+    pub bind_addr: SocketAddr,
     pub require_auth: bool,
     pub enable_admin: bool,
 }
@@ -50,7 +50,7 @@ fn process_env_var(name: &str) -> Option<String> {
 impl Default for Config {
     fn default() -> Self {
         Self::from_env().unwrap_or(Self {
-            bind_addr:    SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 3000),
+            bind_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 3000),
             require_auth: true,
             enable_admin: true,
         })

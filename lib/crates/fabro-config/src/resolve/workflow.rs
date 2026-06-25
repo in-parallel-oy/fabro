@@ -8,12 +8,12 @@ pub fn resolve_workflow(
     _errors: &mut Vec<ResolveError>,
 ) -> WorkflowNamespace {
     WorkflowNamespace {
-        name:        layer.name.clone(),
+        name: layer.name.clone(),
         description: layer.description.clone(),
-        graph:       layer
+        graph: layer
             .graph
             .clone()
             .expect("defaults.toml should provide workflow.graph"),
-        metadata:    layer.metadata.clone().into_inner(),
+        metadata: layer.metadata.clone().into_inner(),
     }
 }

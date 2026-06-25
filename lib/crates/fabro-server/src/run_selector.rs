@@ -5,7 +5,7 @@ pub(crate) enum ResolveRunError {
     InvalidSelector,
     AmbiguousPrefix {
         selector: String,
-        matches:  Vec<String>,
+        matches: Vec<String>,
     },
     NotFound {
         selector: String,
@@ -73,7 +73,7 @@ where
         count if count > 1 => {
             return Err(ResolveRunError::AmbiguousPrefix {
                 selector: selector.to_string(),
-                matches:  id_matches
+                matches: id_matches
                     .iter()
                     .map(|run| {
                         let workflow = workflow_name(run)

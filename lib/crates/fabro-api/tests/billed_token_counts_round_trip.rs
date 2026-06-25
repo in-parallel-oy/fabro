@@ -12,13 +12,13 @@ fn billed_token_counts_reuses_canonical_type() {
 #[test]
 fn billed_token_counts_json_matches_openapi_shape() {
     let counts = BilledTokenCounts {
-        input_tokens:       10,
-        output_tokens:      20,
-        total_tokens:       35,
-        reasoning_tokens:   3,
-        cache_read_tokens:  1,
+        input_tokens: 10,
+        output_tokens: 20,
+        total_tokens: 35,
+        reasoning_tokens: 3,
+        cache_read_tokens: 1,
         cache_write_tokens: 1,
-        total_usd_micros:   Some(42),
+        total_usd_micros: Some(42),
     };
 
     let json = serde_json::to_value(&counts).unwrap();

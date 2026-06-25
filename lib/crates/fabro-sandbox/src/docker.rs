@@ -61,56 +61,56 @@ pub fn docker_access_command(container_id: &str, working_directory: &str) -> Str
 #[derive(Clone, Debug, PartialEq)]
 pub struct DockerSandboxOptions {
     /// Docker image to use.
-    pub image:        String,
+    pub image: String,
     /// Docker network mode. Default: `Some("bridge")`.
     pub network_mode: Option<String>,
     /// Memory limit in bytes. `None` = unlimited.
     pub memory_limit: Option<i64>,
     /// CPU quota (microseconds per 100ms period). `None` = unlimited.
-    pub cpu_quota:    Option<i64>,
+    pub cpu_quota: Option<i64>,
     /// Whether to pull the image if not found locally. Default: `true`.
-    pub auto_pull:    bool,
+    pub auto_pull: bool,
     /// Additional `KEY=VALUE` environment variables for the container.
-    pub env_vars:     Vec<String>,
+    pub env_vars: Vec<String>,
     /// Bollard bind specifiers (`host:container[:mode]`). Forwarded to
     /// `HostConfig.binds`. Host-side `InterpString` resolution is performed
     /// upstream (`runtime_docker_config`); only fully-resolved strings
     /// reach this struct.
-    pub binds:        Vec<String>,
+    pub binds: Vec<String>,
     /// Create an empty workspace instead of cloning even when an origin exists.
-    pub skip_clone:   bool,
+    pub skip_clone: bool,
 }
 
 impl Default for DockerSandboxOptions {
     fn default() -> Self {
         Self {
-            image:        "buildpack-deps:noble".to_string(),
+            image: "buildpack-deps:noble".to_string(),
             network_mode: Some("bridge".to_string()),
             memory_limit: None,
-            cpu_quota:    None,
-            auto_pull:    true,
-            env_vars:     Vec::new(),
-            binds:        Vec::new(),
-            skip_clone:   false,
+            cpu_quota: None,
+            auto_pull: true,
+            env_vars: Vec::new(),
+            binds: Vec::new(),
+            skip_clone: false,
         }
     }
 }
 
 pub struct DockerSandbox {
-    docker:            Docker,
-    config:            DockerSandboxOptions,
-    github_app:        Option<GitHubCredentials>,
-    run_id:            Option<RunId>,
-    clone_origin_url:  Option<String>,
-    clone_branch:      Option<String>,
-    container_id:      OnceCell<String>,
-    repo_cloned:       OnceCell<bool>,
+    docker: Docker,
+    config: DockerSandboxOptions,
+    github_app: Option<GitHubCredentials>,
+    run_id: Option<RunId>,
+    clone_origin_url: Option<String>,
+    clone_branch: Option<String>,
+    container_id: OnceCell<String>,
+    repo_cloned: OnceCell<bool>,
     working_directory: OnceCell<String>,
-    origin_url:        OnceCell<String>,
-    cached_platform:   std::sync::OnceLock<String>,
+    origin_url: OnceCell<String>,
+    cached_platform: std::sync::OnceLock<String>,
     cached_os_version: std::sync::OnceLock<String>,
-    rg_available:      OnceCell<bool>,
-    event_callback:    Option<SandboxEventCallback>,
+    rg_available: OnceCell<bool>,
+    event_callback: Option<SandboxEventCallback>,
 }
 
 enum EnsureImageOutcome {
@@ -520,7 +520,7 @@ impl DockerSandbox {
         let (stdout, stderr, exit_code) = output;
         let duration_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
         Ok(ExecStreamingResult {
-            result:            ExecResult {
+            result: ExecResult {
                 stdout: String::from_utf8_lossy(&stdout).into_owned(),
                 stderr: String::from_utf8_lossy(&stderr).into_owned(),
                 exit_code: (termination == CommandTermination::Exited).then_some(exit_code),
@@ -528,7 +528,7 @@ impl DockerSandbox {
                 duration_ms,
             },
             streams_separated: true,
-            live_streaming:    true,
+            live_streaming: true,
         })
     }
 
@@ -618,7 +618,7 @@ impl DockerSandbox {
         let layout = clone_source::github_repo_layout(&origin_url, WORKING_DIRECTORY, REPOS_ROOT)?;
 
         self.emit(SandboxEvent::GitCloneStarted {
-            url:    origin_url.clone(),
+            url: origin_url.clone(),
             branch: branch.clone(),
         });
         let clone_start = Instant::now();
@@ -657,8 +657,8 @@ impl DockerSandbox {
                 format!("Failed to clone repo into Docker sandbox: {stderr}")
             });
             self.emit(SandboxEvent::GitCloneFailed {
-                url:    origin_url,
-                error:  err.to_string(),
+                url: origin_url,
+                error: err.to_string(),
                 causes: err.causes(),
             });
             return Err(err);
@@ -697,7 +697,7 @@ impl DockerSandbox {
 
         let clone_duration = u64::try_from(clone_start.elapsed().as_millis()).unwrap_or(u64::MAX);
         self.emit(SandboxEvent::GitCloneCompleted {
-            url:         origin_url,
+            url: origin_url,
             duration_ms: clone_duration,
         });
         Ok(())
@@ -778,7 +778,7 @@ impl DockerSandbox {
 
         let tar_bytes = build_single_file_tar(&file_name, bytes)?;
         let upload_opts = UploadToContainerOptions {
-            path:                     parent_dir,
+            path: parent_dir,
             no_overwrite_dir_non_dir: "false".to_string(),
         };
 
@@ -791,8 +791,8 @@ impl DockerSandbox {
     fn start_error(&self, error: crate::Error) -> crate::Result<()> {
         self.emit(SandboxEvent::StartFailed {
             provider: "docker".into(),
-            error:    error.to_string(),
-            causes:   error.causes(),
+            error: error.to_string(),
+            causes: error.causes(),
         });
         Err(error)
     }
@@ -800,8 +800,8 @@ impl DockerSandbox {
     fn stop_error(&self, error: crate::Error) -> crate::Result<()> {
         self.emit(SandboxEvent::StopFailed {
             provider: "docker".into(),
-            error:    error.to_string(),
-            causes:   error.causes(),
+            error: error.to_string(),
+            causes: error.causes(),
         });
         Err(error)
     }
@@ -809,8 +809,8 @@ impl DockerSandbox {
     fn delete_error(&self, error: crate::Error) -> crate::Result<()> {
         self.emit(SandboxEvent::DeleteFailed {
             provider: "docker".into(),
-            error:    error.to_string(),
-            causes:   error.causes(),
+            error: error.to_string(),
+            causes: error.causes(),
         });
         Err(error)
     }
@@ -901,8 +901,8 @@ fn docker_stdio_exec_options(
             ..Default::default()
         },
         StartExecOptions {
-            detach:          false,
-            tty:             false,
+            detach: false,
+            tty: false,
             output_capacity: None,
         },
     )
@@ -991,17 +991,17 @@ async fn request_docker_exec_stop_with(
 }
 
 struct DockerStdioProcessControl {
-    docker:       Docker,
+    docker: Docker,
     container_id: String,
-    exec_id:      String,
-    stop_file:    String,
-    state:        Arc<DockerStdioProcessState>,
+    exec_id: String,
+    stop_file: String,
+    state: Arc<DockerStdioProcessState>,
 }
 
 #[derive(Default)]
 struct DockerStdioProcessState {
-    stop_requested:     AtomicBool,
-    termination:        TokioMutex<Option<StdioProcessTermination>>,
+    stop_requested: AtomicBool,
+    termination: TokioMutex<Option<StdioProcessTermination>>,
     termination_notify: Notify,
 }
 
@@ -1183,17 +1183,23 @@ fn verify_managed_labels(
 }
 
 fn docker_not_found(error: &DockerError) -> bool {
-    matches!(error, DockerError::DockerResponseServerError {
-        status_code: 404,
-        ..
-    })
+    matches!(
+        error,
+        DockerError::DockerResponseServerError {
+            status_code: 404,
+            ..
+        }
+    )
 }
 
 fn docker_not_modified(error: &DockerError) -> bool {
-    matches!(error, DockerError::DockerResponseServerError {
-        status_code: 304,
-        ..
-    })
+    matches!(
+        error,
+        DockerError::DockerResponseServerError {
+            status_code: 304,
+            ..
+        }
+    )
 }
 
 fn bash_remediation(error: &DockerError, image: &str) -> String {
@@ -1264,14 +1270,14 @@ impl Sandbox for DockerSandbox {
                 let pull_duration =
                     u64::try_from(pull_start.elapsed().as_millis()).unwrap_or(u64::MAX);
                 self.emit(SandboxEvent::SnapshotReady {
-                    name:        self.config.image.clone(),
+                    name: self.config.image.clone(),
                     duration_ms: pull_duration,
                 });
             }
             Err(e) => {
                 self.emit(SandboxEvent::SnapshotFailed {
-                    name:   self.config.image.clone(),
-                    error:  e.to_string(),
+                    name: self.config.image.clone(),
+                    error: e.to_string(),
                     causes: e.causes(),
                 });
                 return Err(self.fail_init(init_start, e));
@@ -1374,12 +1380,12 @@ impl Sandbox for DockerSandbox {
 
         let init_duration = u64::try_from(init_start.elapsed().as_millis()).unwrap_or(u64::MAX);
         self.emit(SandboxEvent::Ready {
-            provider:    "docker".into(),
+            provider: "docker".into(),
             duration_ms: init_duration,
-            name:        None,
-            cpu:         None,
-            memory:      None,
-            url:         None,
+            name: None,
+            cpu: None,
+            memory: None,
+            url: None,
         });
 
         Ok(())
@@ -2042,8 +2048,11 @@ mod tests {
             "/repos",
         )
         .unwrap();
-        let command =
-            git_clone_and_link_command("https://github.com/in-parallel-oy/fabro", Some("main"), &layout);
+        let command = git_clone_and_link_command(
+            "https://github.com/in-parallel-oy/fabro",
+            Some("main"),
+            &layout,
+        );
 
         assert_eq!(
             command,

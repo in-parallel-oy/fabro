@@ -44,13 +44,13 @@ pub use details::sandbox_details;
 pub use docker::{DockerSandbox, DockerSandboxOptions};
 pub use error::{Error, Result, default_redacted_output_tail, display_for_log};
 pub use fabro_types::{RunSandboxInstance, SandboxProviderKind};
+#[cfg(feature = "gcloud")]
+pub use gcloud::{GcloudConfig, GcloudSandbox, GcloudSettings};
 pub use local::LocalSandbox;
 #[cfg(feature = "daytona")]
 pub use provider::daytona::DaytonaSandboxProvider;
 #[cfg(feature = "docker")]
 pub use provider::docker::DockerSandboxProvider;
-#[cfg(feature = "gcloud")]
-pub use gcloud::{GcloudConfig, GcloudSandbox, GcloudSettings};
 #[cfg(feature = "gcloud")]
 pub use provider::gcloud::GcloudSandboxProvider;
 pub use provider::{

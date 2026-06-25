@@ -18,13 +18,13 @@ pub(super) fn routes() -> Router<Arc<AppState>> {
 #[derive(serde::Deserialize)]
 struct ModelListParams {
     #[serde(rename = "page[limit]", default = "default_page_limit")]
-    limit:    u32,
+    limit: u32,
     #[serde(rename = "page[offset]", default)]
-    offset:   u32,
+    offset: u32,
     #[serde(default)]
     provider: Option<String>,
     #[serde(default)]
-    query:    Option<String>,
+    query: Option<String>,
 }
 
 #[derive(serde::Deserialize)]

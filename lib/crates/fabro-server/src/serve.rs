@@ -109,14 +109,14 @@ fn spawn_shutdown_orchestrator(
 #[derive(Debug, Clone)]
 pub(crate) struct ObjectStoreBuildOptions {
     pub client_options: ClientOptions,
-    pub retry_config:   RetryConfig,
+    pub retry_config: RetryConfig,
 }
 
 impl Default for ObjectStoreBuildOptions {
     fn default() -> Self {
         Self {
             client_options: ClientOptions::new(),
-            retry_config:   RetryConfig::default(),
+            retry_config: RetryConfig::default(),
         }
     }
 }
@@ -153,7 +153,7 @@ impl HttpConnector for NoProxyReqwestConnector {
         let client = builder
             .build()
             .map_err(|err| object_store::Error::Generic {
-                store:  "object_store",
+                store: "object_store",
                 source: Box::new(err),
             })?;
         Ok(HttpClient::new(client))
@@ -250,7 +250,7 @@ fn serve_overrides(args: &ServeArgs) -> (Option<RunLayer>, Option<ServerLayer>) 
 
 enum WebhookPreconditions {
     Ready {
-        app_id:          String,
+        app_id: String,
         private_key_pem: String,
     },
     Skip(String),
@@ -658,9 +658,9 @@ where
         effective_log_destination,
     );
     let resolved_app_settings = ResolvedAppStateSettings {
-        server_settings:       runtime_settings.server_settings,
+        server_settings: runtime_settings.server_settings,
         manifest_run_defaults: runtime_settings.manifest_run_defaults,
-        llm_catalog_settings:  runtime_settings.llm_catalog_settings,
+        llm_catalog_settings: runtime_settings.llm_catalog_settings,
     };
     let resolved_server_settings = resolved_app_settings.server_settings.server.clone();
     validate_startup_configuration(&resolved_server_settings)?;
@@ -760,12 +760,16 @@ where
     }
     spawn_scheduler(Arc::clone(&state));
     spawn_automation_scheduler(Arc::clone(&state));
-    let router = build_router_with_options(Arc::clone(&state), &auth_mode, RouterOptions {
-        web_enabled,
-        #[cfg(debug_assertions)]
-        watch_web,
-        ..RouterOptions::default()
-    });
+    let router = build_router_with_options(
+        Arc::clone(&state),
+        &auth_mode,
+        RouterOptions {
+            web_enabled,
+            #[cfg(debug_assertions)]
+            watch_web,
+            ..RouterOptions::default()
+        },
+    );
     let bound_listener = bind_listener(&bind_request).await?;
     let bind_addr = bound_listener.bind.clone();
 
@@ -819,9 +823,9 @@ where
                                 .server_settings
                                 .with_storage_override(&data_dir_for_poll);
                             ResolvedAppStateSettings {
-                                server_settings:       resolved.server_settings,
+                                server_settings: resolved.server_settings,
                                 manifest_run_defaults: resolved.manifest_run_defaults,
-                                llm_catalog_settings:  resolved.llm_catalog_settings,
+                                llm_catalog_settings: resolved.llm_catalog_settings,
                             }
                         });
                         match resolved {
@@ -1197,8 +1201,8 @@ mod tests {
     fn resolved_runtime_settings(source: &str) -> ResolvedAppStateSettings {
         ResolvedAppStateSettings {
             manifest_run_defaults: manifest_run_defaults(source),
-            server_settings:       server_settings(source),
-            llm_catalog_settings:  fabro_model::catalog::LlmCatalogSettings::default(),
+            server_settings: server_settings(source),
+            llm_catalog_settings: fabro_model::catalog::LlmCatalogSettings::default(),
         }
     }
 
@@ -1597,9 +1601,9 @@ disk_cache = true
     #[test]
     fn build_object_store_from_settings_uses_injected_static_credentials() {
         let settings = ObjectStoreSettings::S3 {
-            bucket:     "fabro-data".to_string(),
-            region:     "us-east-1".to_string(),
-            endpoint:   None,
+            bucket: "fabro-data".to_string(),
+            region: "us-east-1".to_string(),
+            endpoint: None,
             path_style: false,
         };
 
@@ -1619,9 +1623,9 @@ disk_cache = true
     #[test]
     fn build_object_store_from_settings_rejects_partial_static_credentials() {
         let settings = ObjectStoreSettings::S3 {
-            bucket:     "fabro-data".to_string(),
-            region:     "us-east-1".to_string(),
-            endpoint:   None,
+            bucket: "fabro-data".to_string(),
+            region: "us-east-1".to_string(),
+            endpoint: None,
             path_style: false,
         };
 
@@ -1644,9 +1648,9 @@ disk_cache = true
     #[test]
     fn build_object_store_from_settings_ignores_endpoint_override_env_vars() {
         let settings = ObjectStoreSettings::S3 {
-            bucket:     "fabro-data".to_string(),
-            region:     "us-east-1".to_string(),
-            endpoint:   None,
+            bucket: "fabro-data".to_string(),
+            region: "us-east-1".to_string(),
+            endpoint: None,
             path_style: false,
         };
 

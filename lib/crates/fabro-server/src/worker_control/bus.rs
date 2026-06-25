@@ -72,7 +72,7 @@ impl WorkerControlCursor {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkerControlDelivery {
-    pub(crate) id:       WorkerControlMessageId,
+    pub(crate) id: WorkerControlMessageId,
     pub(crate) envelope: WorkerControlEnvelope,
 }
 

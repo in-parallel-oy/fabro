@@ -36,9 +36,9 @@ pub(super) fn encode(ctx: &CodecCtx<'_>, stream: bool) -> EncodedRequest {
 
 pub(super) fn encode_count_tokens(ctx: &CodecCtx<'_>) -> EncodedRequest {
     EncodedRequest {
-        body:     serde_json::json!({ "generateContentRequest": build_body(ctx) }),
+        body: serde_json::json!({ "generateContentRequest": build_body(ctx) }),
         endpoint: format!("/models/{}:countTokens", ctx.deployment_id),
-        headers:  Vec::new(),
+        headers: Vec::new(),
     }
 }
 
@@ -231,9 +231,9 @@ fn translate_tools(tools: &[ToolDefinition]) -> Vec<GeminiToolGroup> {
         function_declarations: tools
             .iter()
             .map(|t| GeminiFunctionDecl {
-                name:        t.name.clone(),
+                name: t.name.clone(),
                 description: t.description.clone(),
-                parameters:  t.parameters.clone(),
+                parameters: t.parameters.clone(),
             })
             .collect(),
     }]
@@ -324,19 +324,19 @@ mod tests {
 
     fn minimal_request() -> Request {
         Request {
-            model:            "gemini-2.0-flash".to_string(),
-            messages:         vec![Message::user("Hello")],
-            provider:         None,
-            tools:            None,
-            tool_choice:      None,
-            response_format:  None,
-            temperature:      None,
-            top_p:            None,
-            max_tokens:       None,
-            stop_sequences:   None,
+            model: "gemini-2.0-flash".to_string(),
+            messages: vec![Message::user("Hello")],
+            provider: None,
+            tools: None,
+            tool_choice: None,
+            response_format: None,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            stop_sequences: None,
             reasoning_effort: None,
-            speed:            None,
-            metadata:         None,
+            speed: None,
+            metadata: None,
             provider_options: None,
         }
     }
@@ -368,11 +368,11 @@ mod tests {
         let request = minimal_request();
         let params = CodecParams::default();
         let ctx = CodecCtx {
-            request:       &request,
+            request: &request,
             provider_name: "gemini",
             deployment_id: &request.model,
-            model:         None,
-            params:        &params,
+            model: None,
+            params: &params,
         };
 
         assert_eq!(
@@ -399,11 +399,11 @@ mod tests {
         )]);
         let params = CodecParams::default();
         let ctx = CodecCtx {
-            request:       &request,
+            request: &request,
             provider_name: "gemini",
             deployment_id: &request.model,
-            model:         None,
-            params:        &params,
+            model: None,
+            params: &params,
         };
         let count_body = encode_count_tokens(&ctx).body;
 
@@ -537,13 +537,13 @@ mod tests {
     #[test]
     fn audio_url_translates_to_file_data() {
         let msg = Message {
-            role:         Role::User,
-            content:      vec![ContentPart::Audio(AudioData {
-                url:        Some("https://example.com/audio.wav".to_string()),
-                data:       None,
+            role: Role::User,
+            content: vec![ContentPart::Audio(AudioData {
+                url: Some("https://example.com/audio.wav".to_string()),
+                data: None,
                 media_type: Some("audio/wav".to_string()),
             })],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let contents = translate_messages(&[&msg]);
@@ -556,13 +556,13 @@ mod tests {
     #[test]
     fn audio_base64_translates_to_inline_data() {
         let msg = Message {
-            role:         Role::User,
-            content:      vec![ContentPart::Audio(AudioData {
-                url:        None,
-                data:       Some(vec![0xFF, 0xFB, 0x90]),
+            role: Role::User,
+            content: vec![ContentPart::Audio(AudioData {
+                url: None,
+                data: Some(vec![0xFF, 0xFB, 0x90]),
                 media_type: None,
             })],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let contents = translate_messages(&[&msg]);
@@ -574,14 +574,14 @@ mod tests {
     #[test]
     fn document_url_translates_to_file_data() {
         let msg = Message {
-            role:         Role::User,
-            content:      vec![ContentPart::Document(DocumentData {
-                url:        Some("https://example.com/doc.pdf".to_string()),
-                data:       None,
+            role: Role::User,
+            content: vec![ContentPart::Document(DocumentData {
+                url: Some("https://example.com/doc.pdf".to_string()),
+                data: None,
                 media_type: Some("application/pdf".to_string()),
-                file_name:  Some("doc.pdf".to_string()),
+                file_name: Some("doc.pdf".to_string()),
             })],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let contents = translate_messages(&[&msg]);
@@ -593,14 +593,14 @@ mod tests {
     #[test]
     fn document_base64_translates_to_inline_data() {
         let msg = Message {
-            role:         Role::User,
-            content:      vec![ContentPart::Document(DocumentData {
-                url:        None,
-                data:       Some(vec![0x25, 0x50, 0x44, 0x46]),
+            role: Role::User,
+            content: vec![ContentPart::Document(DocumentData {
+                url: None,
+                data: Some(vec![0x25, 0x50, 0x44, 0x46]),
                 media_type: None,
-                file_name:  None,
+                file_name: None,
             })],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         let contents = translate_messages(&[&msg]);
@@ -619,9 +619,9 @@ mod tests {
         tc.provider_metadata = Some(serde_json::json!({"thoughtSignature": "sig456"}));
 
         let msg = Message {
-            role:         Role::Assistant,
-            content:      vec![ContentPart::ToolCall(tc)],
-            name:         None,
+            role: Role::Assistant,
+            content: vec![ContentPart::ToolCall(tc)],
+            name: None,
             tool_call_id: None,
         };
         let contents = translate_messages(&[&msg]);
@@ -641,9 +641,9 @@ mod tests {
         );
 
         let msg = Message {
-            role:         Role::Assistant,
-            content:      vec![ContentPart::ToolCall(tc)],
-            name:         None,
+            role: Role::Assistant,
+            content: vec![ContentPart::ToolCall(tc)],
+            name: None,
             tool_call_id: None,
         };
         let contents = translate_messages(&[&msg]);

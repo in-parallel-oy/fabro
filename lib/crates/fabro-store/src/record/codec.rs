@@ -69,19 +69,19 @@ mod tests {
 
     #[derive(Debug, Serialize, Deserialize)]
     struct SnapshotRecord {
-        code:       String,
-        issued_at:  chrono::DateTime<Utc>,
+        code: String,
+        issued_at: chrono::DateTime<Utc>,
         expires_at: chrono::DateTime<Utc>,
-        attempts:   u32,
+        attempts: u32,
     }
 
     #[test]
     fn json_codec_matches_snapshot() {
         let record = SnapshotRecord {
-            code:       "code-123".to_string(),
-            issued_at:  Utc.with_ymd_and_hms(2026, 4, 20, 12, 34, 56).unwrap(),
+            code: "code-123".to_string(),
+            issued_at: Utc.with_ymd_and_hms(2026, 4, 20, 12, 34, 56).unwrap(),
             expires_at: Utc.with_ymd_and_hms(2026, 4, 20, 12, 39, 56).unwrap(),
-            attempts:   2,
+            attempts: 2,
         };
 
         let encoded = JsonCodec::encode(&record).unwrap();

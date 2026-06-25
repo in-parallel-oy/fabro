@@ -249,7 +249,7 @@ async fn get_transcript(
         data: page.entries,
         meta: PairTranscriptMeta {
             next_since_seq: page.next_since_seq,
-            has_more:       page.has_more,
+            has_more: page.has_more,
         },
     })
     .into_response()
@@ -262,53 +262,53 @@ fn transcript_entry_from_event(
     match &envelope.event.body {
         EventBody::AgentPairUserMessage(props) if props.pair_id == pair.pair_id => Some(
             PairTranscriptEntry::UserMessage(PairTranscriptUserMessage {
-                seq:               envelope.seq,
-                event_id:          envelope.event.id.clone(),
-                ts:                envelope.event.ts,
-                pair_id:           props.pair_id,
-                target:            pair.target.clone(),
-                message_id:        props.message_id,
+                seq: envelope.seq,
+                event_id: envelope.event.id.clone(),
+                ts: envelope.event.ts,
+                pair_id: props.pair_id,
+                target: pair.target.clone(),
+                message_id: props.message_id,
                 client_message_id: props.client_message_id.clone(),
-                text:              props.text.clone(),
+                text: props.text.clone(),
             }),
         ),
         EventBody::AgentPairSystemMessage(props) if props.pair_id == pair.pair_id => Some(
             PairTranscriptEntry::SystemMessage(PairTranscriptSystemMessage {
-                seq:                 envelope.seq,
-                event_id:            envelope.event.id.clone(),
-                ts:                  envelope.event.ts,
-                pair_id:             props.pair_id,
-                target:              pair.target.clone(),
+                seq: envelope.seq,
+                event_id: envelope.event.id.clone(),
+                ts: envelope.event.ts,
+                pair_id: props.pair_id,
+                target: pair.target.clone(),
                 system_message_kind: props.kind,
-                text:                props.text.clone(),
+                text: props.text.clone(),
             }),
         ),
         EventBody::AgentMessage(props) if event_matches_pair_target(pair, &envelope.event) => Some(
             PairTranscriptEntry::AssistantMessage(PairTranscriptAssistantMessage {
-                seq:             envelope.seq,
-                event_id:        envelope.event.id.clone(),
-                ts:              envelope.event.ts,
-                pair_id:         pair.pair_id,
-                target:          pair.target.clone(),
-                text:            props.text.clone(),
+                seq: envelope.seq,
+                event_id: envelope.event.id.clone(),
+                ts: envelope.event.ts,
+                pair_id: pair.pair_id,
+                target: pair.target.clone(),
+                text: props.text.clone(),
                 tool_call_count: props.tool_call_count,
             }),
         ),
         EventBody::AgentToolStarted(props) if event_matches_pair_target(pair, &envelope.event) => {
             Some(PairTranscriptEntry::ToolCall(PairTranscriptToolCall {
-                seq:          envelope.seq,
-                event_id:     envelope.event.id.clone(),
-                ts:           envelope.event.ts,
-                pair_id:      pair.pair_id,
-                target:       pair.target.clone(),
+                seq: envelope.seq,
+                event_id: envelope.event.id.clone(),
+                ts: envelope.event.ts,
+                pair_id: pair.pair_id,
+                target: pair.target.clone(),
                 tool_call_id: props.tool_call_id.clone(),
-                tool_name:    props.tool_name.clone(),
-                status:       PairTranscriptToolStatus::Started,
-                summary:      compact_summary(&props.tool_name, &props.arguments, false),
-                is_error:     false,
-                truncated:    true,
-                detail_ref:   PairTranscriptDetailRef {
-                    seq:          envelope.seq,
+                tool_name: props.tool_name.clone(),
+                status: PairTranscriptToolStatus::Started,
+                summary: compact_summary(&props.tool_name, &props.arguments, false),
+                is_error: false,
+                truncated: true,
+                detail_ref: PairTranscriptDetailRef {
+                    seq: envelope.seq,
                     tool_call_id: Some(props.tool_call_id.clone()),
                 },
             }))
@@ -317,48 +317,48 @@ fn transcript_entry_from_event(
             if event_matches_pair_target(pair, &envelope.event) =>
         {
             Some(PairTranscriptEntry::ToolCall(PairTranscriptToolCall {
-                seq:          envelope.seq,
-                event_id:     envelope.event.id.clone(),
-                ts:           envelope.event.ts,
-                pair_id:      pair.pair_id,
-                target:       pair.target.clone(),
+                seq: envelope.seq,
+                event_id: envelope.event.id.clone(),
+                ts: envelope.event.ts,
+                pair_id: pair.pair_id,
+                target: pair.target.clone(),
                 tool_call_id: props.tool_call_id.clone(),
-                tool_name:    props.tool_name.clone(),
-                status:       PairTranscriptToolStatus::Completed,
-                summary:      compact_summary(&props.tool_name, &props.output, props.is_error),
-                is_error:     props.is_error,
-                truncated:    true,
-                detail_ref:   PairTranscriptDetailRef {
-                    seq:          envelope.seq,
+                tool_name: props.tool_name.clone(),
+                status: PairTranscriptToolStatus::Completed,
+                summary: compact_summary(&props.tool_name, &props.output, props.is_error),
+                is_error: props.is_error,
+                truncated: true,
+                detail_ref: PairTranscriptDetailRef {
+                    seq: envelope.seq,
                     tool_call_id: Some(props.tool_call_id.clone()),
                 },
             }))
         }
         EventBody::AgentError(props) if event_matches_pair_target(pair, &envelope.event) => {
             Some(PairTranscriptEntry::Error(PairTranscriptError {
-                seq:        envelope.seq,
-                event_id:   envelope.event.id.clone(),
-                ts:         envelope.event.ts,
-                pair_id:    pair.pair_id,
-                target:     pair.target.clone(),
-                message:    compact_value(&props.error, 240),
+                seq: envelope.seq,
+                event_id: envelope.event.id.clone(),
+                ts: envelope.event.ts,
+                pair_id: pair.pair_id,
+                target: pair.target.clone(),
+                message: compact_value(&props.error, 240),
                 detail_ref: PairTranscriptDetailRef {
-                    seq:          envelope.seq,
+                    seq: envelope.seq,
                     tool_call_id: None,
                 },
             }))
         }
         EventBody::AgentWarning(props) if event_matches_pair_target(pair, &envelope.event) => {
             Some(PairTranscriptEntry::Warning(PairTranscriptWarning {
-                seq:          envelope.seq,
-                event_id:     envelope.event.id.clone(),
-                ts:           envelope.event.ts,
-                pair_id:      pair.pair_id,
-                target:       pair.target.clone(),
+                seq: envelope.seq,
+                event_id: envelope.event.id.clone(),
+                ts: envelope.event.ts,
+                pair_id: pair.pair_id,
+                target: pair.target.clone(),
                 warning_kind: props.kind.clone(),
-                message:      props.message.clone(),
-                detail_ref:   PairTranscriptDetailRef {
-                    seq:          envelope.seq,
+                message: props.message.clone(),
+                detail_ref: PairTranscriptDetailRef {
+                    seq: envelope.seq,
                     tool_call_id: None,
                 },
             }))
@@ -514,13 +514,13 @@ async fn wait_for_pair_record(
                     if status == PairStatus::Active && props.pair_id == pair_id =>
                 {
                     return Ok(PairRecord {
-                        pair_id:        props.pair_id,
-                        run_id:         *id,
-                        status:         PairStatus::Active,
-                        started_at:     envelope.event.ts,
-                        ended_at:       None,
+                        pair_id: props.pair_id,
+                        run_id: *id,
+                        status: PairStatus::Active,
+                        started_at: envelope.event.ts,
+                        ended_at: None,
                         failure_reason: None,
-                        target:         props.target.clone(),
+                        target: props.target.clone(),
                     });
                 }
                 EventBody::RunPairEnded(props)
@@ -581,13 +581,13 @@ async fn wait_for_pair_message_record(
             if let EventBody::AgentPairUserMessage(props) = &envelope.event.body {
                 if props.pair_id == pair.record.pair_id && props.message_id == message_id {
                     return Ok(PairMessageRecord {
-                        message_id:        props.message_id,
+                        message_id: props.message_id,
                         client_message_id: props.client_message_id.clone(),
-                        pair_id:           props.pair_id,
-                        run_id:            *id,
-                        stage_id:          pair.record.target.stage_id.clone(),
-                        text:              props.text.clone(),
-                        accepted_at:       envelope.event.ts,
+                        pair_id: props.pair_id,
+                        run_id: *id,
+                        stage_id: pair.record.target.stage_id.clone(),
+                        text: props.text.clone(),
+                        accepted_at: envelope.event.ts,
                     });
                 }
             }
@@ -607,15 +607,15 @@ async fn wait_for_pair_message_record(
 
 #[derive(Debug, Clone)]
 struct PairWindow {
-    record:    PairRecord,
+    record: PairRecord,
     start_seq: u32,
-    end_seq:   Option<u32>,
+    end_seq: Option<u32>,
 }
 
 struct TranscriptPage {
-    entries:        Vec<PairTranscriptEntry>,
+    entries: Vec<PairTranscriptEntry>,
     next_since_seq: u32,
-    has_more:       bool,
+    has_more: bool,
 }
 
 async fn pair_window_by_id(
@@ -650,19 +650,22 @@ async fn reconstruct_pair_windows(
     for envelope in events {
         match &envelope.event.body {
             EventBody::RunPairStarted(props) => {
-                pairs.insert(props.pair_id, PairWindow {
-                    record:    PairRecord {
-                        pair_id:        props.pair_id,
-                        run_id:         *id,
-                        status:         PairStatus::Active,
-                        started_at:     envelope.event.ts,
-                        ended_at:       None,
-                        failure_reason: None,
-                        target:         props.target.clone(),
+                pairs.insert(
+                    props.pair_id,
+                    PairWindow {
+                        record: PairRecord {
+                            pair_id: props.pair_id,
+                            run_id: *id,
+                            status: PairStatus::Active,
+                            started_at: envelope.event.ts,
+                            ended_at: None,
+                            failure_reason: None,
+                            target: props.target.clone(),
+                        },
+                        start_seq: envelope.seq,
+                        end_seq: None,
                     },
-                    start_seq: envelope.seq,
-                    end_seq:   None,
-                });
+                );
             }
             EventBody::RunPairEnded(props) => {
                 if let Some(pair) = pairs.get_mut(&props.pair_id) {
@@ -781,9 +784,9 @@ async fn transcript_page(
         }
         Err(_) => match durable_run_status(state, *id).await {
             Ok(Some(_)) => Ok(TranscriptPage {
-                entries:        Vec::new(),
+                entries: Vec::new(),
                 next_since_seq: since_seq,
-                has_more:       false,
+                has_more: false,
             }),
             Ok(None) => Err(ApiError::not_found("Run not found.").into_response()),
             Err(err) => Err(
@@ -861,14 +864,14 @@ mod tests {
     #[test]
     fn transcript_projection_matches_by_stage_id() {
         let pair = PairRecord {
-            pair_id:        "01HZX6M29F1CD5YYMHT1F5D7WQ".parse().unwrap(),
-            run_id:         fixtures::RUN_1,
-            status:         PairStatus::Active,
-            started_at:     Utc.with_ymd_and_hms(2026, 5, 18, 12, 0, 0).unwrap(),
-            ended_at:       None,
+            pair_id: "01HZX6M29F1CD5YYMHT1F5D7WQ".parse().unwrap(),
+            run_id: fixtures::RUN_1,
+            status: PairStatus::Active,
+            started_at: Utc.with_ymd_and_hms(2026, 5, 18, 12, 0, 0).unwrap(),
+            ended_at: None,
             failure_reason: None,
-            target:         PairTarget {
-                stage_id:   StageId::new("code", 1),
+            target: PairTarget {
+                stage_id: StageId::new("code", 1),
                 node_label: "Code".to_string(),
             },
         };
@@ -880,17 +883,17 @@ mod tests {
                 Some("ses_01"),
                 Some(StageId::new("code", 1)),
                 EventBody::AgentMessage(AgentMessageProps {
-                    text:            "I found the issue.".to_string(),
-                    model:           ModelRef {
+                    text: "I found the issue.".to_string(),
+                    model: ModelRef {
                         provider: ProviderId::new("openai"),
                         model_id: "gpt-5.4".to_string(),
-                        speed:    None,
+                        speed: None,
                     },
-                    billing:         BilledTokenCounts::default(),
+                    billing: BilledTokenCounts::default(),
                     tool_call_count: 0,
-                    visit:           1,
-                    message:         None,
-                    context_window:  None,
+                    visit: 1,
+                    message: None,
+                    context_window: None,
                 }),
             ),
         )
@@ -912,17 +915,17 @@ mod tests {
                     Some("ses_01"),
                     Some(StageId::new("other", 1)),
                     EventBody::AgentMessage(AgentMessageProps {
-                        text:            "wrong stage".to_string(),
-                        model:           ModelRef {
+                        text: "wrong stage".to_string(),
+                        model: ModelRef {
                             provider: ProviderId::new("openai"),
                             model_id: "gpt-5.4".to_string(),
-                            speed:    None,
+                            speed: None,
                         },
-                        billing:         BilledTokenCounts::default(),
+                        billing: BilledTokenCounts::default(),
                         tool_call_count: 0,
-                        visit:           1,
-                        message:         None,
-                        context_window:  None,
+                        visit: 1,
+                        message: None,
+                        context_window: None,
                     }),
                 ),
             )
@@ -943,7 +946,7 @@ mod tests {
         let run_id = RunId::new();
         let pair_id = PairId::new();
         let target = PairTarget {
-            stage_id:   StageId::new("code", 1),
+            stage_id: StageId::new("code", 1),
             node_label: "Code".to_string(),
         };
         let run_store = state
@@ -1011,27 +1014,31 @@ mod tests {
     }
 
     async fn append_run_created(run_store: &fabro_store::RunDatabase, run_id: RunId) {
-        workflow_event::append_event(run_store, &run_id, &workflow_event::Event::RunCreated {
-            run_id,
-            title: None,
-            settings: serde_json::to_value(WorkflowSettings::default()).unwrap(),
-            graph: serde_json::to_value(Graph::new("test")).unwrap(),
-            workflow_source: None,
-            workflow_config: None,
-            labels: std::collections::BTreeMap::new(),
-            run_dir: "/tmp/test".to_string(),
-            source_directory: None,
-            workflow_slug: None,
-            automation: None,
-            db_prefix: None,
-            provenance: test_support::test_run_provenance(),
-            manifest_blob: None,
-            git: None,
-            fork_source_ref: None,
-            retried_from: None,
-            parent_id: None,
-            web_url: None,
-        })
+        workflow_event::append_event(
+            run_store,
+            &run_id,
+            &workflow_event::Event::RunCreated {
+                run_id,
+                title: None,
+                settings: serde_json::to_value(WorkflowSettings::default()).unwrap(),
+                graph: serde_json::to_value(Graph::new("test")).unwrap(),
+                workflow_source: None,
+                workflow_config: None,
+                labels: std::collections::BTreeMap::new(),
+                run_dir: "/tmp/test".to_string(),
+                source_directory: None,
+                workflow_slug: None,
+                automation: None,
+                db_prefix: None,
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                git: None,
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
+            },
+        )
         .await
         .expect("run.created should append");
     }

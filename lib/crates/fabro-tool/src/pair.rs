@@ -20,14 +20,14 @@ pub enum RunPairAction {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct FabroRunPairParams {
-    pub action:            RunPairAction,
-    pub run_id:            Option<String>,
-    pub pair_id:           Option<String>,
-    pub stage_id:          Option<String>,
-    pub text:              Option<String>,
+    pub action: RunPairAction,
+    pub run_id: Option<String>,
+    pub pair_id: Option<String>,
+    pub stage_id: Option<String>,
+    pub text: Option<String>,
     pub client_message_id: Option<String>,
-    pub since_seq:         Option<u32>,
-    pub limit:             Option<u32>,
+    pub since_seq: Option<u32>,
+    pub limit: Option<u32>,
 }
 
 #[derive(Debug)]
@@ -46,17 +46,17 @@ pub enum ValidatedPairAction {
         pair_id: PairId,
     },
     Message {
-        pair_id:           PairId,
-        text:              String,
+        pair_id: PairId,
+        text: String,
         client_message_id: Option<String>,
     },
     End {
         pair_id: PairId,
     },
     Transcript {
-        pair_id:   PairId,
+        pair_id: PairId,
         since_seq: Option<u32>,
-        limit:     Option<u32>,
+        limit: Option<u32>,
     },
 }
 
@@ -208,10 +208,14 @@ pub async fn pair_run(
             client_message_id,
         } => json!(
             backend
-                .send_run_pair_message(&run_id, &pair_id, PairMessageRequest {
-                    text,
-                    client_message_id,
-                },)
+                .send_run_pair_message(
+                    &run_id,
+                    &pair_id,
+                    PairMessageRequest {
+                        text,
+                        client_message_id,
+                    },
+                )
                 .await
                 .map_err(|err| ToolError::from_anyhow(&err))?
         ),
@@ -275,7 +279,7 @@ mod tests {
 
     fn pair_target() -> PairTarget {
         PairTarget {
-            stage_id:   "code@1".parse().unwrap(),
+            stage_id: "code@1".parse().unwrap(),
             node_label: "Code".to_string(),
         }
     }
@@ -294,14 +298,14 @@ mod tests {
     fn missing_or_blank_run_id_returns_tool_error() {
         for raw in [None, Some(String::new()), Some("   ".to_string())] {
             let err = ValidatedPairRun::try_from(FabroRunPairParams {
-                action:            RunPairAction::Status,
-                run_id:            raw,
-                pair_id:           None,
-                stage_id:          None,
-                text:              None,
+                action: RunPairAction::Status,
+                run_id: raw,
+                pair_id: None,
+                stage_id: None,
+                text: None,
                 client_message_id: None,
-                since_seq:         None,
-                limit:             None,
+                since_seq: None,
+                limit: None,
             })
             .unwrap_err();
             assert!(
@@ -315,14 +319,14 @@ mod tests {
     #[test]
     fn start_requires_stage_id() {
         let err = ValidatedPairRun::try_from(FabroRunPairParams {
-            action:            RunPairAction::Start,
-            run_id:            Some("run_123".to_string()),
-            pair_id:           None,
-            stage_id:          None,
-            text:              None,
+            action: RunPairAction::Start,
+            run_id: Some("run_123".to_string()),
+            pair_id: None,
+            stage_id: None,
+            text: None,
             client_message_id: None,
-            since_seq:         None,
-            limit:             None,
+            since_seq: None,
+            limit: None,
         })
         .unwrap_err();
         assert!(
@@ -333,14 +337,14 @@ mod tests {
         );
 
         let err = ValidatedPairRun::try_from(FabroRunPairParams {
-            action:            RunPairAction::Start,
-            run_id:            Some("run_123".to_string()),
-            pair_id:           None,
-            stage_id:          Some("bad-stage-id".to_string()),
-            text:              None,
+            action: RunPairAction::Start,
+            run_id: Some("run_123".to_string()),
+            pair_id: None,
+            stage_id: Some("bad-stage-id".to_string()),
+            text: None,
             client_message_id: None,
-            since_seq:         None,
-            limit:             None,
+            since_seq: None,
+            limit: None,
         })
         .unwrap_err();
         assert!(
@@ -353,14 +357,14 @@ mod tests {
     #[test]
     fn message_requires_pair_id_and_text() {
         let err = ValidatedPairRun::try_from(FabroRunPairParams {
-            action:            RunPairAction::Message,
-            run_id:            Some("run_123".to_string()),
-            pair_id:           None,
-            stage_id:          None,
-            text:              Some("hello".to_string()),
+            action: RunPairAction::Message,
+            run_id: Some("run_123".to_string()),
+            pair_id: None,
+            stage_id: None,
+            text: Some("hello".to_string()),
             client_message_id: None,
-            since_seq:         None,
-            limit:             None,
+            since_seq: None,
+            limit: None,
         })
         .unwrap_err();
         assert!(
@@ -371,14 +375,14 @@ mod tests {
         );
 
         let err = ValidatedPairRun::try_from(FabroRunPairParams {
-            action:            RunPairAction::Message,
-            run_id:            Some("run_123".to_string()),
-            pair_id:           Some(pair_id().to_string()),
-            stage_id:          None,
-            text:              None,
+            action: RunPairAction::Message,
+            run_id: Some("run_123".to_string()),
+            pair_id: Some(pair_id().to_string()),
+            stage_id: None,
+            text: None,
             client_message_id: None,
-            since_seq:         None,
-            limit:             None,
+            since_seq: None,
+            limit: None,
         })
         .unwrap_err();
         assert!(
@@ -391,14 +395,14 @@ mod tests {
     #[test]
     fn message_rejects_overlong_text() {
         let err = ValidatedPairRun::try_from(FabroRunPairParams {
-            action:            RunPairAction::Message,
-            run_id:            Some("run_123".to_string()),
-            pair_id:           Some(pair_id().to_string()),
-            stage_id:          None,
-            text:              Some("a".repeat(MAX_PAIR_MESSAGE_BYTES + 1)),
+            action: RunPairAction::Message,
+            run_id: Some("run_123".to_string()),
+            pair_id: Some(pair_id().to_string()),
+            stage_id: None,
+            text: Some("a".repeat(MAX_PAIR_MESSAGE_BYTES + 1)),
             client_message_id: None,
-            since_seq:         None,
-            limit:             None,
+            since_seq: None,
+            limit: None,
         })
         .unwrap_err();
         assert!(
@@ -412,14 +416,14 @@ mod tests {
     #[test]
     fn transcript_requires_pair_id() {
         let err = ValidatedPairRun::try_from(FabroRunPairParams {
-            action:            RunPairAction::Transcript,
-            run_id:            Some("run_123".to_string()),
-            pair_id:           None,
-            stage_id:          None,
-            text:              None,
+            action: RunPairAction::Transcript,
+            run_id: Some("run_123".to_string()),
+            pair_id: None,
+            stage_id: None,
+            text: None,
             client_message_id: None,
-            since_seq:         None,
-            limit:             None,
+            since_seq: None,
+            limit: None,
         })
         .unwrap_err();
         assert!(
@@ -433,14 +437,14 @@ mod tests {
     #[test]
     fn end_requires_pair_id() {
         let err = ValidatedPairRun::try_from(FabroRunPairParams {
-            action:            RunPairAction::End,
-            run_id:            Some("run_123".to_string()),
-            pair_id:           None,
-            stage_id:          None,
-            text:              None,
+            action: RunPairAction::End,
+            run_id: Some("run_123".to_string()),
+            pair_id: None,
+            stage_id: None,
+            text: None,
             client_message_id: None,
-            since_seq:         None,
-            limit:             None,
+            since_seq: None,
+            limit: None,
         })
         .unwrap_err();
         assert!(
@@ -453,14 +457,14 @@ mod tests {
     #[test]
     fn invalid_pair_id_for_action_is_reported() {
         let err = ValidatedPairRun::try_from(FabroRunPairParams {
-            action:            RunPairAction::Get,
-            run_id:            Some("run_123".to_string()),
-            pair_id:           Some("not-a-pair-id".to_string()),
-            stage_id:          None,
-            text:              None,
+            action: RunPairAction::Get,
+            run_id: Some("run_123".to_string()),
+            pair_id: Some("not-a-pair-id".to_string()),
+            stage_id: None,
+            text: None,
             client_message_id: None,
-            since_seq:         None,
-            limit:             None,
+            since_seq: None,
+            limit: None,
         })
         .unwrap_err();
         assert!(
@@ -473,17 +477,17 @@ mod tests {
     #[test]
     fn pair_run_result_status_does_not_leak_internals() {
         let status = RunPairStatusResponse {
-            run_id:       run_id(),
+            run_id: run_id(),
             current_pair: Some(PairRecord {
-                pair_id:        pair_id(),
-                run_id:         run_id(),
-                status:         PairStatus::Active,
-                started_at:     Utc::now(),
-                ended_at:       None,
+                pair_id: pair_id(),
+                run_id: run_id(),
+                status: PairStatus::Active,
+                started_at: Utc::now(),
+                ended_at: None,
                 failure_reason: None,
-                target:         pair_target(),
+                target: pair_target(),
             }),
-            targets:      vec![pair_target()],
+            targets: vec![pair_target()],
         };
         let result = PairRunResult {
             run_id: "run_123".to_string(),
@@ -497,13 +501,13 @@ mod tests {
     #[test]
     fn pair_run_result_start_does_not_leak_internals() {
         let record = PairRecord {
-            pair_id:        pair_id(),
-            run_id:         run_id(),
-            status:         PairStatus::Active,
-            started_at:     Utc::now(),
-            ended_at:       None,
+            pair_id: pair_id(),
+            run_id: run_id(),
+            status: PairStatus::Active,
+            started_at: Utc::now(),
+            ended_at: None,
             failure_reason: None,
-            target:         pair_target(),
+            target: pair_target(),
         };
         let result = PairRunResult {
             run_id: "run_123".to_string(),
@@ -517,13 +521,13 @@ mod tests {
     #[test]
     fn pair_run_result_message_does_not_leak_internals() {
         let record = PairMessageRecord {
-            message_id:        PairMessageId::new(),
+            message_id: PairMessageId::new(),
             client_message_id: Some("c-1".to_string()),
-            pair_id:           pair_id(),
-            run_id:            run_id(),
-            stage_id:          "code@1".parse().unwrap(),
-            text:              "hi".to_string(),
-            accepted_at:       Utc::now(),
+            pair_id: pair_id(),
+            run_id: run_id(),
+            stage_id: "code@1".parse().unwrap(),
+            text: "hi".to_string(),
+            accepted_at: Utc::now(),
         };
         let result = PairRunResult {
             run_id: "run_123".to_string(),
@@ -539,18 +543,18 @@ mod tests {
         let response = PairTranscriptResponse {
             data: vec![PairTranscriptEntry::AssistantMessage(
                 PairTranscriptAssistantMessage {
-                    seq:             7,
-                    event_id:        "evt".to_string(),
-                    ts:              Utc::now(),
-                    pair_id:         pair_id(),
-                    target:          pair_target(),
-                    text:            "hi".to_string(),
+                    seq: 7,
+                    event_id: "evt".to_string(),
+                    ts: Utc::now(),
+                    pair_id: pair_id(),
+                    target: pair_target(),
+                    text: "hi".to_string(),
                     tool_call_count: 0,
                 },
             )],
             meta: PairTranscriptMeta {
                 next_since_seq: 8,
-                has_more:       false,
+                has_more: false,
             },
         };
         let result = PairRunResult {

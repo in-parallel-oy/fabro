@@ -20,7 +20,7 @@ use crate::shared::print_json_pretty;
 
 #[derive(Serialize)]
 struct RenderedConfig {
-    user:   UserSettings,
+    user: UserSettings,
     server: ServerSettings,
 }
 

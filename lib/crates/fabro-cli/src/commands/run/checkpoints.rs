@@ -14,9 +14,9 @@ use crate::shared::repo::ensure_matching_repo_origin;
 
 #[derive(Serialize)]
 pub(crate) struct TimelineEntryJson {
-    ordinal:        usize,
-    node_name:      String,
-    visit:          usize,
+    ordinal: usize,
+    node_name: String,
+    visit: usize,
     run_commit_sha: Option<String>,
 }
 
@@ -38,11 +38,10 @@ pub(crate) fn timeline_entries_json(entries: &[TimelineEntryResponse]) -> Vec<Ti
     entries
         .iter()
         .map(|entry| TimelineEntryJson {
-            ordinal:        usize::try_from(entry.ordinal.get())
+            ordinal: usize::try_from(entry.ordinal.get())
                 .expect("timeline ordinal should fit in usize"),
-            node_name:      entry.node_name.clone(),
-            visit:          usize::try_from(entry.visit.get())
-                .expect("timeline visit should fit in usize"),
+            node_name: entry.node_name.clone(),
+            visit: usize::try_from(entry.visit.get()).expect("timeline visit should fit in usize"),
             run_commit_sha: entry.run_commit_sha.clone(),
         })
         .collect()

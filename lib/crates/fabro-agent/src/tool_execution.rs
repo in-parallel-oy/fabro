@@ -271,23 +271,32 @@ fn error_tool_result_with_events(
 }
 
 fn emit_tool_call_started(emitter: &Emitter, session_id: &str, tc: &ToolCall) {
-    emitter.emit(session_id.to_owned(), AgentEvent::ToolCallStarted {
-        tool_name:    tc.name.clone(),
-        tool_call_id: tc.id.clone(),
-        arguments:    tc.arguments.clone(),
-    });
+    emitter.emit(
+        session_id.to_owned(),
+        AgentEvent::ToolCallStarted {
+            tool_name: tc.name.clone(),
+            tool_call_id: tc.id.clone(),
+            arguments: tc.arguments.clone(),
+        },
+    );
 }
 
 fn emit_tool_call_result(emitter: &Emitter, session_id: &str, tc: &ToolCall, result: &ToolResult) {
-    emitter.emit(session_id.to_owned(), AgentEvent::ToolCallOutputDelta {
-        delta: result.content.to_string(),
-    });
-    emitter.emit(session_id.to_owned(), AgentEvent::ToolCallCompleted {
-        tool_name:    tc.name.clone(),
-        tool_call_id: tc.id.clone(),
-        output:       result.content.clone(),
-        is_error:     result.is_error,
-    });
+    emitter.emit(
+        session_id.to_owned(),
+        AgentEvent::ToolCallOutputDelta {
+            delta: result.content.to_string(),
+        },
+    );
+    emitter.emit(
+        session_id.to_owned(),
+        AgentEvent::ToolCallCompleted {
+            tool_name: tc.name.clone(),
+            tool_call_id: tc.id.clone(),
+            output: result.content.clone(),
+            is_error: result.is_error,
+        },
+    );
 }
 
 /// Execute a single tool call with event emission and output truncation.
@@ -474,8 +483,8 @@ async fn execute_one_tool(
 
             let agent_event_emitter: Option<Arc<dyn AgentEventEmitter>> =
                 Some(Arc::new(SessionBoundEmitter {
-                    emitter:      emitter.clone(),
-                    session_id:   session_id.to_owned(),
+                    emitter: emitter.clone(),
+                    session_id: session_id.to_owned(),
                     tool_call_id: Some(tc.id.clone()),
                 }));
             let ctx = ToolContext {
@@ -513,10 +522,10 @@ fn truncate_tool_result(
     };
 
     ToolResult {
-        tool_call_id:     result.tool_call_id.clone(),
-        content:          truncated_content,
-        is_error:         result.is_error,
-        image_data:       result.image_data.clone(),
+        tool_call_id: result.tool_call_id.clone(),
+        content: truncated_content,
+        is_error: result.is_error,
+        image_data: result.image_data.clone(),
         image_media_type: result.image_media_type.clone(),
     }
 }
@@ -603,9 +612,9 @@ mod tests {
     fn make_echo_tool() -> RegisteredTool {
         RegisteredTool {
             definition: ToolDefinition {
-                name:        "echo".to_string(),
+                name: "echo".to_string(),
                 description: "Echo input".to_string(),
-                parameters:  serde_json::json!({
+                parameters: serde_json::json!({
                     "type": "object",
                     "properties": {
                         "text": {"type": "string"}
@@ -613,37 +622,37 @@ mod tests {
                     "required": ["text"]
                 }),
             },
-            executor:   Arc::new(|args: serde_json::Value, _ctx: ToolContext| {
+            executor: Arc::new(|args: serde_json::Value, _ctx: ToolContext| {
                 Box::pin(async move {
                     let text = args["text"].as_str().unwrap_or("").to_string();
                     Ok(format!("echo: {text}"))
                 })
             }),
-            source:     ToolSource::Native,
+            source: ToolSource::Native,
         }
     }
 
     fn make_fail_tool() -> RegisteredTool {
         RegisteredTool {
             definition: ToolDefinition {
-                name:        "fail_tool".to_string(),
+                name: "fail_tool".to_string(),
                 description: "Always fails".to_string(),
-                parameters:  serde_json::json!({}),
+                parameters: serde_json::json!({}),
             },
-            executor:   Arc::new(|_args: serde_json::Value, _ctx: ToolContext| {
+            executor: Arc::new(|_args: serde_json::Value, _ctx: ToolContext| {
                 Box::pin(async move { Err("tool failed".to_string()) })
             }),
-            source:     ToolSource::Native,
+            source: ToolSource::Native,
         }
     }
 
     fn make_tool_call(name: &str, id: &str, args: serde_json::Value) -> ToolCall {
         ToolCall {
-            id:                id.to_string(),
-            name:              name.to_string(),
-            tool_type:         "function".to_string(),
-            arguments:         args,
-            raw_arguments:     None,
+            id: id.to_string(),
+            name: name.to_string(),
+            tool_type: "function".to_string(),
+            arguments: args,
+            raw_arguments: None,
             provider_metadata: None,
         }
     }
@@ -661,10 +670,10 @@ mod tests {
             Ok(questions
                 .into_iter()
                 .map(|question| AgentQuestionAnswer {
-                    original_id:       question.original_id,
+                    original_id: question.original_id,
                     original_question: question.original_question,
-                    answers:           vec!["Ship".to_string()],
-                    status:            AgentQuestionAnswerStatus::Answered,
+                    answers: vec!["Ship".to_string()],
+                    status: AgentQuestionAnswerStatus::Answered,
                 })
                 .collect())
         }
@@ -768,16 +777,16 @@ mod tests {
     }
 
     struct MockHookCallback {
-        pre_decision:       ToolHookDecision,
-        post_calls:         Arc<Mutex<Vec<(String, String, String)>>>,
+        pre_decision: ToolHookDecision,
+        post_calls: Arc<Mutex<Vec<(String, String, String)>>>,
         post_failure_calls: Arc<Mutex<Vec<(String, String, String)>>>,
     }
 
     impl MockHookCallback {
         fn new(decision: ToolHookDecision) -> Self {
             Self {
-                pre_decision:       decision,
-                post_calls:         Arc::new(Mutex::new(Vec::new())),
+                pre_decision: decision,
+                post_calls: Arc::new(Mutex::new(Vec::new())),
                 post_failure_calls: Arc::new(Mutex::new(Vec::new())),
             }
         }
@@ -985,18 +994,18 @@ mod tests {
         let executions_for_tool = Arc::clone(&executions);
         registry.register(RegisteredTool {
             definition: ToolDefinition {
-                name:        "write_file".to_string(),
+                name: "write_file".to_string(),
                 description: "Writes a file".to_string(),
-                parameters:  serde_json::json!({"type": "object"}),
+                parameters: serde_json::json!({"type": "object"}),
             },
-            executor:   Arc::new(move |_args: serde_json::Value, _ctx: ToolContext| {
+            executor: Arc::new(move |_args: serde_json::Value, _ctx: ToolContext| {
                 let executions = Arc::clone(&executions_for_tool);
                 Box::pin(async move {
                     *executions.lock().unwrap() += 1;
                     Ok("wrote".to_string())
                 })
             }),
-            source:     ToolSource::Native,
+            source: ToolSource::Native,
         });
         let config = SessionOptions {
             tool_access_policy: Some(Arc::new(NamedPolicy::new([(
@@ -1040,18 +1049,18 @@ mod tests {
         let executions_for_tool = Arc::clone(&executions);
         registry.register(RegisteredTool {
             definition: ToolDefinition {
-                name:        "shell".to_string(),
+                name: "shell".to_string(),
                 description: "Runs a command".to_string(),
-                parameters:  serde_json::json!({"type": "object"}),
+                parameters: serde_json::json!({"type": "object"}),
             },
-            executor:   Arc::new(move |_args: serde_json::Value, _ctx: ToolContext| {
+            executor: Arc::new(move |_args: serde_json::Value, _ctx: ToolContext| {
                 let executions = Arc::clone(&executions_for_tool);
                 Box::pin(async move {
                     *executions.lock().unwrap() += 1;
                     Ok("ran".to_string())
                 })
             }),
-            source:     ToolSource::Native,
+            source: ToolSource::Native,
         });
         let config = SessionOptions {
             tool_access_policy: Some(Arc::new(NamedPolicy::new([(

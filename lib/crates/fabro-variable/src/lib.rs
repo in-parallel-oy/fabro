@@ -12,11 +12,11 @@ use fabro_types::{Variable, is_env_style_name};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct VariableEntry {
-    value:       String,
+    value: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     description: Option<String>,
-    created_at:  DateTime<Utc>,
-    updated_at:  DateTime<Utc>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug)]
@@ -62,7 +62,7 @@ impl From<serde_json::Error> for Error {
 
 #[derive(Debug)]
 pub struct VariableStore {
-    path:    PathBuf,
+    path: PathBuf,
     entries: HashMap<String, VariableEntry>,
 }
 
@@ -205,11 +205,11 @@ impl VariableStore {
 
 fn variable_from_entry(name: &str, entry: &VariableEntry) -> Variable {
     Variable {
-        name:        name.to_string(),
-        value:       entry.value.clone(),
+        name: name.to_string(),
+        value: entry.value.clone(),
         description: entry.description.clone(),
-        created_at:  entry.created_at,
-        updated_at:  entry.updated_at,
+        created_at: entry.created_at,
+        updated_at: entry.updated_at,
     }
 }
 

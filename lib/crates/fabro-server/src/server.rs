@@ -194,7 +194,7 @@ pub fn default_page_limit() -> u32 {
 #[derive(serde::Deserialize)]
 pub struct PaginationParams {
     #[serde(rename = "page[limit]", default = "default_page_limit")]
-    pub limit:  u32,
+    pub limit: u32,
     #[serde(rename = "page[offset]", default)]
     pub offset: u32,
 }
@@ -227,7 +227,7 @@ impl<T: serde::Serialize> ListResponse<T> {
             data,
             meta: PaginationMeta {
                 has_more: false,
-                total:    None,
+                total: None,
             },
         }
     }
@@ -283,16 +283,16 @@ const WORKER_CONTROL_ENQUEUE_TIMEOUT: Duration = Duration::from_secs(1);
 /// Per-model billing totals.
 #[derive(Default)]
 struct ModelBillingTotals {
-    stages:  i64,
+    stages: i64,
     billing: BilledTokenCounts,
 }
 
 /// In-memory aggregate billing counters, reset on server restart.
 #[derive(Default)]
 struct BillingAccumulator {
-    total_runs:   i64,
+    total_runs: i64,
     total_timing: fabro_types::RunTiming,
-    by_model:     HashMap<ModelRef, ModelBillingTotals>,
+    by_model: HashMap<ModelRef, ModelBillingTotals>,
 }
 
 pub(crate) type RegistryFactoryOverride =
@@ -302,10 +302,10 @@ pub(crate) type RegistryFactoryOverride =
 enum RunAnswerTransport {
     Worker {
         run_id: RunId,
-        bus:    Arc<dyn WorkerControlBus>,
+        bus: Arc<dyn WorkerControlBus>,
     },
     InProcess {
-        interviewer:  Arc<ControlInterviewer>,
+        interviewer: Arc<ControlInterviewer>,
         steering_hub: Arc<fabro_workflow::SteeringHub>,
     },
 }
@@ -532,45 +532,45 @@ impl RunAnswerTransport {
 
 #[derive(Debug, Clone)]
 struct LoadedPendingInterview {
-    run_id:   RunId,
-    qid:      String,
+    run_id: RunId,
+    qid: String,
     question: InterviewQuestionRecord,
 }
 
 #[derive(Debug, Clone)]
 struct SlackLifecycleDetails {
-    kind:               slack_blocks::RunLifecycleKind,
+    kind: slack_blocks::RunLifecycleKind,
     started_event_name: Option<String>,
-    result:             Option<String>,
-    duration_ms:        Option<u64>,
+    result: Option<String>,
+    duration_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default)]
 struct PriorSlackLifecycleEventDetails {
     started_event_name: Option<String>,
-    pull_request:       Option<SlackLifecyclePullRequest>,
+    pull_request: Option<SlackLifecyclePullRequest>,
 }
 
 #[derive(Debug, Clone)]
 struct SlackLifecyclePullRequest {
     number: u64,
-    title:  Option<String>,
-    url:    Option<String>,
+    title: Option<String>,
+    url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 struct SlackConnectionRuntimeState {
-    status:            IntegrationConnectionState,
+    status: IntegrationConnectionState,
     last_connected_at: Option<DateTime<Utc>>,
-    last_error:        Option<String>,
+    last_error: Option<String>,
 }
 
 impl Default for SlackConnectionRuntimeState {
     fn default() -> Self {
         Self {
-            status:            IntegrationConnectionState::Connecting,
+            status: IntegrationConnectionState::Connecting,
             last_connected_at: None,
-            last_error:        None,
+            last_error: None,
         }
     }
 }
@@ -583,12 +583,12 @@ fn sanitize_integration_error(error: &str) -> String {
 
 #[derive(Clone)]
 struct SlackService {
-    client:          SlackClient,
-    app_token:       String,
+    client: SlackClient,
+    app_token: String,
     default_channel: Option<String>,
     posted_messages: Arc<Mutex<HashMap<(RunId, String), SlackPostedMessage>>>,
     thread_registry: Arc<ThreadRegistry>,
-    connection:      Arc<Mutex<SlackConnectionRuntimeState>>,
+    connection: Arc<Mutex<SlackConnectionRuntimeState>>,
 }
 
 impl SlackService {
@@ -610,10 +610,10 @@ impl SlackService {
             .expect("slack connection state lock poisoned")
             .clone();
         IntegrationConnectionStatus {
-            kind:              IntegrationConnectionKind::SocketMode,
-            status:            state.status,
+            kind: IntegrationConnectionKind::SocketMode,
+            status: state.status,
             last_connected_at: state.last_connected_at,
-            last_error:        state.last_error,
+            last_error: state.last_error,
         }
     }
 
@@ -667,12 +667,12 @@ impl SlackService {
                 }
 
                 let question = runtime_question_from_interview_record(&InterviewQuestionRecord {
-                    id:              props.question_id.clone(),
-                    text:            props.question.clone(),
-                    stage:           props.stage.clone(),
-                    question_type:   props.question_type.parse().unwrap_or_default(),
-                    options:         props.options.clone(),
-                    allow_freeform:  props.allow_freeform,
+                    id: props.question_id.clone(),
+                    text: props.question.clone(),
+                    stage: props.stage.clone(),
+                    question_type: props.question_type.parse().unwrap_or_default(),
+                    options: props.options.clone(),
+                    allow_freeform: props.allow_freeform,
                     timeout_seconds: props.timeout_seconds,
                     context_display: props.context_display.clone(),
                 });
@@ -814,18 +814,20 @@ impl SlackService {
                 .as_ref()
                 .map(|pull_request| slack_blocks::RunLifecyclePullRequest {
                     number: pull_request.number,
-                    title:  pull_request.title.as_deref(),
-                    url:    pull_request.url.as_deref(),
+                    title: pull_request.title.as_deref(),
+                    url: pull_request.url.as_deref(),
                 });
-        let blocks =
-            slack_blocks::run_lifecycle_blocks(details.kind, &slack_blocks::RunLifecycleBlocks {
+        let blocks = slack_blocks::run_lifecycle_blocks(
+            details.kind,
+            &slack_blocks::RunLifecycleBlocks {
                 run_id: &run_id,
                 run_url,
                 workflow_label: &workflow_label,
                 result: details.result.as_deref(),
                 duration_ms: details.duration_ms,
                 pull_request: pull_request_blocks,
-            });
+            },
+        );
 
         let blocks = &blocks;
         let posts = routes.into_iter().filter_map(|(route_name, route)| {
@@ -893,25 +895,25 @@ impl SlackService {
 fn slack_lifecycle_details(event: &RunEvent) -> Option<SlackLifecycleDetails> {
     match &event.body {
         EventBody::RunStarted(props) => Some(SlackLifecycleDetails {
-            kind:               slack_blocks::RunLifecycleKind::Started,
+            kind: slack_blocks::RunLifecycleKind::Started,
             started_event_name: Some(props.name.clone()),
-            result:             None,
-            duration_ms:        None,
+            result: None,
+            duration_ms: None,
         }),
         EventBody::RunCompleted(props) => Some(SlackLifecycleDetails {
-            kind:               slack_blocks::RunLifecycleKind::Completed,
+            kind: slack_blocks::RunLifecycleKind::Completed,
             started_event_name: None,
-            result:             Some(slack_lifecycle_completed_result(
+            result: Some(slack_lifecycle_completed_result(
                 &props.status,
                 props.reason,
             )),
-            duration_ms:        Some(props.timing.wall_time_ms),
+            duration_ms: Some(props.timing.wall_time_ms),
         }),
         EventBody::RunFailed(props) => Some(SlackLifecycleDetails {
-            kind:               slack_blocks::RunLifecycleKind::Failed,
+            kind: slack_blocks::RunLifecycleKind::Failed,
             started_event_name: None,
-            result:             Some(slack_lifecycle_failed_result(&props.failure)),
-            duration_ms:        Some(props.timing.wall_time_ms),
+            result: Some(slack_lifecycle_failed_result(&props.failure)),
+            duration_ms: Some(props.timing.wall_time_ms),
         }),
         _ => None,
     }
@@ -977,8 +979,8 @@ async fn load_prior_slack_lifecycle_event_details(
             EventBody::PullRequestCreated(props) => {
                 details.pull_request = Some(SlackLifecyclePullRequest {
                     number: props.pr_number,
-                    title:  Some(props.title),
-                    url:    Some(props.pr_url),
+                    title: Some(props.title),
+                    url: Some(props.pr_url),
                 });
             }
             _ => {}
@@ -1009,8 +1011,8 @@ fn slack_lifecycle_workflow_label(
 fn slack_lifecycle_pull_request_from_link(link: &PullRequestLink) -> SlackLifecyclePullRequest {
     SlackLifecyclePullRequest {
         number: link.number,
-        title:  None,
-        url:    Some(link.html_url()),
+        title: None,
+        url: Some(link.html_url()),
     }
 }
 
@@ -1191,10 +1193,10 @@ impl AskFabroReadiness {
 }
 
 struct PullRequestCreateGuard {
-    locks:  PullRequestCreateLocks,
+    locks: PullRequestCreateLocks,
     run_id: RunId,
-    mutex:  Arc<AsyncMutex<()>>,
-    guard:  Option<OwnedMutexGuard<()>>,
+    mutex: Arc<AsyncMutex<()>>,
+    guard: Option<OwnedMutexGuard<()>>,
 }
 
 impl Drop for PullRequestCreateGuard {
@@ -1260,9 +1262,9 @@ pub(crate) struct AppStateConfig {
 
 #[derive(Clone)]
 pub(crate) struct ResolvedAppStateSettings {
-    pub(crate) server_settings:       ServerSettings,
+    pub(crate) server_settings: ServerSettings,
     pub(crate) manifest_run_defaults: RunLayer,
-    pub(crate) llm_catalog_settings:  LlmCatalogSettings,
+    pub(crate) llm_catalog_settings: LlmCatalogSettings,
 }
 
 fn accumulate_billing_rollup(
@@ -1619,8 +1621,8 @@ async fn resolve_llm_client_from_source(
     let report = LlmClient::from_credentials_report(resolved.credentials, catalog).await;
 
     Ok(LlmClientResult {
-        client:              report.client,
-        auth_issues:         resolved.auth_issues,
+        client: report.client,
+        auth_issues: resolved.auth_issues,
         registration_issues: report.registration_issues,
     })
 }
@@ -1699,23 +1701,23 @@ pub fn build_router(state: Arc<AppState>, auth_mode: AuthMode) -> Router {
 
 #[derive(Clone, Debug)]
 pub struct RouterOptions {
-    pub web_enabled:       bool,
+    pub web_enabled: bool,
     pub static_asset_root: Option<PathBuf>,
-    pub github_endpoints:  Option<Arc<GithubEndpoints>>,
+    pub github_endpoints: Option<Arc<GithubEndpoints>>,
     /// Set when serving with the `--watch-web` dev flag. The static-file
     /// handler then refuses to fall back to the embedded SPA snapshot and
     /// returns a 503 "build in progress" page on miss, so developers see
     /// their edits or a clear signal — never stale embedded bytes.
-    pub watch_web:         bool,
+    pub watch_web: bool,
 }
 
 impl Default for RouterOptions {
     fn default() -> Self {
         Self {
-            web_enabled:       true,
+            web_enabled: true,
             static_asset_root: None,
-            github_endpoints:  None,
-            watch_web:         false,
+            github_endpoints: None,
+            watch_web: false,
         }
     }
 }
@@ -2009,8 +2011,8 @@ async fn github_webhook(
 }
 
 struct PrunePlan {
-    run_ids:          Vec<RunId>,
-    rows:             Vec<PruneRunEntry>,
+    run_ids: Vec<RunId>,
+    rows: Vec<PruneRunEntry>,
     total_size_bytes: u64,
 }
 
@@ -2042,12 +2044,12 @@ fn build_disk_usage_response(
         }
         if verbose {
             run_rows.push(DiskUsageRunRow {
-                run_id:        Some(run.run_id().to_string()),
+                run_id: Some(run.run_id().to_string()),
                 workflow_name: Some(run.workflow_display_name()),
-                status:        Some(run.status().to_string()),
-                start_time:    Some(run.start_time()),
-                size_bytes:    Some(to_i64(size)),
-                reclaimable:   Some(!run.status().is_active()),
+                status: Some(run.status().to_string()),
+                start_time: Some(run.start_time()),
+                size_bytes: Some(to_i64(size)),
+                reclaimable: Some(!run.status().is_active()),
             });
         }
     }
@@ -2074,32 +2076,32 @@ fn build_disk_usage_response(
     let other_size = managed_size.saturating_sub(total_run_size + total_log_size);
 
     Ok(DiskUsageResponse {
-        summary:                 vec![
+        summary: vec![
             DiskUsageSummaryRow {
-                type_:             Some("runs".to_string()),
-                count:             Some(to_i64(runs.len())),
-                active:            Some(to_i64(active_count)),
-                size_bytes:        Some(to_i64(total_run_size)),
+                type_: Some("runs".to_string()),
+                count: Some(to_i64(runs.len())),
+                active: Some(to_i64(active_count)),
+                size_bytes: Some(to_i64(total_run_size)),
                 reclaimable_bytes: Some(to_i64(reclaimable_run_size)),
             },
             DiskUsageSummaryRow {
-                type_:             Some("logs".to_string()),
-                count:             Some(to_i64(log_count)),
-                active:            None,
-                size_bytes:        Some(to_i64(total_log_size)),
+                type_: Some("logs".to_string()),
+                count: Some(to_i64(log_count)),
+                active: None,
+                size_bytes: Some(to_i64(total_log_size)),
                 reclaimable_bytes: Some(to_i64(total_log_size)),
             },
             DiskUsageSummaryRow {
-                type_:             Some("other".to_string()),
-                count:             None,
-                active:            None,
-                size_bytes:        Some(to_i64(other_size)),
+                type_: Some("other".to_string()),
+                count: None,
+                active: None,
+                size_bytes: Some(to_i64(other_size)),
                 reclaimable_bytes: Some(0),
             },
         ],
-        total_size_bytes:        Some(to_i64(managed_size)),
+        total_size_bytes: Some(to_i64(managed_size)),
         total_reclaimable_bytes: Some(to_i64(reclaimable_run_size + total_log_size)),
-        runs:                    verbose.then_some(run_rows),
+        runs: verbose.then_some(run_rows),
     })
 }
 
@@ -2149,10 +2151,10 @@ fn build_prune_plan(
     let rows = filtered
         .iter()
         .map(|run| PruneRunEntry {
-            run_id:        Some(run.run_id().to_string()),
-            dir_name:      Some(run.dir_name.clone()),
+            run_id: Some(run.run_id().to_string()),
+            dir_name: Some(run.dir_name.clone()),
             workflow_name: Some(run.workflow_display_name()),
-            size_bytes:    Some(to_i64(dir_size(&run.path))),
+            size_bytes: Some(to_i64(dir_size(&run.path))),
         })
         .collect::<Vec<_>>();
     let total_size_bytes = rows
@@ -2274,7 +2276,9 @@ fn build_sandbox_provider_registry(
         if settings.is_provisionable() {
             // `fabro_http::HttpClient` is a type alias for `reqwest::Client`;
             // reuse the shared client when present, else a fresh one.
-            let http = http_client.clone().unwrap_or_else(fabro_http::HttpClient::new);
+            let http = http_client
+                .clone()
+                .unwrap_or_else(fabro_http::HttpClient::new);
             providers.push(Arc::new(GcloudSandboxProvider::new(settings, http)));
         }
     }
@@ -2645,11 +2649,11 @@ async fn delete_run_sandbox_resource(
     let runtime = &record.runtime;
     if preserve {
         return Ok(SandboxDeleteOutcome::Preserved(DeleteRunResponse {
-            deleted:           true,
+            deleted: true,
             sandbox_preserved: true,
-            sandbox:           DeleteRunSandbox {
+            sandbox: DeleteRunSandbox {
                 provider: record.provider,
-                id:       runtime.id.clone(),
+                id: runtime.id.clone(),
             },
         }));
     }
@@ -2941,7 +2945,7 @@ fn release_run_answer_claim(state: &AppState, run_id: RunId, qid: &str) {
 
 #[derive(Clone)]
 struct LiveWorkerProcess {
-    run_id:     RunId,
+    run_id: RunId,
     worker_ref: WorkerRef,
 }
 
@@ -3400,15 +3404,16 @@ fn update_live_run_from_event(state: &AppState, run_id: RunId, event: &RunEvent)
                     if props.provider.as_deref() == Some(acp_provider) {
                         managed_run.active_api_targets.remove(stage_id);
                     } else {
-                        managed_run
-                            .active_api_targets
-                            .insert(stage_id.clone(), PairTarget {
-                                stage_id:   stage_id.clone(),
+                        managed_run.active_api_targets.insert(
+                            stage_id.clone(),
+                            PairTarget {
+                                stage_id: stage_id.clone(),
                                 node_label: event
                                     .node_label
                                     .clone()
                                     .unwrap_or_else(|| stage_id.node_id().to_string()),
-                            });
+                            },
+                        );
                     }
                 } else {
                     managed_run
@@ -3600,27 +3605,27 @@ fn resolved_log_destination(state: &AppState) -> anyhow::Result<LogDestination> 
 
 fn runtime_question_from_interview_record(question: &InterviewQuestionRecord) -> Question {
     Question {
-        id:              question.id.clone(),
-        text:            question.text.clone(),
-        question_type:   question.question_type,
-        options:         question.options.clone(),
-        allow_freeform:  question.allow_freeform,
-        default:         None,
+        id: question.id.clone(),
+        text: question.text.clone(),
+        question_type: question.question_type,
+        options: question.options.clone(),
+        allow_freeform: question.allow_freeform,
+        default: None,
         timeout_seconds: question.timeout_seconds,
-        stage:           question.stage.clone(),
-        metadata:        HashMap::new(),
+        stage: question.stage.clone(),
+        metadata: HashMap::new(),
         context_display: question.context_display.clone(),
     }
 }
 
 fn api_question_from_interview_record(question: &InterviewQuestionRecord) -> ApiQuestion {
     ApiQuestion {
-        id:              question.id.clone(),
-        text:            question.text.clone(),
-        stage:           question.stage.clone(),
-        question_type:   question.question_type,
-        options:         question.options.clone(),
-        allow_freeform:  question.allow_freeform,
+        id: question.id.clone(),
+        text: question.text.clone(),
+        stage: question.stage.clone(),
+        question_type: question.question_type,
+        options: question.options.clone(),
+        allow_freeform: question.allow_freeform,
         timeout_seconds: question.timeout_seconds,
         context_display: question.context_display.clone(),
     }
@@ -3871,7 +3876,7 @@ async fn execute_run_in_process(state: Arc<AppState>, run_id: RunId) {
             if managed_run.status == RunStatus::Starting {
                 managed_run.status = RunStatus::Running;
                 managed_run.answer_transport = Some(RunAnswerTransport::InProcess {
-                    interviewer:  Arc::clone(&interviewer),
+                    interviewer: Arc::clone(&interviewer),
                     steering_hub: Arc::clone(&steering_hub),
                 });
                 false

@@ -184,9 +184,9 @@ async fn encode_dual_id_tool_round_trip() {
     request.messages = vec![
         Message::user("Find foo"),
         Message {
-            role:         Role::Assistant,
-            content:      vec![ContentPart::ToolCall(tool_call)],
-            name:         None,
+            role: Role::Assistant,
+            content: vec![ContentPart::ToolCall(tool_call)],
+            name: None,
             tool_call_id: None,
         },
         Message::tool_result(
@@ -207,8 +207,8 @@ async fn encode_opaque_items_round_trip() {
         messages: vec![
             Message::user("Think about 2+2."),
             Message {
-                role:         Role::Assistant,
-                content:      vec![
+                role: Role::Assistant,
+                content: vec![
                     ContentPart::Other {
                         kind: ContentPart::OPENAI_REASONING.to_string(),
                         data: serde_json::json!({
@@ -227,7 +227,7 @@ async fn encode_opaque_items_round_trip() {
                         }),
                     },
                 ],
-                name:         None,
+                name: None,
                 tool_call_id: None,
             },
             Message::user("Now 3+3?"),
@@ -273,9 +273,9 @@ async fn encode_audio_attachment() {
 #[tokio::test]
 async fn encode_response_format_json_object() {
     let format = ResponseFormat {
-        kind:        ResponseFormatType::JsonObject,
+        kind: ResponseFormatType::JsonObject,
         json_schema: None,
-        strict:      false,
+        strict: false,
     };
     let capture = encode_capture(adapter(), &corpus_response_format(MODEL, format)).await;
     fabro_test::fabro_json_snapshot!(capture.body);

@@ -11,15 +11,15 @@ use super::common::{FabroToolBackend, RunSummaryResult, ToolError, ToolResult};
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct FabroRunGatherParams {
-    pub run_ids:               Vec<String>,
-    pub timeout_seconds:       Option<u64>,
+    pub run_ids: Vec<String>,
+    pub timeout_seconds: Option<u64>,
     pub poll_interval_seconds: Option<u64>,
 }
 
 #[derive(Debug)]
 pub struct ValidatedGatherRuns {
-    pub run_ids:               Vec<String>,
-    pub timeout_seconds:       u64,
+    pub run_ids: Vec<String>,
+    pub timeout_seconds: u64,
     pub poll_interval_seconds: u64,
 }
 
@@ -38,8 +38,8 @@ impl TryFrom<FabroRunGatherParams> for ValidatedGatherRuns {
             return Err(ToolError::message("poll_interval_seconds must be >= 5"));
         }
         Ok(Self {
-            run_ids:               params.run_ids,
-            timeout_seconds:       params.timeout_seconds.unwrap_or(300),
+            run_ids: params.run_ids,
+            timeout_seconds: params.timeout_seconds.unwrap_or(300),
             poll_interval_seconds: params.poll_interval_seconds.unwrap_or(15),
         })
     }
@@ -47,8 +47,8 @@ impl TryFrom<FabroRunGatherParams> for ValidatedGatherRuns {
 
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct GatherRunsResult {
-    pub runs:            Vec<RunSummaryResult>,
-    pub timed_out:       bool,
+    pub runs: Vec<RunSummaryResult>,
+    pub timed_out: bool,
     pub elapsed_seconds: u64,
 }
 
@@ -81,16 +81,16 @@ pub async fn gather_runs(
             .all(|run| run.lifecycle.status.is_terminal())
         {
             return Ok(GatherRunsResult {
-                runs:            summaries.iter().map(common::run_summary_result).collect(),
-                timed_out:       false,
+                runs: summaries.iter().map(common::run_summary_result).collect(),
+                timed_out: false,
                 elapsed_seconds: start.elapsed().as_secs(),
             });
         }
         let now = Instant::now();
         if now >= deadline {
             return Ok(GatherRunsResult {
-                runs:            summaries.iter().map(common::run_summary_result).collect(),
-                timed_out:       true,
+                runs: summaries.iter().map(common::run_summary_result).collect(),
+                timed_out: true,
                 elapsed_seconds: start.elapsed().as_secs(),
             });
         }

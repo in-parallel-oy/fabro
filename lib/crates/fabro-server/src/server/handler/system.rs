@@ -77,21 +77,21 @@ async fn get_system_info(_auth: RequiredUser, State(state): State<Arc<AppState>>
     };
 
     let response = SystemInfoResponse {
-        version:          Some(FABRO_VERSION.to_string()),
-        server_url:       Some(state.effective_web_url()),
-        git_sha:          option_env!("FABRO_GIT_SHA").map(str::to_string),
-        build_date:       option_env!("FABRO_BUILD_DATE").map(str::to_string),
-        profile:          option_env!("FABRO_BUILD_PROFILE").map(str::to_string),
-        os:               Some(std::env::consts::OS.to_string()),
-        arch:             Some(std::env::consts::ARCH.to_string()),
-        storage_engine:   Some("slatedb".to_string()),
-        storage_dir:      Some(state.server_storage_dir().display().to_string()),
-        uptime_secs:      Some(to_i64(state.started_at.elapsed().as_secs())),
-        runs:             Some(SystemRunCounts {
-            total:                Some(to_i64(total_runs)),
-            active:               Some(to_i64(active_runs)),
+        version: Some(FABRO_VERSION.to_string()),
+        server_url: Some(state.effective_web_url()),
+        git_sha: option_env!("FABRO_GIT_SHA").map(str::to_string),
+        build_date: option_env!("FABRO_BUILD_DATE").map(str::to_string),
+        profile: option_env!("FABRO_BUILD_PROFILE").map(str::to_string),
+        os: Some(std::env::consts::OS.to_string()),
+        arch: Some(std::env::consts::ARCH.to_string()),
+        storage_engine: Some("slatedb".to_string()),
+        storage_dir: Some(state.server_storage_dir().display().to_string()),
+        uptime_secs: Some(to_i64(state.started_at.elapsed().as_secs())),
+        runs: Some(SystemRunCounts {
+            total: Some(to_i64(total_runs)),
+            active: Some(to_i64(active_runs)),
             scheduler_slots_used: Some(to_i64(scheduler_slots_used)),
-            max_concurrent_runs:  Some(to_i64(state.max_concurrent_runs)),
+            max_concurrent_runs: Some(to_i64(state.max_concurrent_runs)),
         }),
         sandbox_provider: Some(system_sandbox_provider(&manifest_run_settings)),
     };
@@ -340,9 +340,9 @@ async fn get_system_repair_runs(
     let runs = issues
         .into_iter()
         .map(|issue| SystemRepairRunIssue {
-            run_id:     issue.run_id.to_string(),
+            run_id: issue.run_id.to_string(),
             created_at: issue.created_at,
-            error:      issue.error,
+            error: issue.error,
         })
         .collect();
 
@@ -391,12 +391,12 @@ async fn prune_runs(
         return (
             StatusCode::OK,
             Json(PruneRunsResponse {
-                dry_run:          Some(true),
-                runs:             Some(prune_plan.rows),
-                total_count:      Some(to_i64(prune_plan.run_ids.len())),
+                dry_run: Some(true),
+                runs: Some(prune_plan.rows),
+                total_count: Some(to_i64(prune_plan.run_ids.len())),
                 total_size_bytes: Some(to_i64(prune_plan.total_size_bytes)),
-                deleted_count:    Some(0),
-                freed_bytes:      Some(0),
+                deleted_count: Some(0),
+                freed_bytes: Some(0),
             }),
         )
             .into_response();
@@ -411,12 +411,12 @@ async fn prune_runs(
     (
         StatusCode::OK,
         Json(PruneRunsResponse {
-            dry_run:          Some(false),
-            runs:             None,
-            total_count:      Some(to_i64(prune_plan.run_ids.len())),
+            dry_run: Some(false),
+            runs: None,
+            total_count: Some(to_i64(prune_plan.run_ids.len())),
             total_size_bytes: Some(to_i64(prune_plan.total_size_bytes)),
-            deleted_count:    Some(to_i64(prune_plan.run_ids.len())),
-            freed_bytes:      Some(to_i64(prune_plan.total_size_bytes)),
+            deleted_count: Some(to_i64(prune_plan.run_ids.len())),
+            freed_bytes: Some(to_i64(prune_plan.total_size_bytes)),
         }),
     )
         .into_response()
@@ -425,8 +425,8 @@ async fn prune_runs(
 #[derive(serde::Deserialize)]
 struct GitHubRepoResponse {
     default_branch: String,
-    private:        bool,
-    permissions:    Option<serde_json::Value>,
+    private: bool,
+    permissions: Option<serde_json::Value>,
 }
 
 /// Reject owner/repo path segments that could rewrite the GitHub API endpoint
@@ -697,8 +697,8 @@ async fn get_aggregate_billing(
         .iter()
         .map(|(model, totals)| BillingByModel {
             billing: totals.billing.clone(),
-            model:   model.clone(),
-            stages:  totals.stages,
+            model: model.clone(),
+            stages: totals.stages,
         })
         .collect();
     let total_billing =
@@ -719,15 +719,15 @@ async fn get_aggregate_billing(
             });
     let response = AggregateBilling {
         totals: AggregateBillingTotals {
-            cache_read_tokens:  total_billing.cache_read_tokens,
+            cache_read_tokens: total_billing.cache_read_tokens,
             cache_write_tokens: total_billing.cache_write_tokens,
-            input_tokens:       total_billing.input_tokens,
-            output_tokens:      total_billing.output_tokens,
-            reasoning_tokens:   total_billing.reasoning_tokens,
-            runs:               agg.total_runs,
-            timing:             agg.total_timing,
-            total_tokens:       total_billing.total_tokens,
-            total_usd_micros:   total_billing.total_usd_micros,
+            input_tokens: total_billing.input_tokens,
+            output_tokens: total_billing.output_tokens,
+            reasoning_tokens: total_billing.reasoning_tokens,
+            runs: agg.total_runs,
+            timing: agg.total_timing,
+            total_tokens: total_billing.total_tokens,
+            total_usd_micros: total_billing.total_usd_micros,
         },
         by_model,
     };

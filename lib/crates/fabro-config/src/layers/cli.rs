@@ -12,13 +12,13 @@ use super::run::McpEntryLayer;
 #[serde(deny_unknown_fields)]
 pub struct CliLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub target:  Option<CliTargetLayer>,
+    pub target: Option<CliTargetLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub auth:    Option<CliAuthLayer>,
+    pub auth: Option<CliAuthLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub exec:    Option<CliExecLayer>,
+    pub exec: Option<CliExecLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub output:  Option<CliOutputLayer>,
+    pub output: Option<CliOutputLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updates: Option<CliUpdatesLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -66,9 +66,9 @@ pub struct CliExecLayer {
     #[option(default = "false", value_type = "boolean")]
     pub prevent_idle_sleep: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model:              Option<CliExecModelLayer>,
+    pub model: Option<CliExecModelLayer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent:              Option<CliExecAgentLayer>,
+    pub agent: Option<CliExecAgentLayer>,
 }
 
 #[derive(
@@ -90,7 +90,7 @@ pub struct CliExecModelLayer {
     /// Model name for `fabro exec`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[option(value_type = "string")]
-    pub name:     Option<String>,
+    pub name: Option<String>,
 }
 
 #[derive(
@@ -115,7 +115,7 @@ pub struct CliExecAgentLayer {
     /// Agent-scoped MCP entries for `fabro exec`.
     #[serde(default, skip_serializing_if = "StickyMap::is_empty")]
     #[option(value_type = "table")]
-    pub mcps:        StickyMap<McpEntryLayer>,
+    pub mcps: StickyMap<McpEntryLayer>,
 }
 
 /// `[cli.output]` — generic CLI output defaults.
@@ -134,7 +134,7 @@ pub struct CliOutputLayer {
     /// Output format for commands that support machine-readable output.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[option(default = "\"text\"", value_type = "\"text\" | \"json\"")]
-    pub format:    Option<OutputFormat>,
+    pub format: Option<OutputFormat>,
     /// Default output verbosity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[option(

@@ -8,7 +8,7 @@ use serde_json::json;
 #[test]
 fn run_failed_serializes_nested_failure_contract() {
     let body = EventBody::RunFailed(RunFailedProps {
-        failure:              RunFailure {
+        failure: RunFailure {
             reason: FailureReason::SandboxInitFailed,
             detail: {
                 let mut detail = FailureDetail::new(
@@ -24,19 +24,19 @@ fn run_failed_serializes_nested_failure_contract() {
                     "init|transient_infra|docker-pull".to_string(),
                 ));
                 detail.exec_output_tail = Some(ExecOutputTail {
-                    stdout:           Some("last stdout line".to_string()),
-                    stderr:           Some("last stderr line".to_string()),
+                    stdout: Some("last stdout line".to_string()),
+                    stderr: Some("last stderr line".to_string()),
                     stdout_truncated: false,
                     stderr_truncated: true,
                 });
                 detail
             },
         },
-        timing:               RunTiming::wall_only(42),
+        timing: RunTiming::wall_only(42),
         final_git_commit_sha: Some("abc123".to_string()),
-        final_patch:          Some("diff --git a/file b/file".to_string()),
-        diff_summary:         None,
-        billing:              None,
+        final_patch: Some("diff --git a/file b/file".to_string()),
+        diff_summary: None,
+        billing: None,
     });
 
     let value = serde_json::to_value(&body).expect("run.failed body should serialize");
@@ -82,15 +82,15 @@ fn run_failed_serializes_nested_failure_contract() {
 #[test]
 fn run_failed_omits_empty_failure_optional_fields() {
     let body = EventBody::RunFailed(RunFailedProps {
-        failure:              RunFailure {
+        failure: RunFailure {
             reason: FailureReason::WorkflowError,
             detail: FailureDetail::new("boom", FailureCategory::Deterministic),
         },
-        timing:               RunTiming::wall_only(1),
+        timing: RunTiming::wall_only(1),
         final_git_commit_sha: None,
-        final_patch:          None,
-        diff_summary:         None,
-        billing:              None,
+        final_patch: None,
+        diff_summary: None,
+        billing: None,
     });
 
     let value = serde_json::to_value(&body).expect("run.failed body should serialize");
@@ -118,14 +118,14 @@ fn run_failed_omits_empty_failure_optional_fields() {
 #[test]
 fn conclusion_serializes_rich_failure() {
     let conclusion = Conclusion {
-        timestamp:            chrono::DateTime::parse_from_rfc3339("2026-05-13T12:00:00Z")
+        timestamp: chrono::DateTime::parse_from_rfc3339("2026-05-13T12:00:00Z")
             .unwrap()
             .with_timezone(&chrono::Utc),
-        status:               StageOutcome::Failed {
+        status: StageOutcome::Failed {
             retry_requested: false,
         },
-        timing:               RunTiming::wall_only(42),
-        failure:              Some(RunFailure {
+        timing: RunTiming::wall_only(42),
+        failure: Some(RunFailure {
             reason: FailureReason::WorkflowError,
             detail: {
                 let mut detail = FailureDetail::new("run failed", FailureCategory::Deterministic);
@@ -134,10 +134,10 @@ fn conclusion_serializes_rich_failure() {
             },
         }),
         final_git_commit_sha: None,
-        stages:               Vec::new(),
-        billing:              None,
-        total_retries:        0,
-        diff:                 RunDiff::default(),
+        stages: Vec::new(),
+        billing: None,
+        total_retries: 0,
+        diff: RunDiff::default(),
     };
 
     let value = serde_json::to_value(&conclusion).expect("conclusion should serialize");

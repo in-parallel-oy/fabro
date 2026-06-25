@@ -37,7 +37,7 @@ pub(crate) enum InternalLogSink {
         log: LogSink,
     },
     Worker {
-        server_log:       LogSink,
+        server_log: LogSink,
         per_run_log_path: PathBuf,
     },
 }
@@ -243,7 +243,7 @@ fn formatted_field_value(formatted_fields: &str, field_name: &str) -> Option<Str
 #[derive(Default)]
 struct EventFieldVisitor {
     message: Option<String>,
-    fields:  Vec<(String, String)>,
+    fields: Vec<(String, String)>,
 }
 
 impl EventFieldVisitor {

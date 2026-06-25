@@ -142,9 +142,12 @@ impl RunStatus {
                         reason: FailureReason::Cancelled,
                     }
                 )
-                | (Self::Pending { .. }, Self::Failed {
-                    reason: FailureReason::ApprovalDenied,
-                })
+                | (
+                    Self::Pending { .. },
+                    Self::Failed {
+                        reason: FailureReason::ApprovalDenied,
+                    }
+                )
                 | (
                     Self::Starting | Self::Paused { .. } | Self::Blocked { .. },
                     Self::Running
@@ -221,7 +224,7 @@ impl fmt::Display for RunStatus {
 #[derive(Debug, Clone, PartialEq)]
 pub struct InvalidTransition {
     pub from: RunStatus,
-    pub to:   RunStatus,
+    pub to: RunStatus,
 }
 
 impl fmt::Display for InvalidTransition {

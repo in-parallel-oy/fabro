@@ -2728,11 +2728,10 @@ async fn daytona_install_finish_writes_settings_and_vault_secret() {
 async fn sandbox_daytona_test_endpoint_rejects_under_scoped_api_key() {
     let server = MockServer::start_async().await;
     let auth = mock_daytona_auth_probe(&server).await;
-    let current_key = mock_daytona_current_key(&server, vec![
-        "delete:snapshots",
-        "delete:sandboxes",
-        "delete:volumes",
-    ])
+    let current_key = mock_daytona_current_key(
+        &server,
+        vec!["delete:snapshots", "delete:sandboxes", "delete:volumes"],
+    )
     .await;
     let app = build_install_router(
         InstallAppState::for_test("test-install-token")

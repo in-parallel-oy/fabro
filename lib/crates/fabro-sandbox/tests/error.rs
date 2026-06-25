@@ -19,7 +19,7 @@ fn docker_image_inspect_error_preserves_source_cause() {
 
     let source = BollardError::DockerResponseServerError {
         status_code: 500,
-        message:     "daemon unavailable".to_string(),
+        message: "daemon unavailable".to_string(),
     };
 
     let error = fabro_sandbox::Error::docker_image_inspect("buildpack-deps:noble", source);
@@ -28,7 +28,8 @@ fn docker_image_inspect_error_preserves_source_cause() {
         error.to_string(),
         "Failed to inspect Docker image buildpack-deps:noble"
     );
-    assert_eq!(error.causes(), vec![
-        "Docker responded with status code 500: daemon unavailable"
-    ]);
+    assert_eq!(
+        error.causes(),
+        vec!["Docker responded with status code 500: daemon unavailable"]
+    );
 }

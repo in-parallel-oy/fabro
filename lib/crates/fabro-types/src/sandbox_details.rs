@@ -8,20 +8,20 @@ use crate::RunSandboxInstance;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SandboxDetails {
-    pub sandbox:      RunSandboxInstance,
-    pub state:        SandboxState,
+    pub sandbox: RunSandboxInstance,
+    pub state: SandboxState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_state: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub region:       Option<String>,
+    pub region: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub web_url:      Option<String>,
-    pub resources:    SandboxResources,
+    pub web_url: Option<String>,
+    pub resources: SandboxResources,
     #[serde(default)]
-    pub network:      SandboxNetwork,
+    pub network: SandboxNetwork,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub labels:       BTreeMap<String, String>,
-    pub timestamps:   SandboxTimestamps,
+    pub labels: BTreeMap<String, String>,
+    pub timestamps: SandboxTimestamps,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,16 +45,16 @@ pub enum SandboxState {
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct SandboxResources {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cpu_cores:    Option<f64>,
+    pub cpu_cores: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory_bytes: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub disk_bytes:   Option<u64>,
+    pub disk_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct SandboxNetwork {
-    pub egress:  SandboxNetworkPolicy,
+    pub egress: SandboxNetworkPolicy,
     pub ingress: SandboxNetworkPolicy,
 }
 
@@ -66,7 +66,7 @@ impl SandboxNetwork {
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize)]
 pub struct SandboxNetworkPolicy {
-    mode:  SandboxNetworkPolicyMode,
+    mode: SandboxNetworkPolicyMode,
     cidrs: Vec<String>,
 }
 
@@ -85,14 +85,14 @@ impl SandboxNetworkPolicy {
 
     pub fn open() -> Self {
         Self {
-            mode:  SandboxNetworkPolicyMode::Open,
+            mode: SandboxNetworkPolicyMode::Open,
             cidrs: Vec::new(),
         }
     }
 
     pub fn blocked() -> Self {
         Self {
-            mode:  SandboxNetworkPolicyMode::Blocked,
+            mode: SandboxNetworkPolicyMode::Blocked,
             cidrs: Vec::new(),
         }
     }
@@ -114,7 +114,7 @@ impl SandboxNetworkPolicy {
 
     pub fn essentials_only() -> Self {
         Self {
-            mode:  SandboxNetworkPolicyMode::EssentialsOnly,
+            mode: SandboxNetworkPolicyMode::EssentialsOnly,
             cidrs: Vec::new(),
         }
     }
@@ -128,7 +128,7 @@ impl<'de> Deserialize<'de> for SandboxNetworkPolicy {
         #[derive(Deserialize)]
         struct Wire {
             #[serde(default)]
-            mode:  SandboxNetworkPolicyMode,
+            mode: SandboxNetworkPolicyMode,
             #[serde(default)]
             cidrs: Vec<String>,
         }
@@ -172,7 +172,7 @@ pub enum SandboxNetworkPolicyMode {
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct SandboxTimestamps {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub created_at:       Option<DateTime<Utc>>,
+    pub created_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_activity_at: Option<DateTime<Utc>>,
 }

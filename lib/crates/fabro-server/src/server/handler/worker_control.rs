@@ -160,7 +160,7 @@ async fn worker_control_websocket(socket: WebSocket, mut receiver: WorkerControl
 
 fn invalid_cursor_close_message() -> WsMessage {
     WsMessage::Close(Some(CloseFrame {
-        code:   close_code::POLICY,
+        code: close_code::POLICY,
         reason: WORKER_CONTROL_INVALID_CURSOR_REASON.into(),
     }))
 }

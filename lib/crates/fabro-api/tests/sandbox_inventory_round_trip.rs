@@ -28,40 +28,37 @@ fn sandbox_inventory_round_trip_json_matches_openapi_shape() {
     let created_at = Utc.with_ymd_and_hms(2026, 5, 25, 12, 0, 0).unwrap();
     let response = SandboxListResponse {
         data: vec![SandboxInfo {
-            provider:          SandboxProviderKind::Daytona,
-            id:                "sandbox-abc123".to_string(),
-            display_name:      Some("fabro-01KSGHGMCFM8W2FHXNMJ7MVY65".to_string()),
-            state:             SandboxState::Running,
-            native_state:      Some("started".to_string()),
-            image:             None,
-            snapshot:          Some("daytona-medium".to_string()),
-            region:            Some("us".to_string()),
-            web_url:           Some(
+            provider: SandboxProviderKind::Daytona,
+            id: "sandbox-abc123".to_string(),
+            display_name: Some("fabro-01KSGHGMCFM8W2FHXNMJ7MVY65".to_string()),
+            state: SandboxState::Running,
+            native_state: Some("started".to_string()),
+            image: None,
+            snapshot: Some("daytona-medium".to_string()),
+            region: Some("us".to_string()),
+            web_url: Some(
                 "https://app.daytona.io/dashboard/sandboxes?sandboxId=sandbox-abc123".to_string(),
             ),
             working_directory: Some("/home/daytona/workspace".to_string()),
-            resources:         SandboxResources {
-                cpu_cores:    Some(2.0),
+            resources: SandboxResources {
+                cpu_cores: Some(2.0),
                 memory_bytes: Some(4 * 1024 * 1024 * 1024),
-                disk_bytes:   Some(20 * 1024 * 1024 * 1024),
+                disk_bytes: Some(20 * 1024 * 1024 * 1024),
             },
-            network:           SandboxNetwork {
-                egress:  SandboxNetworkPolicy::open(),
+            network: SandboxNetwork {
+                egress: SandboxNetworkPolicy::open(),
                 ingress: SandboxNetworkPolicy::blocked(),
             },
-            labels:            BTreeMap::from([(
-                "sh.fabro.managed".to_string(),
-                "true".to_string(),
-            )]),
-            timestamps:        SandboxTimestamps {
-                created_at:       Some(created_at),
+            labels: BTreeMap::from([("sh.fabro.managed".to_string(), "true".to_string())]),
+            timestamps: SandboxTimestamps {
+                created_at: Some(created_at),
                 last_activity_at: Some(created_at),
             },
         }],
         meta: SandboxListMeta {
             provider_errors: vec![SandboxProviderLookupError {
                 provider: SandboxProviderKind::Docker,
-                message:  "Failed to connect to Docker daemon".to_string(),
+                message: "Failed to connect to Docker daemon".to_string(),
             }],
         },
     };

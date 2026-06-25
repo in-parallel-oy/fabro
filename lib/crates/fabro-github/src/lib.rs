@@ -26,8 +26,8 @@ pub fn github_api_base_url() -> String {
 /// two, and keeps the auth/endpoint pair from drifting apart.
 #[derive(Debug, Clone)]
 pub struct GitHubContext<'a> {
-    creds:       &'a GitHubCredentials,
-    base_url:    &'a str,
+    creds: &'a GitHubCredentials,
+    base_url: &'a str,
     http_client: Option<fabro_http::HttpClient>,
 }
 
@@ -63,8 +63,8 @@ impl<'a> GitHubContext<'a> {
 pub enum PullRequestApiError {
     #[error("Pull request #{number} not found in {owner}/{repo}")]
     NotFound {
-        owner:  String,
-        repo:   String,
+        owner: String,
+        repo: String,
         number: u64,
     },
     #[error(transparent)]
@@ -84,16 +84,16 @@ pub struct AppOwner {
 /// Information about a GitHub App from the authenticated `/app` endpoint.
 #[derive(Debug, Clone, Deserialize)]
 pub struct AppInfo {
-    pub slug:  String,
+    pub slug: String,
     pub owner: AppOwner,
 }
 
 /// Credentials for authenticating as a GitHub App.
 #[derive(Clone, Debug)]
 pub struct GitHubAppCredentials {
-    pub app_id:          String,
+    pub app_id: String,
     pub private_key_pem: String,
-    pub slug:            Option<String>,
+    pub slug: Option<String>,
 }
 
 impl GitHubAppCredentials {
@@ -165,7 +165,7 @@ impl GitHubAppCredentials {
 
 #[derive(Clone, Debug)]
 pub struct InstallationToken {
-    pub token:      String,
+    pub token: String,
     pub expires_at: DateTime<Utc>,
 }
 
@@ -292,7 +292,7 @@ pub enum HttpMethod {
 /// A minimal HTTP response for testability.
 pub struct HttpResponse {
     pub status: u16,
-    body:       String,
+    body: String,
 }
 
 impl HttpResponse {
@@ -482,7 +482,7 @@ async fn mint_installation_token_with_jwt(
 
     #[derive(Deserialize)]
     struct AccessToken {
-        token:      String,
+        token: String,
         expires_at: DateTime<Utc>,
     }
 
@@ -592,7 +592,7 @@ async fn mint_installation_token_with_jwt(
         .context("Failed to parse access token response")?;
 
     Ok(InstallationToken {
-        token:      access_token.token,
+        token: access_token.token,
         expires_at: access_token.expires_at,
     })
 }
@@ -639,8 +639,8 @@ pub async fn create_installation_access_token_for_pr(
 /// Result of a successful pull request creation.
 pub struct CreatedPullRequest {
     pub html_url: String,
-    pub number:   u64,
-    pub node_id:  String,
+    pub number: u64,
+    pub node_id: String,
 }
 
 /// Create a pull request on GitHub.
@@ -683,8 +683,8 @@ pub async fn create_pull_request_with_client(
     #[derive(Deserialize)]
     struct PullRequestResponse {
         html_url: String,
-        number:   u64,
-        node_id:  String,
+        number: u64,
+        node_id: String,
     }
 
     let token = ctx
@@ -746,8 +746,8 @@ pub async fn create_pull_request_with_client(
 
     Ok(CreatedPullRequest {
         html_url: pr.html_url,
-        number:   pr.number,
-        node_id:  pr.node_id,
+        number: pr.number,
+        node_id: pr.node_id,
     })
 }
 
@@ -1637,11 +1637,11 @@ mod tests {
     // -----------------------------------------------------------------------
 
     struct MockRoute {
-        method:           HttpMethod,
-        path:             String,
-        status:           u16,
-        response_body:    String,
-        assert_header:    Option<(String, MockHeaderCheck)>,
+        method: HttpMethod,
+        path: String,
+        status: u16,
+        response_body: String,
+        assert_header: Option<(String, MockHeaderCheck)>,
         assert_body_json: Option<serde_json::Value>,
     }
 
@@ -1742,9 +1742,9 @@ mod tests {
             .with_req_body(r#"{"permissions":{"contents":"write"}}"#);
 
         let creds = GitHubAppCredentials {
-            app_id:          "test".to_string(),
+            app_id: "test".to_string(),
             private_key_pem: test_rsa_key().to_string(),
-            slug:            None,
+            slug: None,
         };
 
         let token = creds
@@ -1943,9 +1943,9 @@ mod tests {
 
         let pem = test_rsa_key();
         let creds = GitHubCredentials::App(GitHubAppCredentials {
-            app_id:          "test".to_string(),
+            app_id: "test".to_string(),
             private_key_pem: pem.to_string(),
-            slug:            None,
+            slug: None,
         });
         let result = branch_exists_with_client(
             &mock,
@@ -1982,9 +1982,9 @@ mod tests {
 
         let pem = test_rsa_key();
         let creds = GitHubCredentials::App(GitHubAppCredentials {
-            app_id:          "test".to_string(),
+            app_id: "test".to_string(),
             private_key_pem: pem.to_string(),
-            slug:            None,
+            slug: None,
         });
         let result = branch_exists_with_client(
             &mock,
@@ -2021,9 +2021,9 @@ mod tests {
 
         let pem = test_rsa_key();
         let creds = GitHubCredentials::App(GitHubAppCredentials {
-            app_id:          "test".to_string(),
+            app_id: "test".to_string(),
             private_key_pem: pem.to_string(),
-            slug:            None,
+            slug: None,
         });
         let result = branch_exists_with_client(
             &mock,
@@ -2189,9 +2189,9 @@ mod tests {
 
         let pem = test_rsa_key();
         let creds = GitHubCredentials::App(GitHubAppCredentials {
-            app_id:          "test".to_string(),
+            app_id: "test".to_string(),
             private_key_pem: pem.to_string(),
-            slug:            None,
+            slug: None,
         });
         let detail = get_pull_request_with_client(
             &mock,
@@ -2235,9 +2235,9 @@ mod tests {
 
         let pem = test_rsa_key();
         let creds = GitHubCredentials::App(GitHubAppCredentials {
-            app_id:          "test".to_string(),
+            app_id: "test".to_string(),
             private_key_pem: pem.to_string(),
-            slug:            None,
+            slug: None,
         });
         let err = get_pull_request_with_client(
             &mock,
@@ -2307,13 +2307,13 @@ mod tests {
     #[test]
     fn installation_token_valid_token_rejects_expired_tokens() {
         let expired = InstallationToken {
-            token:      "ghs_expired".to_string(),
+            token: "ghs_expired".to_string(),
             expires_at: chrono::Utc::now() - chrono::Duration::seconds(1),
         };
         assert!(expired.valid_token().is_err());
 
         let fresh = InstallationToken {
-            token:      "ghs_fresh".to_string(),
+            token: "ghs_fresh".to_string(),
             expires_at: chrono::Utc::now() + chrono::Duration::minutes(30),
         };
         assert_eq!(fresh.valid_token().unwrap(), "ghs_fresh");
@@ -2360,9 +2360,9 @@ mod tests {
 
         let pem = test_rsa_key();
         let creds = GitHubCredentials::App(GitHubAppCredentials {
-            app_id:          "test".to_string(),
+            app_id: "test".to_string(),
             private_key_pem: pem.to_string(),
-            slug:            None,
+            slug: None,
         });
         merge_pull_request_with_client(
             &mock,
@@ -2395,9 +2395,9 @@ mod tests {
 
         let pem = test_rsa_key();
         let creds = GitHubCredentials::App(GitHubAppCredentials {
-            app_id:          "test".to_string(),
+            app_id: "test".to_string(),
             private_key_pem: pem.to_string(),
-            slug:            None,
+            slug: None,
         });
         let err = merge_pull_request_with_client(
             &mock,
@@ -2431,9 +2431,9 @@ mod tests {
 
         let pem = test_rsa_key();
         let creds = GitHubCredentials::App(GitHubAppCredentials {
-            app_id:          "test".to_string(),
+            app_id: "test".to_string(),
             private_key_pem: pem.to_string(),
-            slug:            None,
+            slug: None,
         });
         let err = merge_pull_request_with_client(
             &mock,
@@ -2476,9 +2476,9 @@ mod tests {
 
         let pem = test_rsa_key();
         let creds = GitHubCredentials::App(GitHubAppCredentials {
-            app_id:          "test".to_string(),
+            app_id: "test".to_string(),
             private_key_pem: pem.to_string(),
-            slug:            None,
+            slug: None,
         });
         close_pull_request_with_client(&mock, &GitHubContext::new(&creds, ""), "owner", "repo", 42)
             .await
@@ -2504,9 +2504,9 @@ mod tests {
 
         let pem = test_rsa_key();
         let creds = GitHubCredentials::App(GitHubAppCredentials {
-            app_id:          "test".to_string(),
+            app_id: "test".to_string(),
             private_key_pem: pem.to_string(),
-            slug:            None,
+            slug: None,
         });
         let err = close_pull_request_with_client(
             &mock,

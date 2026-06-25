@@ -17,7 +17,7 @@ pub(super) fn encode(ctx: &CodecCtx<'_>, stream: bool) -> Result<EncodedRequest,
                  structured output is a named follow-up)",
                 ctx.provider_name
             ),
-            source:  None,
+            source: None,
         });
     }
 
@@ -359,19 +359,19 @@ mod tests {
 
     fn base_request(model: &str) -> Request {
         Request {
-            model:            model.to_string(),
-            messages:         vec![Message::user("Hello")],
-            provider:         Some("bedrock".to_string()),
-            tools:            None,
-            tool_choice:      None,
-            response_format:  None,
-            temperature:      Some(0.5),
-            top_p:            None,
-            max_tokens:       Some(256),
-            stop_sequences:   None,
+            model: model.to_string(),
+            messages: vec![Message::user("Hello")],
+            provider: Some("bedrock".to_string()),
+            tools: None,
+            tool_choice: None,
+            response_format: None,
+            temperature: Some(0.5),
+            top_p: None,
+            max_tokens: Some(256),
+            stop_sequences: None,
             reasoning_effort: None,
-            speed:            None,
-            metadata:         None,
+            speed: None,
+            metadata: None,
             provider_options: None,
         }
     }
@@ -393,11 +393,11 @@ mod tests {
         let request = base_request("claude");
         let params = CodecParams::default();
         let ctx = CodecCtx {
-            request:       &request,
+            request: &request,
             provider_name: "bedrock",
             deployment_id: "us.anthropic.claude-sonnet-4-6",
-            model:         None,
-            params:        &params,
+            model: None,
+            params: &params,
         };
         assert_eq!(
             encode(&ctx, false).unwrap().endpoint,
@@ -479,15 +479,15 @@ mod tests {
     fn tool_results_ride_in_user_messages() {
         let mut request = base_request("claude");
         request.messages = vec![Message {
-            role:         Role::Tool,
-            content:      vec![ContentPart::ToolResult(ToolResult {
-                tool_call_id:     "tool-1".to_string(),
-                content:          json!("42"),
-                is_error:         false,
-                image_data:       None,
+            role: Role::Tool,
+            content: vec![ContentPart::ToolResult(ToolResult {
+                tool_call_id: "tool-1".to_string(),
+                content: json!("42"),
+                is_error: false,
+                image_data: None,
                 image_media_type: None,
             })],
-            name:         None,
+            name: None,
             tool_call_id: Some("tool-1".to_string()),
         }];
         let encoded = encode_with(&request);
@@ -506,13 +506,13 @@ mod tests {
         // null/empty `toolUse.input`, so the encoder must emit `{}`.
         let mut request = base_request("claude");
         request.messages = vec![Message {
-            role:         Role::Assistant,
-            content:      vec![ContentPart::ToolCall(ToolCall::new(
+            role: Role::Assistant,
+            content: vec![ContentPart::ToolCall(ToolCall::new(
                 "tool-1",
                 "TaskList",
                 Value::Null,
             ))],
-            name:         None,
+            name: None,
             tool_call_id: None,
         }];
         let encoded = encode_with(&request);
@@ -526,13 +526,13 @@ mod tests {
     fn thinking_parts_restructure_into_reasoning_text_blocks() {
         let mut request = base_request("claude");
         request.messages = vec![Message {
-            role:         Role::Assistant,
-            content:      vec![ContentPart::Thinking(ThinkingData {
-                text:      "prior thoughts".to_string(),
+            role: Role::Assistant,
+            content: vec![ContentPart::Thinking(ThinkingData {
+                text: "prior thoughts".to_string(),
                 signature: Some("sig-1".to_string()),
-                redacted:  false,
+                redacted: false,
             })],
-            name:         None,
+            name: None,
             tool_call_id: None,
         }];
         let encoded = encode_with(&request);
@@ -567,17 +567,17 @@ mod tests {
     fn response_format_is_rejected() {
         let mut request = base_request("claude");
         request.response_format = Some(ResponseFormat {
-            kind:        ResponseFormatType::JsonSchema,
+            kind: ResponseFormatType::JsonSchema,
             json_schema: Some(json!({"type": "object"})),
-            strict:      false,
+            strict: false,
         });
         let params = CodecParams::default();
         let ctx = CodecCtx {
-            request:       &request,
+            request: &request,
             provider_name: "bedrock",
             deployment_id: "m",
-            model:         None,
-            params:        &params,
+            model: None,
+            params: &params,
         };
         assert!(encode(&ctx, false).is_err());
     }
@@ -614,11 +614,11 @@ sampling_params = false
         request.top_p = Some(0.9);
         let params = CodecParams::default();
         let ctx = CodecCtx {
-            request:       &request,
+            request: &request,
             provider_name: "bedrock",
             deployment_id: "pinned-model",
-            model:         catalog.get("pinned-model"),
-            params:        &params,
+            model: catalog.get("pinned-model"),
+            params: &params,
         };
         let encoded = encode(&ctx, false).unwrap();
 

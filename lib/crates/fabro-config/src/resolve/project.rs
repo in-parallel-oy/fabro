@@ -5,8 +5,8 @@ use crate::ProjectLayer;
 
 pub fn resolve_project(layer: &ProjectLayer, _errors: &mut Vec<ResolveError>) -> ProjectNamespace {
     ProjectNamespace {
-        name:        layer.name.clone(),
+        name: layer.name.clone(),
         description: layer.description.clone(),
-        metadata:    layer.metadata.clone().into_inner(),
+        metadata: layer.metadata.clone().into_inner(),
     }
 }

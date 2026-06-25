@@ -18,20 +18,20 @@ use crate::user_config::ServerTarget;
 
 #[derive(Debug, Deserialize)]
 struct CliTokenResponse {
-    access_token:             String,
-    access_token_expires_at:  DateTime<Utc>,
-    refresh_token:            String,
+    access_token: String,
+    access_token_expires_at: DateTime<Utc>,
+    refresh_token: String,
     refresh_token_expires_at: DateTime<Utc>,
-    subject:                  CliTokenSubject,
+    subject: CliTokenSubject,
 }
 
 #[derive(Debug, Deserialize)]
 struct CliTokenSubject {
-    idp_issuer:  String,
+    idp_issuer: String,
     idp_subject: String,
-    login:       String,
-    name:        String,
-    email:       String,
+    login: String,
+    name: String,
+    email: String,
 }
 
 pub(super) async fn login_command(args: AuthLoginArgs, base_ctx: &CommandContext) -> Result<()> {
@@ -46,7 +46,7 @@ pub(super) async fn login_command(args: AuthLoginArgs, base_ctx: &CommandContext
         AuthStore::default().put(
             &target,
             AuthEntry::DevToken(DevTokenEntry {
-                token:        token.clone(),
+                token: token.clone(),
                 logged_in_at: Utc::now(),
             }),
         )?;
@@ -106,18 +106,18 @@ pub(super) async fn login_command(args: AuthLoginArgs, base_ctx: &CommandContext
 
         let tokens = exchange_cli_token(&target, &code, &pkce.verifier, &redirect_uri).await?;
         let entry = OAuthEntry {
-            access_token:             tokens.access_token,
-            access_token_expires_at:  tokens.access_token_expires_at,
-            refresh_token:            tokens.refresh_token,
+            access_token: tokens.access_token,
+            access_token_expires_at: tokens.access_token_expires_at,
+            refresh_token: tokens.refresh_token,
             refresh_token_expires_at: tokens.refresh_token_expires_at,
-            subject:                  StoredSubject {
-                idp_issuer:  tokens.subject.idp_issuer,
+            subject: StoredSubject {
+                idp_issuer: tokens.subject.idp_issuer,
                 idp_subject: tokens.subject.idp_subject,
-                login:       tokens.subject.login,
-                name:        tokens.subject.name,
-                email:       tokens.subject.email,
+                login: tokens.subject.login,
+                name: tokens.subject.name,
+                email: tokens.subject.email,
             },
-            logged_in_at:             Utc::now(),
+            logged_in_at: Utc::now(),
         };
         let summary = identity_summary(&entry.subject);
         AuthStore::default().put(&target, AuthEntry::OAuth(entry))?;

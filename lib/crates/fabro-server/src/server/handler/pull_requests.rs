@@ -118,10 +118,10 @@ fn github_pull_request_not_found_error(number: u64) -> ApiError {
 
 struct PullRequestGithubContext {
     record: PullRequestLink,
-    owner:  String,
-    repo:   String,
+    owner: String,
+    repo: String,
     number: u64,
-    creds:  fabro_github::GitHubCredentials,
+    creds: fabro_github::GitHubCredentials,
 }
 
 async fn load_pull_request_record(
@@ -167,11 +167,11 @@ async fn load_pull_request_github_context(
 }
 
 struct RunPrInputs<'a> {
-    goal:              &'a str,
-    base_branch:       &'a str,
-    run_branch:        &'a str,
-    diff:              &'a str,
-    conclusion:        &'a fabro_types::Conclusion,
+    goal: &'a str,
+    base_branch: &'a str,
+    run_branch: &'a str,
+    diff: &'a str,
+    conclusion: &'a fabro_types::Conclusion,
     normalized_origin: String,
 }
 
@@ -258,11 +258,11 @@ fn unavailable_pull_request_response(
 ) -> fabro_types::PullRequestResponse {
     fabro_types::PullRequestResponse {
         data: fabro_types::PullRequest {
-            link:    record,
+            link: record,
             details: None,
         },
         meta: fabro_types::PullRequestMeta {
-            details_status:             fabro_types::PullRequestDetailsStatus::Unavailable,
+            details_status: fabro_types::PullRequestDetailsStatus::Unavailable,
             details_unavailable_reason: Some(reason),
         },
     }
@@ -274,11 +274,11 @@ fn available_pull_request_response(
 ) -> fabro_types::PullRequestResponse {
     fabro_types::PullRequestResponse {
         data: fabro_types::PullRequest {
-            link:    record,
+            link: record,
             details: Some(details),
         },
         meta: fabro_types::PullRequestMeta {
-            details_status:             fabro_types::PullRequestDetailsStatus::Available,
+            details_status: fabro_types::PullRequestDetailsStatus::Available,
             details_unavailable_reason: None,
         },
     }
@@ -490,10 +490,10 @@ async fn merge_run_pull_request(
         .await
     {
         Ok(()) => Json(MergeRunPullRequestResponse {
-            number:   i64::try_from(ctx.number)
+            number: i64::try_from(ctx.number)
                 .expect("stored pull request number should fit in i64"),
             html_url: ctx.record.html_url(),
-            method:   body.method,
+            method: body.method,
         })
         .into_response(),
         Err(fabro_github::PullRequestApiError::NotFound { .. }) => {
@@ -518,7 +518,7 @@ async fn close_run_pull_request(
 
     match fabro_github::close_pull_request(&github, &ctx.owner, &ctx.repo, ctx.number).await {
         Ok(()) => Json(CloseRunPullRequestResponse {
-            number:   i64::try_from(ctx.number)
+            number: i64::try_from(ctx.number)
                 .expect("stored pull request number should fit in i64"),
             html_url: ctx.record.html_url(),
         })

@@ -25,8 +25,8 @@ const DEFAULT_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta
 /// available, no forced streaming), so there is no route config.
 pub struct Adapter {
     pub(crate) http: HttpTransport,
-    provider_name:   String,
-    catalog:         Option<Arc<Catalog>>,
+    provider_name: String,
+    catalog: Option<Arc<Catalog>>,
 }
 
 impl Adapter {
@@ -38,9 +38,9 @@ impl Adapter {
     #[must_use]
     pub fn new_optional_auth(api_key: Option<String>) -> Self {
         Self {
-            http:          HttpTransport::new_optional(api_key, DEFAULT_BASE_URL),
+            http: HttpTransport::new_optional(api_key, DEFAULT_BASE_URL),
             provider_name: "gemini".to_string(),
-            catalog:       None,
+            catalog: None,
         }
     }
 
@@ -83,9 +83,9 @@ impl Adapter {
     async fn resolve_request<'a>(&self, request: &'a Request) -> std::borrow::Cow<'a, Request> {
         // Gemini loads all three attachment kinds inline.
         let policy = AttachmentPolicy {
-            images:    true,
+            images: true,
             documents: true,
-            audio:     true,
+            audio: true,
         };
         attachments::resolve(request, policy).await
     }
@@ -219,19 +219,19 @@ mod tests {
 
     fn minimal_request() -> Request {
         Request {
-            model:            "gemini-2.0-flash".to_string(),
-            messages:         vec![Message::user("Hello")],
-            provider:         None,
-            tools:            None,
-            tool_choice:      None,
-            response_format:  None,
-            temperature:      None,
-            top_p:            None,
-            max_tokens:       None,
-            stop_sequences:   None,
+            model: "gemini-2.0-flash".to_string(),
+            messages: vec![Message::user("Hello")],
+            provider: None,
+            tools: None,
+            tool_choice: None,
+            response_format: None,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            stop_sequences: None,
             reasoning_effort: None,
-            speed:            None,
-            metadata:         None,
+            speed: None,
+            metadata: None,
             provider_options: None,
         }
     }

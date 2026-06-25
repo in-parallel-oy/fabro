@@ -13,14 +13,14 @@ use fabro_vault::{SecretType as VaultSecretType, Vault};
 
 #[derive(Debug, Clone, Copy)]
 pub struct PendingSettingsWrite<'a> {
-    pub path:              &'a Path,
-    pub contents:          &'a str,
+    pub path: &'a Path,
+    pub contents: &'a str,
     pub previous_contents: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PendingDevTokenWrite {
-    path:  PathBuf,
+    path: PathBuf,
     token: String,
 }
 
@@ -54,20 +54,20 @@ pub const GITHUB_APP_VAULT_KEYS: &[&str] = &[
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VaultSecretWrite {
-    pub name:        String,
-    pub value:       String,
+    pub name: String,
+    pub value: String,
     pub secret_type: VaultSecretType,
     pub description: Option<String>,
 }
 
 pub struct InstallPersistencePlan<'a> {
-    pub storage_dir:         &'a Path,
-    pub settings_write:      Option<PendingSettingsWrite<'a>>,
-    pub server_env_writes:   Vec<envfile::EnvFileUpdate>,
+    pub storage_dir: &'a Path,
+    pub settings_write: Option<PendingSettingsWrite<'a>>,
+    pub server_env_writes: Vec<envfile::EnvFileUpdate>,
     pub server_env_removals: Vec<envfile::EnvFileRemoval>,
-    pub dev_token_write:     Option<PendingDevTokenWrite>,
-    pub vault_writes:        Vec<VaultSecretWrite>,
-    pub vault_removals:      Vec<String>,
+    pub dev_token_write: Option<PendingDevTokenWrite>,
+    pub vault_writes: Vec<VaultSecretWrite>,
+    pub vault_removals: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,10 +88,10 @@ pub enum InstallObjectStoreSelection {
         root: String,
     },
     S3 {
-        bucket:            String,
-        region:            String,
-        credential_mode:   InstallObjectStoreCredentialMode,
-        access_key_id:     Option<String>,
+        bucket: String,
+        region: String,
+        credential_mode: InstallObjectStoreCredentialMode,
+        access_key_id: Option<String>,
         secret_access_key: Option<String>,
     },
 }
@@ -104,15 +104,15 @@ pub enum InstallSandboxSelection {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallObjectStoreEnvPlan {
-    pub writes:   Vec<envfile::EnvFileUpdate>,
+    pub writes: Vec<envfile::EnvFileUpdate>,
     pub removals: Vec<envfile::EnvFileRemoval>,
 }
 
 #[derive(Debug)]
 pub struct PersistInstallOutputsError {
-    source:                 anyhow::Error,
+    source: anyhow::Error,
     pub server_env_applied: bool,
-    pub removed_env_keys:   Vec<String>,
+    pub removed_env_keys: Vec<String>,
 }
 
 impl PersistInstallOutputsError {
@@ -337,7 +337,7 @@ fn object_store_env_removals() -> Vec<envfile::EnvFileRemoval> {
     ]
     .into_iter()
     .map(|key| envfile::EnvFileRemoval {
-        key:     key.to_string(),
+        key: key.to_string(),
         comment: Some(OBJECT_STORE_MANAGED_COMMENT.to_string()),
     })
     .collect()
@@ -405,7 +405,7 @@ pub fn write_object_store_settings(
                 write_local_store_settings(server, "slatedb", "slatedb", root)?;
             }
             Ok(InstallObjectStoreEnvPlan {
-                writes:   Vec::new(),
+                writes: Vec::new(),
                 removals: object_store_env_removals(),
             })
         }
@@ -442,13 +442,13 @@ pub fn write_object_store_settings(
                         .context("secret_access_key is required for manual credentials")?;
                     vec![
                         envfile::EnvFileUpdate {
-                            key:     OBJECT_STORE_ACCESS_KEY_ID_ENV.to_string(),
-                            value:   access_key_id.to_string(),
+                            key: OBJECT_STORE_ACCESS_KEY_ID_ENV.to_string(),
+                            value: access_key_id.to_string(),
                             comment: Some(OBJECT_STORE_MANAGED_COMMENT.to_string()),
                         },
                         envfile::EnvFileUpdate {
-                            key:     OBJECT_STORE_SECRET_ACCESS_KEY_ENV.to_string(),
-                            value:   secret_access_key.to_string(),
+                            key: OBJECT_STORE_SECRET_ACCESS_KEY_ENV.to_string(),
+                            value: secret_access_key.to_string(),
                             comment: Some(OBJECT_STORE_MANAGED_COMMENT.to_string()),
                         },
                     ]
@@ -551,7 +551,7 @@ fn persist_server_env_secrets(
 ) -> Result<envfile::EnvFileUpdateReport> {
     if writes.is_empty() && removals.is_empty() {
         return Ok(envfile::EnvFileUpdateReport {
-            entries:      std::collections::HashMap::new(),
+            entries: std::collections::HashMap::new(),
             removed_keys: Vec::new(),
         });
     }
@@ -944,9 +944,13 @@ stale = "remove-me"
         )
         .unwrap();
 
-        write_github_app_settings(&mut doc, "123", "fabro-app", "client-id", &[
-            "brynary".to_string()
-        ])
+        write_github_app_settings(
+            &mut doc,
+            "123",
+            "fabro-app",
+            "client-id",
+            &["brynary".to_string()],
+        )
         .unwrap();
 
         let github = doc
@@ -1007,20 +1011,20 @@ stale = "remove-me"
         let result = persist_install_outputs_direct(
             dir.path(),
             &[envfile::EnvFileUpdate {
-                key:     "SESSION_SECRET".to_string(),
-                value:   "session".to_string(),
+                key: "SESSION_SECRET".to_string(),
+                value: "session".to_string(),
                 comment: None,
             }],
             &[],
             &[VaultSecretWrite {
-                name:        "bad-secret-name".to_string(),
-                value:       "boom".to_string(),
+                name: "bad-secret-name".to_string(),
+                value: "boom".to_string(),
                 secret_type: VaultSecretType::Token,
                 description: None,
             }],
             Some(&PendingSettingsWrite {
-                path:              &settings_path,
-                contents:          "_version = 1\n[server]\nfoo = \"bar\"\n",
+                path: &settings_path,
+                contents: "_version = 1\n[server]\nfoo = \"bar\"\n",
                 previous_contents: Some("_version = 1\n[server]\n"),
             }),
         );
@@ -1055,18 +1059,18 @@ stale = "remove-me"
             .unwrap();
 
         InstallPersistencePlan {
-            storage_dir:         dir.path(),
-            settings_write:      None,
-            server_env_writes:   Vec::new(),
+            storage_dir: dir.path(),
+            settings_write: None,
+            server_env_writes: Vec::new(),
             server_env_removals: Vec::new(),
-            dev_token_write:     None,
-            vault_writes:        vec![VaultSecretWrite {
-                name:        "NEW_SECRET".to_string(),
-                value:       "new".to_string(),
+            dev_token_write: None,
+            vault_writes: vec![VaultSecretWrite {
+                name: "NEW_SECRET".to_string(),
+                value: "new".to_string(),
                 secret_type: VaultSecretType::Token,
                 description: None,
             }],
-            vault_removals:      vec!["REMOVE_ME".to_string()],
+            vault_removals: vec!["REMOVE_ME".to_string()],
         }
         .persist_direct()
         .unwrap();
@@ -1090,26 +1094,26 @@ stale = "remove-me"
             .unwrap();
 
         let result = InstallPersistencePlan {
-            storage_dir:         dir.path(),
-            settings_write:      Some(PendingSettingsWrite {
-                path:              &settings_path,
-                contents:          "_version = 1\n[server]\nfoo = \"bar\"\n",
+            storage_dir: dir.path(),
+            settings_write: Some(PendingSettingsWrite {
+                path: &settings_path,
+                contents: "_version = 1\n[server]\nfoo = \"bar\"\n",
                 previous_contents: Some("_version = 1\n[server]\n"),
             }),
-            server_env_writes:   vec![envfile::EnvFileUpdate {
-                key:     "SESSION_SECRET".to_string(),
-                value:   "session".to_string(),
+            server_env_writes: vec![envfile::EnvFileUpdate {
+                key: "SESSION_SECRET".to_string(),
+                value: "session".to_string(),
                 comment: None,
             }],
             server_env_removals: Vec::new(),
-            dev_token_write:     None,
-            vault_writes:        vec![VaultSecretWrite {
-                name:        "bad-secret-name".to_string(),
-                value:       "boom".to_string(),
+            dev_token_write: None,
+            vault_writes: vec![VaultSecretWrite {
+                name: "bad-secret-name".to_string(),
+                value: "boom".to_string(),
                 secret_type: VaultSecretType::Token,
                 description: None,
             }],
-            vault_removals:      vec!["REMOVE_ME".to_string()],
+            vault_removals: vec!["REMOVE_ME".to_string()],
         }
         .persist_direct();
 
@@ -1189,13 +1193,13 @@ stale = "remove-me"
         let token = prepared.token.clone();
 
         InstallPersistencePlan {
-            storage_dir:         dir.path(),
-            settings_write:      None,
-            server_env_writes:   Vec::new(),
+            storage_dir: dir.path(),
+            settings_write: None,
+            server_env_writes: Vec::new(),
             server_env_removals: Vec::new(),
-            dev_token_write:     prepared.write,
-            vault_writes:        Vec::new(),
-            vault_removals:      Vec::new(),
+            dev_token_write: prepared.write,
+            vault_writes: Vec::new(),
+            vault_removals: Vec::new(),
         }
         .persist_direct()
         .unwrap();
@@ -1219,18 +1223,18 @@ stale = "remove-me"
         let prepared = prepare_dev_token_write_for_install(&path).unwrap();
 
         let result = InstallPersistencePlan {
-            storage_dir:         dir.path(),
-            settings_write:      None,
-            server_env_writes:   Vec::new(),
+            storage_dir: dir.path(),
+            settings_write: None,
+            server_env_writes: Vec::new(),
             server_env_removals: Vec::new(),
-            dev_token_write:     prepared.write,
-            vault_writes:        vec![VaultSecretWrite {
-                name:        "bad-secret-name".to_string(),
-                value:       "boom".to_string(),
+            dev_token_write: prepared.write,
+            vault_writes: vec![VaultSecretWrite {
+                name: "bad-secret-name".to_string(),
+                value: "boom".to_string(),
                 secret_type: VaultSecretType::Token,
                 description: None,
             }],
-            vault_removals:      Vec::new(),
+            vault_removals: Vec::new(),
         }
         .persist_direct();
 
@@ -1271,9 +1275,12 @@ stale = "remove-me"
     #[test]
     fn write_object_store_settings_keeps_local_defaults_and_removes_managed_keys() {
         let mut doc = toml::Value::Table(toml::Table::default());
-        let plan = write_object_store_settings(&mut doc, &InstallObjectStoreSelection::Local {
-            root: String::new(),
-        })
+        let plan = write_object_store_settings(
+            &mut doc,
+            &InstallObjectStoreSelection::Local {
+                root: String::new(),
+            },
+        )
         .expect("local object store selection should succeed");
 
         assert!(
@@ -1289,9 +1296,12 @@ stale = "remove-me"
     #[test]
     fn write_object_store_settings_configures_local_root() {
         let mut doc = toml::Value::Table(toml::Table::default());
-        let plan = write_object_store_settings(&mut doc, &InstallObjectStoreSelection::Local {
-            root: "/srv/fabro/objects".to_string(),
-        })
+        let plan = write_object_store_settings(
+            &mut doc,
+            &InstallObjectStoreSelection::Local {
+                root: "/srv/fabro/objects".to_string(),
+            },
+        )
         .expect("local object store selection should succeed");
 
         let server = doc
@@ -1357,13 +1367,16 @@ stale = "remove-me"
     #[test]
     fn write_object_store_settings_configures_s3_runtime_credentials() {
         let mut doc = toml::Value::Table(toml::Table::default());
-        let plan = write_object_store_settings(&mut doc, &InstallObjectStoreSelection::S3 {
-            bucket:            "fabro-data".to_string(),
-            region:            "us-east-1".to_string(),
-            credential_mode:   InstallObjectStoreCredentialMode::Runtime,
-            access_key_id:     None,
-            secret_access_key: None,
-        })
+        let plan = write_object_store_settings(
+            &mut doc,
+            &InstallObjectStoreSelection::S3 {
+                bucket: "fabro-data".to_string(),
+                region: "us-east-1".to_string(),
+                credential_mode: InstallObjectStoreCredentialMode::Runtime,
+                access_key_id: None,
+                secret_access_key: None,
+            },
+        )
         .expect("runtime-credential object store selection should succeed");
 
         let server = doc
@@ -1392,13 +1405,16 @@ stale = "remove-me"
     #[test]
     fn write_object_store_settings_configures_s3_manual_credentials() {
         let mut doc = toml::Value::Table(toml::Table::default());
-        let plan = write_object_store_settings(&mut doc, &InstallObjectStoreSelection::S3 {
-            bucket:            "fabro-data".to_string(),
-            region:            "us-east-1".to_string(),
-            credential_mode:   InstallObjectStoreCredentialMode::AccessKey,
-            access_key_id:     Some("AKIA_TEST".to_string()),
-            secret_access_key: Some("secret-test".to_string()),
-        })
+        let plan = write_object_store_settings(
+            &mut doc,
+            &InstallObjectStoreSelection::S3 {
+                bucket: "fabro-data".to_string(),
+                region: "us-east-1".to_string(),
+                credential_mode: InstallObjectStoreCredentialMode::AccessKey,
+                access_key_id: Some("AKIA_TEST".to_string()),
+                secret_access_key: Some("secret-test".to_string()),
+            },
+        )
         .expect("manual-credential object store selection should succeed");
 
         assert_eq!(plan.writes.len(), 2);
@@ -1507,7 +1523,7 @@ stale = "remove-me"
             dir.path(),
             &[],
             &[envfile::EnvFileRemoval {
-                key:     OBJECT_STORE_ACCESS_KEY_ID_ENV.to_string(),
+                key: OBJECT_STORE_ACCESS_KEY_ID_ENV.to_string(),
                 comment: Some(OBJECT_STORE_MANAGED_COMMENT.to_string()),
             }],
             &[],
@@ -1543,8 +1559,8 @@ stale = "remove-me"
         persist_install_outputs_direct(
             dir.path(),
             &[envfile::EnvFileUpdate {
-                key:     "SESSION_SECRET".to_string(),
-                value:   "first".to_string(),
+                key: "SESSION_SECRET".to_string(),
+                value: "first".to_string(),
                 comment: None,
             }],
             &[],
@@ -1558,8 +1574,8 @@ stale = "remove-me"
         persist_install_outputs_direct(
             dir.path(),
             &[envfile::EnvFileUpdate {
-                key:     "SESSION_SECRET".to_string(),
-                value:   "second".to_string(),
+                key: "SESSION_SECRET".to_string(),
+                value: "second".to_string(),
                 comment: None,
             }],
             &[],

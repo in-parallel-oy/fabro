@@ -51,7 +51,7 @@ pub fn resolve_server(layer: &ServerLayer, errors: &mut Vec<ResolveError>) -> Se
                 .expect("defaults.toml should provide server.scheduler.max_concurrent_runs"),
         },
         logging: ServerLoggingSettings {
-            level:       layer
+            level: layer
                 .logging
                 .as_ref()
                 .and_then(|logging| logging.level.as_ref())
@@ -70,16 +70,16 @@ fn resolve_sandbox(layer: Option<&ServerSandboxLayer>) -> ServerSandboxSettings 
     let providers = layer.and_then(|sandbox| sandbox.providers.as_ref());
     ServerSandboxSettings {
         providers: ServerSandboxProvidersSettings {
-            local:   resolve_sandbox_provider(
+            local: resolve_sandbox_provider(
                 providers.and_then(|providers| providers.local.as_ref()),
             ),
-            docker:  resolve_sandbox_provider(
+            docker: resolve_sandbox_provider(
                 providers.and_then(|providers| providers.docker.as_ref()),
             ),
             daytona: resolve_sandbox_provider(
                 providers.and_then(|providers| providers.daytona.as_ref()),
             ),
-            gcloud:  resolve_sandbox_provider(
+            gcloud: resolve_sandbox_provider(
                 providers.and_then(|providers| providers.gcloud.as_ref()),
             ),
         },
@@ -153,7 +153,7 @@ fn resolve_auth(
     let methods = if let Some(mut methods) = layer.and_then(|auth| auth.methods.clone()) {
         if methods.is_empty() {
             errors.push(ResolveError::Invalid {
-                path:   "server.auth.methods".to_string(),
+                path: "server.auth.methods".to_string(),
                 reason: "must not be empty".to_string(),
             });
         }
@@ -172,7 +172,7 @@ fn resolve_auth(
         .unwrap_or_default();
     if methods.contains(&ServerAuthMethod::Github) && github.allowed_usernames.is_empty() {
         errors.push(ResolveError::Invalid {
-            path:   "server.auth.github.allowed_usernames".to_string(),
+            path: "server.auth.github.allowed_usernames".to_string(),
             reason: "must not be empty when github auth is enabled".to_string(),
         });
     }
@@ -201,7 +201,7 @@ fn validate_github_webhook_strategy(
         && github.app_id.is_none()
     {
         errors.push(ResolveError::Invalid {
-            path:   "server.integrations.github.app_id".to_string(),
+            path: "server.integrations.github.app_id".to_string(),
             reason: "must be set when server.integrations.github.webhooks.strategy is configured"
                 .to_string(),
         });
@@ -211,7 +211,7 @@ fn validate_github_webhook_strategy(
         && api_layer.and_then(|api| api.url.as_ref()).is_none()
     {
         errors.push(ResolveError::Invalid {
-            path:   "server.api.url".to_string(),
+            path: "server.api.url".to_string(),
             reason:
                 "must be set when server.integrations.github.webhooks.strategy = \"server_url\""
                     .to_string(),
@@ -351,24 +351,24 @@ fn resolve_integrations(layer: Option<&ServerIntegrationsLayer>) -> ServerIntegr
                 );
                 warn_if_demoted_template("server.integrations.github.slug", github.slug.as_deref());
                 GithubIntegrationSettings {
-                    enabled:   github.enabled.unwrap_or(true),
-                    strategy:  github.strategy.unwrap_or_default(),
-                    app_id:    github.app_id.clone(),
+                    enabled: github.enabled.unwrap_or(true),
+                    strategy: github.strategy.unwrap_or_default(),
+                    app_id: github.app_id.clone(),
                     client_id: github.client_id.clone(),
-                    slug:      github.slug.clone(),
-                    webhooks:  github.webhooks.as_ref().map(resolve_github_webhooks),
+                    slug: github.slug.clone(),
+                    webhooks: github.webhooks.as_ref().map(resolve_github_webhooks),
                 }
             })
             .unwrap_or_default(),
-        slack:  layer
+        slack: layer
             .and_then(|integrations| integrations.slack.as_ref())
             .map_or(
                 SlackIntegrationSettings {
-                    enabled:         false,
+                    enabled: false,
                     default_channel: None,
                 },
                 |slack| SlackIntegrationSettings {
-                    enabled:         slack.enabled.unwrap_or(true),
+                    enabled: slack.enabled.unwrap_or(true),
                     default_channel: slack.default_channel.clone(),
                 },
             ),

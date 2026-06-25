@@ -49,18 +49,18 @@ impl TodoRuntime {
         todo: TodoProjection,
     ) {
         let props = TodoCreatedProps {
-            list_id:     list_id.clone(),
-            list_kind:   kind,
-            todo_id:     todo.id.clone(),
-            status:      todo.status,
-            order:       todo.order,
-            subject:     todo.subject.clone(),
+            list_id: list_id.clone(),
+            list_kind: kind,
+            todo_id: todo.id.clone(),
+            status: todo.status,
+            order: todo.order,
+            subject: todo.subject.clone(),
             description: todo.description.clone(),
             active_form: todo.active_form.clone(),
-            owner:       todo.owner.clone(),
-            blocks:      todo.blocks.clone(),
-            blocked_by:  todo.blocked_by.clone(),
-            metadata:    todo.metadata.clone(),
+            owner: todo.owner.clone(),
+            blocks: todo.blocks.clone(),
+            blocked_by: todo.blocked_by.clone(),
+            metadata: todo.metadata.clone(),
         };
         {
             let mut guard = self.lists.lock().expect("todo runtime lock poisoned");
@@ -171,10 +171,13 @@ mod tests {
             list_id.clone(),
             TodoProjection::new("a", 0, "first"),
         );
-        runtime.update(&ctx, TodoUpdatedProps {
-            status: Some(TodoStatus::InProgress),
-            ..TodoUpdatedProps::new(&list_id, TodoListKind::OpenAiPlan, "a")
-        });
+        runtime.update(
+            &ctx,
+            TodoUpdatedProps {
+                status: Some(TodoStatus::InProgress),
+                ..TodoUpdatedProps::new(&list_id, TodoListKind::OpenAiPlan, "a")
+            },
+        );
         runtime.delete(&ctx, TodoListKind::OpenAiPlan, list_id, "a".to_string());
 
         let events = collector.events.lock().unwrap().clone();
@@ -197,10 +200,13 @@ mod tests {
             list_id.clone(),
             TodoProjection::new("1", 0, "task"),
         );
-        runtime.update(&ctx, TodoUpdatedProps {
-            status: Some(TodoStatus::Deleted),
-            ..TodoUpdatedProps::new(&list_id, TodoListKind::AnthropicTasks, "1")
-        });
+        runtime.update(
+            &ctx,
+            TodoUpdatedProps {
+                status: Some(TodoStatus::Deleted),
+                ..TodoUpdatedProps::new(&list_id, TodoListKind::AnthropicTasks, "1")
+            },
+        );
 
         let events = collector.events.lock().unwrap().clone();
         assert!(matches!(events[1], AgentEvent::TodoDeleted(_)));

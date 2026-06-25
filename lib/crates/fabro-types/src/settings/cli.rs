@@ -14,10 +14,10 @@ use super::run::{AgentPermissions, McpServerSettings};
 /// A structurally resolved `[cli]` view for consumers.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CliNamespace {
-    pub target:  Option<CliTargetSettings>,
-    pub auth:    CliAuthSettings,
-    pub exec:    CliExecSettings,
-    pub output:  CliOutputSettings,
+    pub target: Option<CliTargetSettings>,
+    pub auth: CliAuthSettings,
+    pub exec: CliExecSettings,
+    pub output: CliOutputSettings,
     pub updates: CliUpdatesSettings,
     pub logging: CliLoggingSettings,
 }
@@ -37,25 +37,25 @@ pub struct CliAuthSettings {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CliExecSettings {
     pub prevent_idle_sleep: bool,
-    pub model:              CliExecModelSettings,
-    pub agent:              CliExecAgentSettings,
+    pub model: CliExecModelSettings,
+    pub agent: CliExecAgentSettings,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CliExecModelSettings {
     pub provider: Option<String>,
-    pub name:     Option<String>,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CliExecAgentSettings {
     pub permissions: Option<AgentPermissions>,
-    pub mcps:        HashMap<String, McpServerSettings>,
+    pub mcps: HashMap<String, McpServerSettings>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CliOutputSettings {
-    pub format:    OutputFormat,
+    pub format: OutputFormat,
     pub verbosity: OutputVerbosity,
 }
 

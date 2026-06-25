@@ -157,8 +157,8 @@ async fn create_automation_run(
     };
     let explicit_title_supplied = materialized.manifest.title.is_some();
     let automation_ref = AutomationRef {
-        id:         automation.id.to_string(),
-        name:       Some(automation.name.clone()),
+        id: automation.id.to_string(),
+        name: Some(automation.name.clone()),
         trigger_id: Some(api_trigger_id),
     };
 

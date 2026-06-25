@@ -42,17 +42,17 @@ impl TemplateRenderMode {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TemplateErrorLocation {
     pub source_name: Option<String>,
-    pub line:        Option<u32>,
-    pub column:      Option<u32>,
-    pub span_start:  Option<usize>,
-    pub span_len:    Option<usize>,
+    pub line: Option<u32>,
+    pub column: Option<u32>,
+    pub span_start: Option<usize>,
+    pub span_len: Option<usize>,
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct TemplateContext {
-    goal:   Option<String>,
+    goal: Option<String>,
     inputs: HashMap<String, toml::Value>,
-    env:    Option<Value>,
+    env: Option<Value>,
 }
 
 impl TemplateContext {
@@ -87,7 +87,7 @@ impl TemplateContext {
         E: Env + Clone + Send + Sync + fmt::Debug + 'static,
     {
         self.env = Some(Value::from_object(EnvLookup {
-            env:       env.clone(),
+            env: env.clone(),
             allowlist: None,
         }));
         self
@@ -99,7 +99,7 @@ impl TemplateContext {
         E: Env + Clone + Send + Sync + fmt::Debug + 'static,
     {
         self.env = Some(Value::from_object(EnvLookup {
-            env:       env.clone(),
+            env: env.clone(),
             allowlist: Some(allowlist.to_vec()),
         }));
         self
@@ -115,9 +115,9 @@ impl TemplateContext {
 
 #[derive(Debug, Clone)]
 struct RenderContext {
-    goal:   Option<Value>,
+    goal: Option<Value>,
     inputs: Value,
-    env:    Option<Value>,
+    env: Option<Value>,
 }
 
 impl Object for RenderContext {
@@ -133,7 +133,7 @@ impl Object for RenderContext {
 
 #[derive(Debug, Clone)]
 pub struct EnvLookup<E> {
-    env:       E,
+    env: E,
     allowlist: Option<Vec<String>>,
 }
 
@@ -160,36 +160,36 @@ where
 pub enum TemplateError {
     LoaderDependentString {
         source_name: Option<String>,
-        tag:         TemplateDependencyKind,
+        tag: TemplateDependencyKind,
     },
     Load {
         source_name: Option<String>,
-        source:      Box<TemplateLoadError>,
+        source: Box<TemplateLoadError>,
     },
     Syntax {
-        line:        Option<u32>,
+        line: Option<u32>,
         source_name: Option<String>,
         source_text: Option<Arc<str>>,
-        span:        Option<SourceSpan>,
+        span: Option<SourceSpan>,
         source_code: Option<Box<NamedSource<Arc<str>>>>,
-        source:      Box<minijinja::Error>,
+        source: Box<minijinja::Error>,
     },
     UndefinedVariable {
-        expression:  Option<String>,
-        line:        Option<u32>,
+        expression: Option<String>,
+        line: Option<u32>,
         source_name: Option<String>,
         source_text: Option<Arc<str>>,
-        span:        Option<SourceSpan>,
+        span: Option<SourceSpan>,
         source_code: Option<Box<NamedSource<Arc<str>>>>,
-        source:      Box<minijinja::Error>,
+        source: Box<minijinja::Error>,
     },
     Render {
-        line:        Option<u32>,
+        line: Option<u32>,
         source_name: Option<String>,
         source_text: Option<Arc<str>>,
-        span:        Option<SourceSpan>,
+        span: Option<SourceSpan>,
         source_code: Option<Box<NamedSource<Arc<str>>>>,
-        source:      Box<minijinja::Error>,
+        source: Box<minijinja::Error>,
     },
 }
 
@@ -250,10 +250,10 @@ fn extract_expression(error: &minijinja::Error) -> Option<String> {
 }
 
 struct MiniJinjaErrorDetails {
-    line:        Option<u32>,
+    line: Option<u32>,
     source_name: Option<String>,
     source_text: Option<Arc<str>>,
-    span:        Option<SourceSpan>,
+    span: Option<SourceSpan>,
     source_code: Option<Box<NamedSource<Arc<str>>>>,
 }
 
@@ -365,12 +365,12 @@ impl TemplateError {
         let details = MiniJinjaErrorDetails::from_error(primary, primary_origin);
         match primary.kind() {
             ErrorKind::SyntaxError => Self::Syntax {
-                line:        details.line,
+                line: details.line,
                 source_name: details.source_name,
                 source_text: details.source_text,
-                span:        details.span,
+                span: details.span,
                 source_code: details.source_code,
-                source:      Box::new(error),
+                source: Box::new(error),
             },
             ErrorKind::UndefinedError => {
                 let expression = extract_expression(primary);
@@ -390,12 +390,12 @@ impl TemplateError {
                 });
                 let details = MiniJinjaErrorDetails::from_error(&error, render_origin);
                 Self::Render {
-                    line:        details.line,
+                    line: details.line,
                     source_name: details.source_name,
                     source_text: details.source_text,
-                    span:        details.span,
+                    span: details.span,
                     source_code: details.source_code,
-                    source:      Box::new(error),
+                    source: Box::new(error),
                 }
             }
         }
@@ -417,10 +417,10 @@ impl TemplateError {
         let span = self.span();
         TemplateErrorLocation {
             source_name: self.source_name().map(ToOwned::to_owned),
-            line:        self.line(),
-            column:      self.column(),
-            span_start:  span.map(|span| span.offset()),
-            span_len:    span.map(|span| span.len()),
+            line: self.line(),
+            column: self.column(),
+            span_start: span.map(|span| span.offset()),
+            span_len: span.map(|span| span.len()),
         }
     }
 
@@ -756,7 +756,7 @@ fn render_rooted_source(
             {
                 TemplateError::Load {
                     source_name: Some(source.path.to_string()),
-                    source:      Box::new(error),
+                    source: Box::new(error),
                 }
             } else {
                 TemplateError::from_minijinja(error, origin)
@@ -1282,10 +1282,13 @@ mod tests {
 
         let dependencies = extract_template_dependencies("test.md", source).unwrap();
 
-        assert_eq!(dependencies.static_references, vec![TemplateDependency {
-            kind:      TemplateDependencyKind::Include,
-            reference: "text.md".to_string(),
-        }]);
+        assert_eq!(
+            dependencies.static_references,
+            vec![TemplateDependency {
+                kind: TemplateDependencyKind::Include,
+                reference: "text.md".to_string(),
+            }]
+        );
         assert!(dependencies.dynamic_references.is_empty());
     }
 

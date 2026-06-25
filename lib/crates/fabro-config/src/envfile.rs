@@ -10,33 +10,33 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnvFileUpdate {
-    pub key:     String,
-    pub value:   String,
+    pub key: String,
+    pub value: String,
     pub comment: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnvFileRemoval {
-    pub key:     String,
+    pub key: String,
     pub comment: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct EnvFileEntry {
-    value:   String,
+    value: String,
     comment: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct EnvFileRecord {
-    key:     String,
-    value:   String,
+    key: String,
+    value: String,
     comment: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnvFileUpdateReport {
-    pub entries:      HashMap<String, String>,
+    pub entries: HashMap<String, String>,
     pub removed_keys: Vec<String>,
 }
 
@@ -52,10 +52,13 @@ where
 {
     let mut entries = read_env_entries(path)?;
     for (key, value) in updates {
-        entries.insert(key.into(), EnvFileEntry {
-            value:   value.into(),
-            comment: None,
-        });
+        entries.insert(
+            key.into(),
+            EnvFileEntry {
+                value: value.into(),
+                comment: None,
+            },
+        );
     }
     write_env_entries(path, &entries)?;
     Ok(entries
@@ -80,10 +83,13 @@ pub fn write_env_file(path: &Path, entries: &HashMap<String, String>) -> io::Res
     let entries = entries
         .iter()
         .map(|(key, value)| {
-            (key.clone(), EnvFileEntry {
-                value:   value.clone(),
-                comment: None,
-            })
+            (
+                key.clone(),
+                EnvFileEntry {
+                    value: value.clone(),
+                    comment: None,
+                },
+            )
         })
         .collect::<HashMap<_, _>>();
     write_env_entries(path, &entries)
@@ -128,8 +134,8 @@ where
             }
         }
         records.push(EnvFileRecord {
-            key:     update.key,
-            value:   update.value,
+            key: update.key,
+            value: update.value,
             comment: update.comment,
         });
     }
@@ -192,8 +198,8 @@ fn read_env_records(path: &Path) -> io::Result<Vec<EnvFileRecord>> {
         }
 
         records.push(EnvFileRecord {
-            key:     key.to_string(),
-            value:   decode_value(raw_value.trim())?,
+            key: key.to_string(),
+            value: decode_value(raw_value.trim())?,
             comment: pending_comment.take(),
         });
     }
@@ -205,8 +211,8 @@ fn write_env_entries(path: &Path, entries: &HashMap<String, EnvFileEntry>) -> io
     let records = entries
         .iter()
         .map(|(key, entry)| EnvFileRecord {
-            key:     key.clone(),
-            value:   entry.value.clone(),
+            key: key.clone(),
+            value: entry.value.clone(),
             comment: entry.comment.clone(),
         })
         .collect::<Vec<_>>();
@@ -260,10 +266,13 @@ fn records_to_entries(records: &[EnvFileRecord]) -> HashMap<String, EnvFileEntry
         .iter()
         .cloned()
         .map(|record| {
-            (record.key, EnvFileEntry {
-                value:   record.value,
-                comment: record.comment,
-            })
+            (
+                record.key,
+                EnvFileEntry {
+                    value: record.value,
+                    comment: record.comment,
+                },
+            )
         })
         .collect()
 }
@@ -356,10 +365,10 @@ mod tests {
         let path = dir.path().join("server.env");
         std::fs::write(&path, "EXISTING=value\n").unwrap();
 
-        let entries = merge_env_file(&path, [
-            ("SESSION_SECRET", "secret"),
-            ("FABRO_DEV_TOKEN", "token"),
-        ])
+        let entries = merge_env_file(
+            &path,
+            [("SESSION_SECRET", "secret"), ("FABRO_DEV_TOKEN", "token")],
+        )
         .unwrap();
 
         assert_eq!(entries.get("EXISTING").map(String::as_str), Some("value"));
@@ -404,12 +413,12 @@ mod tests {
         let report = update_env_file_with_report(
             &path,
             [EnvFileRemoval {
-                key:     "AWS_ACCESS_KEY_ID".to_string(),
+                key: "AWS_ACCESS_KEY_ID".to_string(),
                 comment: Some("managed by fabro-install: object-store".to_string()),
             }],
             [EnvFileUpdate {
-                key:     "AWS_SECRET_ACCESS_KEY".to_string(),
-                value:   "replaced".to_string(),
+                key: "AWS_SECRET_ACCESS_KEY".to_string(),
+                value: "replaced".to_string(),
                 comment: Some("managed by fabro-install: object-store".to_string()),
             }],
         )
@@ -442,11 +451,11 @@ mod tests {
             &path,
             [
                 EnvFileRemoval {
-                    key:     "AWS_ACCESS_KEY_ID".to_string(),
+                    key: "AWS_ACCESS_KEY_ID".to_string(),
                     comment: Some("managed by fabro-install: object-store".to_string()),
                 },
                 EnvFileRemoval {
-                    key:     "AWS_SECRET_ACCESS_KEY".to_string(),
+                    key: "AWS_SECRET_ACCESS_KEY".to_string(),
                     comment: Some("managed by fabro-install: object-store".to_string()),
                 },
             ],

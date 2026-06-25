@@ -17,7 +17,7 @@ pub(super) fn decode_response(
         .map_err(|e| Error::network(format!("failed to parse response: {e}"), e))?;
 
     let choice = api_resp.choices.first().ok_or_else(|| Error::Provider {
-        kind:   ProviderErrorKind::Server,
+        kind: ProviderErrorKind::Server,
         detail: Box::new(ProviderErrorDetail::new(
             "no choices in response",
             ctx.provider_name,
@@ -28,9 +28,9 @@ pub(super) fn decode_response(
     if let Some(reasoning) = &choice.message.reasoning_content {
         if !reasoning.is_empty() {
             content_parts.push(ContentPart::Thinking(ThinkingData {
-                text:      reasoning.clone(),
+                text: reasoning.clone(),
                 signature: None,
-                redacted:  false,
+                redacted: false,
             }));
         }
     }
@@ -65,9 +65,9 @@ pub(super) fn decode_response(
         model: api_resp.model,
         provider: ctx.provider_name.to_string(),
         message: Message {
-            role:         Role::Assistant,
-            content:      content_parts,
-            name:         None,
+            role: Role::Assistant,
+            content: content_parts,
+            name: None,
             tool_call_id: None,
         },
         finish_reason,

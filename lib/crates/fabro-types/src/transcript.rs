@@ -22,32 +22,32 @@ ulid_id!(MessageId);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ImageData {
-    pub url:        Option<String>,
-    pub data:       Option<Vec<u8>>,
+    pub url: Option<String>,
+    pub data: Option<Vec<u8>>,
     pub media_type: Option<String>,
-    pub detail:     Option<String>,
+    pub detail: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AudioData {
-    pub url:        Option<String>,
-    pub data:       Option<Vec<u8>>,
+    pub url: Option<String>,
+    pub data: Option<Vec<u8>>,
     pub media_type: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DocumentData {
-    pub url:        Option<String>,
-    pub data:       Option<Vec<u8>>,
+    pub url: Option<String>,
+    pub data: Option<Vec<u8>>,
     pub media_type: Option<String>,
-    pub file_name:  Option<String>,
+    pub file_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ThinkingData {
-    pub text:      String,
+    pub text: String,
     pub signature: Option<String>,
-    pub redacted:  bool,
+    pub redacted: bool,
 }
 
 // --- Tool call / tool result -------------------------------------------------
@@ -58,12 +58,12 @@ fn default_tool_type() -> String {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolCall {
-    pub id:                String,
-    pub name:              String,
+    pub id: String,
+    pub name: String,
     #[serde(rename = "type", default = "default_tool_type")]
-    pub tool_type:         String,
-    pub arguments:         serde_json::Value,
-    pub raw_arguments:     Option<String>,
+    pub tool_type: String,
+    pub arguments: serde_json::Value,
+    pub raw_arguments: Option<String>,
     /// Opaque provider-specific metadata (e.g. Gemini `thought_signature`).
     /// Preserved across round-trips so the provider can include it when
     /// sending conversation history back to the API.
@@ -90,11 +90,11 @@ impl ToolCall {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolResult {
-    pub tool_call_id:     String,
-    pub content:          serde_json::Value,
-    pub is_error:         bool,
+    pub tool_call_id: String,
+    pub content: serde_json::Value,
+    pub is_error: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub image_data:       Option<Vec<u8>>,
+    pub image_data: Option<Vec<u8>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image_media_type: Option<String>,
 }
@@ -112,10 +112,10 @@ impl ToolResult {
 
     pub fn error(id: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
-            tool_call_id:     id.into(),
-            content:          serde_json::Value::String(message.into()),
-            is_error:         true,
-            image_data:       None,
+            tool_call_id: id.into(),
+            content: serde_json::Value::String(message.into()),
+            is_error: true,
+            image_data: None,
             image_media_type: None,
         }
     }
@@ -276,10 +276,10 @@ pub enum Role {
 /// vocabulary.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
-    pub role:         Role,
-    pub content:      Vec<ContentPart>,
+    pub role: Role,
+    pub content: Vec<ContentPart>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub name:         Option<String>,
+    pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
 }
@@ -287,27 +287,27 @@ pub struct Message {
 impl Message {
     pub fn system(text: impl Into<String>) -> Self {
         Self {
-            role:         Role::System,
-            content:      vec![ContentPart::text(text)],
-            name:         None,
+            role: Role::System,
+            content: vec![ContentPart::text(text)],
+            name: None,
             tool_call_id: None,
         }
     }
 
     pub fn user(text: impl Into<String>) -> Self {
         Self {
-            role:         Role::User,
-            content:      vec![ContentPart::text(text)],
-            name:         None,
+            role: Role::User,
+            content: vec![ContentPart::text(text)],
+            name: None,
             tool_call_id: None,
         }
     }
 
     pub fn assistant(text: impl Into<String>) -> Self {
         Self {
-            role:         Role::Assistant,
-            content:      vec![ContentPart::text(text)],
-            name:         None,
+            role: Role::Assistant,
+            content: vec![ContentPart::text(text)],
+            name: None,
             tool_call_id: None,
         }
     }
@@ -319,15 +319,15 @@ impl Message {
     ) -> Self {
         let id = tool_call_id.into();
         Self {
-            role:         Role::Tool,
-            content:      vec![ContentPart::ToolResult(ToolResult {
+            role: Role::Tool,
+            content: vec![ContentPart::ToolResult(ToolResult {
                 tool_call_id: id.clone(),
                 content,
                 is_error,
                 image_data: None,
                 image_media_type: None,
             })],
-            name:         None,
+            name: None,
             tool_call_id: Some(id),
         }
     }
@@ -409,8 +409,8 @@ pub enum MessageSource {
 /// entered LLM history via the pair channel.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairMessageRef {
-    pub pair_id:           PairId,
-    pub message_id:        PairMessageId,
+    pub pair_id: PairId,
+    pub message_id: PairMessageId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_message_id: Option<String>,
 }
@@ -425,27 +425,27 @@ pub struct PairMessageRef {
 /// an API-mode session from the event stream.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TranscriptMessage {
-    pub id:          MessageId,
+    pub id: MessageId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub turn_id:     Option<TurnId>,
-    pub kind:        MessageKind,
-    pub source:      MessageSource,
+    pub turn_id: Option<TurnId>,
+    pub kind: MessageKind,
+    pub source: MessageSource,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub actor:       Option<Principal>,
+    pub actor: Option<Principal>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pair:        Option<PairMessageRef>,
-    pub content:     Vec<ContentPart>,
+    pub pair: Option<PairMessageRef>,
+    pub content: Vec<ContentPart>,
     /// Provider + model identity for the response that produced this
     /// message, when applicable. Strongly typed via [`ModelRef`] so
     /// provider and model id can never drift apart.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model:       Option<ModelRef>,
+    pub model: Option<ModelRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub usage:       Option<TokenCounts>,
+    pub usage: Option<TokenCounts>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub created_at:  Option<DateTime<Utc>>,
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 impl TranscriptMessage {
@@ -486,9 +486,9 @@ mod tests {
     #[test]
     fn content_part_thinking_preserves_signature_and_redaction() {
         let part = ContentPart::Thinking(ThinkingData {
-            text:      "private thought".to_string(),
+            text: "private thought".to_string(),
             signature: Some("sig_abc".to_string()),
-            redacted:  true,
+            redacted: true,
         });
         let v = serde_json::to_value(&part).unwrap();
         assert_eq!(v["kind"], "redacted_thinking");
@@ -533,17 +533,17 @@ mod tests {
     #[test]
     fn transcript_message_serde_round_trip() {
         let msg = TranscriptMessage {
-            id:          MessageId::new(),
-            turn_id:     None,
-            kind:        MessageKind::User,
-            source:      MessageSource::Steer,
-            actor:       None,
-            pair:        None,
-            content:     vec![ContentPart::text("please continue")],
-            model:       None,
+            id: MessageId::new(),
+            turn_id: None,
+            kind: MessageKind::User,
+            source: MessageSource::Steer,
+            actor: None,
+            pair: None,
+            content: vec![ContentPart::text("please continue")],
+            model: None,
             response_id: None,
-            usage:       None,
-            created_at:  None,
+            usage: None,
+            created_at: None,
         };
         let v = serde_json::to_value(&msg).unwrap();
         assert_eq!(v["kind"], "user");
@@ -554,9 +554,11 @@ mod tests {
 
     #[test]
     fn transcript_message_drops_optional_fields_on_serialize() {
-        let msg = TranscriptMessage::new(MessageKind::Agent, MessageSource::ProviderAnswer, vec![
-            ContentPart::text("done"),
-        ]);
+        let msg = TranscriptMessage::new(
+            MessageKind::Agent,
+            MessageSource::ProviderAnswer,
+            vec![ContentPart::text("done")],
+        );
         let v = serde_json::to_value(&msg).unwrap();
         let obj = v.as_object().unwrap();
         // Optional fields should be omitted, not present as nulls.
@@ -572,8 +574,8 @@ mod tests {
     #[test]
     fn pair_message_ref_skips_empty_client_id() {
         let r = PairMessageRef {
-            pair_id:           PairId::new(),
-            message_id:        PairMessageId::new(),
+            pair_id: PairId::new(),
+            message_id: PairMessageId::new(),
             client_message_id: None,
         };
         let v = serde_json::to_value(&r).unwrap();

@@ -10,10 +10,13 @@ pub(crate) async fn run(args: AskArgs, base_ctx: &CommandContext) -> Result<()> 
     let client = ctx.server().await?;
     let run_id = client.resolve_run(&args.run).await?.id;
     let session = client
-        .create_run_session(run_id, CreateRunSessionRequest {
-            title: Some(session_title(&args.prompt)),
-            model: args.model,
-        })
+        .create_run_session(
+            run_id,
+            CreateRunSessionRequest {
+                title: Some(session_title(&args.prompt)),
+                model: args.model,
+            },
+        )
         .await?;
     let mut stream = client
         .submit_session_turn_stream(session.id, args.prompt)

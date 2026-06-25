@@ -11,14 +11,14 @@ pub struct SystemIntegrationsResponse {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SystemIntegrationStatus {
-    pub provider:            IntegrationProvider,
-    pub enabled:             bool,
-    pub configured:          bool,
-    pub status:              IntegrationStatus,
+    pub provider: IntegrationProvider,
+    pub enabled: bool,
+    pub configured: bool,
+    pub status: IntegrationStatus,
     pub missing_credentials: Vec<String>,
-    pub connection:          Option<IntegrationConnectionStatus>,
+    pub connection: Option<IntegrationConnectionStatus>,
     #[serde(default)]
-    pub metadata:            BTreeMap<String, String>,
+    pub metadata: BTreeMap<String, String>,
 }
 
 #[derive(
@@ -47,10 +47,10 @@ pub enum IntegrationStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IntegrationConnectionStatus {
-    pub kind:              IntegrationConnectionKind,
-    pub status:            IntegrationConnectionState,
+    pub kind: IntegrationConnectionKind,
+    pub status: IntegrationConnectionState,
     pub last_connected_at: Option<DateTime<Utc>>,
-    pub last_error:        Option<String>,
+    pub last_error: Option<String>,
 }
 
 #[derive(

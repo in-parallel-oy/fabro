@@ -16,33 +16,33 @@ fn templated_settings() -> WorkflowSettings {
 #[test]
 fn run_spec_round_trips_templated_settings() {
     let record = RunSpec {
-        run_id:           fixtures::RUN_1,
-        settings:         templated_settings(),
-        graph:            Graph::new("ship"),
-        graph_source:     None,
-        workflow_slug:    Some("demo".to_string()),
-        automation:       Some(AutomationRef {
-            id:         "nightly".to_string(),
-            name:       Some("Nightly".to_string()),
+        run_id: fixtures::RUN_1,
+        settings: templated_settings(),
+        graph: Graph::new("ship"),
+        graph_source: None,
+        workflow_slug: Some("demo".to_string()),
+        automation: Some(AutomationRef {
+            id: "nightly".to_string(),
+            name: Some("Nightly".to_string()),
             trigger_id: Some("schedule_1".to_string()),
         }),
         source_directory: Some("/Users/client/project".to_string()),
-        labels:           HashMap::from([("team".to_string(), "platform".to_string())]),
-        provenance:       test_run_provenance(),
-        manifest_blob:    None,
-        definition_blob:  None,
-        git:              Some(GitContext {
-            origin_url:   "https://github.com/in-parallel-oy/fabro.git".to_string(),
-            branch:       "main".to_string(),
-            sha:          Some("abc123".to_string()),
-            dirty:        DirtyStatus::Clean,
+        labels: HashMap::from([("team".to_string(), "platform".to_string())]),
+        provenance: test_run_provenance(),
+        manifest_blob: None,
+        definition_blob: None,
+        git: Some(GitContext {
+            origin_url: "https://github.com/in-parallel-oy/fabro.git".to_string(),
+            branch: "main".to_string(),
+            sha: Some("abc123".to_string()),
+            dirty: DirtyStatus::Clean,
             push_outcome: PreRunPushOutcome::Succeeded {
                 remote: "origin".to_string(),
                 branch: "main".to_string(),
             },
         }),
-        fork_source_ref:  Some(ForkSourceRef {
-            source_run_id:  fixtures::RUN_2,
+        fork_source_ref: Some(ForkSourceRef {
+            source_run_id: fixtures::RUN_2,
             checkpoint_sha: "def456".to_string(),
         }),
     };

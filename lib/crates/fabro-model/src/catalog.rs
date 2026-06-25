@@ -33,87 +33,87 @@ pub struct LlmCatalogSettings {
     #[serde(default)]
     pub providers: HashMap<String, ProviderCatalogSettings>,
     #[serde(default)]
-    pub models:    HashMap<String, ModelCatalogSettings>,
+    pub models: HashMap<String, ModelCatalogSettings>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderCatalogSettings {
     #[serde(default)]
-    pub display_name:   Option<String>,
+    pub display_name: Option<String>,
     #[serde(default)]
-    pub adapter:        Option<String>,
+    pub adapter: Option<String>,
     /// Wire dialect for this provider's routes. Defaults to the adapter's
     /// codec; only the default pairing is accepted today.
     #[serde(default)]
-    pub codec:          Option<CodecKind>,
+    pub codec: Option<CodecKind>,
     #[serde(default)]
-    pub agent_profile:  Option<AgentProfileKind>,
+    pub agent_profile: Option<AgentProfileKind>,
     #[serde(default)]
-    pub auth:           Option<ProviderAuthConfig>,
+    pub auth: Option<ProviderAuthConfig>,
     #[serde(default)]
     pub billing_policy: Option<BillingPolicy>,
     #[serde(default)]
-    pub api_key_url:    Option<String>,
+    pub api_key_url: Option<String>,
     #[serde(default)]
-    pub base_url:       Option<String>,
+    pub base_url: Option<String>,
     #[serde(default)]
-    pub extra_headers:  Option<HashMap<String, HeaderValueRef>>,
+    pub extra_headers: Option<HashMap<String, HeaderValueRef>>,
     #[serde(default)]
-    pub priority:       Option<i32>,
+    pub priority: Option<i32>,
     #[serde(default)]
-    pub enabled:        Option<bool>,
+    pub enabled: Option<bool>,
     #[serde(default)]
-    pub aliases:        Option<Vec<String>>,
+    pub aliases: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelCatalogSettings {
     #[serde(default)]
-    pub provider:             Option<String>,
+    pub provider: Option<String>,
     #[serde(default)]
-    pub api_id:               Option<String>,
+    pub api_id: Option<String>,
     /// Wire dialect for this model's route, overriding the provider's codec
     /// (the multiplexer case). Only the adapter's default pairing is
     /// accepted today.
     #[serde(default)]
-    pub codec:                Option<CodecKind>,
+    pub codec: Option<CodecKind>,
     /// Billing family for this model, overriding the provider's policy
     /// (e.g. Anthropic cache billing for a Claude model served through an
     /// aggregator whose other models bill OpenAI-style).
     #[serde(default)]
-    pub billing_policy:       Option<BillingPolicy>,
+    pub billing_policy: Option<BillingPolicy>,
     #[serde(default)]
-    pub agent_profile:        Option<AgentProfileKind>,
+    pub agent_profile: Option<AgentProfileKind>,
     #[serde(default)]
-    pub display_name:         Option<String>,
+    pub display_name: Option<String>,
     #[serde(default)]
-    pub family:               Option<String>,
+    pub family: Option<String>,
     #[serde(default)]
-    pub training:             Option<String>,
+    pub training: Option<String>,
     #[serde(default, deserialize_with = "deserialize_knowledge_cutoff")]
-    pub knowledge_cutoff:     Option<String>,
+    pub knowledge_cutoff: Option<String>,
     #[serde(default)]
-    pub default:              Option<bool>,
+    pub default: Option<bool>,
     #[serde(default)]
-    pub small_default:        Option<bool>,
+    pub small_default: Option<bool>,
     #[serde(default)]
-    pub probe:                Option<bool>,
+    pub probe: Option<bool>,
     #[serde(default)]
-    pub enabled:              Option<bool>,
+    pub enabled: Option<bool>,
     #[serde(default)]
-    pub aliases:              Option<Vec<String>>,
+    pub aliases: Option<Vec<String>>,
     #[serde(default)]
     pub estimated_output_tps: Option<f64>,
     #[serde(default)]
-    pub limits:               Option<SettingsModelLimits>,
+    pub limits: Option<SettingsModelLimits>,
     #[serde(default)]
-    pub features:             Option<SettingsModelFeatures>,
+    pub features: Option<SettingsModelFeatures>,
     #[serde(default)]
-    pub controls:             Option<SettingsModelControls>,
+    pub controls: Option<SettingsModelControls>,
     #[serde(default)]
-    pub costs:                Option<SettingsModelCostTable>,
+    pub costs: Option<SettingsModelCostTable>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
@@ -122,24 +122,24 @@ pub struct SettingsModelLimits {
     #[serde(default)]
     pub context_window: Option<i64>,
     #[serde(default)]
-    pub max_output:     Option<i64>,
+    pub max_output: Option<i64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SettingsModelFeatures {
     #[serde(default)]
-    pub tools:            Option<bool>,
+    pub tools: Option<bool>,
     #[serde(default)]
-    pub vision:           Option<bool>,
+    pub vision: Option<bool>,
     #[serde(default)]
-    pub reasoning:        Option<bool>,
+    pub reasoning: Option<bool>,
     #[serde(default)]
     pub reasoning_effort: Option<ReasoningEffortFeature>,
     #[serde(default)]
-    pub prompt_cache:     Option<bool>,
+    pub prompt_cache: Option<bool>,
     #[serde(default)]
-    pub sampling_params:  Option<bool>,
+    pub sampling_params: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
@@ -148,14 +148,14 @@ pub struct SettingsModelControls {
     #[serde(default)]
     pub reasoning_effort: Option<Vec<String>>,
     #[serde(default)]
-    pub speed:            Option<Vec<String>>,
+    pub speed: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SettingsModelCostTable {
     #[serde(flatten)]
-    pub base:  CostRates,
+    pub base: CostRates,
     #[serde(default)]
     pub speed: Option<BTreeMap<String, CostRates>>,
 }
@@ -164,9 +164,9 @@ pub struct SettingsModelCostTable {
 #[serde(deny_unknown_fields)]
 pub struct CostRates {
     #[serde(default)]
-    pub input_cost_per_mtok:       Option<f64>,
+    pub input_cost_per_mtok: Option<f64>,
     #[serde(default)]
-    pub output_cost_per_mtok:      Option<f64>,
+    pub output_cost_per_mtok: Option<f64>,
     #[serde(default)]
     pub cache_input_cost_per_mtok: Option<f64>,
 }
@@ -251,7 +251,7 @@ pub struct ProviderAuthConfig {
     /// which resolves opaquely from the AWS credential chain.
     pub credentials: Vec<CredentialRef>,
     #[serde(default)]
-    pub header:      ApiKeyHeaderPolicy,
+    pub header: ApiKeyHeaderPolicy,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -391,9 +391,9 @@ struct HeaderValueRefSerde {
     #[serde(default)]
     literal: Option<String>,
     #[serde(default)]
-    env:     Option<String>,
+    env: Option<String>,
     #[serde(default)]
-    vault:   Option<String>,
+    vault: Option<String>,
 }
 
 impl<'de> Deserialize<'de> for HeaderValueRef {
@@ -496,25 +496,25 @@ static GLOBAL_CATALOG: LazyLock<Catalog> = LazyLock::new(|| {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FallbackTarget {
     pub provider: String,
-    pub model:    String,
+    pub model: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CatalogProvider {
-    pub id:             ProviderId,
-    pub display_name:   String,
-    pub adapter:        AdapterKind,
+    pub id: ProviderId,
+    pub display_name: String,
+    pub adapter: AdapterKind,
     /// Wire dialect driven by this provider's routes; models may override it
     /// via [`CatalogModelSettings::codec`].
-    pub codec:          CodecKind,
-    pub agent_profile:  AgentProfileKind,
-    pub auth:           Option<ProviderAuthConfig>,
+    pub codec: CodecKind,
+    pub agent_profile: AgentProfileKind,
+    pub auth: Option<ProviderAuthConfig>,
     pub billing_policy: BillingPolicy,
-    pub api_key_url:    Option<String>,
-    pub base_url:       Option<String>,
-    pub extra_headers:  HashMap<String, HeaderValueRef>,
-    pub priority:       i32,
-    pub aliases:        Vec<String>,
+    pub api_key_url: Option<String>,
+    pub base_url: Option<String>,
+    pub extra_headers: HashMap<String, HeaderValueRef>,
+    pub priority: i32,
+    pub aliases: Vec<String>,
 }
 
 impl CatalogProvider {
@@ -534,22 +534,22 @@ impl CatalogProvider {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogModelControls {
     pub reasoning_effort: Vec<ReasoningEffort>,
-    pub speed:            Vec<Speed>,
+    pub speed: Vec<Speed>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CatalogModelSettings {
-    pub api_id:         String,
+    pub api_id: String,
     /// Wire dialect for this model's route (the provider codec unless the
     /// model row overrides it).
-    pub codec:          CodecKind,
+    pub codec: CodecKind,
     /// Billing family for this model (the provider policy unless the model
     /// row overrides it).
     pub billing_policy: BillingPolicy,
-    pub agent_profile:  AgentProfileKind,
-    pub controls:       CatalogModelControls,
-    pub speed_costs:    HashMap<Speed, ModelCosts>,
-    probe:              bool,
+    pub agent_profile: AgentProfileKind,
+    pub controls: CatalogModelControls,
+    pub speed_costs: HashMap<Speed, ModelCosts>,
+    probe: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -558,13 +558,13 @@ pub enum CatalogBuildError {
     NoBuiltinProviderFiles,
     #[error("failed to read embedded provider TOML path '{path}' as UTF-8")]
     InvalidBuiltinUtf8 {
-        path:   String,
+        path: String,
         #[source]
         source: std::str::Utf8Error,
     },
     #[error("failed to parse embedded provider TOML '{path}'")]
     InvalidBuiltinToml {
-        path:   String,
+        path: String,
         #[source]
         source: TomlDeError,
     },
@@ -572,45 +572,45 @@ pub enum CatalogBuildError {
     InvalidBuiltinProviderCount { path: String },
     #[error("embedded provider TOML '{path}' must define provider '{expected}', found '{actual}'")]
     BuiltinProviderIdMismatch {
-        path:     String,
+        path: String,
         expected: String,
-        actual:   String,
+        actual: String,
     },
     #[error(
         "embedded provider TOML '{path}' contains model '{model}' for provider '{actual}', expected '{expected}'"
     )]
     BuiltinModelProviderMismatch {
-        path:     String,
-        model:    String,
+        path: String,
+        model: String,
         expected: String,
-        actual:   String,
+        actual: String,
     },
     #[error("provider '{provider}' is missing required field '{field}'")]
     MissingProviderField {
         provider: ProviderId,
-        field:    &'static str,
+        field: &'static str,
     },
     #[error("provider '{provider}' uses unknown adapter '{adapter}'")]
     UnknownAdapter {
         provider: ProviderId,
-        adapter:  String,
+        adapter: String,
     },
     #[error(
         "provider '{provider}' configures codec '{codec}', but adapter '{adapter}' only supports '{expected}'"
     )]
     UnsupportedProviderCodec {
         provider: ProviderId,
-        adapter:  AdapterKind,
-        codec:    CodecKind,
+        adapter: AdapterKind,
+        codec: CodecKind,
         expected: CodecKind,
     },
     #[error(
         "model '{model}' configures codec '{codec}', but adapter '{adapter}' only supports '{expected}'"
     )]
     UnsupportedModelCodec {
-        model:    String,
-        adapter:  AdapterKind,
-        codec:    CodecKind,
+        model: String,
+        adapter: AdapterKind,
+        codec: CodecKind,
         expected: CodecKind,
     },
     #[error("provider '{provider}' API-key auth must declare at least one credential")]
@@ -620,43 +620,40 @@ pub enum CatalogBuildError {
     )]
     UnsupportedAwsSigv4Credential {
         provider: ProviderId,
-        adapter:  AdapterKind,
+        adapter: AdapterKind,
     },
     #[error("provider identifier '{identifier}' is declared by both '{first}' and '{second}'")]
     DuplicateProviderIdentifier {
         identifier: String,
-        first:      ProviderId,
-        second:     ProviderId,
+        first: ProviderId,
+        second: ProviderId,
     },
     #[error("model '{model}' is missing required field '{field}'")]
     MissingModelField { model: String, field: &'static str },
     #[error("model '{model}' references unknown provider '{provider}'")]
-    UnknownModelProvider {
-        model:    String,
-        provider: ProviderId,
-    },
+    UnknownModelProvider { model: String, provider: ProviderId },
     #[error("model identifier '{identifier}' is declared by both '{first}' and '{second}'")]
     DuplicateModelIdentifier {
         identifier: String,
-        first:      String,
-        second:     String,
+        first: String,
+        second: String,
     },
     #[error("provider '{provider}' has multiple default models: {models:?}")]
     MultipleProviderDefaults {
         provider: ProviderId,
-        models:   Vec<String>,
+        models: Vec<String>,
     },
     #[error("provider '{provider}' has multiple small default models: {models:?}")]
     MultipleProviderSmallDefaults {
         provider: ProviderId,
-        models:   Vec<String>,
+        models: Vec<String>,
     },
     #[error("catalog must contain at least one enabled default model")]
     NoDefaultModel,
     #[error("model '{model}' has invalid reasoning_effort '{value}'")]
     InvalidReasoningEffort {
-        model:  String,
-        value:  String,
+        model: String,
+        value: String,
         #[source]
         source: strum::ParseError,
     },
@@ -670,8 +667,8 @@ pub enum CatalogBuildError {
     EmptyReasoningEffortControls { model: String },
     #[error("model '{model}' has invalid speed '{value}'")]
     InvalidSpeed {
-        model:  String,
-        value:  String,
+        model: String,
+        value: String,
         #[source]
         source: strum::ParseError,
     },
@@ -686,12 +683,12 @@ pub enum CatalogBuildError {
 /// Use [`Catalog::builtin()`] for the embedded settings-backed catalog.
 #[derive(Debug)]
 pub struct Catalog {
-    models:           Vec<Model>,
-    providers:        Vec<CatalogProvider>,
-    model_settings:   HashMap<String, CatalogModelSettings>,
-    model_index:      HashMap<String, usize>,
+    models: Vec<Model>,
+    providers: Vec<CatalogProvider>,
+    model_settings: HashMap<String, CatalogModelSettings>,
+    model_index: HashMap<String, usize>,
     provider_aliases: HashMap<String, ProviderId>,
-    provider_index:   HashMap<ProviderId, usize>,
+    provider_index: HashMap<ProviderId, usize>,
 }
 
 impl Catalog {
@@ -743,7 +740,7 @@ impl Catalog {
                 required_model_string(&model_id, model_settings.provider.as_ref(), "provider")?;
             if !known_providers.contains(provider_id.as_str()) {
                 return Err(CatalogBuildError::UnknownModelProvider {
-                    model:    model_id,
+                    model: model_id,
                     provider: ProviderId::from(provider_id),
                 });
             }
@@ -884,7 +881,7 @@ impl Catalog {
     pub fn provider_summaries(&self, configured: &HashSet<ProviderId>) -> Vec<Provider> {
         #[derive(Default)]
         struct Stats {
-            model_count:   u32,
+            model_count: u32,
             default_model: Option<String>,
         }
 
@@ -1164,7 +1161,7 @@ impl Catalog {
                 let provider = ProviderId::from(provider_str.clone());
                 self.closest(&provider, reference).map(|m| FallbackTarget {
                     provider: provider_str.clone(),
-                    model:    m.id.clone(),
+                    model: m.id.clone(),
                 })
             })
             .collect()
@@ -1210,18 +1207,18 @@ fn merge_provider_settings(
     fallback: ProviderCatalogSettings,
 ) -> ProviderCatalogSettings {
     ProviderCatalogSettings {
-        display_name:   higher.display_name.or(fallback.display_name),
-        adapter:        higher.adapter.or(fallback.adapter),
-        codec:          higher.codec.or(fallback.codec),
-        agent_profile:  higher.agent_profile.or(fallback.agent_profile),
-        auth:           higher.auth.or(fallback.auth),
+        display_name: higher.display_name.or(fallback.display_name),
+        adapter: higher.adapter.or(fallback.adapter),
+        codec: higher.codec.or(fallback.codec),
+        agent_profile: higher.agent_profile.or(fallback.agent_profile),
+        auth: higher.auth.or(fallback.auth),
         billing_policy: higher.billing_policy.or(fallback.billing_policy),
-        api_key_url:    higher.api_key_url.or(fallback.api_key_url),
-        base_url:       higher.base_url.or(fallback.base_url),
-        extra_headers:  higher.extra_headers.or(fallback.extra_headers),
-        priority:       higher.priority.or(fallback.priority),
-        enabled:        higher.enabled.or(fallback.enabled),
-        aliases:        higher.aliases.or(fallback.aliases),
+        api_key_url: higher.api_key_url.or(fallback.api_key_url),
+        base_url: higher.base_url.or(fallback.base_url),
+        extra_headers: higher.extra_headers.or(fallback.extra_headers),
+        priority: higher.priority.or(fallback.priority),
+        enabled: higher.enabled.or(fallback.enabled),
+        aliases: higher.aliases.or(fallback.aliases),
     }
 }
 
@@ -1230,39 +1227,35 @@ fn merge_model_settings(
     fallback: ModelCatalogSettings,
 ) -> ModelCatalogSettings {
     ModelCatalogSettings {
-        provider:             higher.provider.or(fallback.provider),
-        api_id:               higher.api_id.or(fallback.api_id),
-        codec:                higher.codec.or(fallback.codec),
-        billing_policy:       higher.billing_policy.or(fallback.billing_policy),
-        agent_profile:        higher.agent_profile.or(fallback.agent_profile),
-        display_name:         higher.display_name.or(fallback.display_name),
-        family:               higher.family.or(fallback.family),
-        training:             higher.training.or(fallback.training),
-        knowledge_cutoff:     higher.knowledge_cutoff.or(fallback.knowledge_cutoff),
-        default:              higher.default.or(fallback.default),
-        small_default:        higher.small_default.or(fallback.small_default),
-        probe:                higher.probe.or(fallback.probe),
-        enabled:              higher.enabled.or(fallback.enabled),
-        aliases:              higher.aliases.or(fallback.aliases),
+        provider: higher.provider.or(fallback.provider),
+        api_id: higher.api_id.or(fallback.api_id),
+        codec: higher.codec.or(fallback.codec),
+        billing_policy: higher.billing_policy.or(fallback.billing_policy),
+        agent_profile: higher.agent_profile.or(fallback.agent_profile),
+        display_name: higher.display_name.or(fallback.display_name),
+        family: higher.family.or(fallback.family),
+        training: higher.training.or(fallback.training),
+        knowledge_cutoff: higher.knowledge_cutoff.or(fallback.knowledge_cutoff),
+        default: higher.default.or(fallback.default),
+        small_default: higher.small_default.or(fallback.small_default),
+        probe: higher.probe.or(fallback.probe),
+        enabled: higher.enabled.or(fallback.enabled),
+        aliases: higher.aliases.or(fallback.aliases),
         estimated_output_tps: higher
             .estimated_output_tps
             .or(fallback.estimated_output_tps),
-        limits:               merge_optional(
-            higher.limits,
-            fallback.limits,
-            merge_model_limits_settings,
-        ),
-        features:             merge_optional(
+        limits: merge_optional(higher.limits, fallback.limits, merge_model_limits_settings),
+        features: merge_optional(
             higher.features,
             fallback.features,
             merge_model_features_settings,
         ),
-        controls:             merge_optional(
+        controls: merge_optional(
             higher.controls,
             fallback.controls,
             merge_model_controls_settings,
         ),
-        costs:                merge_optional(higher.costs, fallback.costs, merge_model_cost_table),
+        costs: merge_optional(higher.costs, fallback.costs, merge_model_cost_table),
     }
 }
 
@@ -1280,7 +1273,7 @@ fn merge_model_limits_settings(
 ) -> SettingsModelLimits {
     SettingsModelLimits {
         context_window: higher.context_window.or(fallback.context_window),
-        max_output:     higher.max_output.or(fallback.max_output),
+        max_output: higher.max_output.or(fallback.max_output),
     }
 }
 
@@ -1289,12 +1282,12 @@ fn merge_model_features_settings(
     fallback: &SettingsModelFeatures,
 ) -> SettingsModelFeatures {
     SettingsModelFeatures {
-        tools:            higher.tools.or(fallback.tools),
-        vision:           higher.vision.or(fallback.vision),
-        reasoning:        higher.reasoning.or(fallback.reasoning),
+        tools: higher.tools.or(fallback.tools),
+        vision: higher.vision.or(fallback.vision),
+        reasoning: higher.reasoning.or(fallback.reasoning),
         reasoning_effort: higher.reasoning_effort.or(fallback.reasoning_effort),
-        prompt_cache:     higher.prompt_cache.or(fallback.prompt_cache),
-        sampling_params:  higher.sampling_params.or(fallback.sampling_params),
+        prompt_cache: higher.prompt_cache.or(fallback.prompt_cache),
+        sampling_params: higher.sampling_params.or(fallback.sampling_params),
     }
 }
 
@@ -1307,7 +1300,7 @@ fn merge_model_controls_settings(
             .reasoning_effort
             .clone()
             .or_else(|| fallback.reasoning_effort.clone()),
-        speed:            higher.speed.clone().or_else(|| fallback.speed.clone()),
+        speed: higher.speed.clone().or_else(|| fallback.speed.clone()),
     }
 }
 
@@ -1316,15 +1309,15 @@ fn merge_model_cost_table(
     fallback: &SettingsModelCostTable,
 ) -> SettingsModelCostTable {
     SettingsModelCostTable {
-        base:  merge_cost_rates(&higher.base, &fallback.base),
+        base: merge_cost_rates(&higher.base, &fallback.base),
         speed: higher.speed.clone().or_else(|| fallback.speed.clone()),
     }
 }
 
 fn merge_cost_rates(higher: &CostRates, fallback: &CostRates) -> CostRates {
     CostRates {
-        input_cost_per_mtok:       higher.input_cost_per_mtok.or(fallback.input_cost_per_mtok),
-        output_cost_per_mtok:      higher
+        input_cost_per_mtok: higher.input_cost_per_mtok.or(fallback.input_cost_per_mtok),
+        output_cost_per_mtok: higher
             .output_cost_per_mtok
             .or(fallback.output_cost_per_mtok),
         cache_input_cost_per_mtok: higher
@@ -1354,7 +1347,7 @@ fn build_providers(
         let adapter = AdapterKind::from_str(&adapter_name).map_err(|_| {
             CatalogBuildError::UnknownAdapter {
                 provider: provider_id.clone(),
-                adapter:  adapter_name,
+                adapter: adapter_name,
             }
         })?;
         let defaults = adapter_defaults(adapter);
@@ -1383,7 +1376,7 @@ fn build_providers(
 
 #[derive(Debug, Clone, Copy)]
 struct AdapterDefaults {
-    agent_profile:  AgentProfileKind,
+    agent_profile: AgentProfileKind,
     billing_policy: BillingPolicy,
 }
 
@@ -1392,15 +1385,15 @@ fn adapter_defaults(adapter: AdapterKind) -> AdapterDefaults {
         // Bedrock hosts Anthropic-family models, so it shares the Anthropic
         // agent profile and billing policy by default.
         AdapterKind::Anthropic | AdapterKind::Bedrock => AdapterDefaults {
-            agent_profile:  AgentProfileKind::Anthropic,
+            agent_profile: AgentProfileKind::Anthropic,
             billing_policy: BillingPolicy::Anthropic,
         },
         AdapterKind::OpenAi | AdapterKind::OpenAiCompatible => AdapterDefaults {
-            agent_profile:  AgentProfileKind::OpenAi,
+            agent_profile: AgentProfileKind::OpenAi,
             billing_policy: BillingPolicy::OpenAi,
         },
         AdapterKind::Gemini => AdapterDefaults {
-            agent_profile:  AgentProfileKind::Gemini,
+            agent_profile: AgentProfileKind::Gemini,
             billing_policy: BillingPolicy::Gemini,
         },
     }
@@ -1620,8 +1613,8 @@ fn build_model_features(
 fn build_model_costs(costs: Option<&SettingsModelCostTable>) -> ModelCosts {
     let base = costs.map(|costs| &costs.base);
     ModelCosts {
-        input_cost_per_mtok:       base.and_then(|base| base.input_cost_per_mtok),
-        output_cost_per_mtok:      base.and_then(|base| base.output_cost_per_mtok),
+        input_cost_per_mtok: base.and_then(|base| base.input_cost_per_mtok),
+        output_cost_per_mtok: base.and_then(|base| base.output_cost_per_mtok),
         cache_input_cost_per_mtok: base.and_then(|base| base.cache_input_cost_per_mtok),
     }
 }
@@ -1650,8 +1643,8 @@ fn build_speed_costs(
 
 fn cost_rates_to_model_costs(rates: &CostRates) -> ModelCosts {
     ModelCosts {
-        input_cost_per_mtok:       rates.input_cost_per_mtok,
-        output_cost_per_mtok:      rates.output_cost_per_mtok,
+        input_cost_per_mtok: rates.input_cost_per_mtok,
+        output_cost_per_mtok: rates.output_cost_per_mtok,
         cache_input_cost_per_mtok: rates.cache_input_cost_per_mtok,
     }
 }
@@ -1821,9 +1814,9 @@ fn validate_builtin_fragment(
         .expect("provider count was checked");
     if actual != expected {
         return Err(CatalogBuildError::BuiltinProviderIdMismatch {
-            path:     path.to_string(),
+            path: path.to_string(),
             expected: expected.to_string(),
-            actual:   actual.clone(),
+            actual: actual.clone(),
         });
     }
 
@@ -1833,10 +1826,10 @@ fn validate_builtin_fragment(
         };
         if provider != expected {
             return Err(CatalogBuildError::BuiltinModelProviderMismatch {
-                path:     path.to_string(),
-                model:    model.clone(),
+                path: path.to_string(),
+                model: model.clone(),
                 expected: expected.to_string(),
-                actual:   provider.clone(),
+                actual: provider.clone(),
             });
         }
     }
@@ -1902,9 +1895,10 @@ reasoning = true
             provider.base_url.as_deref(),
             Some("https://bedrock-runtime.eu-west-1.amazonaws.com")
         );
-        assert_eq!(provider.auth.as_ref().unwrap().credentials, vec![
-            CredentialRef::AwsSigv4
-        ]);
+        assert_eq!(
+            provider.auth.as_ref().unwrap().credentials,
+            vec![CredentialRef::AwsSigv4]
+        );
         // Bedrock inherits the Anthropic agent profile and billing by default.
         assert_eq!(provider.agent_profile, AgentProfileKind::Anthropic);
         assert_eq!(provider.billing_policy, BillingPolicy::Anthropic);
@@ -2029,13 +2023,16 @@ enabled = true
         // Bearer key first (env then vault, like every other provider), under
         // either the AWS-canonical name or Fabro's `<PROVIDER>_API_KEY`
         // convention; SigV4 chain as the fallback.
-        assert_eq!(provider.auth.as_ref().unwrap().credentials, vec![
-            CredentialRef::Env("AWS_BEARER_TOKEN_BEDROCK".to_string()),
-            CredentialRef::Env("BEDROCK_API_KEY".to_string()),
-            CredentialRef::Vault("AWS_BEARER_TOKEN_BEDROCK".to_string()),
-            CredentialRef::Vault("BEDROCK_API_KEY".to_string()),
-            CredentialRef::AwsSigv4,
-        ]);
+        assert_eq!(
+            provider.auth.as_ref().unwrap().credentials,
+            vec![
+                CredentialRef::Env("AWS_BEARER_TOKEN_BEDROCK".to_string()),
+                CredentialRef::Env("BEDROCK_API_KEY".to_string()),
+                CredentialRef::Vault("AWS_BEARER_TOKEN_BEDROCK".to_string()),
+                CredentialRef::Vault("BEDROCK_API_KEY".to_string()),
+                CredentialRef::AwsSigv4,
+            ]
+        );
 
         // Claude rows bill Anthropic-style; open-weights rows override the
         // provider's Anthropic defaults the other way.
@@ -2323,10 +2320,10 @@ enabled = true
 
     #[test]
     fn builtin_build_fallback_chain() {
-        let fallbacks = HashMap::from([("anthropic".to_string(), vec![
-            "gemini".to_string(),
-            "openai".to_string(),
-        ])]);
+        let fallbacks = HashMap::from([(
+            "anthropic".to_string(),
+            vec!["gemini".to_string(), "openai".to_string()],
+        )]);
         let chain = Catalog::builtin().build_fallback_chain(
             &ProviderId::anthropic(),
             "claude-opus-4-6",
@@ -2363,10 +2360,10 @@ enabled = true
 
     #[test]
     fn builtin_build_fallback_chain_skips_no_capability_match() {
-        let fallbacks = HashMap::from([("anthropic".to_string(), vec![
-            "openai".to_string(),
-            "kimi".to_string(),
-        ])]);
+        let fallbacks = HashMap::from([(
+            "anthropic".to_string(),
+            vec!["openai".to_string(), "kimi".to_string()],
+        )]);
         let chain = Catalog::builtin().build_fallback_chain(
             &ProviderId::anthropic(),
             "claude-haiku-4-5",
@@ -3763,7 +3760,7 @@ billing_policy = "none"
                     CredentialRef::Env("BEARER_API_KEY".to_string()),
                     CredentialRef::Vault("BEARER_API_KEY".to_string()),
                 ],
-                header:      ApiKeyHeaderPolicy::Bearer,
+                header: ApiKeyHeaderPolicy::Bearer,
             })
         );
 
@@ -3773,7 +3770,7 @@ billing_policy = "none"
             custom.auth,
             Some(ProviderAuthConfig {
                 credentials: vec![CredentialRef::Env("CUSTOM_API_KEY".to_string())],
-                header:      ApiKeyHeaderPolicy::Custom {
+                header: ApiKeyHeaderPolicy::Custom {
                     name: "x-api-key".to_string(),
                 },
             })

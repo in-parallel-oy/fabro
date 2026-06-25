@@ -17,9 +17,9 @@ use crate::manifest_builder::McpRunManifestBuilder;
 
 #[derive(Clone)]
 pub(crate) struct FabroMcpServer {
-    settings:    Arc<FabroMcpServerSettings>,
-    backend:     Arc<OnceCell<Arc<dyn FabroToolBackend>>>,
-    cwd:         PathBuf,
+    settings: Arc<FabroMcpServerSettings>,
+    backend: Arc<OnceCell<Arc<dyn FabroToolBackend>>>,
+    cwd: PathBuf,
     tool_router: ToolRouter<Self>,
 }
 
@@ -254,8 +254,8 @@ mod tests {
     #[test]
     fn fabro_run_pair_tool_is_registered_with_stage_based_schema() {
         let settings = FabroMcpServerSettings {
-            cwd:            PathBuf::from("."),
-            config_path:    PathBuf::from("fabro.toml"),
+            cwd: PathBuf::from("."),
+            config_path: PathBuf::from("fabro.toml"),
             client_factory: Arc::new(|| {
                 Box::pin(async { panic!("client should not be constructed while listing tools") })
             }),
@@ -283,8 +283,8 @@ mod tests {
     #[test]
     fn fabro_run_create_tool_advertises_string_and_object_run_specs() {
         let settings = FabroMcpServerSettings {
-            cwd:            PathBuf::from("."),
-            config_path:    PathBuf::from("fabro.toml"),
+            cwd: PathBuf::from("."),
+            config_path: PathBuf::from("fabro.toml"),
             client_factory: Arc::new(|| {
                 Box::pin(async { panic!("client should not be constructed while listing tools") })
             }),

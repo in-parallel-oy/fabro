@@ -4,8 +4,8 @@ use crate::command::AcpCommandError;
 
 #[derive(Debug)]
 pub struct AcpProcessExit {
-    pub termination:      CommandTermination,
-    pub exit_code:        Option<i32>,
+    pub termination: CommandTermination,
+    pub exit_code: Option<i32>,
     pub exec_output_tail: Option<ExecOutputTail>,
 }
 
@@ -45,10 +45,7 @@ pub enum AcpError {
     ProcessExited(AcpProcessExit),
 
     #[error("ACP prompt stopped with {stop_reason}: {text}")]
-    StopReason {
-        stop_reason: String,
-        text:        String,
-    },
+    StopReason { stop_reason: String, text: String },
 }
 
 impl AcpError {

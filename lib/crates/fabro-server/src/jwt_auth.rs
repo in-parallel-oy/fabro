@@ -23,20 +23,20 @@ const DEV_TOKEN_COMPARE_KEY: &[u8] = b"fabro-dev-token-compare-key";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerifiedAuth {
-    pub login:       String,
-    pub name:        String,
-    pub email:       String,
-    pub avatar_url:  String,
-    pub user_url:    String,
+    pub login: String,
+    pub name: String,
+    pub email: String,
+    pub avatar_url: String,
+    pub user_url: String,
     pub auth_method: AuthMethod,
-    pub identity:    IdpIdentity,
+    pub identity: IdpIdentity,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConfiguredAuth {
-    pub(crate) methods:    Vec<ServerAuthMethod>,
-    pub(crate) dev_token:  Option<String>,
-    pub(crate) jwt_key:    Option<JwtSigningKey>,
+    pub(crate) methods: Vec<ServerAuthMethod>,
+    pub(crate) dev_token: Option<String>,
+    pub(crate) jwt_key: Option<JwtSigningKey>,
     pub(crate) jwt_issuer: Option<String>,
 }
 
@@ -355,21 +355,21 @@ mod tests {
 
     fn dev_token_mode() -> AuthMode {
         AuthMode::Enabled(ConfiguredAuth {
-            methods:    vec![ServerAuthMethod::DevToken],
-            dev_token:  Some(
+            methods: vec![ServerAuthMethod::DevToken],
+            dev_token: Some(
                 "fabro_dev_abababababababababababababababababababababababababababababababab"
                     .to_string(),
             ),
-            jwt_key:    Some(signing_key()),
+            jwt_key: Some(signing_key()),
             jwt_issuer: Some("https://fabro.example".to_string()),
         })
     }
 
     fn github_jwt_mode() -> AuthMode {
         AuthMode::Enabled(ConfiguredAuth {
-            methods:    vec![ServerAuthMethod::Github],
-            dev_token:  None,
-            jwt_key:    Some(signing_key()),
+            methods: vec![ServerAuthMethod::Github],
+            dev_token: None,
+            jwt_key: Some(signing_key()),
             jwt_issuer: Some("https://fabro.example".to_string()),
         })
     }
@@ -386,12 +386,12 @@ mod tests {
 
     fn jwt_subject() -> auth::JwtSubject {
         auth::JwtSubject {
-            identity:    IdpIdentity::new("https://github.com", "12345").unwrap(),
-            login:       "octocat".to_string(),
-            name:        "The Octocat".to_string(),
-            email:       "octocat@example.com".to_string(),
-            avatar_url:  "https://example.com/octocat.png".to_string(),
-            user_url:    "https://github.com/octocat".to_string(),
+            identity: IdpIdentity::new("https://github.com", "12345").unwrap(),
+            login: "octocat".to_string(),
+            name: "The Octocat".to_string(),
+            email: "octocat@example.com".to_string(),
+            avatar_url: "https://example.com/octocat.png".to_string(),
+            user_url: "https://github.com/octocat".to_string(),
             auth_method: AuthMethod::Github,
         }
     }

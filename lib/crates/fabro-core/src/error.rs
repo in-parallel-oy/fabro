@@ -23,7 +23,7 @@ impl fmt::Display for VisitLimitSource {
 #[derive(Debug, Clone)]
 pub struct HandlerErrorDetail {
     pub retryable: bool,
-    pub failure:   FailureDetail,
+    pub failure: FailureDetail,
 }
 
 impl fmt::Display for HandlerErrorDetail {
@@ -46,9 +46,9 @@ pub enum Error {
         "node \"{node_id}\" visited {visits} times ({limit_source} limit {limit}); run is stuck in a cycle"
     )]
     VisitLimitExceeded {
-        node_id:      String,
-        visits:       usize,
-        limit:        usize,
+        node_id: String,
+        visits: usize,
+        limit: usize,
         limit_source: VisitLimitSource,
     },
     #[error("stall timeout on node \"{node_id}\"")]
@@ -117,9 +117,9 @@ mod tests {
         );
         assert_eq!(
             Error::VisitLimitExceeded {
-                node_id:      "n1".into(),
-                visits:       5,
-                limit:        3,
+                node_id: "n1".into(),
+                visits: 5,
+                limit: 3,
                 limit_source: VisitLimitSource::Node,
             }
             .to_string(),
@@ -142,13 +142,13 @@ mod tests {
     fn core_error_handler_is_retryable() {
         let retryable = Error::handler(HandlerErrorDetail {
             retryable: true,
-            failure:   FailureDetail::new("timeout", FailureCategory::TransientInfra),
+            failure: FailureDetail::new("timeout", FailureCategory::TransientInfra),
         });
         assert!(retryable.is_retryable());
 
         let not_retryable = Error::handler(HandlerErrorDetail {
             retryable: false,
-            failure:   FailureDetail::new("bad input", FailureCategory::Deterministic),
+            failure: FailureDetail::new("bad input", FailureCategory::Deterministic),
         });
         assert!(!not_retryable.is_retryable());
     }
@@ -157,16 +157,19 @@ mod tests {
     fn core_error_handler_to_fail_outcome() {
         let err = Error::handler(HandlerErrorDetail {
             retryable: true,
-            failure:   {
+            failure: {
                 let mut failure = FailureDetail::new("api down", FailureCategory::TransientInfra);
                 failure.signature = Some(fabro_types::FailureSignature("sig123".into()));
                 failure
             },
         });
         let outcome: Outcome = err.to_fail_outcome();
-        assert_eq!(outcome.status, StageOutcome::Failed {
-            retry_requested: false,
-        });
+        assert_eq!(
+            outcome.status,
+            StageOutcome::Failed {
+                retry_requested: false,
+            }
+        );
         let failure = outcome.failure.unwrap();
         assert_eq!(failure.message, "api down");
         assert_eq!(failure.category, FailureCategory::TransientInfra);

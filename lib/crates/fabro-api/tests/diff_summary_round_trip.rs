@@ -13,8 +13,8 @@ fn diff_summary_reuses_canonical_type() {
 fn diff_summary_serializes_with_required_integer_fields() {
     let summary = DiffSummary {
         files_changed: 3,
-        additions:     12,
-        deletions:     4,
+        additions: 12,
+        deletions: 4,
     };
     assert_eq!(
         serde_json::to_value(summary).unwrap(),

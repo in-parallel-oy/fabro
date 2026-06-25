@@ -16,7 +16,7 @@ pub struct EphemeralKeypair {
     /// Wrapped in `Zeroizing` so it is wiped from memory on drop.
     private_openssh: Zeroizing<String>,
     /// OpenSSH-format public key line (`ssh-ed25519 AAAA...`).
-    public_openssh:  String,
+    public_openssh: String,
 }
 
 impl EphemeralKeypair {
@@ -30,13 +30,12 @@ impl EphemeralKeypair {
         let keypair = Ed25519Keypair::from(private);
         let key = PrivateKey::from(keypair);
 
-        let private_openssh = key
-            .to_openssh(LineEnding::LF)
-            .map_err(|err| crate::Error::message(format!("Failed to encode ephemeral private key: {err}")))?;
-        let public_openssh = key
-            .public_key()
-            .to_openssh()
-            .map_err(|err| crate::Error::message(format!("Failed to encode ephemeral public key: {err}")))?;
+        let private_openssh = key.to_openssh(LineEnding::LF).map_err(|err| {
+            crate::Error::message(format!("Failed to encode ephemeral private key: {err}"))
+        })?;
+        let public_openssh = key.public_key().to_openssh().map_err(|err| {
+            crate::Error::message(format!("Failed to encode ephemeral public key: {err}"))
+        })?;
 
         Ok(Self {
             private_openssh,

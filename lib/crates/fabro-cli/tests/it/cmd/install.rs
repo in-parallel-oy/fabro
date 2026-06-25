@@ -515,10 +515,13 @@ fn install_json_non_interactive_success_emits_complete_event() {
         .lines()
         .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
         .collect::<Vec<_>>();
-    assert_eq!(events, vec![serde_json::json!({
-        "event": "install_complete",
-        "status": "success"
-    })]);
+    assert_eq!(
+        events,
+        vec![serde_json::json!({
+            "event": "install_complete",
+            "status": "success"
+        })]
+    );
 }
 
 #[fabro_macros::e2e_test(live("ANTHROPIC_API_KEY"))]

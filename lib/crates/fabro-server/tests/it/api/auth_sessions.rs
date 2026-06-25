@@ -89,16 +89,16 @@ fn derive_cookie_key(master: &[u8]) -> Key {
 fn session_cookie() -> String {
     let now = chrono::Utc::now();
     let session = SessionCookie {
-        v:           2,
-        login:       "octocat".to_string(),
+        v: 2,
+        login: "octocat".to_string(),
         auth_method: fabro_types::AuthMethod::Github,
-        identity:    github_identity(),
-        name:        "The Octocat".to_string(),
-        email:       "octocat@example.com".to_string(),
-        avatar_url:  "https://avatars.githubusercontent.com/u/583231".to_string(),
-        user_url:    "https://github.com/octocat".to_string(),
-        iat:         now.timestamp(),
-        exp:         (now + chrono::Duration::days(30)).timestamp(),
+        identity: github_identity(),
+        name: "The Octocat".to_string(),
+        email: "octocat@example.com".to_string(),
+        avatar_url: "https://avatars.githubusercontent.com/u/583231".to_string(),
+        user_url: "https://github.com/octocat".to_string(),
+        iat: now.timestamp(),
+        exp: (now + chrono::Duration::days(30)).timestamp(),
     };
     let key = derive_cookie_key(TEST_SESSION_SECRET.as_bytes());
     let mut jar = CookieJar::new();
@@ -242,10 +242,13 @@ async fn inactive_and_other_identity_cli_tokens_are_excluded() {
         })
         .collect::<Vec<_>>();
 
-    assert_eq!(session_ids, vec![
-        "browser:current".to_string(),
-        format!("cli:{active_chain_id}")
-    ]);
+    assert_eq!(
+        session_ids,
+        vec![
+            "browser:current".to_string(),
+            format!("cli:{active_chain_id}")
+        ]
+    );
 }
 
 #[tokio::test]

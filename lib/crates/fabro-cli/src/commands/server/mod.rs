@@ -163,9 +163,9 @@ pub(crate) async fn dispatch(
 
 struct InstallBootstrap {
     bind_request: BindRequest,
-    storage_dir:  std::path::PathBuf,
-    config_path:  std::path::PathBuf,
-    token:        String,
+    storage_dir: std::path::PathBuf,
+    config_path: std::path::PathBuf,
+    token: String,
 }
 
 fn maybe_install_bootstrap(
@@ -240,7 +240,7 @@ fn persist_install_dev_token_hook() -> InstallFinishHook {
         AuthStore::default().put(
             &target,
             AuthEntry::DevToken(DevTokenEntry {
-                token:        token.clone(),
+                token: token.clone(),
                 logged_in_at: chrono::Utc::now(),
             }),
         )?;

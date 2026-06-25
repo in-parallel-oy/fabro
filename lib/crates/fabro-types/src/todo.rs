@@ -86,14 +86,14 @@ impl TodoListKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TodoProjection {
     /// Identity within `list_id`.
-    pub id:          String,
+    pub id: String,
     /// Lifecycle status. `Deleted` does not appear in the current projection
     /// because such todos are removed entirely.
-    pub status:      TodoStatus,
+    pub status: TodoStatus,
     /// Ordering within the list. Lower comes first.
-    pub order:       u32,
+    pub order: u32,
     /// Free-form summary (Claude `subject`, Codex `step`).
-    pub subject:     String,
+    pub subject: String,
     /// Longer description (Claude `description`); empty when not provided.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
@@ -101,17 +101,17 @@ pub struct TodoProjection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_form: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub owner:       Option<String>,
+    pub owner: Option<String>,
     /// IDs of other tasks this one blocks.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub blocks:      Vec<String>,
+    pub blocks: Vec<String>,
     /// IDs of tasks this one is blocked by.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub blocked_by:  Vec<String>,
+    pub blocked_by: Vec<String>,
     /// Per-todo metadata bag. Keys with `null` values are removed by
     /// `TaskUpdate`.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub metadata:    BTreeMap<String, serde_json::Value>,
+    pub metadata: BTreeMap<String, serde_json::Value>,
 }
 
 impl TodoProjection {
@@ -191,13 +191,13 @@ impl TodoProjection {
 /// distinguish "unchanged" from "cleared".
 #[derive(Debug, Clone, Copy)]
 pub struct TodoPatch<'a> {
-    pub status:         Option<TodoStatus>,
-    pub order:          Option<u32>,
-    pub subject:        Option<&'a str>,
-    pub description:    Option<&'a str>,
-    pub active_form:    Option<&'a Option<String>>,
-    pub owner:          Option<&'a Option<String>>,
-    pub add_blocks:     Option<&'a [String]>,
+    pub status: Option<TodoStatus>,
+    pub order: Option<u32>,
+    pub subject: Option<&'a str>,
+    pub description: Option<&'a str>,
+    pub active_form: Option<&'a Option<String>>,
+    pub owner: Option<&'a Option<String>>,
+    pub add_blocks: Option<&'a [String]>,
     pub add_blocked_by: Option<&'a [String]>,
     pub metadata_patch: &'a BTreeMap<String, serde_json::Value>,
 }
@@ -209,13 +209,13 @@ impl<'a> TodoPatch<'a> {
     #[must_use]
     pub fn from_props(props: &'a super::run_event::TodoUpdatedProps) -> Self {
         Self {
-            status:         props.status,
-            order:          props.order,
-            subject:        props.subject.as_deref(),
-            description:    props.description.as_deref(),
-            active_form:    props.active_form.as_ref(),
-            owner:          props.owner.as_ref(),
-            add_blocks:     props.add_blocks.as_deref(),
+            status: props.status,
+            order: props.order,
+            subject: props.subject.as_deref(),
+            description: props.description.as_deref(),
+            active_form: props.active_form.as_ref(),
+            owner: props.owner.as_ref(),
+            add_blocks: props.add_blocks.as_deref(),
             add_blocked_by: props.add_blocked_by.as_deref(),
             metadata_patch: &props.metadata_patch,
         }
@@ -228,11 +228,11 @@ impl<'a> TodoPatch<'a> {
 /// callers do not have to re-sort the projection on every read.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TodoListProjection {
-    pub kind:    TodoListKind,
+    pub kind: TodoListKind,
     pub list_id: String,
     /// Items currently in the list, in display order.
     #[serde(default)]
-    pub items:   Vec<TodoProjection>,
+    pub items: Vec<TodoProjection>,
 }
 
 impl TodoListProjection {

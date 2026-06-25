@@ -21,11 +21,11 @@ pub(crate) const REMOVAL_DEADLINE: &str = "2026-08-18";
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct OptionalServerEnvSecretsMigrationReport {
-    pub(crate) migrated_secrets:      usize,
-    pub(crate) removed_env_entries:   usize,
+    pub(crate) migrated_secrets: usize,
+    pub(crate) removed_env_entries: usize,
     pub(crate) preserved_env_entries: usize,
-    pub(crate) backup_path:           Option<PathBuf>,
-    pub(crate) warnings:              Vec<String>,
+    pub(crate) backup_path: Option<PathBuf>,
+    pub(crate) warnings: Vec<String>,
 }
 
 impl OptionalServerEnvSecretsMigrationReport {
@@ -131,7 +131,7 @@ fn secret_type_for(name: &str) -> SecretType {
 
 fn env_removal(name: &str) -> EnvFileRemoval {
     EnvFileRemoval {
-        key:     name.to_string(),
+        key: name.to_string(),
         comment: None,
     }
 }

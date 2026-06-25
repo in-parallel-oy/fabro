@@ -70,12 +70,12 @@ fn translate_bearer_token(token: &str, config: &ConfiguredAuth) -> Option<String
         jwt_key,
         jwt_issuer,
         &JwtSubject {
-            identity:    dev_identity(),
-            login:       "dev".to_string(),
-            name:        "Dev Token".to_string(),
-            email:       "dev@fabro.local".to_string(),
-            avatar_url:  String::new(),
-            user_url:    String::new(),
+            identity: dev_identity(),
+            login: "dev".to_string(),
+            name: "Dev Token".to_string(),
+            email: "dev@fabro.local".to_string(),
+            avatar_url: String::new(),
+            user_url: String::new(),
             auth_method: AuthMethod::DevToken,
         },
         Duration::minutes(ACCESS_TOKEN_TTL_MINUTES),
@@ -172,9 +172,9 @@ mod tests {
 
     fn auth_mode() -> AuthMode {
         AuthMode::Enabled(ConfiguredAuth {
-            methods:    vec![ServerAuthMethod::DevToken, ServerAuthMethod::Github],
-            dev_token:  Some(DEV_TOKEN.to_string()),
-            jwt_key:    Some(signing_key()),
+            methods: vec![ServerAuthMethod::DevToken, ServerAuthMethod::Github],
+            dev_token: Some(DEV_TOKEN.to_string()),
+            jwt_key: Some(signing_key()),
             jwt_issuer: Some("https://fabro.example".to_string()),
         })
     }
@@ -242,31 +242,31 @@ methods = ["dev-token"]
 
     fn github_session() -> SessionCookie {
         SessionCookie {
-            v:           2,
-            login:       "octocat".to_string(),
+            v: 2,
+            login: "octocat".to_string(),
             auth_method: AuthMethod::Github,
-            identity:    IdpIdentity::new("https://github.com", "12345").unwrap(),
-            name:        "The Octocat".to_string(),
-            email:       "octocat@example.com".to_string(),
-            avatar_url:  "https://example.com/octocat.png".to_string(),
-            user_url:    "https://github.com/octocat".to_string(),
-            iat:         chrono::Utc::now().timestamp(),
-            exp:         (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp(),
+            identity: IdpIdentity::new("https://github.com", "12345").unwrap(),
+            name: "The Octocat".to_string(),
+            email: "octocat@example.com".to_string(),
+            avatar_url: "https://example.com/octocat.png".to_string(),
+            user_url: "https://github.com/octocat".to_string(),
+            iat: chrono::Utc::now().timestamp(),
+            exp: (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp(),
         }
     }
 
     fn dev_session() -> SessionCookie {
         SessionCookie {
-            v:           2,
-            login:       "dev".to_string(),
+            v: 2,
+            login: "dev".to_string(),
             auth_method: AuthMethod::DevToken,
-            identity:    IdpIdentity::new("fabro:dev", "dev").unwrap(),
-            name:        "Development User".to_string(),
-            email:       "dev@localhost".to_string(),
-            avatar_url:  "/images/logo.svg".to_string(),
-            user_url:    String::new(),
-            iat:         chrono::Utc::now().timestamp(),
-            exp:         (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp(),
+            identity: IdpIdentity::new("fabro:dev", "dev").unwrap(),
+            name: "Development User".to_string(),
+            email: "dev@localhost".to_string(),
+            avatar_url: "/images/logo.svg".to_string(),
+            user_url: String::new(),
+            iat: chrono::Utc::now().timestamp(),
+            exp: (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp(),
         }
     }
 
@@ -275,12 +275,12 @@ methods = ["dev-token"]
             &signing_key(),
             "https://fabro.example",
             &auth::JwtSubject {
-                identity:    IdpIdentity::new("https://github.com", "12345").unwrap(),
-                login:       "octocat".to_string(),
-                name:        "The Octocat".to_string(),
-                email:       "octocat@example.com".to_string(),
-                avatar_url:  "https://example.com/octocat.png".to_string(),
-                user_url:    "https://github.com/octocat".to_string(),
+                identity: IdpIdentity::new("https://github.com", "12345").unwrap(),
+                login: "octocat".to_string(),
+                name: "The Octocat".to_string(),
+                email: "octocat@example.com".to_string(),
+                avatar_url: "https://example.com/octocat.png".to_string(),
+                user_url: "https://github.com/octocat".to_string(),
                 auth_method: AuthMethod::Github,
             },
             chrono::Duration::minutes(10),
@@ -619,12 +619,16 @@ methods = ["dev-token"]
     #[tokio::test]
     async fn full_router_accepts_dev_token_bearer_when_web_is_disabled() {
         let state = test_state();
-        let app = server::build_router_with_options(state, &auth_mode(), RouterOptions {
-            web_enabled:       false,
-            github_endpoints:  None,
-            static_asset_root: None,
-            watch_web:         false,
-        });
+        let app = server::build_router_with_options(
+            state,
+            &auth_mode(),
+            RouterOptions {
+                web_enabled: false,
+                github_endpoints: None,
+                static_asset_root: None,
+                watch_web: false,
+            },
+        );
 
         let response = app
             .oneshot(

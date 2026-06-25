@@ -23,34 +23,34 @@ fn provider_id_json_matches_openapi_shape_through_model() {
     );
 
     let model = Model {
-        id:                   "venice-custom".to_string(),
-        provider:             ProviderId::new("venice"),
-        family:               "venice".to_string(),
-        display_name:         "Venice Custom".to_string(),
-        limits:               ModelLimits {
+        id: "venice-custom".to_string(),
+        provider: ProviderId::new("venice"),
+        family: "venice".to_string(),
+        display_name: "Venice Custom".to_string(),
+        limits: ModelLimits {
             context_window: 128_000,
-            max_output:     None,
+            max_output: None,
         },
-        training:             None,
-        knowledge_cutoff:     None,
-        features:             ModelFeatures {
-            tools:            false,
-            vision:           false,
-            reasoning:        false,
+        training: None,
+        knowledge_cutoff: None,
+        features: ModelFeatures {
+            tools: false,
+            vision: false,
+            reasoning: false,
             reasoning_effort: ReasoningEffortFeature::None,
-            prompt_cache:     false,
-            sampling_params:  true,
+            prompt_cache: false,
+            sampling_params: true,
         },
-        costs:                ModelCosts {
-            input_cost_per_mtok:       None,
-            output_cost_per_mtok:      None,
+        costs: ModelCosts {
+            input_cost_per_mtok: None,
+            output_cost_per_mtok: None,
             cache_input_cost_per_mtok: None,
         },
         estimated_output_tps: None,
-        aliases:              Vec::new(),
-        default:              false,
-        small_default:        false,
-        configured:           true,
+        aliases: Vec::new(),
+        default: false,
+        small_default: false,
+        configured: true,
     };
 
     let json = serde_json::to_value(&model).unwrap();

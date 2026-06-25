@@ -82,10 +82,10 @@ pub enum ResponseFormatType {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResponseFormat {
     #[serde(rename = "type")]
-    pub kind:        ResponseFormatType,
+    pub kind: ResponseFormatType,
     pub json_schema: Option<serde_json::Value>,
     #[serde(default)]
-    pub strict:      bool,
+    pub strict: bool,
 }
 
 // --- 3.11 Warning ---
@@ -93,7 +93,7 @@ pub struct ResponseFormat {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Warning {
     pub message: String,
-    pub code:    Option<String>,
+    pub code: Option<String>,
 }
 
 // --- 3.12 RateLimitInfo ---
@@ -101,10 +101,10 @@ pub struct Warning {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RateLimitInfo {
     pub requests_remaining: Option<i64>,
-    pub requests_limit:     Option<i64>,
-    pub tokens_remaining:   Option<i64>,
-    pub tokens_limit:       Option<i64>,
-    pub reset_at:           Option<String>,
+    pub requests_limit: Option<i64>,
+    pub tokens_remaining: Option<i64>,
+    pub tokens_limit: Option<i64>,
+    pub reset_at: Option<String>,
 }
 
 // --- 3.8 ReasoningEffort ---
@@ -117,19 +117,19 @@ pub use fabro_model::ReasoningEffort;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Request {
-    pub model:            String,
-    pub messages:         Vec<Message>,
-    pub provider:         Option<String>,
-    pub tools:            Option<Vec<ToolDefinition>>,
-    pub tool_choice:      Option<ToolChoice>,
-    pub response_format:  Option<ResponseFormat>,
-    pub temperature:      Option<f64>,
-    pub top_p:            Option<f64>,
-    pub max_tokens:       Option<i64>,
-    pub stop_sequences:   Option<Vec<String>>,
+    pub model: String,
+    pub messages: Vec<Message>,
+    pub provider: Option<String>,
+    pub tools: Option<Vec<ToolDefinition>>,
+    pub tool_choice: Option<ToolChoice>,
+    pub response_format: Option<ResponseFormat>,
+    pub temperature: Option<f64>,
+    pub top_p: Option<f64>,
+    pub max_tokens: Option<i64>,
+    pub stop_sequences: Option<Vec<String>>,
     pub reasoning_effort: Option<ReasoningEffort>,
-    pub speed:            Option<Speed>,
-    pub metadata:         Option<HashMap<String, String>>,
+    pub speed: Option<Speed>,
+    pub metadata: Option<HashMap<String, String>>,
     pub provider_options: Option<serde_json::Value>,
 }
 
@@ -137,9 +137,9 @@ pub struct Request {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDefinition {
-    pub name:        String,
+    pub name: String,
     pub description: String,
-    pub parameters:  serde_json::Value,
+    pub parameters: serde_json::Value,
 }
 
 const CUSTOM_TOOL_TYPE_KEY: &str = "x-fabro-tool-type";
@@ -166,9 +166,9 @@ impl ToolDefinition {
         format: impl Into<serde_json::Value>,
     ) -> Self {
         Self {
-            name:        name.into(),
+            name: name.into(),
             description: description.into(),
-            parameters:  serde_json::json!({
+            parameters: serde_json::json!({
                 CUSTOM_TOOL_TYPE_KEY: "custom",
                 CUSTOM_TOOL_FORMAT_KEY: format.into(),
             }),
@@ -227,22 +227,22 @@ pub use fabro_model::CostSource;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Response {
-    pub id:            String,
-    pub model:         String,
-    pub provider:      String,
-    pub message:       Message,
+    pub id: String,
+    pub model: String,
+    pub provider: String,
+    pub message: Message,
     pub finish_reason: FinishReason,
-    pub usage:         TokenCounts,
-    pub raw:           Option<serde_json::Value>,
-    pub warnings:      Vec<Warning>,
-    pub rate_limit:    Option<RateLimitInfo>,
+    pub usage: TokenCounts,
+    pub raw: Option<serde_json::Value>,
+    pub warnings: Vec<Warning>,
+    pub rate_limit: Option<RateLimitInfo>,
     /// USD cost of this completion, when known or estimable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cost_usd:      Option<f64>,
+    pub cost_usd: Option<f64>,
     /// Whether `cost_usd` came from provider billing data or a catalog
     /// estimate.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cost_source:   Option<CostSource>,
+    pub cost_source: Option<CostSource>,
 }
 
 impl Response {
@@ -293,7 +293,7 @@ pub enum StreamEvent {
         text_id: Option<String>,
     },
     TextDelta {
-        delta:   String,
+        delta: String,
         text_id: Option<String>,
     },
     TextEnd {
@@ -315,19 +315,19 @@ pub enum StreamEvent {
     },
     StepFinish {
         finish_reason: FinishReason,
-        usage:         TokenCounts,
-        response:      Box<Response>,
-        tool_calls:    Vec<ToolCall>,
-        tool_results:  Vec<ToolResult>,
+        usage: TokenCounts,
+        response: Box<Response>,
+        tool_calls: Vec<ToolCall>,
+        tool_results: Vec<ToolResult>,
     },
     Finish {
         finish_reason: FinishReason,
-        usage:         TokenCounts,
-        response:      Box<Response>,
+        usage: TokenCounts,
+        response: Box<Response>,
     },
     Error {
         error: Error,
-        raw:   Option<serde_json::Value>,
+        raw: Option<serde_json::Value>,
     },
 }
 
@@ -379,14 +379,14 @@ pub use fabro_model::{Model, ModelCosts, ModelFeatures, ModelLimits, ReasoningEf
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TimeoutOptions {
-    pub total:    Option<f64>,
+    pub total: Option<f64>,
     pub per_step: Option<f64>,
 }
 
 impl From<f64> for TimeoutOptions {
     fn from(total: f64) -> Self {
         Self {
-            total:    Some(total),
+            total: Some(total),
             per_step: None,
         }
     }
@@ -394,16 +394,16 @@ impl From<f64> for TimeoutOptions {
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct AdapterTimeout {
-    pub connect:     f64,
-    pub request:     Option<f64>,
+    pub connect: f64,
+    pub request: Option<f64>,
     pub stream_read: Option<f64>,
 }
 
 impl Default for AdapterTimeout {
     fn default() -> Self {
         Self {
-            connect:     30.0,
-            request:     None,
+            connect: 30.0,
+            request: None,
             stream_read: Some(300.0),
         }
     }
@@ -418,9 +418,9 @@ pub type OnRetryCallback = Arc<dyn Fn(&Error, u32, std::time::Duration) + Send +
 #[derive(Clone)]
 pub struct RetryPolicy {
     pub max_retries: u32,
-    pub backoff:     BackoffPolicy,
+    pub backoff: BackoffPolicy,
     /// Called before each retry with (error, attempt number, delay).
-    pub on_retry:    Option<OnRetryCallback>,
+    pub on_retry: Option<OnRetryCallback>,
 }
 
 impl std::fmt::Debug for RetryPolicy {
@@ -437,13 +437,13 @@ impl Default for RetryPolicy {
     fn default() -> Self {
         Self {
             max_retries: 2,
-            backoff:     BackoffPolicy {
+            backoff: BackoffPolicy {
                 initial_delay: std::time::Duration::from_secs(1),
-                factor:        2.0,
-                max_delay:     std::time::Duration::from_mins(1),
-                jitter:        true,
+                factor: 2.0,
+                max_delay: std::time::Duration::from_mins(1),
+                jitter: true,
             },
-            on_retry:    None,
+            on_retry: None,
         }
     }
 }
@@ -459,7 +459,7 @@ pub enum ObjectStreamEvent {
     Delta { event: StreamEvent },
     /// The stream completed with a fully parsed object and response.
     Complete {
-        object:   serde_json::Value,
+        object: serde_json::Value,
         response: Box<Response>,
     },
 }
@@ -468,11 +468,11 @@ pub enum ObjectStreamEvent {
 
 #[derive(Debug, Clone)]
 pub struct GenerateResult {
-    pub response:     Response,
+    pub response: Response,
     pub tool_results: Vec<ToolResult>,
-    pub total_usage:  TokenCounts,
-    pub steps:        Vec<StepResult>,
-    pub output:       Option<serde_json::Value>,
+    pub total_usage: TokenCounts,
+    pub steps: Vec<StepResult>,
+    pub output: Option<serde_json::Value>,
 }
 
 impl std::ops::Deref for GenerateResult {
@@ -484,7 +484,7 @@ impl std::ops::Deref for GenerateResult {
 
 #[derive(Debug, Clone)]
 pub struct StepResult {
-    pub response:     Response,
+    pub response: Response,
     pub tool_results: Vec<ToolResult>,
 }
 
@@ -543,13 +543,13 @@ mod tests {
     #[test]
     fn message_text_concatenates_text_parts() {
         let msg = Message {
-            role:         Role::Assistant,
-            content:      vec![
+            role: Role::Assistant,
+            content: vec![
                 ContentPart::text("Hello "),
                 ContentPart::ToolCall(ToolCall::new("c1", "test", serde_json::json!({}))),
                 ContentPart::text("world"),
             ],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         assert_eq!(msg.text(), "Hello world");
@@ -558,13 +558,13 @@ mod tests {
     #[test]
     fn message_text_returns_empty_for_no_text_parts() {
         let msg = Message {
-            role:         Role::Assistant,
-            content:      vec![ContentPart::ToolCall(ToolCall::new(
+            role: Role::Assistant,
+            content: vec![ContentPart::ToolCall(ToolCall::new(
                 "c1",
                 "test",
                 serde_json::json!({}),
             ))],
-            name:         None,
+            name: None,
             tool_call_id: None,
         };
         assert_eq!(msg.text(), "");
@@ -619,10 +619,10 @@ mod tests {
     #[test]
     fn usage_serialization_includes_present_optional_fields() {
         let usage = TokenCounts {
-            input_tokens:       100,
-            output_tokens:      30,
-            reasoning_tokens:   20,
-            cache_read_tokens:  80,
+            input_tokens: 100,
+            output_tokens: 30,
+            reasoning_tokens: 20,
+            cache_read_tokens: 80,
             cache_write_tokens: 10,
         };
         insta::assert_snapshot!(serde_json::to_string_pretty(&usage).unwrap(), @r#"
@@ -649,17 +649,17 @@ mod tests {
     #[test]
     fn usage_addition_both_filled() {
         let a = TokenCounts {
-            input_tokens:       10,
-            output_tokens:      15,
-            reasoning_tokens:   5,
-            cache_read_tokens:  3,
+            input_tokens: 10,
+            output_tokens: 15,
+            reasoning_tokens: 5,
+            cache_read_tokens: 3,
             cache_write_tokens: 1,
         };
         let b = TokenCounts {
-            input_tokens:       15,
-            output_tokens:      15,
-            reasoning_tokens:   10,
-            cache_read_tokens:  7,
+            input_tokens: 15,
+            output_tokens: 15,
+            reasoning_tokens: 10,
+            cache_read_tokens: 7,
             cache_write_tokens: 2,
         };
         let sum = a + b;
@@ -697,25 +697,28 @@ mod tests {
         assert_eq!(ToolChoice::None, ToolChoice::None);
         assert_eq!(ToolChoice::Required, ToolChoice::Required);
         let named = ToolChoice::named("get_weather");
-        assert_eq!(named, ToolChoice::Named {
-            tool_name: "get_weather".to_string(),
-        });
+        assert_eq!(
+            named,
+            ToolChoice::Named {
+                tool_name: "get_weather".to_string(),
+            }
+        );
     }
 
     #[test]
     fn response_text_accessor() {
         let response = Response {
-            id:            "resp_1".into(),
-            model:         "test-model".into(),
-            provider:      "test".into(),
-            message:       Message::assistant("Hello world"),
+            id: "resp_1".into(),
+            model: "test-model".into(),
+            provider: "test".into(),
+            message: Message::assistant("Hello world"),
             finish_reason: FinishReason::Stop,
-            usage:         TokenCounts::default(),
-            raw:           None,
-            warnings:      vec![],
-            rate_limit:    None,
-            cost_usd:      None,
-            cost_source:   None,
+            usage: TokenCounts::default(),
+            raw: None,
+            warnings: vec![],
+            rate_limit: None,
+            cost_usd: None,
+            cost_source: None,
         };
         assert_eq!(response.text(), "Hello world");
     }
@@ -723,12 +726,12 @@ mod tests {
     #[test]
     fn response_tool_calls_accessor() {
         let response = Response {
-            id:            "resp_1".into(),
-            model:         "test-model".into(),
-            provider:      "test".into(),
-            message:       Message {
-                role:         Role::Assistant,
-                content:      vec![
+            id: "resp_1".into(),
+            model: "test-model".into(),
+            provider: "test".into(),
+            message: Message {
+                role: Role::Assistant,
+                content: vec![
                     ContentPart::text("Let me check"),
                     ContentPart::ToolCall(ToolCall::new(
                         "call_1",
@@ -736,16 +739,16 @@ mod tests {
                         serde_json::json!({"city": "SF"}),
                     )),
                 ],
-                name:         None,
+                name: None,
                 tool_call_id: None,
             },
             finish_reason: FinishReason::ToolCalls,
-            usage:         TokenCounts::default(),
-            raw:           None,
-            warnings:      vec![],
-            rate_limit:    None,
-            cost_usd:      None,
-            cost_source:   None,
+            usage: TokenCounts::default(),
+            raw: None,
+            warnings: vec![],
+            rate_limit: None,
+            cost_usd: None,
+            cost_source: None,
         };
         let calls = response.tool_calls();
         assert_eq!(calls.len(), 1);
@@ -756,29 +759,29 @@ mod tests {
     #[test]
     fn response_reasoning_accessor() {
         let response = Response {
-            id:            "resp_1".into(),
-            model:         "test-model".into(),
-            provider:      "test".into(),
-            message:       Message {
-                role:         Role::Assistant,
-                content:      vec![
+            id: "resp_1".into(),
+            model: "test-model".into(),
+            provider: "test".into(),
+            message: Message {
+                role: Role::Assistant,
+                content: vec![
                     ContentPart::Thinking(ThinkingData {
-                        text:      "Let me think...".into(),
+                        text: "Let me think...".into(),
                         signature: Some("sig_123".into()),
-                        redacted:  false,
+                        redacted: false,
                     }),
                     ContentPart::text("The answer is 42."),
                 ],
-                name:         None,
+                name: None,
                 tool_call_id: None,
             },
             finish_reason: FinishReason::Stop,
-            usage:         TokenCounts::default(),
-            raw:           None,
-            warnings:      vec![],
-            rate_limit:    None,
-            cost_usd:      None,
-            cost_source:   None,
+            usage: TokenCounts::default(),
+            raw: None,
+            warnings: vec![],
+            rate_limit: None,
+            cost_usd: None,
+            cost_source: None,
         };
         assert_eq!(response.reasoning(), Some("Let me think...".to_string()));
         assert_eq!(response.text(), "The answer is 42.");
@@ -787,17 +790,17 @@ mod tests {
     #[test]
     fn response_reasoning_returns_none_when_absent() {
         let response = Response {
-            id:            "resp_1".into(),
-            model:         "test-model".into(),
-            provider:      "test".into(),
-            message:       Message::assistant("Hello"),
+            id: "resp_1".into(),
+            model: "test-model".into(),
+            provider: "test".into(),
+            message: Message::assistant("Hello"),
             finish_reason: FinishReason::Stop,
-            usage:         TokenCounts::default(),
-            raw:           None,
-            warnings:      vec![],
-            rate_limit:    None,
-            cost_usd:      None,
-            cost_source:   None,
+            usage: TokenCounts::default(),
+            raw: None,
+            warnings: vec![],
+            rate_limit: None,
+            cost_usd: None,
+            cost_source: None,
         };
         assert_eq!(response.reasoning(), None);
     }
@@ -818,7 +821,7 @@ mod tests {
     fn stream_event_error() {
         let event = StreamEvent::error(Error::Stream {
             message: "something went wrong".into(),
-            source:  None,
+            source: None,
         });
         match &event {
             StreamEvent::Error { error, .. } => {
@@ -835,9 +838,9 @@ mod tests {
             max_retries: 3,
             backoff: BackoffPolicy {
                 initial_delay: Duration::from_secs(1),
-                factor:        2.0,
-                max_delay:     Duration::from_mins(1),
-                jitter:        false,
+                factor: 2.0,
+                max_delay: Duration::from_mins(1),
+                jitter: false,
             },
             ..Default::default()
         };
@@ -855,9 +858,9 @@ mod tests {
             max_retries: 10,
             backoff: BackoffPolicy {
                 initial_delay: Duration::from_secs(1),
-                factor:        2.0,
-                max_delay:     Duration::from_secs(5),
-                jitter:        false,
+                factor: 2.0,
+                max_delay: Duration::from_secs(5),
+                jitter: false,
             },
             ..Default::default()
         };
@@ -871,9 +874,9 @@ mod tests {
             max_retries: 3,
             backoff: BackoffPolicy {
                 initial_delay: Duration::from_secs(1),
-                factor:        2.0,
-                max_delay:     Duration::from_mins(1),
-                jitter:        true,
+                factor: 2.0,
+                max_delay: Duration::from_mins(1),
+                jitter: true,
             },
             ..Default::default()
         };
@@ -900,10 +903,10 @@ mod tests {
     #[test]
     fn content_part_image_constructor() {
         let part = ContentPart::Image(ImageData {
-            url:        Some("https://example.com/img.png".into()),
-            data:       None,
+            url: Some("https://example.com/img.png".into()),
+            data: None,
             media_type: None,
-            detail:     None,
+            detail: None,
         });
         assert!(matches!(part, ContentPart::Image(_)));
     }
@@ -919,10 +922,10 @@ mod tests {
     #[test]
     fn tool_result_with_image_data() {
         let result = ToolResult {
-            tool_call_id:     "call_1".into(),
-            content:          serde_json::json!("screenshot taken"),
-            is_error:         false,
-            image_data:       Some(vec![0x89, 0x50, 0x4E, 0x47]),
+            tool_call_id: "call_1".into(),
+            content: serde_json::json!("screenshot taken"),
+            is_error: false,
+            image_data: Some(vec![0x89, 0x50, 0x4E, 0x47]),
             image_media_type: Some("image/png".into()),
         };
         assert!(result.image_data.is_some());
@@ -955,21 +958,21 @@ mod tests {
     #[test]
     fn stream_event_step_finish_constructor() {
         let response = Response {
-            id:            "resp_1".into(),
-            model:         "test-model".into(),
-            provider:      "test".into(),
-            message:       Message::assistant("tool response"),
+            id: "resp_1".into(),
+            model: "test-model".into(),
+            provider: "test".into(),
+            message: Message::assistant("tool response"),
             finish_reason: FinishReason::ToolCalls,
-            usage:         TokenCounts {
+            usage: TokenCounts {
                 input_tokens: 10,
                 output_tokens: 5,
                 ..Default::default()
             },
-            raw:           None,
-            warnings:      vec![],
-            rate_limit:    None,
-            cost_usd:      None,
-            cost_source:   None,
+            raw: None,
+            warnings: vec![],
+            rate_limit: None,
+            cost_usd: None,
+            cost_source: None,
         };
         let tool_calls = vec![ToolCall::new(
             "call_1",

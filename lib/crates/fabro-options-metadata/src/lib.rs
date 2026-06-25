@@ -63,7 +63,7 @@ impl Display for OptionEntry {
 #[derive(Copy, Clone)]
 pub struct OptionSet {
     record: fn(&mut dyn Visit),
-    doc:    fn() -> Option<&'static str>,
+    doc: fn() -> Option<&'static str>,
 }
 
 impl OptionSet {
@@ -74,7 +74,7 @@ impl OptionSet {
     {
         Self {
             record: T::record,
-            doc:    T::documentation,
+            doc: T::documentation,
         }
     }
 
@@ -96,9 +96,9 @@ impl OptionSet {
     /// Find an option by dotted name.
     pub fn find(&self, name: &str) -> Option<OptionEntry> {
         struct FindVisitor<'a> {
-            entry:  Option<OptionEntry>,
+            entry: Option<OptionEntry>,
             needle: &'a str,
-            parts:  std::str::Split<'a, char>,
+            parts: std::str::Split<'a, char>,
         }
 
         impl Visit for FindVisitor<'_> {
@@ -135,7 +135,7 @@ impl OptionSet {
     pub fn fields(&self) -> BTreeMap<String, OptionField> {
         struct FieldsVisitor<'a> {
             entries: &'a mut BTreeMap<String, OptionField>,
-            prefix:  String,
+            prefix: String,
         }
 
         impl Visit for FieldsVisitor<'_> {
@@ -156,7 +156,7 @@ impl OptionSet {
         let mut entries = BTreeMap::new();
         self.record(&mut FieldsVisitor {
             entries: &mut entries,
-            prefix:  String::new(),
+            prefix: String::new(),
         });
         entries
     }
@@ -174,7 +174,7 @@ impl Display for OptionSet {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         struct DisplayVisitor<'a, 'b> {
             formatter: &'a mut Formatter<'b>,
-            result:    std::fmt::Result,
+            result: std::fmt::Result,
         }
 
         impl Visit for DisplayVisitor<'_, '_> {
@@ -223,21 +223,21 @@ impl Serialize for OptionSet {
 #[derive(Debug, Eq, PartialEq, Clone, Serialize)]
 pub struct OptionField {
     /// Option documentation from doc comments, when present.
-    pub doc:             Option<&'static str>,
+    pub doc: Option<&'static str>,
     /// The option's default value, formatted for docs.
-    pub default:         Option<&'static str>,
+    pub default: Option<&'static str>,
     /// The option value type, formatted for docs.
-    pub value_type:      Option<&'static str>,
+    pub value_type: Option<&'static str>,
     /// Optional scope, for docs that group settings by source.
-    pub scope:           Option<&'static str>,
+    pub scope: Option<&'static str>,
     /// Example usage for the option.
-    pub example:         Option<&'static str>,
+    pub example: Option<&'static str>,
     /// Deprecation metadata.
-    pub deprecated:      Option<Deprecated>,
+    pub deprecated: Option<Deprecated>,
     /// Possible values for enum-like options.
     pub possible_values: Option<Vec<PossibleValue>>,
     /// Version where this option was added.
-    pub added_in:        Option<&'static str>,
+    pub added_in: Option<&'static str>,
 }
 
 impl Display for OptionField {
@@ -287,7 +287,7 @@ impl Display for OptionField {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct Deprecated {
     /// Version where the option was deprecated.
-    pub since:   Option<&'static str>,
+    pub since: Option<&'static str>,
     /// Deprecation message.
     pub message: Option<&'static str>,
 }

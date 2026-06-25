@@ -124,12 +124,12 @@ pub(super) fn mirror_dist(dist_dir: &Path, asset_dir: &Path) -> Result<()> {
 }
 
 struct MirrorPlan {
-    dirs:  BTreeSet<PathBuf>,
+    dirs: BTreeSet<PathBuf>,
     files: Vec<SourceFile>,
 }
 
 struct SourceFile {
-    source:   PathBuf,
+    source: PathBuf,
     relative: PathBuf,
 }
 
@@ -164,7 +164,7 @@ fn mirror_plan(dist_dir: &Path) -> Result<MirrorPlan> {
         }
 
         files.push(SourceFile {
-            source:   source.to_path_buf(),
+            source: source.to_path_buf(),
             relative: relative.to_path_buf(),
         });
     }

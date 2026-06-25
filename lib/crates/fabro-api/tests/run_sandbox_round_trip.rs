@@ -22,21 +22,21 @@ fn run_sandbox_json_matches_openapi_shape() {
     let sandbox = RunSandbox::ready(
         RunSandboxPlan {
             provider: SandboxProviderKind::Docker,
-            image:    Some("ghcr.io/fabro/sandbox:latest".to_string()),
+            image: Some("ghcr.io/fabro/sandbox:latest".to_string()),
             snapshot: None,
         },
         RunSandboxInstance {
             provider: SandboxProviderKind::Docker,
-            image:    None,
+            image: None,
             snapshot: None,
-            runtime:  RunSandboxRuntime {
-                id:                "container-abc123".to_string(),
+            runtime: RunSandboxRuntime {
+                id: "container-abc123".to_string(),
                 working_directory: "/workspace".to_string(),
-                repo_cloned:       Some(false),
-                clone_origin_url:  Some("https://github.com/in-parallel-oy/fabro.git".to_string()),
-                clone_branch:      Some("main".to_string()),
-                workspace_root:    Some("/workspace".to_string()),
-                repos_root:        Some("/repos".to_string()),
+                repo_cloned: Some(false),
+                clone_origin_url: Some("https://github.com/in-parallel-oy/fabro.git".to_string()),
+                clone_branch: Some("main".to_string()),
+                workspace_root: Some("/workspace".to_string()),
+                repos_root: Some("/repos".to_string()),
                 primary_repo_path: None,
                 primary_repo_link: None,
             },

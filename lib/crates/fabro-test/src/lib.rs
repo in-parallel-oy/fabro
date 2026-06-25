@@ -302,23 +302,23 @@ pub fn server_log_files(logs_dir: &Path) -> Vec<PathBuf> {
 /// shared per nextest run when `NEXTEST_RUN_ID` is present, otherwise shared
 /// per test process.
 pub struct TestContext {
-    pub temp_dir:         PathBuf,
-    pub home_dir:         PathBuf,
-    pub storage_dir:      PathBuf,
-    test_case_id:         String,
-    test_run_id:          String,
-    session_root:         PathBuf,
-    fabro_bin:            PathBuf,
-    filters:              Vec<(String, String)>,
-    active_socket_path:   PathBuf,
-    isolated_server:      Option<ServerPaths>,
+    pub temp_dir: PathBuf,
+    pub home_dir: PathBuf,
+    pub storage_dir: PathBuf,
+    test_case_id: String,
+    test_run_id: String,
+    session_root: PathBuf,
+    fabro_bin: PathBuf,
+    filters: Vec<(String, String)>,
+    active_socket_path: PathBuf,
+    isolated_server: Option<ServerPaths>,
     managed_storage_dirs: Vec<PathBuf>,
-    _context_root:        tempfile::TempDir,
+    _context_root: tempfile::TempDir,
 }
 
 #[derive(Debug, Clone)]
 struct ServerPaths {
-    root:        PathBuf,
+    root: PathBuf,
     storage_dir: PathBuf,
     socket_path: PathBuf,
     config_path: PathBuf,
@@ -326,7 +326,7 @@ struct ServerPaths {
 
 #[derive(Debug, Clone)]
 struct SessionPaths {
-    root:   PathBuf,
+    root: PathBuf,
     server: ServerPaths,
 }
 
@@ -404,29 +404,37 @@ fn session_paths_for_run_id(run_id: Option<&str>) -> (SessionMode, String, Sessi
         if !run_id.trim().is_empty() {
             let short_id = shorten_session_id(run_id);
             let root = base_dir.join(format!("n-{short_id}"));
-            return (SessionMode::Nextest, run_id.to_string(), SessionPaths {
-                server: ServerPaths {
-                    root:        root.clone(),
-                    storage_dir: root.join("storage"),
-                    socket_path: root.join("fabro.sock"),
-                    config_path: root.join("settings.toml"),
+            return (
+                SessionMode::Nextest,
+                run_id.to_string(),
+                SessionPaths {
+                    server: ServerPaths {
+                        root: root.clone(),
+                        storage_dir: root.join("storage"),
+                        socket_path: root.join("fabro.sock"),
+                        config_path: root.join("settings.toml"),
+                    },
+                    root,
                 },
-                root,
-            });
+            );
         }
     }
 
     let process_id = format!("process-{}", current_pid());
     let root = base_dir.join(format!("p-{}", current_pid()));
-    (SessionMode::Process, process_id, SessionPaths {
-        server: ServerPaths {
-            root:        root.clone(),
-            storage_dir: root.join("storage"),
-            socket_path: root.join("fabro.sock"),
-            config_path: root.join("settings.toml"),
+    (
+        SessionMode::Process,
+        process_id,
+        SessionPaths {
+            server: ServerPaths {
+                root: root.clone(),
+                storage_dir: root.join("storage"),
+                socket_path: root.join("fabro.sock"),
+                config_path: root.join("settings.toml"),
+            },
+            root,
         },
-        root,
-    })
+    )
 }
 
 fn short_session_base_dir() -> PathBuf {
@@ -681,10 +689,13 @@ fn write_settings_file(path: &Path, storage_dir: &Path, rest: &str) {
 fn write_test_server_dev_token(storage_dir: &Path) {
     let runtime_directory = Storage::new(storage_dir).runtime_directory();
     let server_env_path = runtime_directory.env_path();
-    envfile::merge_env_file(&server_env_path, [
-        ("FABRO_DEV_TOKEN", TEST_DEV_TOKEN),
-        ("SESSION_SECRET", TEST_SESSION_SECRET),
-    ])
+    envfile::merge_env_file(
+        &server_env_path,
+        [
+            ("FABRO_DEV_TOKEN", TEST_DEV_TOKEN),
+            ("SESSION_SECRET", TEST_SESSION_SECRET),
+        ],
+    )
     .unwrap_or_else(|err| panic!("failed to write {}: {err}", server_env_path.display()));
     let dev_token_path = runtime_directory.dev_token_path();
     ensure_parent_dir(&dev_token_path);
@@ -1039,7 +1050,7 @@ fn test_server_stop_timeout() -> std::time::Duration {
 
 fn shared_server_paths(root: &Path) -> ServerPaths {
     ServerPaths {
-        root:        root.to_path_buf(),
+        root: root.to_path_buf(),
         storage_dir: root.join("storage"),
         socket_path: root.join("fabro.sock"),
         config_path: root.join("settings.toml"),
@@ -1053,7 +1064,7 @@ fn isolated_server_paths(
 ) -> ServerPaths {
     let server_root = root.join("isolated").join(test_case_id);
     ServerPaths {
-        root:        server_root.clone(),
+        root: server_root.clone(),
         storage_dir: storage_dir.unwrap_or_else(|| server_root.join("storage")),
         socket_path: server_root.join("fabro.sock"),
         config_path: server_root.join("settings.toml"),
@@ -1072,7 +1083,7 @@ fn reap_isolated_servers(root: &Path) {
             continue;
         }
         stop_test_server(&ServerPaths {
-            root:        server_root.clone(),
+            root: server_root.clone(),
             storage_dir: server_root.join("storage"),
             socket_path: server_root.join("fabro.sock"),
             config_path: server_root.join("settings.toml"),
@@ -1776,7 +1787,7 @@ impl Drop for TestContext {
     fn drop(&mut self) {
         for storage_dir in &self.managed_storage_dirs {
             stop_test_server(&ServerPaths {
-                root:        storage_dir.clone(),
+                root: storage_dir.clone(),
                 storage_dir: storage_dir.clone(),
                 socket_path: PathBuf::new(),
                 config_path: PathBuf::new(),
@@ -2075,7 +2086,7 @@ pub struct TwinOpenAi {
 
 pub struct TwinGitHub {
     pub base_url: String,
-    server:       twin_github::TestServer,
+    server: twin_github::TestServer,
 }
 
 pub fn test_http_client() -> fabro_http::HttpClient {
@@ -2177,7 +2188,7 @@ impl TwinScenarios {
 #[derive(Debug, Clone)]
 pub struct TwinScenario {
     matcher: Map<String, Value>,
-    script:  Value,
+    script: Value,
 }
 
 impl TwinScenario {
@@ -2191,7 +2202,7 @@ impl TwinScenario {
                 ),
                 ("model".to_string(), Value::String(model.into())),
             ]),
-            script:  json!({ "kind": "success" }),
+            script: json!({ "kind": "success" }),
         }
     }
 
@@ -2205,7 +2216,7 @@ impl TwinScenario {
                 ),
                 ("model".to_string(), Value::String(model.into())),
             ]),
-            script:  json!({ "kind": "success" }),
+            script: json!({ "kind": "success" }),
         }
     }
 
@@ -2309,8 +2320,8 @@ impl TwinScenario {
 
 #[derive(Debug, Clone)]
 pub struct TwinToolCall {
-    name:          String,
-    arguments:     Value,
+    name: String,
+    arguments: Value,
     raw_arguments: Option<String>,
 }
 
@@ -2418,7 +2429,7 @@ pub async fn twin_openai() -> &'static TwinOpenAi {
             let base_url = format!("http://127.0.0.1:{}/v1", addr.port());
 
             let config = TwinConfig {
-                bind_addr:    addr,
+                bind_addr: addr,
                 require_auth: true,
                 enable_admin: true,
             };
@@ -2720,18 +2731,18 @@ mod tests {
     fn run_and_create_commands_include_test_labels() {
         let context_root = tempfile::tempdir().expect("failed to create temp dir");
         let context = TestContext {
-            temp_dir:             context_root.path().join("temp"),
-            home_dir:             context_root.path().join("home"),
-            storage_dir:          context_root.path().join("storage"),
-            test_case_id:         "case-123".to_string(),
-            test_run_id:          "run-cmd-labels".to_string(),
-            session_root:         context_root.path().join("session"),
-            fabro_bin:            context_root.path().join("fabro"),
-            filters:              Vec::new(),
-            active_socket_path:   context_root.path().join("fabro.sock"),
-            isolated_server:      None,
+            temp_dir: context_root.path().join("temp"),
+            home_dir: context_root.path().join("home"),
+            storage_dir: context_root.path().join("storage"),
+            test_case_id: "case-123".to_string(),
+            test_run_id: "run-cmd-labels".to_string(),
+            session_root: context_root.path().join("session"),
+            fabro_bin: context_root.path().join("fabro"),
+            filters: Vec::new(),
+            active_socket_path: context_root.path().join("fabro.sock"),
+            isolated_server: None,
             managed_storage_dirs: Vec::new(),
-            _context_root:        context_root,
+            _context_root: context_root,
         };
 
         let run_args = context

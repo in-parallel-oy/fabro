@@ -204,10 +204,13 @@ events = ["...", "run.completed"]
     let route = &run.notifications["ops"];
     assert_eq!(route.enabled, Some(true));
     assert_eq!(route.provider.as_deref(), Some("slack"));
-    assert_eq!(route.events, vec![
-        StringOrSplice::Value("run.failed".to_string()),
-        StringOrSplice::Value("run.completed".to_string()),
-    ]);
+    assert_eq!(
+        route.events,
+        vec![
+            StringOrSplice::Value("run.failed".to_string()),
+            StringOrSplice::Value("run.completed".to_string()),
+        ]
+    );
 }
 
 #[test]

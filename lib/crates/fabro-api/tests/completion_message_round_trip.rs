@@ -135,10 +135,13 @@ fn content_part_preserves_unknown_kinds() {
     // (previously the handler conversion silently dropped them).
     let wire = json!({"kind": "mystery", "data": {"x": 1}});
     let part: ContentPart = serde_json::from_value(wire.clone()).unwrap();
-    assert_eq!(part, ContentPart::Other {
-        kind: "mystery".to_string(),
-        data: json!({"x": 1}),
-    });
+    assert_eq!(
+        part,
+        ContentPart::Other {
+            kind: "mystery".to_string(),
+            data: json!({"x": 1}),
+        }
+    );
     assert_eq!(serde_json::to_value(part).unwrap(), wire);
 }
 

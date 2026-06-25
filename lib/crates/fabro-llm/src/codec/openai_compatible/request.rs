@@ -75,19 +75,19 @@ mod tests {
 
     fn minimal_request() -> Request {
         Request {
-            model:            "llama-3.1-70b".to_string(),
-            messages:         vec![Message::user("Hello")],
-            provider:         None,
-            tools:            None,
-            tool_choice:      None,
-            response_format:  None,
-            temperature:      None,
-            top_p:            None,
-            max_tokens:       None,
-            stop_sequences:   None,
+            model: "llama-3.1-70b".to_string(),
+            messages: vec![Message::user("Hello")],
+            provider: None,
+            tools: None,
+            tool_choice: None,
+            response_format: None,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            stop_sequences: None,
             reasoning_effort: None,
-            speed:            None,
-            metadata:         None,
+            speed: None,
+            metadata: None,
             provider_options: None,
         }
     }
@@ -110,31 +110,31 @@ mod tests {
     #[test]
     fn api_request_stream_field_serialization() {
         let req = ApiRequest {
-            model:           "test".into(),
-            messages:        vec![],
-            temperature:     None,
-            max_tokens:      None,
-            top_p:           None,
-            stop:            None,
-            tools:           None,
-            tool_choice:     None,
+            model: "test".into(),
+            messages: vec![],
+            temperature: None,
+            max_tokens: None,
+            top_p: None,
+            stop: None,
+            tools: None,
+            tool_choice: None,
             response_format: None,
-            stream:          Some(true),
+            stream: Some(true),
         };
         let json = serde_json::to_value(&req).unwrap();
         assert_eq!(json["stream"], true);
 
         let req_no_stream = ApiRequest {
-            model:           "test".into(),
-            messages:        vec![],
-            temperature:     None,
-            max_tokens:      None,
-            top_p:           None,
-            stop:            None,
-            tools:           None,
-            tool_choice:     None,
+            model: "test".into(),
+            messages: vec![],
+            temperature: None,
+            max_tokens: None,
+            top_p: None,
+            stop: None,
+            tools: None,
+            tool_choice: None,
             response_format: None,
-            stream:          None,
+            stream: None,
         };
         let json_no_stream = serde_json::to_value(&req_no_stream).unwrap();
         assert!(json_no_stream.get("stream").is_none());
@@ -146,11 +146,11 @@ mod tests {
         let params = CodecParams::default();
         let deployment_id = "acme/model-large".to_string();
         let ctx = CodecCtx {
-            request:       &request,
+            request: &request,
             provider_name: "acme",
             deployment_id: &deployment_id,
-            model:         None,
-            params:        &params,
+            model: None,
+            params: &params,
         };
         let body = encode(&ctx, false).body;
         assert_eq!(body["model"], "acme/model-large");

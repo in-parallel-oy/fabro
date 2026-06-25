@@ -32,11 +32,11 @@ pub enum ParseError {
     Toml(String),
     Version(VersionError),
     UnknownTopLevelKey {
-        key:  String,
+        key: String,
         hint: Option<String>,
     },
     ServerManagedEnvironmentCwd {
-        path:   String,
+        path: String,
         source: SettingsSource,
     },
 }
@@ -96,7 +96,7 @@ pub(crate) fn parse_settings(input: &str) -> Result<SettingsLayer, ParseError> {
         for key in table.keys() {
             if !ALLOWED_TOP_LEVEL_KEYS.contains(&key.as_str()) {
                 return Err(ParseError::UnknownTopLevelKey {
-                    key:  key.clone(),
+                    key: key.clone(),
                     hint: rename_hint(key),
                 });
             }
@@ -110,7 +110,7 @@ pub(crate) fn parse_settings(input: &str) -> Result<SettingsLayer, ParseError> {
             for legacy_key in LEGACY_LLM_KEYS {
                 if llm_table.contains_key(*legacy_key) {
                     return Err(ParseError::UnknownTopLevelKey {
-                        key:  format!("llm.{legacy_key}"),
+                        key: format!("llm.{legacy_key}"),
                         hint: rename_hint("llm"),
                     });
                 }

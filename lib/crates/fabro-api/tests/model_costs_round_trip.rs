@@ -11,8 +11,8 @@ fn model_costs_reuses_canonical_type() {
 #[test]
 fn model_costs_json_matches_openapi_shape() {
     let costs = ModelCosts {
-        input_cost_per_mtok:       Some(5.0),
-        output_cost_per_mtok:      Some(25.0),
+        input_cost_per_mtok: Some(5.0),
+        output_cost_per_mtok: Some(25.0),
         cache_input_cost_per_mtok: Some(0.5),
     };
 

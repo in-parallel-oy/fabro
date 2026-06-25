@@ -6,19 +6,19 @@ use crate::{CommandTermination, PullRequestLink};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct InterviewOption {
-    pub key:         String,
-    pub label:       String,
+    pub key: String,
+    pub label: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preview:     Option<String>,
+    pub preview: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ParallelStartedProps {
-    pub visit:        u32,
+    pub visit: u32,
     pub branch_count: usize,
-    pub join_policy:  String,
+    pub join_policy: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -28,35 +28,35 @@ pub struct ParallelBranchStartedProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ParallelBranchCompletedProps {
-    pub index:       usize,
+    pub index: usize,
     pub duration_ms: u64,
-    pub status:      String,
+    pub status: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub head_sha:    Option<String>,
+    pub head_sha: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ParallelCompletedProps {
-    pub visit:         u32,
-    pub duration_ms:   u64,
+    pub visit: u32,
+    pub duration_ms: u64,
     pub success_count: usize,
     pub failure_count: usize,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub results:       Vec<Value>,
+    pub results: Vec<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct InterviewStartedProps {
     #[serde(default)]
-    pub question_id:     String,
-    pub question:        String,
+    pub question_id: String,
+    pub question: String,
     #[serde(default)]
-    pub stage:           String,
-    pub question_type:   String,
+    pub stage: String,
+    pub question_type: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub options:         Vec<InterviewOption>,
+    pub options: Vec<InterviewOption>,
     #[serde(default)]
-    pub allow_freeform:  bool,
+    pub allow_freeform: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_seconds: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -67,8 +67,8 @@ pub struct InterviewStartedProps {
 pub struct InterviewCompletedProps {
     #[serde(default)]
     pub question_id: String,
-    pub question:    String,
-    pub answer:      String,
+    pub question: String,
+    pub answer: String,
     pub duration_ms: u64,
 }
 
@@ -76,9 +76,9 @@ pub struct InterviewCompletedProps {
 pub struct InterviewTimeoutProps {
     #[serde(default)]
     pub question_id: String,
-    pub question:    String,
+    pub question: String,
     #[serde(default)]
-    pub stage:       String,
+    pub stage: String,
     pub duration_ms: u64,
 }
 
@@ -86,10 +86,10 @@ pub struct InterviewTimeoutProps {
 pub struct InterviewInterruptedProps {
     #[serde(default)]
     pub question_id: String,
-    pub question:    String,
+    pub question: String,
     #[serde(default)]
-    pub stage:       String,
-    pub reason:      String,
+    pub stage: String,
+    pub reason: String,
     pub duration_ms: u64,
 }
 
@@ -100,8 +100,8 @@ pub struct GitCommitProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GitPushProps {
-    pub branch:           String,
-    pub success:          bool,
+    pub branch: String,
+    pub success: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exec_output_tail: Option<ExecOutputTail>,
 }
@@ -109,12 +109,12 @@ pub struct GitPushProps {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GitBranchProps {
     pub branch: String,
-    pub sha:    String,
+    pub sha: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GitWorktreeAddProps {
-    pub path:   String,
+    pub path: String,
     pub branch: String,
 }
 
@@ -125,7 +125,7 @@ pub struct GitWorktreeRemoveProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GitFetchProps {
-    pub branch:  String,
+    pub branch: String,
     pub success: bool,
 }
 
@@ -136,25 +136,25 @@ pub struct GitResetProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EdgeSelectedProps {
-    pub from_node:          String,
-    pub to_node:            String,
+    pub from_node: String,
+    pub to_node: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub label:              Option<String>,
+    pub label: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub condition:          Option<String>,
-    pub reason:             String,
+    pub condition: Option<String>,
+    pub reason: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preferred_label:    Option<String>,
+    pub preferred_label: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub suggested_next_ids: Vec<String>,
-    pub stage_status:       String,
-    pub is_jump:            bool,
+    pub stage_status: String,
+    pub is_jump: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LoopRestartProps {
     pub from_node: String,
-    pub to_node:   String,
+    pub to_node: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -165,8 +165,8 @@ pub struct SubgraphStartedProps {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SubgraphCompletedProps {
     pub steps_executed: usize,
-    pub status:         String,
-    pub duration_ms:    u64,
+    pub status: String,
+    pub duration_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -176,13 +176,13 @@ pub struct StallWatchdogTimeoutProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ArtifactCapturedProps {
-    pub attempt:        u32,
-    pub node_slug:      String,
-    pub path:           String,
-    pub mime:           String,
-    pub content_md5:    String,
+    pub attempt: u32,
+    pub node_slug: String,
+    pub path: String,
+    pub mime: String,
+    pub content_md5: String,
     pub content_sha256: String,
-    pub bytes:          u64,
+    pub bytes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -193,17 +193,17 @@ pub struct SshAccessReadyProps {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FailoverProps {
     pub from_provider: String,
-    pub from_model:    String,
-    pub to_provider:   String,
-    pub to_model:      String,
-    pub error:         String,
+    pub from_model: String,
+    pub to_provider: String,
+    pub to_model: String,
+    pub error: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CommandStartedProps {
-    pub script:     String,
-    pub command:    String,
-    pub language:   String,
+    pub script: String,
+    pub command: String,
+    pub language: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u64>,
 }
@@ -211,44 +211,44 @@ pub struct CommandStartedProps {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CommandCompletedProps {
-    pub output:         String,
+    pub output: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub exit_code:      Option<i32>,
-    pub duration_ms:    u64,
-    pub termination:    CommandTermination,
+    pub exit_code: Option<i32>,
+    pub duration_ms: u64,
+    pub termination: CommandTermination,
     #[serde(default)]
-    pub output_bytes:   u64,
+    pub output_bytes: u64,
     #[serde(default)]
     pub live_streaming: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentAcpStartedProps {
-    pub visit:       u32,
-    pub command:     String,
+    pub visit: u32,
+    pub command: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentAcpCompletedProps {
-    pub stdout:      String,
-    pub stderr:      String,
+    pub stdout: String,
+    pub stderr: String,
     pub stop_reason: String,
     pub duration_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentAcpCancelledProps {
-    pub stdout:      String,
-    pub stderr:      String,
+    pub stdout: String,
+    pub stderr: String,
     pub duration_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentAcpTimedOutProps {
-    pub stdout:      String,
-    pub stderr:      String,
+    pub stdout: String,
+    pub stderr: String,
     pub duration_ms: u64,
 }
 
@@ -265,30 +265,30 @@ pub struct AgentAcpTimedOutProps {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentAcpToolCallProps {
     pub tool_call_id: String,
-    pub visit:        u32,
+    pub visit: u32,
     /// Full ACP `ToolCall` payload (`title`, `kind`, `status`, optional
     /// `content`, `locations`, `raw_input`, `raw_output`). Stored
     /// verbatim — see `agent-client-protocol@0.11.1` schema.
     #[serde(flatten)]
-    pub call:         Value,
+    pub call: Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentAcpToolCallUpdateProps {
     pub tool_call_id: String,
-    pub visit:        u32,
+    pub visit: u32,
     /// Partial-shape update over a previously-started `ToolCall`
     /// (any subset of `status`, `content`, `raw_input`, `raw_output`,
     /// etc.). Identity is `tool_call_id`.
     #[serde(flatten)]
-    pub fields:       Value,
+    pub fields: Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentAcpMessageProps {
-    pub visit:    u32,
+    pub visit: u32,
     /// ACP `ContentBlock` payload (text, image, audio, resource).
-    pub content:  Value,
+    pub content: Value,
     /// Remaining ACP `ContentChunk` wrapper fields, such as `_meta`
     /// and feature-gated `messageId`.
     #[serde(flatten)]
@@ -297,17 +297,17 @@ pub struct AgentAcpMessageProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentAcpThoughtProps {
-    pub visit:    u32,
-    pub content:  Value,
+    pub visit: u32,
+    pub content: Value,
     #[serde(flatten)]
     pub metadata: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentAcpPlanProps {
-    pub visit:    u32,
+    pub visit: u32,
     /// `Vec<PlanEntry>` per ACP schema.
-    pub entries:  Value,
+    pub entries: Value,
     /// Remaining ACP `Plan` wrapper fields, such as `_meta`.
     #[serde(flatten)]
     pub metadata: Map<String, Value>,
@@ -315,22 +315,22 @@ pub struct AgentAcpPlanProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentAcpUserMessageProps {
-    pub visit:    u32,
-    pub content:  Value,
+    pub visit: u32,
+    pub content: Value,
     #[serde(flatten)]
     pub metadata: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PullRequestCreatedProps {
-    pub pr_url:      String,
-    pub pr_number:   u64,
-    pub owner:       String,
-    pub repo:        String,
+    pub pr_url: String,
+    pub pr_number: u64,
+    pub owner: String,
+    pub repo: String,
     pub base_branch: String,
     pub head_branch: String,
-    pub title:       String,
-    pub draft:       bool,
+    pub title: String,
+    pub draft: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -35,7 +35,7 @@ pub(crate) struct EventListParams {
     #[serde(default)]
     since_seq: Option<u32>,
     #[serde(default)]
-    limit:     Option<usize>,
+    limit: Option<usize>,
 }
 
 impl EventListParams {
@@ -323,16 +323,16 @@ fn detail_response(envelope: EventEnvelope, max_content_length: usize) -> RunEve
 
     RunEventDetailResponse {
         event: RunEventDetailEnvelope {
-            seq:          envelope.seq,
-            id:           envelope.event.id,
-            ts:           envelope.event.ts,
-            run_id:       envelope.event.run_id,
-            event:        event_name,
-            actor:        envelope.event.actor,
-            session_id:   envelope.event.session_id,
-            node_id:      envelope.event.node_id,
-            node_label:   envelope.event.node_label,
-            stage_id:     envelope.event.stage_id,
+            seq: envelope.seq,
+            id: envelope.event.id,
+            ts: envelope.event.ts,
+            run_id: envelope.event.run_id,
+            event: event_name,
+            actor: envelope.event.actor,
+            session_id: envelope.event.session_id,
+            node_id: envelope.event.node_id,
+            node_label: envelope.event.node_label,
+            stage_id: envelope.event.stage_id,
             tool_call_id: envelope.event.tool_call_id,
         },
         properties,
@@ -557,27 +557,31 @@ mod stage_events_tests {
     }
 
     async fn append_run_created(run_store: &fabro_store::RunDatabase, run_id: &RunId) {
-        workflow_event::append_event(run_store, run_id, &workflow_event::Event::RunCreated {
-            run_id:           *run_id,
-            title:            None,
-            settings:         serde_json::to_value(WorkflowSettings::default()).unwrap(),
-            graph:            serde_json::to_value(Graph::new("test")).unwrap(),
-            workflow_source:  None,
-            workflow_config:  None,
-            labels:           std::collections::BTreeMap::new(),
-            run_dir:          "/tmp/test".to_string(),
-            source_directory: None,
-            workflow_slug:    None,
-            automation:       None,
-            db_prefix:        None,
-            provenance:       test_support::test_run_provenance(),
-            manifest_blob:    None,
-            git:              None,
-            fork_source_ref:  None,
-            retried_from:     None,
-            parent_id:        None,
-            web_url:          None,
-        })
+        workflow_event::append_event(
+            run_store,
+            run_id,
+            &workflow_event::Event::RunCreated {
+                run_id: *run_id,
+                title: None,
+                settings: serde_json::to_value(WorkflowSettings::default()).unwrap(),
+                graph: serde_json::to_value(Graph::new("test")).unwrap(),
+                workflow_source: None,
+                workflow_config: None,
+                labels: std::collections::BTreeMap::new(),
+                run_dir: "/tmp/test".to_string(),
+                source_directory: None,
+                workflow_slug: None,
+                automation: None,
+                db_prefix: None,
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                git: None,
+                fork_source_ref: None,
+                retried_from: None,
+                parent_id: None,
+                web_url: None,
+            },
+        )
         .await
         .expect("run.created should append");
     }
@@ -688,7 +692,7 @@ mod stage_events_tests {
             },
             workflow_event::Event::RunRunnable {
                 source: fabro_types::RunRunnableSource::StartRequested,
-                actor:  None,
+                actor: None,
             },
             workflow_event::Event::RunStarting,
             workflow_event::Event::RunRunning,

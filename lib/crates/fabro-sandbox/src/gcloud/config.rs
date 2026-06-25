@@ -27,23 +27,23 @@ pub const DEFAULT_WORKING_DIR: &str = "/home/fabro/workspace";
 /// provider validates required fields at `create()` time, not construction.
 #[derive(Debug, Clone, Default)]
 pub struct GcloudSettings {
-    pub project:      Option<String>,
-    pub zone:         Option<String>,
-    pub subnetwork:   Option<String>,
-    pub vm_image:     Option<String>,
+    pub project: Option<String>,
+    pub zone: Option<String>,
+    pub subnetwork: Option<String>,
+    pub vm_image: Option<String>,
     pub machine_type: Option<String>,
-    pub name_prefix:  Option<String>,
-    pub ssh_user:     Option<String>,
-    pub working_dir:  Option<String>,
+    pub name_prefix: Option<String>,
+    pub ssh_user: Option<String>,
+    pub working_dir: Option<String>,
     /// Network tag applied to the VM so a pre-created VPC firewall rule can
     /// scope egress. Paired with the host iptables drop in the startup script.
-    pub egress_tag:   Option<String>,
+    pub egress_tag: Option<String>,
     /// Service-account key JSON for the SA→JWT auth fallback. Held in memory
     /// only; never written to disk. Absent when workload identity is used.
-    pub sa_key_json:  Option<String>,
+    pub sa_key_json: Option<String>,
     /// Raw `FABRO_GCLOUD_PROVISIONING_MODEL` (`STANDARD` | `SPOT`). Validated +
     /// defaulted in [`GcloudConfig::resolve`].
-    pub provisioning_model:    Option<String>,
+    pub provisioning_model: Option<String>,
     /// Raw `FABRO_GCLOUD_MAX_RUN_DURATION_SECS` (optional positive integer).
     /// Parsed in [`GcloudConfig::resolve`]; sets a GCE-side hard TTL on the VM.
     pub max_run_duration_secs: Option<String>,
@@ -55,17 +55,17 @@ impl GcloudSettings {
     /// process environment.
     pub fn from_lookup(lookup: impl Fn(&str) -> Option<String>) -> Self {
         Self {
-            project:      lookup("FABRO_GCLOUD_PROJECT"),
-            zone:         lookup("FABRO_GCLOUD_ZONE"),
-            subnetwork:   lookup("FABRO_GCLOUD_SUBNETWORK"),
-            vm_image:     lookup("FABRO_GCLOUD_VM_IMAGE"),
+            project: lookup("FABRO_GCLOUD_PROJECT"),
+            zone: lookup("FABRO_GCLOUD_ZONE"),
+            subnetwork: lookup("FABRO_GCLOUD_SUBNETWORK"),
+            vm_image: lookup("FABRO_GCLOUD_VM_IMAGE"),
             machine_type: lookup("FABRO_GCLOUD_MACHINE_TYPE"),
-            name_prefix:  lookup("FABRO_GCLOUD_NAME_PREFIX"),
-            ssh_user:     lookup("FABRO_GCLOUD_SSH_USER"),
-            working_dir:  lookup("FABRO_GCLOUD_WORKING_DIR"),
-            egress_tag:   lookup("FABRO_GCLOUD_EGRESS_TAG"),
-            sa_key_json:  lookup("FABRO_GCLOUD_SA_KEY_JSON"),
-            provisioning_model:    lookup("FABRO_GCLOUD_PROVISIONING_MODEL"),
+            name_prefix: lookup("FABRO_GCLOUD_NAME_PREFIX"),
+            ssh_user: lookup("FABRO_GCLOUD_SSH_USER"),
+            working_dir: lookup("FABRO_GCLOUD_WORKING_DIR"),
+            egress_tag: lookup("FABRO_GCLOUD_EGRESS_TAG"),
+            sa_key_json: lookup("FABRO_GCLOUD_SA_KEY_JSON"),
+            provisioning_model: lookup("FABRO_GCLOUD_PROVISIONING_MODEL"),
             max_run_duration_secs: lookup("FABRO_GCLOUD_MAX_RUN_DURATION_SECS"),
         }
     }
@@ -85,24 +85,24 @@ impl GcloudSettings {
 /// Per-run resolved configuration. Cloned into a single `GcloudSandbox`.
 #[derive(Debug, Clone)]
 pub struct GcloudConfig {
-    pub project:               String,
-    pub zone:                  String,
-    pub subnetwork:            String,
-    pub vm_image:              String,
-    pub machine_type:          String,
-    pub name_prefix:           String,
-    pub ssh_user:              String,
-    pub working_dir:           String,
-    pub egress_tag:            Option<String>,
-    pub egress:                EgressPolicy,
+    pub project: String,
+    pub zone: String,
+    pub subnetwork: String,
+    pub vm_image: String,
+    pub machine_type: String,
+    pub name_prefix: String,
+    pub ssh_user: String,
+    pub working_dir: String,
+    pub egress_tag: Option<String>,
+    pub egress: EgressPolicy,
     /// Compute `scheduling.provisioningModel`: `STANDARD` (default) or `SPOT`.
-    pub provisioning_model:    String,
+    pub provisioning_model: String,
     /// GCE-side hard TTL in seconds (`scheduling.maxRunDuration`). `None` leaves
     /// the VM running until explicit delete.
     pub max_run_duration_secs: Option<u64>,
-    pub operation_timeout:     Duration,
+    pub operation_timeout: Duration,
     pub host_key_poll_timeout: Duration,
-    pub ssh_connect_timeout:   Duration,
+    pub ssh_connect_timeout: Duration,
 }
 
 impl GcloudConfig {
@@ -110,15 +110,19 @@ impl GcloudConfig {
     /// policy. Returns an error naming the first missing required field.
     pub fn resolve(settings: &GcloudSettings, egress: EgressPolicy) -> crate::Result<Self> {
         let require = |value: &Option<String>, name: &str| {
-            value
-                .clone()
-                .ok_or_else(|| crate::Error::message(format!("gcloud provider: {name} is not configured")))
+            value.clone().ok_or_else(|| {
+                crate::Error::message(format!("gcloud provider: {name} is not configured"))
+            })
         };
 
         // Whitelist-validate an enum-style operator knob. Trims; a trimmed-empty
         // value (infra templating a var that resolves to "") is treated as unset
         // → default, never a hard error that would dead-end the provider.
-        let enum_field = |value: &Option<String>, name: &str, allowed: &[&str], default: &str| -> crate::Result<String> {
+        let enum_field = |value: &Option<String>,
+                          name: &str,
+                          allowed: &[&str],
+                          default: &str|
+         -> crate::Result<String> {
             match value.as_deref().map(str::trim) {
                 None | Some("") => Ok(default.to_string()),
                 Some(raw) => {
@@ -257,7 +261,10 @@ mod tests {
         let mut settings = full_settings();
         settings.subnetwork = Some("projects/p/regions/r/subnetworks/s".to_string());
         let config = GcloudConfig::resolve(&settings, EgressPolicy::Block).unwrap();
-        assert_eq!(config.subnetwork_url(), "projects/p/regions/r/subnetworks/s");
+        assert_eq!(
+            config.subnetwork_url(),
+            "projects/p/regions/r/subnetworks/s"
+        );
     }
 
     #[test]
@@ -312,7 +319,10 @@ mod tests {
         let mut settings = full_settings();
         settings.max_run_duration_secs = Some("soon".to_string());
         let err = GcloudConfig::resolve(&settings, EgressPolicy::Block).unwrap_err();
-        assert!(err.to_string().contains("FABRO_GCLOUD_MAX_RUN_DURATION_SECS"));
+        assert!(
+            err.to_string()
+                .contains("FABRO_GCLOUD_MAX_RUN_DURATION_SECS")
+        );
     }
 
     #[test]
@@ -320,16 +330,19 @@ mod tests {
         let mut settings = full_settings();
         settings.max_run_duration_secs = Some("0".to_string());
         let err = GcloudConfig::resolve(&settings, EgressPolicy::Block).unwrap_err();
-        assert!(err.to_string().contains("FABRO_GCLOUD_MAX_RUN_DURATION_SECS"));
+        assert!(
+            err.to_string()
+                .contains("FABRO_GCLOUD_MAX_RUN_DURATION_SECS")
+        );
         assert!(err.to_string().contains("greater than 0"));
     }
 
     fn full_settings() -> GcloudSettings {
         GcloudSettings {
-            project:      Some("proj".to_string()),
-            zone:         Some("us-central1-a".to_string()),
-            subnetwork:   Some("default".to_string()),
-            vm_image:     Some("projects/proj/global/images/fabro".to_string()),
+            project: Some("proj".to_string()),
+            zone: Some("us-central1-a".to_string()),
+            subnetwork: Some("default".to_string()),
+            vm_image: Some("projects/proj/global/images/fabro".to_string()),
             machine_type: Some("e2-standard-4".to_string()),
             ..Default::default()
         }

@@ -20,9 +20,9 @@ fn sandbox_services_reuse_domain_types() {
 fn sandbox_services_json_matches_openapi_shape() {
     let response = SandboxServiceListResponse {
         data: vec![SandboxService {
-            port:              3000,
-            addresses:         vec!["127.0.0.1:3000".to_string(), "[::]:3000".to_string()],
-            processes:         vec![
+            port: 3000,
+            addresses: vec!["127.0.0.1:3000".to_string(), "[::]:3000".to_string()],
+            processes: vec![
                 r#"users:(("node",pid=42,fd=23))"#.to_string(),
                 r#"users:(("vite",pid=84,fd=19))"#.to_string(),
             ],

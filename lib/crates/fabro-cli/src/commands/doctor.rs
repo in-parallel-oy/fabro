@@ -47,10 +47,10 @@ pub(crate) fn check_config(settings_path: Option<PathBuf>) -> CheckResult {
             }
         }
         None => CheckResult {
-            name:        "Configuration".to_string(),
-            status:      CheckStatus::Warning,
-            summary:     "no settings config file found".to_string(),
-            details:     vec![CheckDetail::new(
+            name: "Configuration".to_string(),
+            status: CheckStatus::Warning,
+            summary: "no settings config file found".to_string(),
+            details: vec![CheckDetail::new(
                 "Create ~/.fabro/settings.toml to configure Fabro".to_string(),
             )],
             remediation: Some("Create ~/.fabro/settings.toml".to_string()),
@@ -59,8 +59,8 @@ pub(crate) fn check_config(settings_path: Option<PathBuf>) -> CheckResult {
 }
 
 struct WildcardPublicUrl {
-    field:      &'static str,
-    value:      String,
+    field: &'static str,
+    value: String,
     suggestion: String,
 }
 
@@ -150,20 +150,20 @@ fn check_version_parity(server_version: &str) -> CheckResult {
     let cli_version = FABRO_VERSION;
     if server_version == cli_version {
         CheckResult {
-            name:        "Version parity".to_string(),
-            status:      CheckStatus::Pass,
-            summary:     cli_version.to_string(),
-            details:     vec![CheckDetail::new(format!(
+            name: "Version parity".to_string(),
+            status: CheckStatus::Pass,
+            summary: cli_version.to_string(),
+            details: vec![CheckDetail::new(format!(
                 "CLI and server are both {cli_version}"
             ))],
             remediation: None,
         }
     } else {
         CheckResult {
-            name:        "Version parity".to_string(),
-            status:      CheckStatus::Warning,
-            summary:     format!("CLI {cli_version}, server {server_version}"),
-            details:     vec![CheckDetail::new(format!(
+            name: "Version parity".to_string(),
+            status: CheckStatus::Warning,
+            summary: format!("CLI {cli_version}, server {server_version}"),
+            details: vec![CheckDetail::new(format!(
                 "CLI version {cli_version} does not match server version {server_version}"
             ))],
             remediation: Some(
@@ -176,10 +176,10 @@ fn check_version_parity(server_version: &str) -> CheckResult {
 
 fn skipped_version_parity(reason: &str) -> CheckResult {
     CheckResult {
-        name:        "Version parity".to_string(),
-        status:      CheckStatus::Warning,
-        summary:     "skipped".to_string(),
-        details:     vec![CheckDetail::new(format!(
+        name: "Version parity".to_string(),
+        status: CheckStatus::Warning,
+        summary: "skipped".to_string(),
+        details: vec![CheckDetail::new(format!(
             "Could not retrieve server version: {reason}"
         ))],
         remediation: None,
@@ -198,15 +198,15 @@ fn convert_diagnostics_sections(sections: Vec<api_types::DiagnosticsSection>) ->
     sections
         .into_iter()
         .map(|section| CheckSection {
-            title:  section.title,
+            title: section.title,
             checks: section
                 .checks
                 .into_iter()
                 .map(|check| CheckResult {
-                    name:        check.name,
-                    status:      convert_diagnostics_status(check.status),
-                    summary:     check.summary,
-                    details:     check
+                    name: check.name,
+                    status: convert_diagnostics_status(check.status),
+                    summary: check.summary,
+                    details: check
                         .details
                         .into_iter()
                         .map(|detail| CheckDetail {
@@ -261,9 +261,9 @@ pub(crate) async fn run_doctor(
     )];
 
     let mut report = CheckReport {
-        title:    "Fabro Doctor".to_string(),
+        title: "Fabro Doctor".to_string(),
         sections: vec![CheckSection {
-            title:  "Local".to_string(),
+            title: "Local".to_string(),
             checks: local_checks,
         }],
     };
@@ -272,12 +272,12 @@ pub(crate) async fn run_doctor(
         Ok(ctx) => ctx,
         Err(err) => {
             report.sections.push(CheckSection {
-                title:  "Server".to_string(),
+                title: "Server".to_string(),
                 checks: vec![CheckResult {
-                    name:        "Fabro server".to_string(),
-                    status:      CheckStatus::Error,
-                    summary:     "settings resolution failed".to_string(),
-                    details:     vec![CheckDetail::new(err.to_string())],
+                    name: "Fabro server".to_string(),
+                    status: CheckStatus::Error,
+                    summary: "settings resolution failed".to_string(),
+                    details: vec![CheckDetail::new(err.to_string())],
                     remediation: Some(
                         "Fix the local CLI settings or provide `--server`, then run doctor again."
                             .to_string(),
@@ -302,12 +302,12 @@ pub(crate) async fn run_doctor(
         Ok(server) => server,
         Err(err) => {
             report.sections.push(CheckSection {
-                title:  "Server".to_string(),
+                title: "Server".to_string(),
                 checks: vec![CheckResult {
-                    name:        "Fabro server".to_string(),
-                    status:      CheckStatus::Error,
-                    summary:     "unreachable".to_string(),
-                    details:     vec![CheckDetail::new(err.to_string())],
+                    name: "Fabro server".to_string(),
+                    status: CheckStatus::Error,
+                    summary: "unreachable".to_string(),
+                    details: vec![CheckDetail::new(err.to_string())],
                     remediation: Some(
                         "Start or connect to the server with `--server` and run doctor again."
                             .to_string(),
@@ -330,12 +330,12 @@ pub(crate) async fn run_doctor(
 
     if let Err(err) = server.get_health().await {
         report.sections.push(CheckSection {
-            title:  "Server".to_string(),
+            title: "Server".to_string(),
             checks: vec![CheckResult {
-                name:        "Fabro server".to_string(),
-                status:      CheckStatus::Error,
-                summary:     "health check failed".to_string(),
-                details:     vec![CheckDetail::new(err.to_string())],
+                name: "Fabro server".to_string(),
+                status: CheckStatus::Error,
+                summary: "health check failed".to_string(),
+                details: vec![CheckDetail::new(err.to_string())],
                 remediation: Some(
                     "Check that the server is reachable and responding to /health.".to_string(),
                 ),
@@ -355,12 +355,12 @@ pub(crate) async fn run_doctor(
     }
 
     report.sections.push(CheckSection {
-        title:  "Server".to_string(),
+        title: "Server".to_string(),
         checks: vec![CheckResult {
-            name:        "Location".to_string(),
-            status:      CheckStatus::Pass,
-            summary:     server.base_url().clone(),
-            details:     vec![],
+            name: "Location".to_string(),
+            status: CheckStatus::Pass,
+            summary: server.base_url().clone(),
+            details: vec![],
             remediation: None,
         }],
     });
@@ -379,12 +379,12 @@ pub(crate) async fn run_doctor(
                 .checks
                 .push(skipped_version_parity(&err.to_string()));
             report.sections.push(CheckSection {
-                title:  "Server".to_string(),
+                title: "Server".to_string(),
                 checks: vec![CheckResult {
-                    name:        "Diagnostics".to_string(),
-                    status:      CheckStatus::Error,
-                    summary:     "probe failed".to_string(),
-                    details:     vec![CheckDetail::new(err.to_string())],
+                    name: "Diagnostics".to_string(),
+                    status: CheckStatus::Error,
+                    summary: "probe failed".to_string(),
+                    details: vec![CheckDetail::new(err.to_string())],
                     remediation: Some(
                         "Fix the server diagnostics failure and run `fabro doctor` again."
                             .to_string(),
@@ -491,14 +491,14 @@ url = "http://0.0.0.0:32276"
     #[test]
     fn render_report_text_without_color_has_no_ansi() {
         let report = CheckReport {
-            title:    "Fabro Doctor".to_string(),
+            title: "Fabro Doctor".to_string(),
             sections: vec![CheckSection {
-                title:  "Local".to_string(),
+                title: "Local".to_string(),
                 checks: vec![CheckResult {
-                    name:        "Configuration".to_string(),
-                    status:      CheckStatus::Pass,
-                    summary:     "loaded".to_string(),
-                    details:     vec![CheckDetail::new(
+                    name: "Configuration".to_string(),
+                    status: CheckStatus::Pass,
+                    summary: "loaded".to_string(),
+                    details: vec![CheckDetail::new(
                         "Loaded from ~/.fabro/settings.toml".into(),
                     )],
                     remediation: None,

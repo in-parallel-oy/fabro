@@ -82,23 +82,23 @@ fn provider_error_from_openai_error_json(error: &serde_json::Value, provider: &s
 /// Accumulated state across SSE events during streaming.
 pub(super) struct SseAccumulator {
     /// Requested model, used as the fallback when the response omits one.
-    model:                   String,
+    model: String,
     /// Configured provider name stamped into responses and error details.
-    provider:                String,
-    response_id:             String,
-    response_model:          String,
-    accumulated_text:        String,
-    tool_calls:              Vec<ToolCall>,
+    provider: String,
+    response_id: String,
+    response_model: String,
+    accumulated_text: String,
+    tool_calls: Vec<ToolCall>,
     /// Raw reasoning output items to preserve for round-tripping.
-    reasoning_items:         Vec<serde_json::Value>,
+    reasoning_items: Vec<serde_json::Value>,
     /// Raw message output items to preserve for round-tripping.
-    message_items:           Vec<serde_json::Value>,
-    usage:                   TokenCounts,
-    finish_reason:           FinishReason,
-    emitted_start:           bool,
-    emitted_text_start:      bool,
+    message_items: Vec<serde_json::Value>,
+    usage: TokenCounts,
+    finish_reason: FinishReason,
+    emitted_start: bool,
+    emitted_text_start: bool,
     emitted_reasoning_start: bool,
-    rate_limit:              Option<RateLimitInfo>,
+    rate_limit: Option<RateLimitInfo>,
 }
 
 impl SseAccumulator {
@@ -406,9 +406,9 @@ impl SseAccumulator {
             model,
             provider: self.provider.clone(),
             message: Message {
-                role:         Role::Assistant,
-                content:      content_parts,
-                name:         None,
+                role: Role::Assistant,
+                content: content_parts,
+                name: None,
                 tool_call_id: None,
             },
             finish_reason: self.finish_reason.clone(),
@@ -450,20 +450,20 @@ mod tests {
     /// initial `StreamStart`.
     fn empty_accumulator() -> SseAccumulator {
         SseAccumulator {
-            model:                   String::new(),
-            provider:                "openai".to_string(),
-            response_id:             String::new(),
-            response_model:          String::new(),
-            accumulated_text:        String::new(),
-            tool_calls:              Vec::new(),
-            reasoning_items:         Vec::new(),
-            message_items:           Vec::new(),
-            usage:                   TokenCounts::default(),
-            finish_reason:           FinishReason::Stop,
-            emitted_start:           true,
-            emitted_text_start:      false,
+            model: String::new(),
+            provider: "openai".to_string(),
+            response_id: String::new(),
+            response_model: String::new(),
+            accumulated_text: String::new(),
+            tool_calls: Vec::new(),
+            reasoning_items: Vec::new(),
+            message_items: Vec::new(),
+            usage: TokenCounts::default(),
+            finish_reason: FinishReason::Stop,
+            emitted_start: true,
+            emitted_text_start: false,
             emitted_reasoning_start: false,
-            rate_limit:              None,
+            rate_limit: None,
         }
     }
 

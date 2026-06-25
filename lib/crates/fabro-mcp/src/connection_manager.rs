@@ -78,16 +78,16 @@ pub fn call_result_to_string(result: &CallToolResult) -> Result<String, String> 
 /// Tool info stored per-tool in the connection manager.
 #[derive(Debug, Clone)]
 pub struct ToolInfo {
-    pub server_name:        String,
+    pub server_name: String,
     pub original_tool_name: String,
-    pub description:        String,
-    pub input_schema:       serde_json::Value,
+    pub description: String,
+    pub input_schema: serde_json::Value,
 }
 
 /// Manages connections to multiple MCP servers and their tools.
 pub struct McpConnectionManager {
     clients: HashMap<String, Arc<McpClient>>,
-    tools:   HashMap<String, ToolInfo>,
+    tools: HashMap<String, ToolInfo>,
 }
 
 impl McpConnectionManager {
@@ -95,7 +95,7 @@ impl McpConnectionManager {
     pub fn new() -> Self {
         Self {
             clients: HashMap::new(),
-            tools:   HashMap::new(),
+            tools: HashMap::new(),
         }
     }
 
@@ -132,12 +132,15 @@ impl McpConnectionManager {
 
         for (name, description, input_schema) in tools {
             let qualified = qualified_tool_name(&config.name, &name);
-            self.tools.insert(qualified, ToolInfo {
-                server_name: config.name.clone(),
-                original_tool_name: name,
-                description,
-                input_schema,
-            });
+            self.tools.insert(
+                qualified,
+                ToolInfo {
+                    server_name: config.name.clone(),
+                    original_tool_name: name,
+                    description,
+                    input_schema,
+                },
+            );
         }
 
         self.clients.insert(config.name.clone(), Arc::new(client));
@@ -323,27 +326,33 @@ mod tests {
     #[test]
     fn tool_summaries_for_server_filters_and_sorts_by_qualified_name() {
         let mut mgr = McpConnectionManager::new();
-        mgr.tools
-            .insert(qualified_tool_name("github", "list_issues"), ToolInfo {
-                server_name:        "github".to_string(),
+        mgr.tools.insert(
+            qualified_tool_name("github", "list_issues"),
+            ToolInfo {
+                server_name: "github".to_string(),
                 original_tool_name: "list_issues".to_string(),
-                description:        "list issues".to_string(),
-                input_schema:       serde_json::json!({}),
-            });
-        mgr.tools
-            .insert(qualified_tool_name("github", "create_issue"), ToolInfo {
-                server_name:        "github".to_string(),
+                description: "list issues".to_string(),
+                input_schema: serde_json::json!({}),
+            },
+        );
+        mgr.tools.insert(
+            qualified_tool_name("github", "create_issue"),
+            ToolInfo {
+                server_name: "github".to_string(),
                 original_tool_name: "create_issue".to_string(),
-                description:        "create issue".to_string(),
-                input_schema:       serde_json::json!({}),
-            });
-        mgr.tools
-            .insert(qualified_tool_name("other", "noop"), ToolInfo {
-                server_name:        "other".to_string(),
+                description: "create issue".to_string(),
+                input_schema: serde_json::json!({}),
+            },
+        );
+        mgr.tools.insert(
+            qualified_tool_name("other", "noop"),
+            ToolInfo {
+                server_name: "other".to_string(),
                 original_tool_name: "noop".to_string(),
-                description:        "noop".to_string(),
-                input_schema:       serde_json::json!({}),
-            });
+                description: "noop".to_string(),
+                input_schema: serde_json::json!({}),
+            },
+        );
 
         let summaries = mgr.tool_summaries_for_server("github");
         assert_eq!(summaries.len(), 2);

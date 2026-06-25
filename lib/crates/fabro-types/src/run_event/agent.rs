@@ -15,7 +15,7 @@ pub struct AgentSessionStartedProps {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model:    Option<String>,
+    pub model: Option<String>,
 }
 
 #[allow(
@@ -34,19 +34,19 @@ pub enum SessionCapability {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentSessionActivatedProps {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub thread_id:        Option<String>,
+    pub thread_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider:         Option<String>,
+    pub provider: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model:            Option<String>,
+    pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<ReasoningEffort>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub speed:            Option<Speed>,
+    pub speed: Option<Speed>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permission_level: Option<PermissionLevel>,
-    pub capabilities:     Vec<SessionCapability>,
-    pub visit:            u32,
+    pub capabilities: Vec<SessionCapability>,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -63,11 +63,11 @@ pub struct AgentToolsAvailableProps {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentToolSummary {
-    pub name:        String,
+    pub name: String,
     pub description: String,
-    pub source:      AgentToolSource,
-    pub category:    AgentToolCategory,
-    pub invoked:     bool,
+    pub source: AgentToolSource,
+    pub category: AgentToolCategory,
+    pub invoked: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,7 +75,7 @@ pub struct AgentToolSummary {
 pub enum AgentToolSource {
     Native,
     Mcp {
-        server_name:   String,
+        server_name: String,
         original_name: String,
     },
     Skill,
@@ -111,44 +111,44 @@ pub struct AgentProcessingEndProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentInputProps {
-    pub text:  String,
+    pub text: String,
     pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentMessageProps {
     // Narrow legacy fields retained for consumer compatibility.
-    pub text:            String,
-    pub model:           ModelRef,
-    pub billing:         BilledTokenCounts,
+    pub text: String,
+    pub model: ModelRef,
+    pub billing: BilledTokenCounts,
     pub tool_call_count: usize,
-    pub visit:           u32,
+    pub visit: u32,
     /// Canonical replay-authoritative transcript message. Present on events
     /// emitted after the unified transcript migration; absent on legacy
     /// payloads so older events still deserialize.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub message:         Option<TranscriptMessage>,
+    pub message: Option<TranscriptMessage>,
     /// Latest content-free context-window projection for this agent stage,
     /// computed from the request that produced this assistant response.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub context_window:  Option<StageContextWindowProjection>,
+    pub context_window: Option<StageContextWindowProjection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentToolStartedProps {
     // Narrow legacy fields retained for consumer compatibility.
-    pub tool_name:         String,
-    pub tool_call_id:      String,
-    pub arguments:         Value,
-    pub visit:             u32,
+    pub tool_name: String,
+    pub tool_call_id: String,
+    pub arguments: Value,
+    pub visit: u32,
     /// Canonical tool call payload. Carries `tool_type`, `raw_arguments`, and
     /// `provider_metadata` (e.g. Gemini `thought_signature`) so tool actions
     /// can be replayed against the originating provider.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tool_call:         Option<ToolCall>,
+    pub tool_call: Option<ToolCall>,
     /// Turn that initiated this tool call.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub turn_id:           Option<TurnId>,
+    pub turn_id: Option<TurnId>,
     /// Agent message id that owns this tool call. Minted before tool
     /// execution so tool actions can be linked back to their parent agent
     /// response in the transcript.
@@ -159,18 +159,18 @@ pub struct AgentToolStartedProps {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentToolCompletedProps {
     // Narrow legacy fields retained for consumer compatibility.
-    pub tool_name:    String,
+    pub tool_name: String,
     pub tool_call_id: String,
-    pub output:       Value,
-    pub is_error:     bool,
-    pub visit:        u32,
+    pub output: Value,
+    pub is_error: bool,
+    pub visit: u32,
     /// Canonical tool result payload. Carries the structured output, error
     /// state, and supported media/artifact fields.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tool_result:  Option<ToolResult>,
+    pub tool_result: Option<ToolResult>,
     /// Turn that owned this tool call.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub turn_id:      Option<TurnId>,
+    pub turn_id: Option<TurnId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -181,10 +181,10 @@ pub struct AgentErrorProps {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentWarningProps {
-    pub kind:    String,
+    pub kind: String,
     pub message: String,
     pub details: Value,
-    pub visit:   u32,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -195,31 +195,31 @@ pub struct AgentLoopDetectedProps {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentTurnLimitReachedProps {
     pub max_turns: usize,
-    pub visit:     u32,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentSteeringInjectedProps {
-    pub text:  String,
+    pub text: String,
     pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentPairUserMessageProps {
-    pub pair_id:           PairId,
-    pub message_id:        PairMessageId,
+    pub pair_id: PairId,
+    pub message_id: PairMessageId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_message_id: Option<String>,
-    pub text:              String,
-    pub visit:             u32,
+    pub text: String,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentPairSystemMessageProps {
     pub pair_id: PairId,
-    pub kind:    PairSystemMessageKind,
-    pub text:    String,
-    pub visit:   u32,
+    pub kind: PairSystemMessageKind,
+    pub text: String,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -244,117 +244,117 @@ pub enum AgentSteerDroppedReason {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentSteerDroppedProps {
     pub reason: AgentSteerDroppedReason,
-    pub count:  u32,
+    pub count: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentCompactionStartedProps {
-    pub estimated_tokens:    usize,
+    pub estimated_tokens: usize,
     pub context_window_size: usize,
-    pub visit:               u32,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentCompactionCompletedProps {
-    pub original_turn_count:    usize,
-    pub preserved_turn_count:   usize,
+    pub original_turn_count: usize,
+    pub preserved_turn_count: usize,
     pub summary_token_estimate: usize,
-    pub tracked_file_count:     usize,
-    pub visit:                  u32,
+    pub tracked_file_count: usize,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentLlmRetryProps {
-    pub provider:   String,
-    pub model:      String,
-    pub attempt:    usize,
+    pub provider: String,
+    pub model: String,
+    pub attempt: usize,
     pub delay_secs: f64,
-    pub error:      Value,
-    pub visit:      u32,
+    pub error: Value,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentSubSpawnedProps {
     pub agent_id: String,
-    pub depth:    usize,
-    pub task:     String,
-    pub visit:    u32,
+    pub depth: usize,
+    pub task: String,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentSubCompletedProps {
-    pub agent_id:   String,
-    pub depth:      usize,
-    pub success:    bool,
+    pub agent_id: String,
+    pub depth: usize,
+    pub success: bool,
     pub turns_used: usize,
-    pub visit:      u32,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentSubFailedProps {
     pub agent_id: String,
-    pub depth:    usize,
-    pub error:    Value,
-    pub visit:    u32,
+    pub depth: usize,
+    pub error: Value,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentSubClosedProps {
     pub agent_id: String,
-    pub depth:    usize,
-    pub visit:    u32,
+    pub depth: usize,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentMcpReadyProps {
     pub server_name: String,
-    pub tool_count:  usize,
+    pub tool_count: usize,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub tools:       Vec<AgentMcpToolSummary>,
-    pub visit:       u32,
+    pub tools: Vec<AgentMcpToolSummary>,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentMcpToolSummary {
-    pub name:          String,
+    pub name: String,
     pub original_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentMcpFailedProps {
     pub server_name: String,
-    pub error:       String,
-    pub visit:       u32,
+    pub error: String,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentMemoryLoadedProps {
-    pub provider_profile:   String,
-    pub files:              Vec<AgentMemoryFileProps>,
+    pub provider_profile: String,
+    pub files: Vec<AgentMemoryFileProps>,
     pub total_loaded_bytes: usize,
-    pub budget_bytes:       usize,
-    pub visit:              u32,
+    pub budget_bytes: usize,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentMemoryFileProps {
-    pub path:         String,
-    pub byte_count:   usize,
+    pub path: String,
+    pub byte_count: usize,
     pub loaded_bytes: usize,
-    pub truncated:    bool,
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentSkillsDiscoveredProps {
     pub provider_profile: String,
-    pub source_dirs:      Vec<String>,
-    pub skills:           Vec<AgentSkillSummary>,
-    pub visit:            u32,
+    pub source_dirs: Vec<String>,
+    pub skills: Vec<AgentSkillSummary>,
+    pub visit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentSkillSummary {
-    pub name:        String,
+    pub name: String,
     pub description: String,
 }
 
@@ -368,8 +368,8 @@ pub enum AgentSkillActivationSource {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentSkillActivatedProps {
     pub skill_name: String,
-    pub source:     AgentSkillActivationSource,
-    pub visit:      u32,
+    pub source: AgentSkillActivationSource,
+    pub visit: u32,
 }
 
 #[cfg(test)]
@@ -383,7 +383,7 @@ mod tests {
         ModelRef {
             provider: fabro_model::ProviderId::openai(),
             model_id: "gpt-5".to_string(),
-            speed:    None,
+            speed: None,
         }
     }
 
@@ -409,17 +409,19 @@ mod tests {
 
     #[test]
     fn agent_message_props_carries_canonical_transcript_message() {
-        let msg = TranscriptMessage::new(MessageKind::Agent, MessageSource::ProviderAnswer, vec![
-            ContentPart::text("ok"),
-        ]);
+        let msg = TranscriptMessage::new(
+            MessageKind::Agent,
+            MessageSource::ProviderAnswer,
+            vec![ContentPart::text("ok")],
+        );
         let props = AgentMessageProps {
-            text:            "ok".to_string(),
-            model:           sample_model_ref(),
-            billing:         BilledTokenCounts::default(),
+            text: "ok".to_string(),
+            model: sample_model_ref(),
+            billing: BilledTokenCounts::default(),
             tool_call_count: 0,
-            visit:           1,
-            message:         Some(msg.clone()),
-            context_window:  None,
+            visit: 1,
+            message: Some(msg.clone()),
+            context_window: None,
         };
         let v = serde_json::to_value(&props).unwrap();
         assert_eq!(v["message"]["kind"], "agent");
@@ -450,12 +452,12 @@ mod tests {
         let parent = MessageId::new();
         let turn = TurnId::new();
         let props = AgentToolStartedProps {
-            tool_name:         "Bash".to_string(),
-            tool_call_id:      "call_1".to_string(),
-            arguments:         json!({"cmd": "ls"}),
-            visit:             1,
-            tool_call:         Some(tc.clone()),
-            turn_id:           Some(turn),
+            tool_name: "Bash".to_string(),
+            tool_call_id: "call_1".to_string(),
+            arguments: json!({"cmd": "ls"}),
+            visit: 1,
+            tool_call: Some(tc.clone()),
+            turn_id: Some(turn),
             parent_message_id: Some(parent),
         };
         let v = serde_json::to_value(&props).unwrap();
@@ -488,13 +490,13 @@ mod tests {
         let tr = ToolResult::success("call_1", json!({"stdout": "ok"}));
         let turn = TurnId::new();
         let props = AgentToolCompletedProps {
-            tool_name:    "Bash".to_string(),
+            tool_name: "Bash".to_string(),
             tool_call_id: "call_1".to_string(),
-            output:       json!({"stdout": "ok"}),
-            is_error:     false,
-            visit:        1,
-            tool_result:  Some(tr.clone()),
-            turn_id:      Some(turn),
+            output: json!({"stdout": "ok"}),
+            is_error: false,
+            visit: 1,
+            tool_result: Some(tr.clone()),
+            turn_id: Some(turn),
         };
         let v = serde_json::to_value(&props).unwrap();
         assert_eq!(v["tool_result"]["content"]["stdout"], "ok");

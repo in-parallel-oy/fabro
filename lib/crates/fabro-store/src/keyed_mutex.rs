@@ -61,8 +61,8 @@ where
     K: Eq + Hash + Clone,
 {
     keyed_mutex: &'a KeyedMutex<K>,
-    key:         K,
-    held_lock:   Option<OwnedMutexGuard<()>>,
+    key: K,
+    held_lock: Option<OwnedMutexGuard<()>>,
 }
 
 impl<K> Drop for KeyedMutexGuard<'_, K>

@@ -19,28 +19,28 @@ pub enum RunEventsAction {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct FabroRunEventsParams {
-    pub action:             RunEventsAction,
-    pub run_id:             String,
-    pub event_types:        Option<Vec<String>>,
-    pub categories:         Option<Vec<String>>,
-    pub direction:          Option<String>,
-    pub created_after:      Option<String>,
-    pub created_before:     Option<String>,
-    pub first:              Option<usize>,
-    pub after:              Option<u32>,
-    pub event_ids:          Option<Vec<String>>,
-    pub offset:             Option<usize>,
-    pub limit:              Option<usize>,
+    pub action: RunEventsAction,
+    pub run_id: String,
+    pub event_types: Option<Vec<String>>,
+    pub categories: Option<Vec<String>>,
+    pub direction: Option<String>,
+    pub created_after: Option<String>,
+    pub created_before: Option<String>,
+    pub first: Option<usize>,
+    pub after: Option<u32>,
+    pub event_ids: Option<Vec<String>>,
+    pub offset: Option<usize>,
+    pub limit: Option<usize>,
     pub max_content_length: Option<usize>,
-    pub query:              Option<String>,
+    pub query: Option<String>,
 }
 
 #[derive(Debug)]
 pub struct ValidatedRunEvents {
-    pub raw:            FabroRunEventsParams,
-    pub descending:     bool,
-    pub first:          usize,
-    pub created_after:  Option<DateTime<Utc>>,
+    pub raw: FabroRunEventsParams,
+    pub descending: bool,
+    pub first: usize,
+    pub created_after: Option<DateTime<Utc>>,
     pub created_before: Option<DateTime<Utc>>,
 }
 
@@ -97,17 +97,17 @@ impl TryFrom<FabroRunEventsParams> for ValidatedRunEvents {
 
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct RunEventsResult {
-    pub run_id:      String,
-    pub action:      RunEventsAction,
-    pub events:      Vec<RunEventResult>,
+    pub run_id: String,
+    pub action: RunEventsAction,
+    pub events: Vec<RunEventResult>,
     pub next_cursor: Option<u32>,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct RunEventResult {
-    pub event_id:  String,
-    pub sequence:  u32,
-    pub event:     Value,
+    pub event_id: String,
+    pub sequence: u32,
+    pub event: Value,
     pub truncated: bool,
 }
 
@@ -276,22 +276,22 @@ mod tests {
     #[test]
     fn run_event_result_truncates_at_utf8_boundary() {
         let event = EventEnvelope {
-            seq:   1,
+            seq: 1,
             event: RunEvent {
-                id:                 "evt_utf8".to_string(),
-                ts:                 Utc::now(),
-                run_id:             fixtures::RUN_1,
-                node_id:            None,
-                node_label:         None,
-                stage_id:           None,
-                parallel_group_id:  None,
+                id: "evt_utf8".to_string(),
+                ts: Utc::now(),
+                run_id: fixtures::RUN_1,
+                node_id: None,
+                node_label: None,
+                stage_id: None,
+                parallel_group_id: None,
                 parallel_branch_id: None,
-                session_id:         None,
-                parent_session_id:  None,
-                tool_call_id:       None,
-                actor:              None,
-                body:               EventBody::Unknown {
-                    name:       "test.utf8".to_string(),
+                session_id: None,
+                parent_session_id: None,
+                tool_call_id: None,
+                actor: None,
+                body: EventBody::Unknown {
+                    name: "test.utf8".to_string(),
                     properties: json!({ "message": "éééé" }),
                 },
             },

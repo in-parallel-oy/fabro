@@ -147,20 +147,23 @@ fn acp_artifacts_are_listed_when_touched_file_mtime_precedes_attempt_start() {
     );
     context.isolated_server();
     let fake_agent = write_fake_acp_agent(&context);
-    let acp_config = fake_acp_config_attr_with_env(&fake_agent, vec![
-        serde_json::json!({
-            "name": "ACP_WRITE_PATH",
-            "value": "verification-artifacts/report.md",
-        }),
-        serde_json::json!({
-            "name": "ACP_WRITE_CONTENT",
-            "value": "verified\n",
-        }),
-        serde_json::json!({
-            "name": "ACP_WRITE_MTIME_EPOCH",
-            "value": "946684800",
-        }),
-    ]);
+    let acp_config = fake_acp_config_attr_with_env(
+        &fake_agent,
+        vec![
+            serde_json::json!({
+                "name": "ACP_WRITE_PATH",
+                "value": "verification-artifacts/report.md",
+            }),
+            serde_json::json!({
+                "name": "ACP_WRITE_CONTENT",
+                "value": "verified\n",
+            }),
+            serde_json::json!({
+                "name": "ACP_WRITE_MTIME_EPOCH",
+                "value": "946684800",
+            }),
+        ],
+    );
     context.write_temp(
         "acp_artifact_collection.fabro",
         format!(
@@ -270,13 +273,16 @@ fn fake_acp_config_attr_recording_env(
     script_path: &std::path::Path,
     env_record: &std::path::Path,
 ) -> String {
-    fake_acp_config_attr_with_env(script_path, vec![
-        serde_json::json!({"name": "ACP_ENV_RECORD", "value": env_record.to_string_lossy()}),
-        serde_json::json!({
-            "name": "ACP_ENV_RECORD_KEYS",
-            "value": "ANTHROPIC_API_KEY,OPENAI_API_KEY,GEMINI_API_KEY",
-        }),
-    ])
+    fake_acp_config_attr_with_env(
+        script_path,
+        vec![
+            serde_json::json!({"name": "ACP_ENV_RECORD", "value": env_record.to_string_lossy()}),
+            serde_json::json!({
+                "name": "ACP_ENV_RECORD_KEYS",
+                "value": "ANTHROPIC_API_KEY,OPENAI_API_KEY,GEMINI_API_KEY",
+            }),
+        ],
+    )
 }
 
 fn fake_acp_config_attr_with_env(

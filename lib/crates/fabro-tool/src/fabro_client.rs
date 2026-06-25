@@ -12,9 +12,9 @@ use crate::{FabroToolBackend, RunManifestBuilder, ToolError};
 
 #[derive(Clone)]
 pub struct ClientBackend {
-    client:           Arc<::fabro_client::Client>,
+    client: Arc<::fabro_client::Client>,
     manifest_builder: Option<Arc<dyn RunManifestBuilder>>,
-    run_scope:        Option<RunId>,
+    run_scope: Option<RunId>,
 }
 
 impl ClientBackend {

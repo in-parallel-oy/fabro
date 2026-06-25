@@ -30,10 +30,10 @@ async fn run_success_output(mut cmd: assert_cmd::Command) -> Output {
 }
 
 struct MidStreamDecodeErrorAnthropicServer {
-    addr:          SocketAddr,
+    addr: SocketAddr,
     request_count: Arc<AtomicUsize>,
-    shutdown:      Arc<AtomicBool>,
-    join_handle:   Option<thread::JoinHandle<()>>,
+    shutdown: Arc<AtomicBool>,
+    join_handle: Option<thread::JoinHandle<()>>,
 }
 
 impl MidStreamDecodeErrorAnthropicServer {

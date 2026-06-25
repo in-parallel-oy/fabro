@@ -22,15 +22,15 @@ use tokio_stream::wrappers::ReceiverStream;
 fn test_server_config() -> McpServerSettings {
     let test_server = format!("{}/tests/test_mcp_server.py", env!("CARGO_MANIFEST_DIR"));
     McpServerSettings {
-        name:                 "test-echo".into(),
-        transport:            McpTransport::Stdio {
+        name: "test-echo".into(),
+        transport: McpTransport::Stdio {
             command: vec!["python3".into(), test_server],
-            env:     HashMap::new(),
+            env: HashMap::new(),
         },
-        current_dir:          None,
-        clear_env:            false,
+        current_dir: None,
+        clear_env: false,
         startup_timeout_secs: 10,
-        tool_timeout_secs:    30,
+        tool_timeout_secs: 30,
     }
 }
 
@@ -70,15 +70,15 @@ async fn stdio_client_uses_configured_cwd_and_exact_env() {
     );
     env.insert("FABRO_MCP_TEST_SENTINEL".to_string(), "fixture".to_string());
     let config = McpServerSettings {
-        name:                 "test-echo".into(),
-        transport:            McpTransport::Stdio {
+        name: "test-echo".into(),
+        transport: McpTransport::Stdio {
             command: vec!["python3".into(), test_server],
             env,
         },
-        current_dir:          Some(canonical_temp_dir.clone()),
-        clear_env:            true,
+        current_dir: Some(canonical_temp_dir.clone()),
+        clear_env: true,
         startup_timeout_secs: 10,
-        tool_timeout_secs:    30,
+        tool_timeout_secs: 30,
     };
     let client = McpClient::new(&config).unwrap();
     client.initialize(config.startup_timeout()).await.unwrap();
@@ -255,16 +255,16 @@ async fn sse_client_initialize_and_call_tool() {
     });
 
     let config = McpServerSettings {
-        name:                 "test-sse".into(),
-        transport:            McpTransport::Http {
+        name: "test-sse".into(),
+        transport: McpTransport::Http {
             protocol: McpHttpProtocol::Sse,
-            url:      format!("http://{addr}/sse"),
-            headers:  HashMap::from([("x-test-token".to_string(), "secret".to_string())]),
+            url: format!("http://{addr}/sse"),
+            headers: HashMap::from([("x-test-token".to_string(), "secret".to_string())]),
         },
-        current_dir:          None,
-        clear_env:            false,
+        current_dir: None,
+        clear_env: false,
         startup_timeout_secs: 10,
-        tool_timeout_secs:    30,
+        tool_timeout_secs: 30,
     };
     let client = McpClient::new(&config).unwrap();
     client.initialize(config.startup_timeout()).await.unwrap();
@@ -352,16 +352,16 @@ async fn sse_client_rejects_oversized_messages() {
     });
 
     let config = McpServerSettings {
-        name:                 "test-sse".into(),
-        transport:            McpTransport::Http {
+        name: "test-sse".into(),
+        transport: McpTransport::Http {
             protocol: McpHttpProtocol::Sse,
-            url:      format!("http://{addr}/sse"),
-            headers:  HashMap::new(),
+            url: format!("http://{addr}/sse"),
+            headers: HashMap::new(),
         },
-        current_dir:          None,
-        clear_env:            false,
+        current_dir: None,
+        clear_env: false,
         startup_timeout_secs: 2,
-        tool_timeout_secs:    30,
+        tool_timeout_secs: 30,
     };
     let client = McpClient::new(&config).unwrap();
     let error = client
@@ -439,16 +439,16 @@ async fn sse_client_rejects_cross_origin_endpoint() {
     });
 
     let config = McpServerSettings {
-        name:                 "test-sse".into(),
-        transport:            McpTransport::Http {
+        name: "test-sse".into(),
+        transport: McpTransport::Http {
             protocol: McpHttpProtocol::Sse,
-            url:      format!("http://{victim_addr}/sse"),
-            headers:  HashMap::from([("authorization".to_string(), "Bearer secret".to_string())]),
+            url: format!("http://{victim_addr}/sse"),
+            headers: HashMap::from([("authorization".to_string(), "Bearer secret".to_string())]),
         },
-        current_dir:          None,
-        clear_env:            false,
+        current_dir: None,
+        clear_env: false,
         startup_timeout_secs: 2,
-        tool_timeout_secs:    30,
+        tool_timeout_secs: 30,
     };
     let client = McpClient::new(&config).unwrap();
     client

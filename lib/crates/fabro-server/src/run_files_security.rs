@@ -46,7 +46,7 @@ const PATH_SUFFIX_GLOBS: &[&str] = &[
 /// so a pattern typo in a future edit doesn't take the whole endpoint down.
 struct Denylist {
     basename: GlobSet,
-    path:     GlobSet,
+    path: GlobSet,
 }
 
 fn build_set(patterns: &[&str]) -> GlobSet {
@@ -63,7 +63,7 @@ fn denylist() -> &'static Denylist {
     static SET: OnceLock<Denylist> = OnceLock::new();
     SET.get_or_init(|| Denylist {
         basename: build_set(BASENAME_GLOBS),
-        path:     build_set(PATH_SUFFIX_GLOBS),
+        path: build_set(PATH_SUFFIX_GLOBS),
     })
 }
 
@@ -142,13 +142,13 @@ fn normalize_for_match(path: &str) -> String {
 /// enforced by `emit`, which never interpolates or logs individual paths,
 /// file contents, or raw git stderr.
 pub struct RunFilesMetrics {
-    pub file_count:      usize,
-    pub bytes_total:     u64,
-    pub duration_ms:     u64,
-    pub truncated:       bool,
-    pub binary_count:    u64,
+    pub file_count: usize,
+    pub bytes_total: u64,
+    pub duration_ms: u64,
+    pub truncated: bool,
+    pub binary_count: u64,
     pub sensitive_count: u64,
-    pub symlink_count:   u64,
+    pub symlink_count: u64,
     pub submodule_count: u64,
 }
 

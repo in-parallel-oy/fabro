@@ -246,25 +246,25 @@ impl TestStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct JunitCase {
-    binary:      String,
-    package:     String,
-    classname:   String,
-    test_name:   String,
-    status:      TestStatus,
+    binary: String,
+    package: String,
+    classname: String,
+    test_name: String,
+    status: TestStatus,
     duration_ms: u64,
 }
 
 struct Totals {
-    passed:  usize,
-    failed:  usize,
+    passed: usize,
+    failed: usize,
     skipped: usize,
 }
 
 impl Totals {
     fn tally(cases: &[JunitCase]) -> Self {
         let mut totals = Self {
-            passed:  0,
-            failed:  0,
+            passed: 0,
+            failed: 0,
             skipped: 0,
         };
         for case in cases {
@@ -366,10 +366,10 @@ fn parse_junit(xml: &str) -> Result<Vec<JunitCase>> {
 
 #[derive(Debug)]
 struct PartialCase {
-    name:      String,
+    name: String,
     classname: String,
-    time:      f64,
-    status:    TestStatus,
+    time: f64,
+    status: TestStatus,
 }
 
 fn parse_testcase_attrs(e: &BytesStart<'_>) -> Result<PartialCase> {

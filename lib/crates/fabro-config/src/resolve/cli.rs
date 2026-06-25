@@ -8,13 +8,13 @@ use crate::{CliExecLayer, CliLayer, CliTargetLayer};
 
 pub fn resolve_cli(layer: &CliLayer, errors: &mut Vec<ResolveError>) -> CliNamespace {
     CliNamespace {
-        target:  resolve_target(layer.target.as_ref(), errors),
-        auth:    CliAuthSettings {
+        target: resolve_target(layer.target.as_ref(), errors),
+        auth: CliAuthSettings {
             strategy: layer.auth.as_ref().and_then(|auth| auth.strategy),
         },
-        exec:    resolve_exec(layer.exec.as_ref()),
-        output:  CliOutputSettings {
-            format:    layer
+        exec: resolve_exec(layer.exec.as_ref()),
+        output: CliOutputSettings {
+            format: layer
                 .output
                 .as_ref()
                 .and_then(|output| output.format)
@@ -79,13 +79,13 @@ fn resolve_exec(exec: Option<&CliExecLayer>) -> CliExecSettings {
         prevent_idle_sleep: exec
             .prevent_idle_sleep
             .expect("defaults.toml should provide cli.exec.prevent_idle_sleep"),
-        model:              CliExecModelSettings {
+        model: CliExecModelSettings {
             provider: model.and_then(|model| model.provider.clone()),
-            name:     model.and_then(|model| model.name.clone()),
+            name: model.and_then(|model| model.name.clone()),
         },
-        agent:              CliExecAgentSettings {
+        agent: CliExecAgentSettings {
             permissions: exec.agent.as_ref().and_then(|agent| agent.permissions),
-            mcps:        exec
+            mcps: exec
                 .agent
                 .as_ref()
                 .map(|agent| {

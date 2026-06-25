@@ -6,10 +6,10 @@ use crate::context::{AuthContextRequest, AuthContextResponse};
 use crate::strategy::{AuthStrategy, LoginResult};
 
 pub struct ApiKeyStrategy {
-    provider_id:   ProviderId,
-    display_name:  String,
+    provider_id: ProviderId,
+    display_name: String,
     env_var_names: Vec<String>,
-    api_key_url:   Option<String>,
+    api_key_url: Option<String>,
 }
 
 impl ApiKeyStrategy {
@@ -41,10 +41,10 @@ impl ApiKeyStrategy {
 impl AuthStrategy for ApiKeyStrategy {
     async fn init(&mut self) -> anyhow::Result<AuthContextRequest> {
         Ok(AuthContextRequest::ApiKey {
-            provider_id:   self.provider_id.clone(),
-            display_name:  self.display_name.clone(),
+            provider_id: self.provider_id.clone(),
+            display_name: self.display_name.clone(),
             env_var_names: self.env_var_names.clone(),
-            api_key_url:   self.api_key_url.clone(),
+            api_key_url: self.api_key_url.clone(),
         })
     }
 

@@ -13,27 +13,27 @@ const RELEASE_TEST_SEGMENT_WRITE_KEY: &str = "fake-for-local-smoke";
 pub(crate) struct ReleaseArgs {
     /// Cut a nightly prerelease instead of a stable release.
     #[arg(long)]
-    nightly:      bool,
+    nightly: bool,
     /// Print planned release steps without mutating git or running Cargo.
     #[arg(long)]
-    dry_run:      bool,
+    dry_run: bool,
     /// Skip the release-mode test smoke.
     #[arg(long)]
-    skip_tests:   bool,
+    skip_tests: bool,
     /// Release date to use for version computation.
     #[arg(long, value_name = "YYYY-MM-DD", env = "FABRO_RELEASE_DATE")]
     release_date: Option<NaiveDate>,
     /// Repository root to release.
     #[arg(long, hide = true)]
-    root:         Option<PathBuf>,
+    root: Option<PathBuf>,
 }
 
 struct ReleasePlan {
-    nightly:      bool,
+    nightly: bool,
     release_date: NaiveDate,
-    dry_run:      bool,
-    skip_tests:   bool,
-    root:         PathBuf,
+    dry_run: bool,
+    skip_tests: bool,
+    root: PathBuf,
 }
 
 #[expect(
@@ -42,13 +42,13 @@ struct ReleasePlan {
 )]
 pub(crate) fn release(args: ReleaseArgs) -> Result<()> {
     let plan = ReleasePlan {
-        nightly:      args.nightly,
+        nightly: args.nightly,
         release_date: args
             .release_date
             .unwrap_or_else(|| Local::now().date_naive()),
-        dry_run:      args.dry_run,
-        skip_tests:   args.skip_tests,
-        root:         args.root.unwrap_or_else(workspace_root),
+        dry_run: args.dry_run,
+        skip_tests: args.skip_tests,
+        root: args.root.unwrap_or_else(workspace_root),
     };
 
     let cargo_toml = plan.root.join("Cargo.toml");

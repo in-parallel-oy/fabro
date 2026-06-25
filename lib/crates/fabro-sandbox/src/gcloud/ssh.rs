@@ -33,8 +33,8 @@ use crate::sandbox::shell_quote;
 
 /// Output from a single SSH command.
 pub struct SshOutput {
-    pub stdout:    Vec<u8>,
-    pub stderr:    Vec<u8>,
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
     pub exit_code: i32,
 }
 
@@ -54,13 +54,13 @@ pub trait SshRunner: Send + Sync {
 /// Parameters required to open a pinned SSH session to a freshly-provisioned
 /// VM.
 pub struct SshConnectParams {
-    pub host:            String,
-    pub user:            String,
+    pub host: String,
+    pub user: String,
     /// OpenSSH private key PEM (in-memory).
-    pub private_key:     String,
+    pub private_key: String,
     /// `known_hosts`-style host key line for the VM (`<algo> <blob>`), pinned
     /// from guest attributes.
-    pub host_key_line:   String,
+    pub host_key_line: String,
     pub connect_timeout: Duration,
 }
 
@@ -89,10 +89,9 @@ impl OpensshRunner {
             .keyfile(&key_path)
             .connect_timeout(params.connect_timeout);
 
-        let session = builder
-            .connect(&params.host)
-            .await
-            .map_err(|err| crate::Error::context(format!("SSH connect to {} failed", params.host), err))?;
+        let session = builder.connect(&params.host).await.map_err(|err| {
+            crate::Error::context(format!("SSH connect to {} failed", params.host), err)
+        })?;
 
         Ok(Self {
             session: Arc::new(session),
@@ -119,8 +118,8 @@ impl SshRunner for OpensshRunner {
             .map_err(|err| crate::Error::context("SSH command failed", err))?;
         Ok(SshOutput {
             exit_code: output.status.code().unwrap_or(-1),
-            stdout:    output.stdout,
-            stderr:    output.stderr,
+            stdout: output.stdout,
+            stderr: output.stderr,
         })
     }
 
@@ -137,7 +136,11 @@ impl SshRunner for OpensshRunner {
 
     async fn upload_file(&self, path: &str, content: &[u8]) -> crate::Result<()> {
         let encoded = STANDARD.encode(content);
-        let cmd = format!("echo {} | base64 -d > {}", shell_quote(&encoded), shell_quote(path));
+        let cmd = format!(
+            "echo {} | base64 -d > {}",
+            shell_quote(&encoded),
+            shell_quote(path)
+        );
         let output = self.run_command(&cmd).await?;
         if output.exit_code != 0 {
             return Err(crate::Error::message(format!(

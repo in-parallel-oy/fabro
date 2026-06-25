@@ -62,7 +62,7 @@ impl History {
         let extracted_user_messages =
             extract_recent_user_messages(discarded, COMPACTION_USER_MESSAGE_TOKEN_BUDGET);
         self.turns.push(Message::System {
-            content:   summary,
+            content: summary,
             timestamp: std::time::SystemTime::now(),
         });
         self.turns.extend(extracted_user_messages);
@@ -116,9 +116,9 @@ impl History {
                         parts.push(ContentPart::ToolCall(tc.clone()));
                     }
                     LlmMessage {
-                        role:         Role::Assistant,
-                        content:      parts,
-                        name:         None,
+                        role: Role::Assistant,
+                        content: parts,
+                        name: None,
                         tool_call_id: None,
                     }
                 }
@@ -138,9 +138,9 @@ impl History {
                 }
                 Message::System { content, .. } => LlmMessage::system(content),
                 Message::Steering { content, .. } => LlmMessage {
-                    role:         Role::User,
-                    content:      vec![ContentPart::text(content)],
-                    name:         None,
+                    role: Role::User,
+                    content: vec![ContentPart::text(content)],
+                    name: None,
                     tool_call_id: None,
                 },
             })
@@ -223,7 +223,7 @@ mod tests {
         let mut history = History::default();
         for i in 0..8 {
             history.push(Message::User {
-                content:   format!("msg {i}"),
+                content: format!("msg {i}"),
                 timestamp: SystemTime::now(),
             });
         }
@@ -237,7 +237,7 @@ mod tests {
         let mut history = History::default();
         for i in 0..3 {
             history.push(Message::User {
-                content:   format!("msg {i}"),
+                content: format!("msg {i}"),
                 timestamp: SystemTime::now(),
             });
         }
@@ -250,7 +250,7 @@ mod tests {
         let mut history = History::default();
         for i in 0..8 {
             history.push(Message::User {
-                content:   format!("msg {i}"),
+                content: format!("msg {i}"),
                 timestamp: SystemTime::now(),
             });
         }
@@ -272,39 +272,39 @@ mod tests {
     fn compact_preserves_matching_tool_calls_for_preserved_tool_results() {
         let mut history = History::default();
         history.push(Message::User {
-            content:   "old msg".into(),
+            content: "old msg".into(),
             timestamp: SystemTime::now(),
         });
         for index in 0..3 {
             let call_id = format!("call_{index}");
             history.push(Message::Assistant {
-                content:        String::new(),
-                tool_calls:     vec![ToolCall::new(
+                content: String::new(),
+                tool_calls: vec![ToolCall::new(
                     &call_id,
                     "read_file",
                     serde_json::json!({ "file_path": format!("{index}.txt") }),
                 )],
                 provider_parts: vec![],
-                usage:          Box::new(TokenCounts::default()),
-                response_id:    format!("resp_{index}"),
-                timestamp:      SystemTime::now(),
+                usage: Box::new(TokenCounts::default()),
+                response_id: format!("resp_{index}"),
+                timestamp: SystemTime::now(),
             });
             history.push(Message::ToolResults {
-                results:   vec![ToolResult::success(&call_id, serde_json::json!("ok"))],
+                results: vec![ToolResult::success(&call_id, serde_json::json!("ok"))],
                 timestamp: SystemTime::now(),
             });
         }
         history.push(Message::Assistant {
-            content:        String::new(),
-            tool_calls:     vec![ToolCall::new(
+            content: String::new(),
+            tool_calls: vec![ToolCall::new(
                 "call_3",
                 "read_file",
                 serde_json::json!({ "file_path": "3.txt" }),
             )],
             provider_parts: vec![],
-            usage:          Box::new(TokenCounts::default()),
-            response_id:    "resp_3".into(),
-            timestamp:      SystemTime::now(),
+            usage: Box::new(TokenCounts::default()),
+            response_id: "resp_3".into(),
+            timestamp: SystemTime::now(),
         });
 
         history.compact(6, "Summary".into());
@@ -329,15 +329,15 @@ mod tests {
     fn compact_noops_when_preserved_tool_result_requires_first_turn() {
         let mut history = History::default();
         history.push(Message::Assistant {
-            content:        String::new(),
-            tool_calls:     vec![ToolCall::new("call_1", "read_file", serde_json::json!({}))],
+            content: String::new(),
+            tool_calls: vec![ToolCall::new("call_1", "read_file", serde_json::json!({}))],
             provider_parts: vec![],
-            usage:          Box::new(TokenCounts::default()),
-            response_id:    "resp_1".into(),
-            timestamp:      SystemTime::now(),
+            usage: Box::new(TokenCounts::default()),
+            response_id: "resp_1".into(),
+            timestamp: SystemTime::now(),
         });
         history.push(Message::ToolResults {
-            results:   vec![ToolResult::success("call_1", serde_json::json!("ok"))],
+            results: vec![ToolResult::success("call_1", serde_json::json!("ok"))],
             timestamp: SystemTime::now(),
         });
 
@@ -352,7 +352,7 @@ mod tests {
         let mut history = History::default();
         for i in 0..6 {
             history.push(Message::User {
-                content:   format!("msg {i}"),
+                content: format!("msg {i}"),
                 timestamp: SystemTime::now(),
             });
         }
@@ -373,7 +373,7 @@ mod tests {
     fn user_turn_maps_to_user_message() {
         let mut history = History::default();
         history.push(Message::User {
-            content:   "Hello".into(),
+            content: "Hello".into(),
             timestamp: SystemTime::now(),
         });
         let messages = history.convert_to_messages();
@@ -386,12 +386,12 @@ mod tests {
     fn assistant_turn_maps_to_assistant_message() {
         let mut history = History::default();
         history.push(Message::Assistant {
-            content:        "Hi there".into(),
-            tool_calls:     vec![],
+            content: "Hi there".into(),
+            tool_calls: vec![],
             provider_parts: vec![],
-            usage:          Box::new(TokenCounts::default()),
-            response_id:    "resp_1".into(),
-            timestamp:      SystemTime::now(),
+            usage: Box::new(TokenCounts::default()),
+            response_id: "resp_1".into(),
+            timestamp: SystemTime::now(),
         });
         let messages = history.convert_to_messages();
         assert_eq!(messages.len(), 1);
@@ -404,12 +404,12 @@ mod tests {
         let mut history = History::default();
         let tc = ToolCall::new("call_1", "read_file", serde_json::json!({"path": "foo.rs"}));
         history.push(Message::Assistant {
-            content:        "Let me read that".into(),
-            tool_calls:     vec![tc],
+            content: "Let me read that".into(),
+            tool_calls: vec![tc],
             provider_parts: vec![],
-            usage:          Box::new(TokenCounts::default()),
-            response_id:    "resp_2".into(),
-            timestamp:      SystemTime::now(),
+            usage: Box::new(TokenCounts::default()),
+            response_id: "resp_2".into(),
+            timestamp: SystemTime::now(),
         });
         let messages = history.convert_to_messages();
         assert_eq!(messages[0].role, Role::Assistant);
@@ -425,17 +425,17 @@ mod tests {
     fn assistant_turn_with_reasoning_in_provider_parts() {
         let mut history = History::default();
         let thinking = ContentPart::Thinking(ThinkingData {
-            text:      "Let me think about this...".into(),
+            text: "Let me think about this...".into(),
             signature: None,
-            redacted:  false,
+            redacted: false,
         });
         history.push(Message::Assistant {
-            content:        "The answer is 42".into(),
-            tool_calls:     vec![],
+            content: "The answer is 42".into(),
+            tool_calls: vec![],
             provider_parts: vec![thinking],
-            usage:          Box::new(TokenCounts::default()),
-            response_id:    "resp_3".into(),
-            timestamp:      SystemTime::now(),
+            usage: Box::new(TokenCounts::default()),
+            response_id: "resp_3".into(),
+            timestamp: SystemTime::now(),
         });
         let messages = history.convert_to_messages();
         let thinking_parts: Vec<_> = messages[0]
@@ -450,17 +450,17 @@ mod tests {
     fn thinking_with_signature_preserved_via_provider_parts() {
         let mut history = History::default();
         let thinking = ContentPart::Thinking(ThinkingData {
-            text:      "Let me think...".into(),
+            text: "Let me think...".into(),
             signature: Some("sig_abc123".into()),
-            redacted:  false,
+            redacted: false,
         });
         history.push(Message::Assistant {
-            content:        "The answer".into(),
-            tool_calls:     vec![],
+            content: "The answer".into(),
+            tool_calls: vec![],
             provider_parts: vec![thinking],
-            usage:          Box::new(TokenCounts::default()),
-            response_id:    "resp_4".into(),
-            timestamp:      SystemTime::now(),
+            usage: Box::new(TokenCounts::default()),
+            response_id: "resp_4".into(),
+            timestamp: SystemTime::now(),
         });
         let messages = history.convert_to_messages();
         let thinking_parts: Vec<_> = messages[0]
@@ -486,12 +486,12 @@ mod tests {
         };
         let tc = ToolCall::new("call_1", "search", serde_json::json!({}));
         history.push(Message::Assistant {
-            content:        String::new(),
-            tool_calls:     vec![tc],
+            content: String::new(),
+            tool_calls: vec![tc],
             provider_parts: vec![reasoning_item],
-            usage:          Box::new(TokenCounts::default()),
-            response_id:    "resp_1".into(),
-            timestamp:      SystemTime::now(),
+            usage: Box::new(TokenCounts::default()),
+            response_id: "resp_1".into(),
+            timestamp: SystemTime::now(),
         });
         let messages = history.convert_to_messages();
         assert_eq!(messages.len(), 1);
@@ -507,7 +507,7 @@ mod tests {
         let mut history = History::default();
         let result = ToolResult::success("call_1", serde_json::json!("file contents here"));
         history.push(Message::ToolResults {
-            results:   vec![result],
+            results: vec![result],
             timestamp: SystemTime::now(),
         });
         let messages = history.convert_to_messages();
@@ -520,7 +520,7 @@ mod tests {
     fn system_turn_maps_to_system_message() {
         let mut history = History::default();
         history.push(Message::System {
-            content:   "You are a coding assistant".into(),
+            content: "You are a coding assistant".into(),
             timestamp: SystemTime::now(),
         });
         let messages = history.convert_to_messages();
@@ -533,7 +533,7 @@ mod tests {
     fn steering_turn_maps_to_user_message() {
         let mut history = History::default();
         history.push(Message::Steering {
-            content:   "Focus on the main task".into(),
+            content: "Focus on the main task".into(),
             timestamp: SystemTime::now(),
         });
         let messages = history.convert_to_messages();
@@ -548,23 +548,23 @@ mod tests {
         let tool_call = ToolCall::new("call_1", "read_file", serde_json::json!({"path": "a.rs"}));
         let tool_result = ToolResult::success("call_1", serde_json::json!("ok"));
         history.push(Message::User {
-            content:   "Read a file".into(),
+            content: "Read a file".into(),
             timestamp: SystemTime::now(),
         });
         history.push(Message::Assistant {
-            content:        "Reading".into(),
-            tool_calls:     vec![tool_call],
+            content: "Reading".into(),
+            tool_calls: vec![tool_call],
             provider_parts: vec![],
-            usage:          Box::new(TokenCounts {
+            usage: Box::new(TokenCounts {
                 input_tokens: 10,
                 output_tokens: 3,
                 ..TokenCounts::default()
             }),
-            response_id:    "resp_1".into(),
-            timestamp:      SystemTime::now(),
+            response_id: "resp_1".into(),
+            timestamp: SystemTime::now(),
         });
         history.push(Message::ToolResults {
-            results:   vec![tool_result],
+            results: vec![tool_result],
             timestamp: SystemTime::now(),
         });
 
@@ -590,17 +590,17 @@ mod tests {
         let mut history = History::default();
         assert_eq!(history.turns().len(), 0);
         history.push(Message::User {
-            content:   "First".into(),
+            content: "First".into(),
             timestamp: SystemTime::now(),
         });
         assert_eq!(history.turns().len(), 1);
         history.push(Message::Assistant {
-            content:        "Second".into(),
-            tool_calls:     vec![],
+            content: "Second".into(),
+            tool_calls: vec![],
             provider_parts: vec![],
-            usage:          Box::new(TokenCounts::default()),
-            response_id:    "resp_1".into(),
-            timestamp:      SystemTime::now(),
+            usage: Box::new(TokenCounts::default()),
+            response_id: "resp_1".into(),
+            timestamp: SystemTime::now(),
         });
         assert_eq!(history.turns().len(), 2);
     }
@@ -609,31 +609,31 @@ mod tests {
     fn round_trip_preserves_content() {
         let mut history = History::default();
         history.push(Message::User {
-            content:   "Hello".into(),
+            content: "Hello".into(),
             timestamp: SystemTime::now(),
         });
         history.push(Message::Assistant {
-            content:        "Hi".into(),
-            tool_calls:     vec![ToolCall::new(
+            content: "Hi".into(),
+            tool_calls: vec![ToolCall::new(
                 "c1",
                 "shell",
                 serde_json::json!({"cmd": "ls"}),
             )],
             provider_parts: vec![ContentPart::Thinking(ThinkingData {
-                text:      "thinking...".into(),
+                text: "thinking...".into(),
                 signature: None,
-                redacted:  false,
+                redacted: false,
             })],
-            usage:          Box::new(TokenCounts {
+            usage: Box::new(TokenCounts {
                 input_tokens: 10,
                 output_tokens: 5,
                 ..Default::default()
             }),
-            response_id:    "resp_1".into(),
-            timestamp:      SystemTime::now(),
+            response_id: "resp_1".into(),
+            timestamp: SystemTime::now(),
         });
         history.push(Message::ToolResults {
-            results:   vec![ToolResult::success(
+            results: vec![ToolResult::success(
                 "c1",
                 serde_json::json!("file1.rs\nfile2.rs"),
             )],
@@ -651,11 +651,11 @@ mod tests {
     fn compact_strips_openai_reasoning_from_preserved_turns() {
         let mut history = History::default();
         history.push(Message::User {
-            content:   "old msg".into(),
+            content: "old msg".into(),
             timestamp: SystemTime::now(),
         });
         history.push(Message::User {
-            content:   "recent msg".into(),
+            content: "recent msg".into(),
             timestamp: SystemTime::now(),
         });
         let reasoning = ContentPart::Other {
@@ -664,12 +664,12 @@ mod tests {
         };
         let tc = ToolCall::new("call_1", "search", serde_json::json!({}));
         history.push(Message::Assistant {
-            content:        "response".into(),
-            tool_calls:     vec![tc],
+            content: "response".into(),
+            tool_calls: vec![tc],
             provider_parts: vec![reasoning],
-            usage:          Box::new(TokenCounts::default()),
-            response_id:    "resp_1".into(),
-            timestamp:      SystemTime::now(),
+            usage: Box::new(TokenCounts::default()),
+            response_id: "resp_1".into(),
+            timestamp: SystemTime::now(),
         });
 
         history.compact(2, "Summary".into());
@@ -699,25 +699,25 @@ mod tests {
     fn compact_preserves_anthropic_thinking_blocks() {
         let mut history = History::default();
         history.push(Message::User {
-            content:   "old msg".into(),
+            content: "old msg".into(),
             timestamp: SystemTime::now(),
         });
         history.push(Message::User {
-            content:   "recent msg".into(),
+            content: "recent msg".into(),
             timestamp: SystemTime::now(),
         });
         let thinking = ContentPart::Thinking(ThinkingData {
-            text:      "deep thought".into(),
+            text: "deep thought".into(),
             signature: Some("sig_xyz".into()),
-            redacted:  false,
+            redacted: false,
         });
         history.push(Message::Assistant {
-            content:        "answer".into(),
-            tool_calls:     vec![],
+            content: "answer".into(),
+            tool_calls: vec![],
             provider_parts: vec![thinking],
-            usage:          Box::new(TokenCounts::default()),
-            response_id:    "resp_1".into(),
-            timestamp:      SystemTime::now(),
+            usage: Box::new(TokenCounts::default()),
+            response_id: "resp_1".into(),
+            timestamp: SystemTime::now(),
         });
 
         history.compact(2, "Summary".into());
@@ -741,28 +741,28 @@ mod tests {
     fn compact_preserves_assistant_data_but_resets_usage() {
         let mut history = History::default();
         history.push(Message::User {
-            content:   "old msg".into(),
+            content: "old msg".into(),
             timestamp: SystemTime::now(),
         });
         let tool_call = ToolCall::new("call_1", "search", serde_json::json!({"query": "fabro"}));
         let thinking = ContentPart::Thinking(ThinkingData {
-            text:      "deep thought".into(),
+            text: "deep thought".into(),
             signature: Some("sig_xyz".into()),
-            redacted:  false,
+            redacted: false,
         });
         history.push(Message::Assistant {
-            content:        "answer".into(),
-            tool_calls:     vec![tool_call.clone()],
+            content: "answer".into(),
+            tool_calls: vec![tool_call.clone()],
             provider_parts: vec![thinking.clone()],
-            usage:          Box::new(TokenCounts {
-                input_tokens:       10,
-                output_tokens:      20,
-                reasoning_tokens:   30,
-                cache_read_tokens:  40,
+            usage: Box::new(TokenCounts {
+                input_tokens: 10,
+                output_tokens: 20,
+                reasoning_tokens: 30,
+                cache_read_tokens: 40,
                 cache_write_tokens: 50,
             }),
-            response_id:    "resp_1".into(),
-            timestamp:      SystemTime::now(),
+            response_id: "resp_1".into(),
+            timestamp: SystemTime::now(),
         });
 
         history.compact(1, "Summary".into());
@@ -795,21 +795,21 @@ mod tests {
     fn compact_strips_reasoning_from_all_preserved_assistant_turns() {
         let mut history = History::default();
         history.push(Message::User {
-            content:   "old msg".into(),
+            content: "old msg".into(),
             timestamp: SystemTime::now(),
         });
         // Two assistant turns that will both be preserved
         for i in 0..2 {
             history.push(Message::Assistant {
-                content:        format!("response {i}"),
-                tool_calls:     vec![],
+                content: format!("response {i}"),
+                tool_calls: vec![],
                 provider_parts: vec![ContentPart::Other {
                     kind: ContentPart::OPENAI_REASONING.into(),
                     data: serde_json::json!({"type": "reasoning", "id": format!("rs_{i}")}),
                 }],
-                usage:          Box::new(TokenCounts::default()),
-                response_id:    format!("resp_{i}"),
-                timestamp:      SystemTime::now(),
+                usage: Box::new(TokenCounts::default()),
+                response_id: format!("resp_{i}"),
+                timestamp: SystemTime::now(),
             });
         }
 
@@ -829,19 +829,19 @@ mod tests {
     fn extract_recent_user_messages_collects_in_chronological_order() {
         let turns = vec![
             Message::User {
-                content:   "first".into(),
+                content: "first".into(),
                 timestamp: SystemTime::now(),
             },
             Message::Assistant {
-                content:        "reply".into(),
-                tool_calls:     vec![],
+                content: "reply".into(),
+                tool_calls: vec![],
                 provider_parts: vec![],
-                usage:          Box::new(TokenCounts::default()),
-                response_id:    "r1".into(),
-                timestamp:      SystemTime::now(),
+                usage: Box::new(TokenCounts::default()),
+                response_id: "r1".into(),
+                timestamp: SystemTime::now(),
             },
             Message::User {
-                content:   "second".into(),
+                content: "second".into(),
                 timestamp: SystemTime::now(),
             },
         ];
@@ -855,11 +855,11 @@ mod tests {
     fn extract_recent_user_messages_respects_token_budget() {
         let turns = vec![
             Message::User {
-                content:   "a".repeat(100),
+                content: "a".repeat(100),
                 timestamp: SystemTime::now(),
             },
             Message::User {
-                content:   "b".repeat(100),
+                content: "b".repeat(100),
                 timestamp: SystemTime::now(),
             },
         ];
@@ -874,19 +874,19 @@ mod tests {
     fn compact_extracts_only_user_turns_from_discarded() {
         let mut history = History::default();
         history.push(Message::User {
-            content:   "user msg".into(),
+            content: "user msg".into(),
             timestamp: SystemTime::now(),
         });
         history.push(Message::Assistant {
-            content:        "assistant msg".into(),
-            tool_calls:     vec![],
+            content: "assistant msg".into(),
+            tool_calls: vec![],
             provider_parts: vec![],
-            usage:          Box::new(TokenCounts::default()),
-            response_id:    "r1".into(),
-            timestamp:      SystemTime::now(),
+            usage: Box::new(TokenCounts::default()),
+            response_id: "r1".into(),
+            timestamp: SystemTime::now(),
         });
         history.push(Message::User {
-            content:   "preserved".into(),
+            content: "preserved".into(),
             timestamp: SystemTime::now(),
         });
 

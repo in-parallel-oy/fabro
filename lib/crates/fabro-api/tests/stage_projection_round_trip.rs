@@ -266,10 +266,10 @@ fn nested_agent_state_types_match_openapi_json_shape() {
 
     let subagent = SubAgentProjection {
         agent_id: "sub-1".to_string(),
-        depth:    1,
-        task:     "Investigate failing test".to_string(),
-        status:   SubAgentStatus::Completed {
-            success:    true,
+        depth: 1,
+        task: "Investigate failing test".to_string(),
+        status: SubAgentStatus::Completed {
+            success: true,
             turns_used: 3,
         },
     };
@@ -291,7 +291,7 @@ fn nested_agent_state_types_match_openapi_json_shape() {
     assert_eq!(api_subagent, subagent);
 
     let skill = AgentSkillSummary {
-        name:        "rust".to_string(),
+        name: "rust".to_string(),
         description: "Rust workflow help".to_string(),
     };
     let skill_json = serde_json::to_value(&skill).unwrap();
@@ -311,7 +311,7 @@ fn nested_agent_state_types_match_openapi_json_shape() {
     assert_eq!(api_source, AgentSkillActivationSource::Slash);
 
     let activated = ActivatedSkill {
-        name:   "rust".to_string(),
+        name: "rust".to_string(),
         source: AgentSkillActivationSource::Slash,
     };
     let skills = SkillsProjection {
@@ -340,7 +340,7 @@ fn nested_agent_state_types_match_openapi_json_shape() {
     assert_eq!(api_skills, skills);
 
     let tool = AgentMcpToolSummary {
-        name:          "read_file".to_string(),
+        name: "read_file".to_string(),
         original_name: "read_file".to_string(),
     };
     let tool_json = serde_json::to_value(&tool).unwrap();
@@ -356,9 +356,9 @@ fn nested_agent_state_types_match_openapi_json_shape() {
 
     let mcp_server = McpServerProjection {
         server_name: "filesystem".to_string(),
-        tool_count:  1,
-        status:      McpServerStatus::Ready { tools: vec![tool] },
-        invoked:     true,
+        tool_count: 1,
+        status: McpServerStatus::Ready { tools: vec![tool] },
+        invoked: true,
     };
     let mcp_json = serde_json::to_value(&mcp_server).unwrap();
     assert_eq!(
@@ -386,14 +386,14 @@ fn nested_agent_state_types_match_openapi_json_shape() {
 #[test]
 fn agent_tool_summary_matches_openapi_json_shape_without_parameter_schema() {
     let tool = AgentToolSummary {
-        name:        "mcp__filesystem__read_file".to_string(),
+        name: "mcp__filesystem__read_file".to_string(),
         description: "Read a file through MCP".to_string(),
-        source:      AgentToolSource::Mcp {
-            server_name:   "filesystem".to_string(),
+        source: AgentToolSource::Mcp {
+            server_name: "filesystem".to_string(),
             original_name: "read_file".to_string(),
         },
-        category:    AgentToolCategory::Other,
-        invoked:     false,
+        category: AgentToolCategory::Other,
+        invoked: false,
     };
 
     let tool_json = serde_json::to_value(&tool).unwrap();

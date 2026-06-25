@@ -14,13 +14,13 @@ use fabro_types::{SecretMetadata, is_env_style_name};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SecretEntry {
-    pub value:       String,
+    pub value: String,
     #[serde(rename = "type", default)]
     pub secret_type: SecretType,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    pub created_at:  DateTime<Utc>,
-    pub updated_at:  DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug)]
@@ -58,7 +58,7 @@ impl From<serde_json::Error> for Error {
 
 #[derive(Debug)]
 pub struct Vault {
-    path:    PathBuf,
+    path: PathBuf,
     entries: HashMap<String, SecretEntry>,
 }
 
@@ -126,11 +126,11 @@ impl Vault {
             .entries
             .iter()
             .map(|(name, entry)| SecretMetadata {
-                name:        name.clone(),
+                name: name.clone(),
                 secret_type: entry.secret_type,
                 description: entry.description.clone(),
-                created_at:  entry.created_at,
-                updated_at:  entry.updated_at,
+                created_at: entry.created_at,
+                updated_at: entry.updated_at,
             })
             .collect::<Vec<_>>();
         data.sort_by(|a, b| a.name.cmp(&b.name));
@@ -315,10 +315,10 @@ mod tests {
             .set("/tmp/key.pem", "pem", SecretType::File, None)
             .unwrap();
 
-        assert_eq!(store.file_secrets(), vec![(
-            "/tmp/key.pem".to_string(),
-            "pem".to_string()
-        )]);
+        assert_eq!(
+            store.file_secrets(),
+            vec![("/tmp/key.pem".to_string(), "pem".to_string())]
+        );
     }
 
     #[test]
@@ -331,10 +331,10 @@ mod tests {
             .unwrap();
 
         let reloaded = Vault::load(path).unwrap();
-        assert_eq!(reloaded.file_secrets(), vec![(
-            "/tmp/key.pem".to_string(),
-            "pem".to_string()
-        )]);
+        assert_eq!(
+            reloaded.file_secrets(),
+            vec![("/tmp/key.pem".to_string(), "pem".to_string())]
+        );
     }
 
     #[test]
@@ -351,10 +351,13 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(store.file_secrets(), vec![(
-            EnvVars::GITHUB_APP_PRIVATE_KEY.to_string(),
-            "base64-pem".to_string()
-        )]);
+        assert_eq!(
+            store.file_secrets(),
+            vec![(
+                EnvVars::GITHUB_APP_PRIVATE_KEY.to_string(),
+                "base64-pem".to_string()
+            )]
+        );
     }
 
     #[test]

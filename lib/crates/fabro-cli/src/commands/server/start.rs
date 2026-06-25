@@ -30,7 +30,7 @@ const SERVER_START_HEALTH_PROBE_TIMEOUT: Duration = Duration::from_millis(250);
 
 pub(crate) struct ForegroundServerLogBootstrap {
     #[expect(dead_code, reason = "held for its Drop to release the server lock")]
-    lock_file:              std::fs::File,
+    lock_file: std::fs::File,
     pub(crate) destination: LogDestination,
 }
 

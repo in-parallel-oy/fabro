@@ -59,7 +59,7 @@ pub(crate) fn build(config: AdapterConfig) -> Result<Arc<dyn ProviderAdapter>, E
                 "bedrock provider '{}' requires a base_url (the Bedrock runtime endpoint)",
                 config.provider_id
             ),
-            source:  None,
+            source: None,
         })?;
     let adapter = match config.auth_header {
         Some(ApiKeyHeader::AwsSigv4) => Adapter::new_sigv4(base_url)?,
@@ -71,7 +71,7 @@ pub(crate) fn build(config: AdapterConfig) -> Result<Arc<dyn ProviderAdapter>, E
                      credentials or aws_sigv4)",
                     config.provider_id, name
                 ),
-                source:  None,
+                source: None,
             });
         }
         None => {
@@ -81,7 +81,7 @@ pub(crate) fn build(config: AdapterConfig) -> Result<Arc<dyn ProviderAdapter>, E
                      an API key)",
                     config.provider_id
                 ),
-                source:  None,
+                source: None,
             });
         }
     };
@@ -98,10 +98,10 @@ pub(crate) fn build(config: AdapterConfig) -> Result<Arc<dyn ProviderAdapter>, E
 /// Provider adapter for Amazon Bedrock.
 pub struct Adapter {
     pub(crate) http: HttpTransport,
-    provider_name:   String,
-    region:          String,
-    auth:            BedrockAuth,
-    catalog:         Option<Arc<Catalog>>,
+    provider_name: String,
+    region: String,
+    auth: BedrockAuth,
+    catalog: Option<Arc<Catalog>>,
 }
 
 impl Adapter {
@@ -178,9 +178,9 @@ impl Adapter {
     /// inline image and document bytes (no URL sources).
     async fn resolve_request<'a>(&self, request: &'a Request) -> std::borrow::Cow<'a, Request> {
         let policy = AttachmentPolicy {
-            images:    true,
+            images: true,
             documents: true,
-            audio:     false,
+            audio: false,
         };
         attachments::resolve(request, policy).await
     }
@@ -194,7 +194,7 @@ impl Adapter {
         let url = format!("{}{}", self.http.base_url, encoded.endpoint);
         let body = serde_json::to_vec(&encoded.body).map_err(|e| Error::Configuration {
             message: format!("failed to serialize converse request: {e}"),
-            source:  None,
+            source: None,
         })?;
 
         let mut req = self.http.client.post(&url);
@@ -300,13 +300,13 @@ impl ProviderAdapter for Adapter {
 /// frame decoder, with a buffer that flattens batched events.
 struct EventStreamLoop {
     response: fabro_http::Response,
-    frames:   FrameDecoder,
-    decoder:  Box<dyn StreamDecoder>,
-    pending:  VecDeque<StreamEvent>,
-    done:     bool,
+    frames: FrameDecoder,
+    decoder: Box<dyn StreamDecoder>,
+    pending: VecDeque<StreamEvent>,
+    done: bool,
     /// `finish()` already drained.
     finished: bool,
-    timeout:  Option<Duration>,
+    timeout: Option<Duration>,
 }
 
 /// Drive `decoder` over the AWS event-stream byte stream of `response`: the
@@ -358,7 +358,7 @@ fn decode_eventstream(
                         for frame in frames {
                             let raw = RawEvent {
                                 event: Some(frame.event_type.as_str()),
-                                data:  frame.payload.as_str(),
+                                data: frame.payload.as_str(),
                             };
                             match state.decoder.on_event(raw) {
                                 Ok(events) => state.pending.extend(events),
@@ -374,7 +374,7 @@ fn decode_eventstream(
                         return Some((
                             Err(Error::Stream {
                                 message: "stream read timed out waiting for next event".to_string(),
-                                source:  None,
+                                source: None,
                             }),
                             state,
                         ));
@@ -398,7 +398,7 @@ fn region_from_base_url(base_url: &str) -> Result<String, Error> {
             "bedrock base_url '{base_url}' is not a recognized Bedrock runtime endpoint \
              (expected https://bedrock-runtime[-fips].<region>.amazonaws.com[.cn])"
         ),
-        source:  None,
+        source: None,
     };
     #[expect(
         clippy::disallowed_types,
@@ -435,19 +435,19 @@ mod tests {
 
     fn make_request(model: &str) -> Request {
         Request {
-            model:            model.to_string(),
-            messages:         vec![Message::user("Hello")],
-            provider:         Some("bedrock".to_string()),
-            tools:            None,
-            tool_choice:      None,
-            response_format:  None,
-            temperature:      None,
-            top_p:            None,
-            max_tokens:       Some(64),
-            stop_sequences:   None,
+            model: model.to_string(),
+            messages: vec![Message::user("Hello")],
+            provider: Some("bedrock".to_string()),
+            tools: None,
+            tool_choice: None,
+            response_format: None,
+            temperature: None,
+            top_p: None,
+            max_tokens: Some(64),
+            stop_sequences: None,
             reasoning_effort: None,
-            speed:            None,
-            metadata:         None,
+            speed: None,
+            metadata: None,
             provider_options: None,
         }
     }
@@ -457,11 +457,11 @@ mod tests {
     /// directly.
     fn test_adapter(server: &MockServer) -> Adapter {
         Adapter {
-            http:          HttpTransport::new_optional(None, server.base_url()),
+            http: HttpTransport::new_optional(None, server.base_url()),
             provider_name: "bedrock".to_string(),
-            region:        "us-east-1".to_string(),
-            auth:          BedrockAuth::ApiKey("test-bedrock-key".to_string()),
-            catalog:       None,
+            region: "us-east-1".to_string(),
+            auth: BedrockAuth::ApiKey("test-bedrock-key".to_string()),
+            catalog: None,
         }
     }
 
@@ -570,15 +570,15 @@ mod tests {
     #[test]
     fn factory_rejects_custom_auth_header() {
         let result = build(AdapterConfig {
-            provider_id:   "bedrock".to_string(),
-            auth_header:   Some(ApiKeyHeader::Custom {
-                name:  "x-api-key".to_string(),
+            provider_id: "bedrock".to_string(),
+            auth_header: Some(ApiKeyHeader::Custom {
+                name: "x-api-key".to_string(),
                 value: "secret".to_string(),
             }),
-            base_url:      Some("https://bedrock-runtime.us-east-1.amazonaws.com".to_string()),
+            base_url: Some("https://bedrock-runtime.us-east-1.amazonaws.com".to_string()),
             extra_headers: HashMap::new(),
-            kind_options:  AdapterKindOptions::None,
-            catalog:       None,
+            kind_options: AdapterKindOptions::None,
+            catalog: None,
         });
 
         let Err(err) = result else {

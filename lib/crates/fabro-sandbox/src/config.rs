@@ -15,11 +15,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct DaytonaSettings {
     pub auto_stop_interval: Option<i32>,
-    pub labels:             Option<HashMap<String, String>>,
-    pub snapshot:           Option<DaytonaSnapshotSettings>,
-    pub network:            Option<DaytonaNetwork>,
+    pub labels: Option<HashMap<String, String>>,
+    pub snapshot: Option<DaytonaSnapshotSettings>,
+    pub network: Option<DaytonaNetwork>,
     #[serde(default)]
-    pub skip_clone:         bool,
+    pub skip_clone: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -116,8 +116,8 @@ pub enum DockerfileSource {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct DaytonaSnapshotSettings {
-    pub cpu:        Option<i32>,
-    pub memory:     Option<i32>,
-    pub disk:       Option<i32>,
+    pub cpu: Option<i32>,
+    pub memory: Option<i32>,
+    pub disk: Option<i32>,
     pub dockerfile: Option<DockerfileSource>,
 }

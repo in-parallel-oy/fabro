@@ -5,8 +5,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// Minimal GitHub pull request reference stored on a workflow run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PullRequestLink {
-    pub owner:  String,
-    pub repo:   String,
+    pub owner: String,
+    pub repo: String,
     pub number: u64,
 }
 
@@ -49,11 +49,11 @@ impl<'de> Deserialize<'de> for PullRequestLink {
             #[serde(default)]
             html_url: Option<String>,
             #[serde(default)]
-            owner:    Option<String>,
+            owner: Option<String>,
             #[serde(default)]
-            repo:     Option<String>,
+            repo: Option<String>,
             #[serde(default)]
-            number:   Option<u64>,
+            number: Option<u64>,
         }
 
         let wire = Wire::deserialize(deserializer)?;
@@ -119,7 +119,7 @@ fn github_pull_request_link_from_url(raw_url: &str) -> Result<PullRequestLink, S
 /// Stored pull request link plus optional live GitHub details.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PullRequest {
-    pub link:    PullRequestLink,
+    pub link: PullRequestLink,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub details: Option<PullRequestDetails>,
 }
@@ -127,7 +127,7 @@ pub struct PullRequest {
 /// Response metadata for `GET /runs/{id}/pull_request`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PullRequestMeta {
-    pub details_status:             PullRequestDetailsStatus,
+    pub details_status: PullRequestDetailsStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub details_unavailable_reason: Option<PullRequestDetailsUnavailableReason>,
 }
@@ -175,64 +175,64 @@ pub struct PullRequestRef {
 /// Fields mirrored directly from GitHub's pull request REST payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PullRequestGithubDetail {
-    pub number:        u64,
-    pub title:         String,
-    pub body:          Option<String>,
-    pub state:         String,
-    pub draft:         bool,
+    pub number: u64,
+    pub title: String,
+    pub body: Option<String>,
+    pub state: String,
+    pub draft: bool,
     #[serde(default)]
-    pub merged:        bool,
+    pub merged: bool,
     #[serde(default)]
-    pub merged_at:     Option<String>,
-    pub mergeable:     Option<bool>,
-    pub additions:     u64,
-    pub deletions:     u64,
+    pub merged_at: Option<String>,
+    pub mergeable: Option<bool>,
+    pub additions: u64,
+    pub deletions: u64,
     pub changed_files: u64,
-    pub html_url:      String,
-    pub user:          PullRequestUser,
-    pub head:          PullRequestRef,
-    pub base:          PullRequestRef,
-    pub created_at:    String,
-    pub updated_at:    String,
+    pub html_url: String,
+    pub user: PullRequestUser,
+    pub head: PullRequestRef,
+    pub base: PullRequestRef,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 /// Live GitHub pull request fields returned only after a successful GitHub API
 /// fetch.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PullRequestDetails {
-    pub title:         String,
-    pub body:          Option<String>,
-    pub state:         String,
-    pub draft:         bool,
-    pub merged:        bool,
-    pub merged_at:     Option<String>,
-    pub mergeable:     Option<bool>,
-    pub additions:     u64,
-    pub deletions:     u64,
+    pub title: String,
+    pub body: Option<String>,
+    pub state: String,
+    pub draft: bool,
+    pub merged: bool,
+    pub merged_at: Option<String>,
+    pub mergeable: Option<bool>,
+    pub additions: u64,
+    pub deletions: u64,
     pub changed_files: u64,
-    pub author:        PullRequestUser,
-    pub head_branch:   String,
-    pub base_branch:   String,
-    pub timestamps:    PullRequestTimestamps,
+    pub author: PullRequestUser,
+    pub head_branch: String,
+    pub base_branch: String,
+    pub timestamps: PullRequestTimestamps,
 }
 
 impl From<PullRequestGithubDetail> for PullRequestDetails {
     fn from(detail: PullRequestGithubDetail) -> Self {
         Self {
-            title:         detail.title,
-            body:          detail.body,
-            state:         detail.state,
-            draft:         detail.draft,
-            merged:        detail.merged,
-            merged_at:     detail.merged_at,
-            mergeable:     detail.mergeable,
-            additions:     detail.additions,
-            deletions:     detail.deletions,
+            title: detail.title,
+            body: detail.body,
+            state: detail.state,
+            draft: detail.draft,
+            merged: detail.merged,
+            merged_at: detail.merged_at,
+            mergeable: detail.mergeable,
+            additions: detail.additions,
+            deletions: detail.deletions,
             changed_files: detail.changed_files,
-            author:        detail.user,
-            head_branch:   detail.head.ref_name,
-            base_branch:   detail.base.ref_name,
-            timestamps:    PullRequestTimestamps {
+            author: detail.user,
+            head_branch: detail.head.ref_name,
+            base_branch: detail.base.ref_name,
+            timestamps: PullRequestTimestamps {
                 created_at: detail.created_at,
                 updated_at: detail.updated_at,
             },
@@ -248,10 +248,10 @@ pub struct PullRequestTimestamps {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckRun {
-    pub name:       String,
-    pub status:     CheckRunStatus,
+    pub name: String,
+    pub status: CheckRunStatus,
     pub conclusion: Option<String>,
-    pub html_url:   Option<String>,
+    pub html_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -272,8 +272,8 @@ mod tests {
     #[test]
     fn pull_request_link_serializes_computed_html_url() {
         let link = PullRequestLink {
-            owner:  "fabro-sh".to_string(),
-            repo:   "fabro".to_string(),
+            owner: "fabro-sh".to_string(),
+            repo: "fabro".to_string(),
             number: 270,
         };
 

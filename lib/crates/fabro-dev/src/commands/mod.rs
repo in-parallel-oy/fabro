@@ -58,19 +58,19 @@ pub(crate) fn replace_generated_region(
 }
 
 pub(crate) struct PlannedCommand {
-    pub(crate) program:   String,
-    pub(crate) args:      Vec<String>,
+    pub(crate) program: String,
+    pub(crate) args: Vec<String>,
     pub(crate) unset_env: Vec<String>,
-    pub(crate) env:       Vec<(String, String)>,
+    pub(crate) env: Vec<(String, String)>,
 }
 
 impl PlannedCommand {
     pub(crate) fn new(program: impl Into<String>) -> Self {
         Self {
-            program:   program.into(),
-            args:      Vec::new(),
+            program: program.into(),
+            args: Vec::new(),
             unset_env: Vec::new(),
-            env:       Vec::new(),
+            env: Vec::new(),
         }
     }
 

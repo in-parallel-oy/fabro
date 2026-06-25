@@ -23,23 +23,23 @@ pub(crate) async fn version_command(args: &VersionArgs, base_ctx: &CommandContex
     let server_info = match ctx.server().await {
         Ok(server) => match server.get_system_info().await {
             Ok(response) => ServerVersionInfo::Success {
-                address:     server_address,
-                version:     response.version,
-                git_sha:     response.git_sha,
-                build_date:  response.build_date,
-                profile:     response.profile,
-                os:          response.os,
-                arch:        response.arch,
+                address: server_address,
+                version: response.version,
+                git_sha: response.git_sha,
+                build_date: response.build_date,
+                profile: response.profile,
+                os: response.os,
+                arch: response.arch,
                 uptime_secs: response.uptime_secs,
             },
             Err(err) => ServerVersionInfo::Error {
                 address: server_address,
-                error:   err.to_string(),
+                error: err.to_string(),
             },
         },
         Err(err) => ServerVersionInfo::Error {
             address: server_address,
-            error:   err.to_string(),
+            error: err.to_string(),
         },
     };
 
@@ -85,39 +85,39 @@ fn version_mismatch_message(client_version: &str, server: &ServerVersionInfo) ->
 }
 
 struct ClientVersionInfo {
-    version:    &'static str,
-    git_sha:    &'static str,
+    version: &'static str,
+    git_sha: &'static str,
     build_date: &'static str,
-    profile:    &'static str,
-    os:         &'static str,
-    arch:       &'static str,
+    profile: &'static str,
+    os: &'static str,
+    arch: &'static str,
 }
 
 enum ServerVersionInfo {
     Success {
-        address:     String,
-        version:     Option<String>,
-        git_sha:     Option<String>,
-        build_date:  Option<String>,
-        profile:     Option<String>,
-        os:          Option<String>,
-        arch:        Option<String>,
+        address: String,
+        version: Option<String>,
+        git_sha: Option<String>,
+        build_date: Option<String>,
+        profile: Option<String>,
+        os: Option<String>,
+        arch: Option<String>,
         uptime_secs: Option<i64>,
     },
     Error {
         address: String,
-        error:   String,
+        error: String,
     },
 }
 
 fn client_info() -> ClientVersionInfo {
     ClientVersionInfo {
-        version:    env!("CARGO_PKG_VERSION"),
-        git_sha:    env!("FABRO_GIT_SHA"),
+        version: env!("CARGO_PKG_VERSION"),
+        git_sha: env!("FABRO_GIT_SHA"),
         build_date: env!("FABRO_BUILD_DATE"),
-        profile:    env!("FABRO_BUILD_PROFILE"),
-        os:         std::env::consts::OS,
-        arch:       std::env::consts::ARCH,
+        profile: env!("FABRO_BUILD_PROFILE"),
+        os: std::env::consts::OS,
+        arch: std::env::consts::ARCH,
     }
 }
 
@@ -268,25 +268,25 @@ mod tests {
     #[test]
     fn version_mismatch_message_covers_all_branches() {
         let matching = ServerVersionInfo::Success {
-            address:     "http://localhost".into(),
-            version:     Some("1.0.0".into()),
-            git_sha:     None,
-            build_date:  None,
-            profile:     None,
-            os:          None,
-            arch:        None,
+            address: "http://localhost".into(),
+            version: Some("1.0.0".into()),
+            git_sha: None,
+            build_date: None,
+            profile: None,
+            os: None,
+            arch: None,
             uptime_secs: None,
         };
         assert_eq!(version_mismatch_message("1.0.0", &matching), None);
 
         let mismatched = ServerVersionInfo::Success {
-            address:     "http://localhost".into(),
-            version:     Some("1.2.0".into()),
-            git_sha:     None,
-            build_date:  None,
-            profile:     None,
-            os:          None,
-            arch:        None,
+            address: "http://localhost".into(),
+            version: Some("1.2.0".into()),
+            git_sha: None,
+            build_date: None,
+            profile: None,
+            os: None,
+            arch: None,
             uptime_secs: None,
         };
         assert_eq!(
@@ -295,20 +295,20 @@ mod tests {
         );
 
         let unknown = ServerVersionInfo::Success {
-            address:     "http://localhost".into(),
-            version:     None,
-            git_sha:     None,
-            build_date:  None,
-            profile:     None,
-            os:          None,
-            arch:        None,
+            address: "http://localhost".into(),
+            version: None,
+            git_sha: None,
+            build_date: None,
+            profile: None,
+            os: None,
+            arch: None,
             uptime_secs: None,
         };
         assert_eq!(version_mismatch_message("1.0.0", &unknown), None);
 
         let errored = ServerVersionInfo::Error {
             address: "http://localhost".into(),
-            error:   "oops".into(),
+            error: "oops".into(),
         };
         assert_eq!(version_mismatch_message("1.0.0", &errored), None);
     }

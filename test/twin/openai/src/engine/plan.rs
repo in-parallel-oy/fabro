@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct TokenUsage {
-    pub input_tokens:  u64,
+    pub input_tokens: u64,
     pub output_tokens: u64,
 }
 
@@ -48,21 +48,21 @@ impl Default for TokenUsage {
 
 #[derive(Clone, Debug)]
 pub struct ResponsePlan {
-    pub id:                String,
-    pub created:           u64,
-    pub model:             String,
-    pub response_text:     String,
+    pub id: String,
+    pub created: u64,
+    pub model: String,
+    pub response_text: String,
     pub structured_output: Option<Value>,
-    pub reasoning:         Vec<String>,
-    pub tool_calls:        Vec<ToolCallPlan>,
-    pub usage:             TokenUsage,
+    pub reasoning: Vec<String>,
+    pub tool_calls: Vec<ToolCallPlan>,
+    pub usage: TokenUsage,
 }
 
 #[derive(Clone, Debug)]
 pub struct ToolCallPlan {
-    pub id:            String,
-    pub name:          String,
-    pub arguments:     Value,
+    pub id: String,
+    pub name: String,
+    pub arguments: Value,
     pub raw_arguments: Option<String>,
 }
 

@@ -44,11 +44,15 @@ script = "start-dev-services.sh"
     let kept = super::workflow_settings_from_toml(with_steps)
         .expect("prepare steps should resolve")
         .run;
-    assert_eq!(kept.prepare.commands, vec!["start-dev-services.sh".to_string()]);
+    assert_eq!(
+        kept.prepare.commands,
+        vec!["start-dev-services.sh".to_string()]
+    );
 
-    let skipped = super::workflow_settings_from_toml(&format!("{with_steps}\n[run]\nskip_prepare = true\n"))
-        .expect("skip_prepare should resolve")
-        .run;
+    let skipped =
+        super::workflow_settings_from_toml(&format!("{with_steps}\n[run]\nskip_prepare = true\n"))
+            .expect("skip_prepare should resolve")
+            .run;
     assert!(skipped.prepare.commands.is_empty());
 }
 
@@ -61,7 +65,10 @@ fn overseer_handshake_resolves_onto_run_namespace() {
     )
     .expect("overseer handshake should resolve")
     .run;
-    assert_eq!(run.overseer_session.as_deref(), Some("overseer_claude_feat"));
+    assert_eq!(
+        run.overseer_session.as_deref(),
+        Some("overseer_claude_feat")
+    );
     assert_eq!(run.overseer_worktree.as_deref(), Some("/repo.feat"));
 
     let bare = super::workflow_settings_from_toml("_version = 1\n")
@@ -241,10 +248,13 @@ binds = [
     )
     .expect("environment with binds should resolve");
 
-    assert_eq!(settings.run.environment.binds, vec![
-        "narayan-fabro-hex:/home/dev/.hex:rw".to_string(),
-        "narayan-seed-build:/seed/_build:ro".to_string(),
-    ]);
+    assert_eq!(
+        settings.run.environment.binds,
+        vec![
+            "narayan-fabro-hex:/home/dev/.hex:rw".to_string(),
+            "narayan-seed-build:/seed/_build:ro".to_string(),
+        ]
+    );
 }
 
 #[test]

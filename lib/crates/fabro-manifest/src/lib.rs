@@ -36,45 +36,45 @@ use fabro_workflow::static_reference::{
 
 #[derive(Debug, Default)]
 pub struct ManifestBuildInput {
-    pub workflow:             PathBuf,
-    pub cwd:                  PathBuf,
-    pub run_overrides:        Option<RunLayer>,
-    pub cli_overrides:        Option<CliLayer>,
-    pub input_overrides:      HashMap<String, toml::Value>,
-    pub args:                 Option<types::ManifestArgs>,
-    pub run_id:               Option<RunId>,
+    pub workflow: PathBuf,
+    pub cwd: PathBuf,
+    pub run_overrides: Option<RunLayer>,
+    pub cli_overrides: Option<CliLayer>,
+    pub input_overrides: HashMap<String, toml::Value>,
+    pub args: Option<types::ManifestArgs>,
+    pub run_id: Option<RunId>,
     pub environment_defaults: MergeMap<EnvironmentLayer>,
     /// Path to the user settings file (for inclusion in
     /// `RunManifest.configs`). `None` skips the user config entry.
-    pub user_settings_path:   Option<PathBuf>,
+    pub user_settings_path: Option<PathBuf>,
 }
 
 #[derive(Debug)]
 pub struct BuiltManifest {
-    pub manifest:    types::RunManifest,
+    pub manifest: types::RunManifest,
     pub target_path: PathBuf,
 }
 
 #[derive(Debug, Default)]
 pub struct RunOverrideInput<'a> {
-    pub goal:             Option<&'a str>,
-    pub model:            Option<&'a str>,
-    pub provider:         Option<&'a str>,
+    pub goal: Option<&'a str>,
+    pub model: Option<&'a str>,
+    pub provider: Option<&'a str>,
     /// ponytail: rebase anchor — tmux backend. Pre-parsed `--backend` override.
-    pub backend:          Option<AgentBackend>,
+    pub backend: Option<AgentBackend>,
     /// ponytail: rebase anchor — skip-prepare. Skip `[run.prepare]` steps when true.
-    pub skip_prepare:     bool,
+    pub skip_prepare: bool,
     /// ponytail: rebase anchor — Overseer handshake. The tmux session the backend
     /// drives + the worktree for run-state/markers; the server re-exports these onto
     /// the worker process (env can't reach a daemon-spawned worker).
-    pub overseer_session:  Option<&'a str>,
+    pub overseer_session: Option<&'a str>,
     pub overseer_worktree: Option<&'a str>,
-    pub environment:      Option<&'a str>,
-    pub docker_image:     Option<&'a str>,
+    pub environment: Option<&'a str>,
+    pub docker_image: Option<&'a str>,
     pub preserve_sandbox: Option<bool>,
-    pub dry_run:          Option<bool>,
-    pub auto_approve:     Option<bool>,
-    pub labels:           HashMap<String, String>,
+    pub dry_run: Option<bool>,
+    pub auto_approve: Option<bool>,
+    pub labels: HashMap<String, String>,
 }
 
 #[must_use]
@@ -83,10 +83,10 @@ pub fn build_run_overrides(input: RunOverrideInput<'_>) -> RunLayer {
         .goal
         .map(|goal| RunGoalLayer::Inline(InterpString::parse(goal)));
     let model = (input.model.is_some() || input.provider.is_some()).then(|| RunModelLayer {
-        provider:  input.provider.map(String::from),
-        name:      input.model.map(String::from),
+        provider: input.provider.map(String::from),
+        name: input.model.map(String::from),
         fallbacks: Vec::new(),
-        controls:  None,
+        controls: None,
     });
     let environment = (input.environment.is_some()
         || input.docker_image.is_some()
@@ -107,7 +107,7 @@ pub fn build_run_overrides(input: RunOverrideInput<'_>) -> RunLayer {
     });
     let execution =
         (input.dry_run.is_some() || input.auto_approve.is_some()).then(|| RunExecutionLayer {
-            mode:     input.dry_run.map(|dry_run| {
+            mode: input.dry_run.map(|dry_run| {
                 if dry_run {
                     RunMode::DryRun
                 } else {
@@ -157,17 +157,17 @@ pub fn build_sparse_run_overrides(input: RunOverrideInput<'_>) -> Option<RunLaye
 }
 
 struct CollectContext<'a> {
-    cwd:               &'a Path,
-    inputs:            HashMap<String, toml::Value>,
-    workflows:         HashMap<String, types::ManifestWorkflow>,
+    cwd: &'a Path,
+    inputs: HashMap<String, toml::Value>,
+    workflows: HashMap<String, types::ManifestWorkflow>,
     visited_workflows: HashSet<String>,
 }
 
 #[derive(Clone)]
 struct WorkflowScanInput {
     absolute_dot_path: PathBuf,
-    dot_path:          ManifestPath,
-    source:            String,
+    dot_path: ManifestPath,
+    source: String,
 }
 
 pub fn build_run_manifest(input: ManifestBuildInput) -> Result<BuiltManifest> {
@@ -219,9 +219,9 @@ pub fn build_run_manifest(input: ManifestBuildInput) -> Result<BuiltManifest> {
     let target_key = target_manifest_path.to_string();
 
     let mut context = CollectContext {
-        cwd:               &input.cwd,
-        inputs:            workflow_settings.run.inputs.clone(),
-        workflows:         HashMap::new(),
+        cwd: &input.cwd,
+        inputs: workflow_settings.run.inputs.clone(),
+        workflows: HashMap::new(),
         visited_workflows: HashSet::new(),
     };
     collect_workflow_entry(&mut context, &input.workflow, &input.cwd)?;
@@ -242,18 +242,18 @@ pub fn build_run_manifest(input: ManifestBuildInput) -> Result<BuiltManifest> {
     let mut configs = Vec::new();
     if let Some((path, _, source)) = project_config_source {
         configs.push(types::ManifestConfig {
-            path:   Some(path.display().to_string()),
+            path: Some(path.display().to_string()),
             source: Some(source),
-            type_:  types::ManifestConfigType::Project,
+            type_: types::ManifestConfigType::Project,
         });
     }
     if let Some(path) = input.user_settings_path.filter(|p| p.is_file()) {
         let source = std::fs::read_to_string(&path)
             .with_context(|| format!("Failed to read {}", path.display()))?;
         configs.push(types::ManifestConfig {
-            path:   Some(path.display().to_string()),
+            path: Some(path.display().to_string()),
             source: Some(source),
-            type_:  types::ManifestConfigType::User,
+            type_: types::ManifestConfigType::User,
         });
     }
 
@@ -284,7 +284,7 @@ pub fn build_run_manifest(input: ManifestBuildInput) -> Result<BuiltManifest> {
             title: None,
             target: types::ManifestTarget {
                 identifier: input.workflow.display().to_string(),
-                path:       target_key,
+                path: target_key,
             },
             version: 1,
             workflows: context.workflows,
@@ -319,7 +319,7 @@ fn collect_workflow_entry(
         .with_context(|| format!("Failed to read {}", location.graph.display()))?;
     let config = if let Some(workflow_toml_path) = location.toml.as_ref() {
         Some(types::ManifestWorkflowConfig {
-            path:   manifest_path_from_absolute(workflow_toml_path, context.cwd)?.to_string(),
+            path: manifest_path_from_absolute(workflow_toml_path, context.cwd)?.to_string(),
             source: std::fs::read_to_string(workflow_toml_path)
                 .with_context(|| format!("Failed to read {}", workflow_toml_path.display()))?,
         })
@@ -341,11 +341,14 @@ fn collect_workflow_entry(
     }
     collect_workflow_files(context, &scan, &mut files, &mut visited_imports)?;
 
-    context.workflows.insert(dot_key, types::ManifestWorkflow {
-        config,
-        files,
-        source,
-    });
+    context.workflows.insert(
+        dot_key,
+        types::ManifestWorkflow {
+            config,
+            files,
+            source,
+        },
+    );
 
     Ok(())
 }
@@ -463,8 +466,8 @@ fn collect_workflow_files(
                     })?;
                 let imported_scan = WorkflowScanInput {
                     absolute_dot_path: imported.absolute_path,
-                    dot_path:          imported.path,
-                    source:            imported_source,
+                    dot_path: imported.path,
+                    source: imported_source,
                 };
                 collect_workflow_files(context, &imported_scan, files, visited_imports)?;
             }
@@ -507,10 +510,10 @@ fn collect_template_include_files(
             .entry(key)
             .or_insert_with(|| types::ManifestFileEntry {
                 content: source.content,
-                ref_:    types::ManifestFileRef {
-                    from:     from.map(std::string::ToString::to_string),
+                ref_: types::ManifestFileRef {
+                    from: from.map(std::string::ToString::to_string),
                     original: path.to_string(),
-                    type_:    types::ManifestFileRefType::FileInline,
+                    type_: types::ManifestFileRefType::FileInline,
                 },
             });
     }
@@ -641,7 +644,7 @@ fn collect_environment_dockerfile(
 
 struct BundledFile {
     absolute_path: PathBuf,
-    path:          ManifestPath,
+    path: ManifestPath,
 }
 
 fn collect_bundled_file(
@@ -664,14 +667,17 @@ fn collect_bundled_file(
     if !files.contains_key(&key) {
         let content = std::fs::read_to_string(&absolute_path)
             .with_context(|| format!("Failed to read {}", absolute_path.display()))?;
-        files.insert(key.clone(), types::ManifestFileEntry {
-            content,
-            ref_: types::ManifestFileRef {
-                from:     from.map(|value| value.to_string()),
-                original: reference.to_string(),
-                type_:    ref_type,
+        files.insert(
+            key.clone(),
+            types::ManifestFileEntry {
+                content,
+                ref_: types::ManifestFileRef {
+                    from: from.map(|value| value.to_string()),
+                    original: reference.to_string(),
+                    type_: ref_type,
+                },
             },
-        });
+        );
     }
 
     Ok(BundledFile {
@@ -723,16 +729,16 @@ fn resolve_manifest_goal(
         )
         .ok_or_else(|| anyhow!("unsupported manifest goal reference: {reference}"))?;
         return Ok(Some(types::ManifestGoal {
-            path:  Some(reference.to_string()),
-            text:  std::fs::read_to_string(&goal_path)
+            path: Some(reference.to_string()),
+            text: std::fs::read_to_string(&goal_path)
                 .with_context(|| format!("Failed to read {}", goal_path.display()))?,
             type_: types::ManifestGoalType::Graph,
         }));
     }
 
     Ok(Some(types::ManifestGoal {
-        path:  None,
-        text:  goal.to_string(),
+        path: None,
+        text: goal.to_string(),
         type_: types::ManifestGoalType::Graph,
     }))
 }
@@ -743,13 +749,13 @@ fn resolve_manifest_goal(
 fn resolved_goal_to_manifest(resolved: ResolvedRunGoal) -> types::ManifestGoal {
     match resolved.source {
         ResolvedGoalSource::Inline => types::ManifestGoal {
-            path:  None,
-            text:  resolved.text,
+            path: None,
+            text: resolved.text,
             type_: types::ManifestGoalType::Value,
         },
         ResolvedGoalSource::File { path } => types::ManifestGoal {
-            path:  Some(path.to_string_lossy().into_owned()),
-            text:  resolved.text,
+            path: Some(path.to_string_lossy().into_owned()),
+            text: resolved.text,
             type_: types::ManifestGoalType::File,
         },
     }
@@ -852,8 +858,8 @@ fn build_manifest_push_outcome(
             branch: branch.to_string(),
         },
         Err(err) => PreRunPushOutcome::Failed {
-            remote:  "origin".to_string(),
-            branch:  branch.to_string(),
+            remote: "origin".to_string(),
+            branch: branch.to_string(),
             message: err.to_string(),
         },
     }
@@ -925,19 +931,19 @@ mod tests {
     #[test]
     fn build_run_overrides_sets_common_cli_and_mcp_layers() {
         let overrides = build_run_overrides(RunOverrideInput {
-            goal:             Some("ship it"),
-            model:            Some("gpt-5.4-mini"),
-            provider:         Some("openai"),
-            backend:          None,
-            skip_prepare:     false,
-            overseer_session:  None,
+            goal: Some("ship it"),
+            model: Some("gpt-5.4-mini"),
+            provider: Some("openai"),
+            backend: None,
+            skip_prepare: false,
+            overseer_session: None,
             overseer_worktree: None,
-            environment:      Some("local"),
-            docker_image:     None,
+            environment: Some("local"),
+            docker_image: None,
             preserve_sandbox: Some(true),
-            dry_run:          Some(true),
-            auto_approve:     Some(false),
-            labels:           [("source".to_string(), "mcp".to_string())]
+            dry_run: Some(true),
+            auto_approve: Some(false),
+            labels: [("source".to_string(), "mcp".to_string())]
                 .into_iter()
                 .collect(),
         });
@@ -1674,10 +1680,13 @@ repository = "target"
             .git
             .expect("manifest git info should be detected");
         assert_eq!(git.origin_url, "https://github.com/example/target");
-        assert_eq!(git.push_outcome, PreRunPushOutcome::SkippedRemoteMismatch {
-            remote:          "https://github.com/user/forked-target".to_string(),
-            repo_origin_url: "https://github.com/example/target".to_string(),
-        });
+        assert_eq!(
+            git.push_outcome,
+            PreRunPushOutcome::SkippedRemoteMismatch {
+                remote: "https://github.com/user/forked-target".to_string(),
+                repo_origin_url: "https://github.com/example/target".to_string(),
+            }
+        );
     }
 
     #[cfg(unix)]
@@ -1748,23 +1757,29 @@ exit 1
     }
 
     fn init_git_repo(path: &Path, branch: &str, origin_url: &str) {
-        run_git(path, &[
-            "-c",
-            &format!("init.defaultBranch={branch}"),
-            "init",
-            "--quiet",
-        ]);
-        run_git(path, &[
-            "-c",
-            "user.name=test",
-            "-c",
-            "user.email=test@example.com",
-            "commit",
-            "--allow-empty",
-            "--quiet",
-            "-m",
-            "init",
-        ]);
+        run_git(
+            path,
+            &[
+                "-c",
+                &format!("init.defaultBranch={branch}"),
+                "init",
+                "--quiet",
+            ],
+        );
+        run_git(
+            path,
+            &[
+                "-c",
+                "user.name=test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "--allow-empty",
+                "--quiet",
+                "-m",
+                "init",
+            ],
+        );
         run_git(path, &["remote", "add", "origin", origin_url]);
     }
 

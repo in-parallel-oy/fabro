@@ -191,10 +191,13 @@ fn model_test_does_not_announce_unconfigured() {
     let context = test_context!();
     let server = MockServer::start();
     context.set_http_target(&server.base_url());
-    let list = mock_model_list(&server, [
-        model_json("claude-opus-4-7", "anthropic", true),
-        model_json("gpt-5.2", "openai", false),
-    ]);
+    let list = mock_model_list(
+        &server,
+        [
+            model_json("claude-opus-4-7", "anthropic", true),
+            model_json("gpt-5.2", "openai", false),
+        ],
+    );
     let configured_test = server.mock(|when, then| {
         when.method("POST")
             .path("/api/v1/models/claude-opus-4-7/test");
@@ -240,10 +243,13 @@ fn model_test_skipped_footer_sources_from_listing() {
     let context = test_context!();
     let server = MockServer::start();
     context.set_http_target(&server.base_url());
-    mock_model_list(&server, [
-        model_json("claude-opus-4-7", "anthropic", true),
-        model_json("gpt-5.2", "openai", false),
-    ]);
+    mock_model_list(
+        &server,
+        [
+            model_json("claude-opus-4-7", "anthropic", true),
+            model_json("gpt-5.2", "openai", false),
+        ],
+    );
     server.mock(|when, then| {
         when.method("POST")
             .path("/api/v1/models/claude-opus-4-7/test");
@@ -308,10 +314,13 @@ fn model_test_json_partitions_skip_and_fail() {
     let context = test_context!();
     let server = MockServer::start();
     context.set_http_target(&server.base_url());
-    mock_model_list(&server, [
-        model_json("gpt-5.2", "openai", false),
-        model_json("claude-opus-4-7", "anthropic", true),
-    ]);
+    mock_model_list(
+        &server,
+        [
+            model_json("gpt-5.2", "openai", false),
+            model_json("claude-opus-4-7", "anthropic", true),
+        ],
+    );
     let unconfigured_test = server.mock(|when, then| {
         when.method("POST").path("/api/v1/models/gpt-5.2/test");
         then.status(500);
@@ -356,14 +365,14 @@ fn model_test_json_partitions_skip_and_fail() {
 
 #[derive(Clone)]
 struct ConcurrentModelServerState {
-    models:          Vec<serde_json::Value>,
-    gate:            Arc<ConcurrencyGate>,
+    models: Vec<serde_json::Value>,
+    gate: Arc<ConcurrencyGate>,
     response_delays: Arc<HashMap<String, Duration>>,
 }
 
 struct ConcurrentModelServer {
-    base_url:    String,
-    gate:        Arc<ConcurrencyGate>,
+    base_url: String,
+    gate: Arc<ConcurrencyGate>,
     shutdown_tx: Option<oneshot::Sender<()>>,
     join_handle: Option<std::thread::JoinHandle<()>>,
 }
@@ -382,13 +391,13 @@ impl Drop for ConcurrentModelServer {
 }
 
 struct ConcurrencyGate {
-    expected:      usize,
-    arrived:       AtomicUsize,
-    in_flight:     AtomicUsize,
+    expected: usize,
+    arrived: AtomicUsize,
+    in_flight: AtomicUsize,
     max_in_flight: AtomicUsize,
-    released:      AtomicBool,
-    timed_out:     AtomicBool,
-    release:       Semaphore,
+    released: AtomicBool,
+    timed_out: AtomicBool,
+    release: Semaphore,
 }
 
 impl ConcurrencyGate {

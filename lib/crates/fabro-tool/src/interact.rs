@@ -34,14 +34,14 @@ pub enum RunInteractAction {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct FabroRunInteractParams {
-    pub action:      RunInteractAction,
-    pub run_id:      String,
-    pub parent_id:   Option<String>,
-    pub reason:      Option<String>,
-    pub message:     Option<String>,
-    pub interrupt:   Option<bool>,
+    pub action: RunInteractAction,
+    pub run_id: String,
+    pub parent_id: Option<String>,
+    pub reason: Option<String>,
+    pub message: Option<String>,
+    pub interrupt: Option<bool>,
     pub question_id: Option<String>,
-    pub answer:      Option<AnswerValue>,
+    pub answer: Option<AnswerValue>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -122,7 +122,7 @@ pub enum ValidatedInteractAction {
         reason: Option<String>,
     },
     Message {
-        message:   String,
+        message: String,
         interrupt: bool,
     },
     Interrupt,
@@ -136,7 +136,7 @@ pub enum ValidatedInteractAction {
     GetQuestions,
     Answer {
         question_id: String,
-        body:        types::SubmitAnswerRequest,
+        body: types::SubmitAnswerRequest,
     },
 }
 
@@ -192,7 +192,7 @@ impl TryFrom<FabroRunInteractParams> for ValidatedInteractRun {
                     return Err(ToolError::message("message is required for action message"));
                 };
                 ValidatedInteractAction::Message {
-                    message:   message.to_string(),
+                    message: message.to_string(),
                     interrupt: params.interrupt.unwrap_or(false),
                 }
             }
@@ -233,7 +233,7 @@ impl TryFrom<FabroRunInteractParams> for ValidatedInteractRun {
                 };
                 ValidatedInteractAction::Answer {
                     question_id: question_id.to_string(),
-                    body:        answer_to_submit_request(answer.into_inner())?,
+                    body: answer_to_submit_request(answer.into_inner())?,
                 }
             }
         };
@@ -508,14 +508,14 @@ mod tests {
     #[test]
     fn interact_answer_validation_rejects_unsupported_json_before_api_calls() {
         let err = ValidatedInteractRun::try_from(FabroRunInteractParams {
-            action:      RunInteractAction::Answer,
-            run_id:      "run_123".to_string(),
-            parent_id:   None,
-            message:     None,
-            interrupt:   None,
+            action: RunInteractAction::Answer,
+            run_id: "run_123".to_string(),
+            parent_id: None,
+            message: None,
+            interrupt: None,
             question_id: Some("question-1".to_string()),
-            answer:      Some(json!({ "value": "yes" }).into()),
-            reason:      None,
+            answer: Some(json!({ "value": "yes" }).into()),
+            reason: None,
         })
         .unwrap_err();
 
@@ -549,14 +549,14 @@ mod tests {
     #[test]
     fn interact_unlink_parent_validation_does_not_require_parent_id() {
         let validated = ValidatedInteractRun::try_from(FabroRunInteractParams {
-            action:      RunInteractAction::UnlinkParent,
-            run_id:      " child-run ".to_string(),
-            parent_id:   None,
-            message:     None,
-            interrupt:   None,
+            action: RunInteractAction::UnlinkParent,
+            run_id: " child-run ".to_string(),
+            parent_id: None,
+            message: None,
+            interrupt: None,
             question_id: None,
-            answer:      None,
-            reason:      None,
+            answer: None,
+            reason: None,
         })
         .expect("unlink_parent should not require parent_id");
 
@@ -570,14 +570,14 @@ mod tests {
     #[test]
     fn interrupt_action_requires_only_run_id() {
         let validated = ValidatedInteractRun::try_from(FabroRunInteractParams {
-            action:      RunInteractAction::Interrupt,
-            run_id:      "run_123".to_string(),
-            parent_id:   None,
-            message:     None,
-            interrupt:   None,
+            action: RunInteractAction::Interrupt,
+            run_id: "run_123".to_string(),
+            parent_id: None,
+            message: None,
+            interrupt: None,
             question_id: None,
-            answer:      None,
-            reason:      None,
+            answer: None,
+            reason: None,
         })
         .expect("interrupt should validate with only run_id");
 
@@ -636,10 +636,13 @@ mod tests {
         let run_id = run_id("01KRBZW5C00000000000000001");
         let backend = Arc::new(MockInteractBackend::new(run_id));
 
-        let result = interact_run(backend.clone(), ValidatedInteractRun {
-            run_id: "nightly".to_string(),
-            action: ValidatedInteractAction::Approve,
-        })
+        let result = interact_run(
+            backend.clone(),
+            ValidatedInteractRun {
+                run_id: "nightly".to_string(),
+                action: ValidatedInteractAction::Approve,
+            },
+        )
         .await
         .expect("approve should dispatch");
 
@@ -653,21 +656,24 @@ mod tests {
         let run_id = run_id("01KRBZW5C00000000000000001");
         let backend = Arc::new(MockInteractBackend::new(run_id));
 
-        let result = interact_run(backend.clone(), ValidatedInteractRun {
-            run_id: "nightly".to_string(),
-            action: ValidatedInteractAction::Deny {
-                reason: Some("Needs review".to_string()),
+        let result = interact_run(
+            backend.clone(),
+            ValidatedInteractRun {
+                run_id: "nightly".to_string(),
+                action: ValidatedInteractAction::Deny {
+                    reason: Some("Needs review".to_string()),
+                },
             },
-        })
+        )
         .await
         .expect("deny should dispatch");
 
         assert!(matches!(result.action, RunInteractAction::Deny));
         assert_eq!(result.result["summary"]["run_id"], run_id.to_string());
-        assert_eq!(backend.denied.lock().unwrap().as_slice(), &[(
-            run_id,
-            Some("Needs review".to_string())
-        )]);
+        assert_eq!(
+            backend.denied.lock().unwrap().as_slice(),
+            &[(run_id, Some("Needs review".to_string()))]
+        );
     }
 
     fn run_id(raw: &str) -> RunId {
@@ -676,24 +682,24 @@ mod tests {
 
     fn run_with_status(run_id: RunId, status: RunStatus) -> Run {
         Run {
-            id:               run_id,
-            parent_id:        None,
-            children_count:   0,
-            title:            "Test run".to_string(),
-            goal:             "Test run".to_string(),
-            workflow:         WorkflowRef {
-                slug:       Some("simple".to_string()),
-                name:       Some("Simple".to_string()),
+            id: run_id,
+            parent_id: None,
+            children_count: 0,
+            title: "Test run".to_string(),
+            goal: "Test run".to_string(),
+            workflow: WorkflowRef {
+                slug: Some("simple".to_string()),
+                name: Some("Simple".to_string()),
                 graph_name: None,
                 node_count: 0,
                 edge_count: 0,
             },
-            automation:       None,
-            repository:       None,
-            created_by:       test_support::test_principal(),
-            origin:           RunOrigin::default(),
-            labels:           HashMap::new(),
-            lifecycle:        RunLifecycle {
+            automation: None,
+            repository: None,
+            created_by: test_support::test_principal(),
+            origin: RunOrigin::default(),
+            labels: HashMap::new(),
+            lifecycle: RunLifecycle {
                 status,
                 approval: None,
                 pending_control: None,
@@ -702,32 +708,32 @@ mod tests {
                 archived: false,
                 archived_at: None,
             },
-            sandbox:          None,
-            models:           Vec::new(),
+            sandbox: None,
+            models: Vec::new(),
             source_directory: None,
-            timestamps:       RunTimestamps {
-                created_at:    Utc.with_ymd_and_hms(2026, 5, 25, 12, 0, 0).unwrap(),
-                started_at:    None,
+            timestamps: RunTimestamps {
+                created_at: Utc.with_ymd_and_hms(2026, 5, 25, 12, 0, 0).unwrap(),
+                started_at: None,
                 last_event_at: None,
-                completed_at:  None,
+                completed_at: None,
             },
-            timing:           None,
-            billing:          None,
-            size:             fabro_types::RunSize::default(),
-            ask_fabro:        fabro_types::AskFabro::default(),
-            diff:             None,
-            pull_request:     None,
+            timing: None,
+            billing: None,
+            size: fabro_types::RunSize::default(),
+            ask_fabro: fabro_types::AskFabro::default(),
+            diff: None,
+            pull_request: None,
             current_question: None,
-            superseded_by:    None,
-            retried_from:     None,
-            links:            RunLinks { web: None },
+            superseded_by: None,
+            retried_from: None,
+            links: RunLinks { web: None },
         }
     }
 
     struct MockInteractBackend {
-        run_id:   RunId,
+        run_id: RunId,
         approved: Mutex<Vec<RunId>>,
-        denied:   Mutex<Vec<(RunId, Option<String>)>>,
+        denied: Mutex<Vec<(RunId, Option<String>)>>,
     }
 
     impl MockInteractBackend {
@@ -754,9 +760,12 @@ mod tests {
 
         async fn resolve_run(&self, selector: &str) -> anyhow::Result<Run> {
             assert_eq!(selector, "nightly");
-            Ok(run_with_status(self.run_id, RunStatus::Pending {
-                reason: fabro_types::PendingReason::ApprovalRequired,
-            }))
+            Ok(run_with_status(
+                self.run_id,
+                RunStatus::Pending {
+                    reason: fabro_types::PendingReason::ApprovalRequired,
+                },
+            ))
         }
 
         async fn retrieve_run(&self, _run_id: &RunId) -> anyhow::Result<Run> {
@@ -774,9 +783,12 @@ mod tests {
 
         async fn deny_run(&self, run_id: &RunId, reason: Option<String>) -> anyhow::Result<Run> {
             self.denied.lock().unwrap().push((*run_id, reason));
-            Ok(run_with_status(*run_id, RunStatus::Failed {
-                reason: FailureReason::ApprovalDenied,
-            }))
+            Ok(run_with_status(
+                *run_id,
+                RunStatus::Failed {
+                    reason: FailureReason::ApprovalDenied,
+                },
+            ))
         }
 
         async fn cancel_run(&self, _run_id: &RunId) -> anyhow::Result<Run> {

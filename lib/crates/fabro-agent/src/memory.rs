@@ -14,11 +14,11 @@ pub const BUDGET_BYTES: usize = 32768;
 /// observability and never carry the file's text.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MemoryDocument {
-    pub path:         String,
-    pub content:      String,
-    pub byte_count:   usize,
+    pub path: String,
+    pub content: String,
+    pub byte_count: usize,
     pub loaded_bytes: usize,
-    pub truncated:    bool,
+    pub truncated: bool,
 }
 
 pub async fn discover_memory(

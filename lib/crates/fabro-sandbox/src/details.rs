@@ -52,15 +52,15 @@ pub async fn sandbox_details(
 
 fn local_details(record: &RunSandboxInstance) -> SandboxDetails {
     SandboxDetails {
-        sandbox:      record.clone(),
-        state:        SandboxState::Running,
+        sandbox: record.clone(),
+        state: SandboxState::Running,
         native_state: None,
-        region:       None,
-        web_url:      None,
-        resources:    SandboxResources::default(),
-        network:      SandboxNetwork::unknown(),
-        labels:       BTreeMap::new(),
-        timestamps:   SandboxTimestamps::default(),
+        region: None,
+        web_url: None,
+        resources: SandboxResources::default(),
+        network: SandboxNetwork::unknown(),
+        labels: BTreeMap::new(),
+        timestamps: SandboxTimestamps::default(),
     }
 }
 
@@ -105,20 +105,20 @@ pub(crate) mod docker {
     pub(crate) fn docker_info_from_inspect(inspect: &ContainerInspectResponse) -> SandboxInfo {
         let fields = docker_fields_from_inspect(inspect);
         SandboxInfo {
-            provider:          SandboxProviderKind::Docker,
-            id:                fields.id,
-            display_name:      fields.display_name,
-            state:             fields.state,
-            native_state:      fields.native_state,
-            image:             fields.image,
-            snapshot:          None,
-            region:            None,
-            web_url:           None,
+            provider: SandboxProviderKind::Docker,
+            id: fields.id,
+            display_name: fields.display_name,
+            state: fields.state,
+            native_state: fields.native_state,
+            image: fields.image,
+            snapshot: None,
+            region: None,
+            web_url: None,
             working_directory: fields.working_directory,
-            resources:         fields.resources,
-            network:           fields.network,
-            labels:            fields.labels,
-            timestamps:        fields.timestamps,
+            resources: fields.resources,
+            network: fields.network,
+            labels: fields.labels,
+            timestamps: fields.timestamps,
         }
     }
 
@@ -130,32 +130,32 @@ pub(crate) mod docker {
         let image = fields.image.clone().or_else(|| record.image.clone());
 
         SandboxDetails {
-            sandbox:      RunSandboxInstance {
+            sandbox: RunSandboxInstance {
                 image,
                 ..record.clone()
             },
-            state:        fields.state,
+            state: fields.state,
             native_state: fields.native_state,
-            region:       None,
-            web_url:      None,
-            resources:    fields.resources,
-            network:      fields.network,
-            labels:       fields.labels,
-            timestamps:   fields.timestamps,
+            region: None,
+            web_url: None,
+            resources: fields.resources,
+            network: fields.network,
+            labels: fields.labels,
+            timestamps: fields.timestamps,
         }
     }
 
     struct DockerFields {
-        id:                String,
-        display_name:      Option<String>,
-        state:             SandboxState,
-        native_state:      Option<String>,
-        image:             Option<String>,
+        id: String,
+        display_name: Option<String>,
+        state: SandboxState,
+        native_state: Option<String>,
+        image: Option<String>,
         working_directory: Option<String>,
-        resources:         SandboxResources,
-        network:           SandboxNetwork,
-        labels:            BTreeMap<String, String>,
-        timestamps:        SandboxTimestamps,
+        resources: SandboxResources,
+        network: SandboxNetwork,
+        labels: BTreeMap<String, String>,
+        timestamps: SandboxTimestamps,
     }
 
     fn docker_fields_from_inspect(inspect: &ContainerInspectResponse) -> DockerFields {
@@ -171,12 +171,12 @@ pub(crate) mod docker {
 
         let host_config = inspect.host_config.as_ref();
         let resources = SandboxResources {
-            cpu_cores:    host_config.and_then(docker_cpu_cores),
+            cpu_cores: host_config.and_then(docker_cpu_cores),
             memory_bytes: host_config
                 .and_then(|host| host.memory)
                 .filter(|bytes| *bytes > 0)
                 .and_then(|bytes| u64::try_from(bytes).ok()),
-            disk_bytes:   None,
+            disk_bytes: None,
         };
         let network = docker_network(host_config);
 
@@ -239,7 +239,7 @@ pub(crate) mod docker {
             Some("none") => {
                 let blocked = SandboxNetworkPolicy::blocked();
                 SandboxNetwork {
-                    egress:  blocked.clone(),
+                    egress: blocked.clone(),
                     ingress: blocked,
                 }
             }
@@ -287,16 +287,16 @@ pub(crate) mod docker {
         fn record() -> RunSandboxInstance {
             RunSandboxInstance {
                 provider: SandboxProviderKind::Docker,
-                image:    None,
+                image: None,
                 snapshot: None,
-                runtime:  RunSandboxRuntime {
-                    id:                "container-abc123".to_string(),
+                runtime: RunSandboxRuntime {
+                    id: "container-abc123".to_string(),
                     working_directory: "/workspace".to_string(),
-                    repo_cloned:       Some(true),
-                    clone_origin_url:  None,
-                    clone_branch:      None,
-                    workspace_root:    None,
-                    repos_root:        None,
+                    repo_cloned: Some(true),
+                    clone_origin_url: None,
+                    clone_branch: None,
+                    workspace_root: None,
+                    repos_root: None,
                     primary_repo_path: None,
                     primary_repo_link: None,
                 },
@@ -537,20 +537,20 @@ pub(crate) mod daytona {
     pub(crate) fn daytona_info_from_sdk_sandbox(sandbox: &daytona_sdk::Sandbox) -> SandboxInfo {
         let fields = daytona_fields_from_sdk_sandbox(sandbox);
         SandboxInfo {
-            provider:          SandboxProviderKind::Daytona,
-            id:                sandbox.id.clone(),
-            display_name:      Some(sandbox.name.clone()).filter(|name| !name.is_empty()),
-            state:             fields.state,
-            native_state:      fields.native_state,
-            image:             None,
-            snapshot:          sandbox.snapshot.clone(),
-            region:            fields.region,
-            web_url:           Some(daytona_dashboard_url(&sandbox.id)),
+            provider: SandboxProviderKind::Daytona,
+            id: sandbox.id.clone(),
+            display_name: Some(sandbox.name.clone()).filter(|name| !name.is_empty()),
+            state: fields.state,
+            native_state: fields.native_state,
+            image: None,
+            snapshot: sandbox.snapshot.clone(),
+            region: fields.region,
+            web_url: Some(daytona_dashboard_url(&sandbox.id)),
             working_directory: Some(WORKING_DIRECTORY.to_string()),
-            resources:         fields.resources,
-            network:           fields.network,
-            labels:            fields.labels,
-            timestamps:        fields.timestamps,
+            resources: fields.resources,
+            network: fields.network,
+            labels: fields.labels,
+            timestamps: fields.timestamps,
         }
     }
 
@@ -560,29 +560,29 @@ pub(crate) mod daytona {
     ) -> SandboxDetails {
         let fields = daytona_fields_from_sdk_sandbox(sandbox);
         SandboxDetails {
-            sandbox:      RunSandboxInstance {
+            sandbox: RunSandboxInstance {
                 snapshot: sandbox.snapshot.clone().or_else(|| record.snapshot.clone()),
                 ..record.clone()
             },
-            state:        fields.state,
+            state: fields.state,
             native_state: fields.native_state,
-            region:       fields.region,
-            web_url:      Some(daytona_dashboard_url(&sandbox.id)),
-            resources:    fields.resources,
-            network:      fields.network,
-            labels:       fields.labels,
-            timestamps:   fields.timestamps,
+            region: fields.region,
+            web_url: Some(daytona_dashboard_url(&sandbox.id)),
+            resources: fields.resources,
+            network: fields.network,
+            labels: fields.labels,
+            timestamps: fields.timestamps,
         }
     }
 
     struct DaytonaFields {
-        state:        SandboxState,
+        state: SandboxState,
         native_state: Option<String>,
-        region:       Option<String>,
-        resources:    SandboxResources,
-        network:      SandboxNetwork,
-        labels:       BTreeMap<String, String>,
-        timestamps:   SandboxTimestamps,
+        region: Option<String>,
+        resources: SandboxResources,
+        network: SandboxNetwork,
+        labels: BTreeMap<String, String>,
+        timestamps: SandboxTimestamps,
     }
 
     fn daytona_fields_from_sdk_sandbox(sandbox: &daytona_sdk::Sandbox) -> DaytonaFields {
@@ -592,9 +592,9 @@ pub(crate) mod daytona {
         let native_state = sandbox.state.map(|state| state.to_string());
 
         let resources = SandboxResources {
-            cpu_cores:    Some(sandbox.cpu),
+            cpu_cores: Some(sandbox.cpu),
             memory_bytes: gibibytes_to_bytes(sandbox.memory),
-            disk_bytes:   gibibytes_to_bytes(sandbox.disk),
+            disk_bytes: gibibytes_to_bytes(sandbox.disk),
         };
 
         let labels: BTreeMap<String, String> = sandbox
@@ -621,7 +621,7 @@ pub(crate) mod daytona {
             ),
             labels,
             timestamps: SandboxTimestamps {
-                created_at:       sandbox.created_at.as_deref().and_then(parse_rfc3339_utc),
+                created_at: sandbox.created_at.as_deref().and_then(parse_rfc3339_utc),
                 last_activity_at: sandbox.updated_at.as_deref().and_then(parse_rfc3339_utc),
             },
         }
@@ -846,21 +846,21 @@ pub(crate) mod gcloud {
             .or_insert_with(|| config.zone.clone());
 
         SandboxInfo {
-            provider:          SandboxProviderKind::Gcloud,
-            id:                instance.name.clone(),
+            provider: SandboxProviderKind::Gcloud,
+            id: instance.name.clone(),
             display_name,
-            state:             normalize_gcloud_state(instance.status.as_deref()),
-            native_state:      instance.status.clone(),
-            image:             Some(config.vm_image.clone()),
-            snapshot:          None,
-            region:            Some(config.region()),
-            web_url:           None,
+            state: normalize_gcloud_state(instance.status.as_deref()),
+            native_state: instance.status.clone(),
+            image: Some(config.vm_image.clone()),
+            snapshot: None,
+            region: Some(config.region()),
+            web_url: None,
             working_directory: Some(config.working_dir.clone()),
-            resources:         SandboxResources::default(),
-            network:           SandboxNetwork::unknown(),
+            resources: SandboxResources::default(),
+            network: SandboxNetwork::unknown(),
             labels,
-            timestamps:        SandboxTimestamps {
-                created_at:       instance
+            timestamps: SandboxTimestamps {
+                created_at: instance
                     .creation_timestamp
                     .as_deref()
                     .and_then(parse_rfc3339_utc),
@@ -886,7 +886,10 @@ pub(crate) mod gcloud {
 
         #[test]
         fn maps_gce_status_to_neutral_state() {
-            assert_eq!(normalize_gcloud_state(Some("RUNNING")), SandboxState::Running);
+            assert_eq!(
+                normalize_gcloud_state(Some("RUNNING")),
+                SandboxState::Running
+            );
             assert_eq!(
                 normalize_gcloud_state(Some("PROVISIONING")),
                 SandboxState::Provisioning
@@ -908,16 +911,16 @@ mod tests {
     fn local_details_returns_running_with_no_metadata() {
         let record = RunSandboxInstance {
             provider: SandboxProviderKind::Local,
-            image:    None,
+            image: None,
             snapshot: None,
-            runtime:  fabro_types::RunSandboxRuntime {
-                id:                "local:01JNQVR7M0EJ5GKAT2SC4ERS1Z".to_string(),
+            runtime: fabro_types::RunSandboxRuntime {
+                id: "local:01JNQVR7M0EJ5GKAT2SC4ERS1Z".to_string(),
                 working_directory: "/Users/client/project".to_string(),
-                repo_cloned:       None,
-                clone_origin_url:  None,
-                clone_branch:      None,
-                workspace_root:    None,
-                repos_root:        None,
+                repo_cloned: None,
+                clone_origin_url: None,
+                clone_branch: None,
+                workspace_root: None,
+                repos_root: None,
                 primary_repo_path: None,
                 primary_repo_link: None,
             },

@@ -33,10 +33,7 @@ pub struct InterpString {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Segment {
     Literal(String),
-    Token {
-        namespace: Namespace,
-        name:      String,
-    },
+    Token { namespace: Namespace, name: String },
 }
 
 /// The interpolation namespaces recognized inside `{{ ... }}` tokens.
@@ -111,10 +108,10 @@ impl Namespace {
 /// [`InterpString::substitute_with`].
 #[derive(Default)]
 pub struct ResolveCtx<'a> {
-    env:     Option<LookupFn<'a>>,
-    vars:    Option<LookupFn<'a>>,
+    env: Option<LookupFn<'a>>,
+    vars: Option<LookupFn<'a>>,
     secrets: Option<LookupFn<'a>>,
-    inputs:  Option<LookupFn<'a>>,
+    inputs: Option<LookupFn<'a>>,
 }
 
 type LookupFn<'a> = Box<dyn FnMut(&str) -> Option<String> + 'a>;
@@ -430,7 +427,7 @@ impl From<&str> for InterpString {
 /// The outcome of a successful interpolation resolution.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resolved {
-    pub value:      String,
+    pub value: String,
     pub provenance: Provenance,
 }
 
@@ -443,7 +440,7 @@ pub enum Provenance {
     /// outward-facing renderers to redact sensitive-sourced values uniformly.
     /// `vars`/`inputs` are non-sensitive and do not mark a value as sourced.
     Sourced {
-        env_names:    Vec<String>,
+        env_names: Vec<String>,
         secret_names: Vec<String>,
     },
 }
@@ -465,8 +462,8 @@ impl Provenance {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolveError {
     pub namespace: Namespace,
-    pub name:      String,
-    pub kind:      ResolveErrorKind,
+    pub name: String,
+    pub kind: ResolveErrorKind,
 }
 
 impl ResolveError {
@@ -616,10 +613,13 @@ mod tests {
             .resolve(lookup_from(&[("API_KEY", "secret-123")]))
             .unwrap();
         assert_eq!(resolved.value, "secret-123");
-        assert_eq!(resolved.provenance, Provenance::Sourced {
-            env_names:    vec!["API_KEY".into()],
-            secret_names: vec![],
-        });
+        assert_eq!(
+            resolved.provenance,
+            Provenance::Sourced {
+                env_names: vec!["API_KEY".into()],
+                secret_names: vec![],
+            }
+        );
     }
 
     #[test]
@@ -636,10 +636,13 @@ mod tests {
             .resolve(lookup_from(&[("USER", "root"), ("HOST", "example.com")]))
             .unwrap();
         assert_eq!(resolved.value, "root@example.com");
-        assert_eq!(resolved.provenance, Provenance::Sourced {
-            env_names:    vec!["USER".into(), "HOST".into()],
-            secret_names: vec![],
-        });
+        assert_eq!(
+            resolved.provenance,
+            Provenance::Sourced {
+                env_names: vec!["USER".into(), "HOST".into()],
+                secret_names: vec![],
+            }
+        );
     }
 
     #[test]
@@ -728,10 +731,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(resolved.value, "https://us-east-1.example.com");
-        assert_eq!(resolved.provenance, Provenance::Sourced {
-            env_names:    vec!["REGION".into()],
-            secret_names: vec![],
-        });
+        assert_eq!(
+            resolved.provenance,
+            Provenance::Sourced {
+                env_names: vec!["REGION".into()],
+                secret_names: vec![],
+            }
+        );
     }
 
     #[test]
@@ -799,10 +805,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(resolved.value, "Bearer vault-value via proxy.internal");
-        assert_eq!(resolved.provenance, Provenance::Sourced {
-            env_names:    vec!["PROXY".into()],
-            secret_names: vec!["API_KEY".into()],
-        });
+        assert_eq!(
+            resolved.provenance,
+            Provenance::Sourced {
+                env_names: vec!["PROXY".into()],
+                secret_names: vec!["API_KEY".into()],
+            }
+        );
     }
 
     #[test]

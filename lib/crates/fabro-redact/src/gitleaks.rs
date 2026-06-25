@@ -221,7 +221,7 @@ impl GitleaksEngine {
 
                 regions.push(Region {
                     start: secret_match.start(),
-                    end:   secret_match.end(),
+                    end: secret_match.end(),
                 });
             }
         }
@@ -289,18 +289,24 @@ mod tests {
 
     #[test]
     fn detects_anthropic_oauth_token() {
-        let input = "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij0123456789";
+        let input =
+            "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij0123456789";
         let regions = find_gitleaks_regions(input);
-        assert!(!regions.is_empty(), "expected sk-ant-oat01 token to be flagged");
+        assert!(
+            !regions.is_empty(),
+            "expected sk-ant-oat01 token to be flagged"
+        );
     }
 
     #[test]
     fn detects_codex_oauth_jwt_access_token() {
         // A JWT-shaped OpenAI/Codex access token.
-        let input =
-            "OPENAI_API_KEY=eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.QWxhZGRpbjpvcGVuc2VzYW1l";
+        let input = "OPENAI_API_KEY=eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.QWxhZGRpbjpvcGVuc2VzYW1l";
         let regions = find_gitleaks_regions(input);
-        assert!(!regions.is_empty(), "expected JWT access token to be flagged");
+        assert!(
+            !regions.is_empty(),
+            "expected JWT access token to be flagged"
+        );
     }
 
     #[test]

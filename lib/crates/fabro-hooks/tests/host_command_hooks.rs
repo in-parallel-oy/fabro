@@ -42,14 +42,14 @@ async fn host_command_hook_uses_host_workdir_not_sandbox_workdir() {
     let runner = HookRunner::new(
         HookSettings {
             hooks: vec![HookDefinition {
-                name:       Some("host-marker".to_string()),
-                event:      HookEvent::RunStart,
-                command:    Some("printf ran > marker.txt".to_string()),
-                hook_type:  None,
-                matcher:    None,
-                blocking:   Some(true),
+                name: Some("host-marker".to_string()),
+                event: HookEvent::RunStart,
+                command: Some("printf ran > marker.txt".to_string()),
+                hook_type: None,
+                matcher: None,
+                blocking: Some(true),
                 timeout_ms: Some(5000),
-                sandbox:    Some(false),
+                sandbox: Some(false),
             }],
         },
         test_llm_source(),
@@ -62,10 +62,14 @@ async fn host_command_hook_uses_host_workdir_not_sandbox_workdir() {
     );
 
     let decision = runner
-        .run(&context, local_sandbox(), HookExecutionContext {
-            host_source_dir:  Some(host_work_dir.clone()),
-            sandbox_work_dir: Some(container_only_work_dir.to_path_buf()),
-        })
+        .run(
+            &context,
+            local_sandbox(),
+            HookExecutionContext {
+                host_source_dir: Some(host_work_dir.clone()),
+                sandbox_work_dir: Some(container_only_work_dir.to_path_buf()),
+            },
+        )
         .await;
 
     assert_eq!(decision, HookDecision::Proceed);

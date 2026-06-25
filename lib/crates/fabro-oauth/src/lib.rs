@@ -187,7 +187,7 @@ fn callback_error_page(detail: &str) -> String {
 // ---------------------------------------------------------------------------
 
 pub struct PkceCodes {
-    pub verifier:  String,
+    pub verifier: String,
     pub challenge: String,
 }
 
@@ -272,14 +272,14 @@ pub struct OAuthEndpoint<'a> {
 
 #[derive(Debug, Deserialize)]
 pub struct TokenResponse {
-    pub id_token:      Option<String>,
-    pub access_token:  String,
+    pub id_token: Option<String>,
+    pub access_token: String,
     pub refresh_token: Option<String>,
-    pub expires_in:    Option<u64>,
+    pub expires_in: Option<u64>,
 }
 
 pub struct CallbackHandle {
-    port:        u16,
+    port: u16,
     shutdown_tx: std::sync::Arc<std::sync::Mutex<Option<oneshot::Sender<()>>>>,
 }
 
@@ -309,7 +309,7 @@ pub struct CallbackSuccess {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallbackFailure {
-    pub error_code:        String,
+    pub error_code: String,
     pub error_description: String,
 }
 
@@ -417,9 +417,9 @@ pub async fn refresh_token(
 
 #[derive(Deserialize)]
 struct CallbackParams {
-    code:              Option<String>,
-    state:             String,
-    error:             Option<String>,
+    code: Option<String>,
+    state: String,
+    error: Option<String>,
     error_description: Option<String>,
 }
 

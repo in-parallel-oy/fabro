@@ -111,17 +111,17 @@ output_cost_per_mtok = {output_cost_per_mtok}
 
     fn response_with_usage(tokens: TokenCounts) -> Response {
         Response {
-            id:            "resp".to_string(),
-            model:         "gpt-test".to_string(),
-            provider:      "openai".to_string(),
-            message:       Message::assistant("hi"),
+            id: "resp".to_string(),
+            model: "gpt-test".to_string(),
+            provider: "openai".to_string(),
+            message: Message::assistant("hi"),
             finish_reason: FinishReason::Stop,
-            usage:         tokens,
-            raw:           None,
-            warnings:      vec![],
-            rate_limit:    None,
-            cost_usd:      None,
-            cost_source:   None,
+            usage: tokens,
+            raw: None,
+            warnings: vec![],
+            rate_limit: None,
+            cost_usd: None,
+            cost_source: None,
         }
     }
 

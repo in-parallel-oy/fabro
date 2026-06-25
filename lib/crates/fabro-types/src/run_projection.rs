@@ -18,57 +18,57 @@ use crate::{
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RunProjection {
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub title:              String,
+    pub title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent_id:          Option<RunId>,
-    pub spec:               RunSpec,
+    pub parent_id: Option<RunId>,
+    pub spec: RunSpec,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub web_url:            Option<String>,
-    pub start:              Option<StartRecord>,
-    pub status:             RunStatus,
+    pub web_url: Option<String>,
+    pub start: Option<StartRecord>,
+    pub status: RunStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approval:           Option<RunApproval>,
+    pub approval: Option<RunApproval>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub archived_at:        Option<DateTime<Utc>>,
-    pub status_updated_at:  DateTime<Utc>,
-    pub last_event_at:      DateTime<Utc>,
-    pub pending_control:    Option<RunControlAction>,
-    pub checkpoints:        Vec<CheckpointRecord>,
-    pub conclusion:         Option<Conclusion>,
-    pub sandbox:            Option<RunSandbox>,
-    pub pull_request:       Option<PullRequestLink>,
-    pub superseded_by:      Option<RunId>,
+    pub archived_at: Option<DateTime<Utc>>,
+    pub status_updated_at: DateTime<Utc>,
+    pub last_event_at: DateTime<Utc>,
+    pub pending_control: Option<RunControlAction>,
+    pub checkpoints: Vec<CheckpointRecord>,
+    pub conclusion: Option<Conclusion>,
+    pub sandbox: Option<RunSandbox>,
+    pub pull_request: Option<PullRequestLink>,
+    pub superseded_by: Option<RunId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub retried_from:       Option<RunId>,
+    pub retried_from: Option<RunId>,
     pub pending_interviews: BTreeMap<String, PendingInterviewRecord>,
-    stages:                 HashMap<StageId, StageProjection>,
+    stages: HashMap<StageId, StageProjection>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PendingInterviewRecord {
-    pub question:   InterviewQuestionRecord,
+    pub question: InterviewQuestionRecord,
     pub started_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CheckpointRecord {
-    pub seq:        u32,
+    pub seq: u32,
     pub checkpoint: Checkpoint,
     #[serde(default)]
-    pub diff:       RunDiff,
+    pub diff: RunDiff,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StageModelUsage {
-    pub mode:             String,
+    pub mode: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider:         Option<String>,
+    pub provider: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model:            Option<String>,
+    pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<ReasoningEffort>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub speed:            Option<Speed>,
+    pub speed: Option<Speed>,
 }
 
 impl StageModelUsage {
@@ -86,14 +86,14 @@ impl StageModelUsage {
             || props.reasoning_effort.is_some()
             || props.speed.is_some();
         has_metadata.then(|| Self {
-            mode:             props
+            mode: props
                 .mode
                 .clone()
                 .unwrap_or_else(|| Self::MODE_PROMPT.to_string()),
-            provider:         props.provider.clone(),
-            model:            props.model.clone(),
+            provider: props.provider.clone(),
+            model: props.model.clone(),
             reasoning_effort: props.reasoning_effort,
-            speed:            props.speed,
+            speed: props.speed,
         })
     }
 
@@ -109,11 +109,11 @@ impl StageModelUsage {
             Self::MODE_AGENT
         };
         Self {
-            mode:             mode.to_string(),
-            provider:         props.provider.clone(),
-            model:            props.model.clone(),
+            mode: mode.to_string(),
+            provider: props.provider.clone(),
+            model: props.model.clone(),
             reasoning_effort: props.reasoning_effort,
-            speed:            props.speed,
+            speed: props.speed,
         }
     }
 }
@@ -210,62 +210,62 @@ pub enum StageContextWindowUnavailableReason {
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct StageContextWindowWarning {
-    pub code:    String,
+    pub code: String,
     pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct StageContextWindowBreakdownItem {
-    pub category:      StageContextWindowCategory,
-    pub tokens:        u64,
+    pub category: StageContextWindowCategory,
+    pub tokens: u64,
     pub usage_percent: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct StageContextWindowProjection {
-    pub provider:              String,
-    pub model:                 String,
+    pub provider: String,
+    pub model: String,
     pub context_window_tokens: u64,
-    pub input_tokens:          u64,
-    pub usage_percent:         f64,
-    pub count_method:          StageContextWindowCountMethod,
-    pub staleness:             StageContextWindowStaleness,
-    pub generated_at:          DateTime<Utc>,
+    pub input_tokens: u64,
+    pub usage_percent: f64,
+    pub count_method: StageContextWindowCountMethod,
+    pub staleness: StageContextWindowStaleness,
+    pub generated_at: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub event_seq:             Option<u32>,
+    pub event_seq: Option<u32>,
     #[serde(default)]
-    pub breakdown:             Vec<StageContextWindowBreakdownItem>,
+    pub breakdown: Vec<StageContextWindowBreakdownItem>,
     #[serde(default)]
-    pub warnings:              Vec<StageContextWindowWarning>,
+    pub warnings: Vec<StageContextWindowWarning>,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct StageContextWindow {
-    pub stage_id:              StageId,
-    pub available:             bool,
+    pub stage_id: StageId,
+    pub available: bool,
     #[serde(default)]
-    pub unavailable_reason:    Option<StageContextWindowUnavailableReason>,
+    pub unavailable_reason: Option<StageContextWindowUnavailableReason>,
     #[serde(default)]
-    pub provider:              Option<String>,
+    pub provider: Option<String>,
     #[serde(default)]
-    pub model:                 Option<String>,
+    pub model: Option<String>,
     #[serde(default)]
     pub context_window_tokens: Option<u64>,
     #[serde(default)]
-    pub input_tokens:          Option<u64>,
+    pub input_tokens: Option<u64>,
     #[serde(default)]
-    pub usage_percent:         Option<f64>,
+    pub usage_percent: Option<f64>,
     #[serde(default)]
-    pub count_method:          Option<StageContextWindowCountMethod>,
-    pub staleness:             StageContextWindowStaleness,
+    pub count_method: Option<StageContextWindowCountMethod>,
+    pub staleness: StageContextWindowStaleness,
     #[serde(default)]
-    pub generated_at:          Option<DateTime<Utc>>,
+    pub generated_at: Option<DateTime<Utc>>,
     #[serde(default)]
-    pub event_seq:             Option<u32>,
+    pub event_seq: Option<u32>,
     #[serde(default)]
-    pub breakdown:             Vec<StageContextWindowBreakdownItem>,
+    pub breakdown: Vec<StageContextWindowBreakdownItem>,
     #[serde(default)]
-    pub warnings:              Vec<StageContextWindowWarning>,
+    pub warnings: Vec<StageContextWindowWarning>,
 }
 
 impl StageContextWindow {
@@ -320,60 +320,60 @@ impl StageContextWindow {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StageProjection {
-    pub first_event_seq:   NonZeroU32,
-    pub prompt:            Option<String>,
-    pub response:          Option<String>,
-    pub completion:        Option<StageCompletion>,
-    pub provider_used:     Option<StageModelUsage>,
-    pub diff:              Option<String>,
+    pub first_event_seq: NonZeroU32,
+    pub prompt: Option<String>,
+    pub response: Option<String>,
+    pub completion: Option<StageCompletion>,
+    pub provider_used: Option<StageModelUsage>,
+    pub diff: Option<String>,
     pub script_invocation: Option<serde_json::Value>,
-    pub script_timing:     Option<serde_json::Value>,
-    pub parallel_results:  Option<serde_json::Value>,
-    pub output:            Option<String>,
+    pub script_timing: Option<serde_json::Value>,
+    pub parallel_results: Option<serde_json::Value>,
+    pub output: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub output_bytes:      Option<u64>,
+    pub output_bytes: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub live_streaming:    Option<bool>,
+    pub live_streaming: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub termination:       Option<crate::CommandTermination>,
+    pub termination: Option<crate::CommandTermination>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub started_at:        Option<DateTime<Utc>>,
+    pub started_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub handler:           Option<StageHandler>,
+    pub handler: Option<StageHandler>,
     /// Per-attempt timing breakdown for the latest terminal attempt.
     ///
     /// `None` for stages still in flight (`started_at` is set but no terminal
     /// event has been observed yet). For live wall-time ticking, the UI uses
     /// `started_at`; once terminal this carries the finalized breakdown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timing:            Option<StageTiming>,
+    pub timing: Option<StageTiming>,
     #[serde(default)]
-    pub usage:             BilledTokenCounts,
+    pub usage: BilledTokenCounts,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model:             Option<ModelRef>,
+    pub model: Option<ModelRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub todos:             Option<TodoListProjection>,
+    pub todos: Option<TodoListProjection>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub subagents:         Vec<SubAgentProjection>,
+    pub subagents: Vec<SubAgentProjection>,
     #[serde(default, skip_serializing_if = "SkillsProjection::is_empty")]
-    pub skills:            SkillsProjection,
+    pub skills: SkillsProjection,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub permission_level:  Option<PermissionLevel>,
+    pub permission_level: Option<PermissionLevel>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub agent_tools:       Vec<AgentToolSummary>,
+    pub agent_tools: Vec<AgentToolSummary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub mcp_servers:       Vec<McpServerProjection>,
+    pub mcp_servers: Vec<McpServerProjection>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub context_window:    Option<StageContextWindowProjection>,
-    pub state:             StageState,
+    pub context_window: Option<StageContextWindowProjection>,
+    pub state: StageState,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SubAgentProjection {
     pub agent_id: String,
-    pub depth:    usize,
-    pub task:     String,
-    pub status:   SubAgentStatus,
+    pub depth: usize,
+    pub task: String,
+    pub status: SubAgentStatus,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -400,17 +400,17 @@ impl SkillsProjection {
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ActivatedSkill {
-    pub name:   String,
+    pub name: String,
     pub source: AgentSkillActivationSource,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct McpServerProjection {
     pub server_name: String,
-    pub tool_count:  usize,
-    pub status:      McpServerStatus,
+    pub tool_count: usize,
+    pub status: McpServerStatus,
     /// True once any tool from this server has been invoked during the stage.
-    pub invoked:     bool,
+    pub invoked: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -762,19 +762,19 @@ mod iter_stages_tests {
         RunProjection::new(
             "Test run".to_string(),
             RunSpec {
-                run_id:           RunId::new(),
-                settings:         WorkflowSettings::default(),
-                graph:            Graph::new("test"),
-                graph_source:     None,
-                workflow_slug:    None,
-                automation:       None,
+                run_id: RunId::new(),
+                settings: WorkflowSettings::default(),
+                graph: Graph::new("test"),
+                graph_source: None,
+                workflow_slug: None,
+                automation: None,
                 source_directory: None,
-                labels:           HashMap::default(),
-                provenance:       test_support::test_run_provenance(),
-                manifest_blob:    None,
-                definition_blob:  None,
-                git:              None,
-                fork_source_ref:  None,
+                labels: HashMap::default(),
+                provenance: test_support::test_run_provenance(),
+                manifest_blob: None,
+                definition_blob: None,
+                git: None,
+                fork_source_ref: None,
             },
             Utc::now(),
         )

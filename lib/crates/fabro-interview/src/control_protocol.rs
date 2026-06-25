@@ -28,7 +28,7 @@ pub const WORKER_CONTROL_PONG_TIMEOUT_REASON: &str = "pong_timeout";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkerControlEnvelope {
-    pub v:       u8,
+    pub v: u8,
     #[serde(flatten)]
     pub message: WorkerControlMessage,
 }
@@ -37,11 +37,11 @@ impl WorkerControlEnvelope {
     #[must_use]
     pub fn interview_answer(qid: impl Into<String>, submission: AnswerSubmission) -> Self {
         Self {
-            v:       WORKER_CONTROL_PROTOCOL_VERSION,
+            v: WORKER_CONTROL_PROTOCOL_VERSION,
             message: WorkerControlMessage::InterviewAnswer {
-                qid:    qid.into(),
+                qid: qid.into(),
                 answer: submission.answer.into(),
-                actor:  submission.actor,
+                actor: submission.actor,
             },
         }
     }
@@ -49,7 +49,7 @@ impl WorkerControlEnvelope {
     #[must_use]
     pub fn cancel_run() -> Self {
         Self {
-            v:       WORKER_CONTROL_PROTOCOL_VERSION,
+            v: WORKER_CONTROL_PROTOCOL_VERSION,
             message: WorkerControlMessage::RunCancel,
         }
     }
@@ -57,7 +57,7 @@ impl WorkerControlEnvelope {
     #[must_use]
     pub fn pause_run() -> Self {
         Self {
-            v:       WORKER_CONTROL_PROTOCOL_VERSION,
+            v: WORKER_CONTROL_PROTOCOL_VERSION,
             message: WorkerControlMessage::RunPause,
         }
     }
@@ -65,7 +65,7 @@ impl WorkerControlEnvelope {
     #[must_use]
     pub fn unpause_run() -> Self {
         Self {
-            v:       WORKER_CONTROL_PROTOCOL_VERSION,
+            v: WORKER_CONTROL_PROTOCOL_VERSION,
             message: WorkerControlMessage::RunUnpause,
         }
     }
@@ -73,7 +73,7 @@ impl WorkerControlEnvelope {
     #[must_use]
     pub fn steer(text: impl Into<String>, actor: Principal) -> Self {
         Self {
-            v:       WORKER_CONTROL_PROTOCOL_VERSION,
+            v: WORKER_CONTROL_PROTOCOL_VERSION,
             message: WorkerControlMessage::Steer {
                 text: text.into(),
                 actor,
@@ -84,7 +84,7 @@ impl WorkerControlEnvelope {
     #[must_use]
     pub fn interrupt(actor: Principal) -> Self {
         Self {
-            v:       WORKER_CONTROL_PROTOCOL_VERSION,
+            v: WORKER_CONTROL_PROTOCOL_VERSION,
             message: WorkerControlMessage::Interrupt { actor },
         }
     }
@@ -92,7 +92,7 @@ impl WorkerControlEnvelope {
     #[must_use]
     pub fn interrupt_then_steer(text: impl Into<String>, actor: Principal) -> Self {
         Self {
-            v:       WORKER_CONTROL_PROTOCOL_VERSION,
+            v: WORKER_CONTROL_PROTOCOL_VERSION,
             message: WorkerControlMessage::InterruptThenSteer {
                 text: text.into(),
                 actor,
@@ -108,7 +108,7 @@ impl WorkerControlEnvelope {
         actor: Principal,
     ) -> Self {
         Self {
-            v:       WORKER_CONTROL_PROTOCOL_VERSION,
+            v: WORKER_CONTROL_PROTOCOL_VERSION,
             message: WorkerControlMessage::PairStart {
                 run_id,
                 pair_id,
@@ -127,7 +127,7 @@ impl WorkerControlEnvelope {
         actor: Principal,
     ) -> Self {
         Self {
-            v:       WORKER_CONTROL_PROTOCOL_VERSION,
+            v: WORKER_CONTROL_PROTOCOL_VERSION,
             message: WorkerControlMessage::PairMessage {
                 pair_id,
                 message_id,
@@ -141,7 +141,7 @@ impl WorkerControlEnvelope {
     #[must_use]
     pub fn end_pair(pair_id: PairId, actor: Principal) -> Self {
         Self {
-            v:       WORKER_CONTROL_PROTOCOL_VERSION,
+            v: WORKER_CONTROL_PROTOCOL_VERSION,
             message: WorkerControlMessage::PairEnd { pair_id, actor },
         }
     }
@@ -152,9 +152,9 @@ impl WorkerControlEnvelope {
 pub enum WorkerControlMessage {
     #[serde(rename = "interview.answer")]
     InterviewAnswer {
-        qid:    String,
+        qid: String,
         answer: WorkerControlAnswer,
-        actor:  Principal,
+        actor: Principal,
     },
     #[serde(rename = "run.cancel")]
     RunCancel,
@@ -170,19 +170,19 @@ pub enum WorkerControlMessage {
     InterruptThenSteer { text: String, actor: Principal },
     #[serde(rename = "pair.start")]
     PairStart {
-        run_id:  RunId,
+        run_id: RunId,
         pair_id: PairId,
-        target:  PairTarget,
-        actor:   Principal,
+        target: PairTarget,
+        actor: Principal,
     },
     #[serde(rename = "pair.message")]
     PairMessage {
-        pair_id:           PairId,
-        message_id:        PairMessageId,
-        text:              String,
+        pair_id: PairId,
+        message_id: PairMessageId,
+        text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         client_message_id: Option<String>,
-        actor:             Principal,
+        actor: Principal,
     },
     #[serde(rename = "pair.end")]
     PairEnd { pair_id: PairId, actor: Principal },
@@ -190,7 +190,7 @@ pub enum WorkerControlMessage {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkerControlDeliveryFrame {
-    pub id:       String,
+    pub id: String,
     pub envelope: WorkerControlEnvelope,
 }
 
@@ -234,9 +234,9 @@ impl From<WorkerControlAnswer> for Answer {
             WorkerControlAnswer::Skipped => Self::skipped(),
             WorkerControlAnswer::Timeout => Self::timeout(),
             WorkerControlAnswer::Selected { key } => Self {
-                value:           AnswerValue::Selected(key),
+                value: AnswerValue::Selected(key),
                 selected_option: None,
-                text:            None,
+                text: None,
             },
             WorkerControlAnswer::MultiSelected { keys } => Self::multi_selected(keys),
             WorkerControlAnswer::Text { text } => Self::text(text),
@@ -298,9 +298,12 @@ mod tests {
 
     #[test]
     fn steer_append_round_trips_through_json() {
-        let envelope = WorkerControlEnvelope::steer("try again", Principal::System {
-            system_kind: SystemActorKind::Engine,
-        });
+        let envelope = WorkerControlEnvelope::steer(
+            "try again",
+            Principal::System {
+                system_kind: SystemActorKind::Engine,
+            },
+        );
         let json = serde_json::to_string(&envelope).unwrap();
         assert_eq!(
             json,
@@ -326,10 +329,12 @@ mod tests {
 
     #[test]
     fn interrupt_then_steer_round_trips_through_json() {
-        let envelope =
-            WorkerControlEnvelope::interrupt_then_steer("stop, do X instead", Principal::System {
+        let envelope = WorkerControlEnvelope::interrupt_then_steer(
+            "stop, do X instead",
+            Principal::System {
                 system_kind: SystemActorKind::Engine,
-            });
+            },
+        );
         let json = serde_json::to_string(&envelope).unwrap();
         assert_eq!(
             json,
@@ -345,7 +350,7 @@ mod tests {
             fixtures::RUN_1,
             "01HZX6M29F1CD5YYMHT1F5D7WQ".parse().unwrap(),
             PairTarget {
-                stage_id:   "code@1".parse().unwrap(),
+                stage_id: "code@1".parse().unwrap(),
                 node_label: "Code".to_string(),
             },
             Principal::System {
@@ -397,7 +402,7 @@ mod tests {
     #[test]
     fn delivery_frame_round_trips_through_json() {
         let frame = WorkerControlDeliveryFrame {
-            id:       "local:42".to_string(),
+            id: "local:42".to_string(),
             envelope: WorkerControlEnvelope::cancel_run(),
         };
         let json = serde_json::to_string(&frame).unwrap();

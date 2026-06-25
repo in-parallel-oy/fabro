@@ -13,7 +13,7 @@ use crate::Sandbox;
 /// `write_file` or `delete_file` targets an existing file that hasn't been
 /// read. Writing to new (non-existent) files is always allowed.
 pub struct ReadBeforeWriteSandbox {
-    inner:    Arc<dyn Sandbox>,
+    inner: Arc<dyn Sandbox>,
     read_set: Mutex<HashSet<String>>,
 }
 
@@ -291,8 +291,9 @@ mod tests {
             *mock.captured_command.lock().unwrap(),
             Some("python fake_agent.py".to_string())
         );
-        assert_eq!(*mock.captured_working_dirs.lock().unwrap(), vec![Some(
-            "/work/sub".to_string()
-        )]);
+        assert_eq!(
+            *mock.captured_working_dirs.lock().unwrap(),
+            vec![Some("/work/sub".to_string())]
+        );
     }
 }

@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 /// Provider context comes from the catalog and auth strategy at resolve time.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OAuthCredential {
-    pub tokens:     OAuthTokens,
-    pub config:     OAuthConfig,
+    pub tokens: OAuthTokens,
+    pub config: OAuthConfig,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_id: Option<String>,
 }
@@ -22,15 +22,15 @@ impl OAuthCredential {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OAuthTokens {
-    pub access_token:  String,
+    pub access_token: String,
     pub refresh_token: Option<String>,
-    pub expires_at:    DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
     /// Raw OIDC `id_token` JWT, when the provider issues one. Codex's
     /// `auth.json` requires it to reconstruct ChatGPT account claims; the
     /// access token alone is not enough. Optional + `default` so vault entries
     /// written before this field deserialize cleanly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id_token:      Option<String>,
+    pub id_token: Option<String>,
 }
 
 pub(crate) fn expires_at_from_now(expires_in: Option<u64>) -> DateTime<Utc> {
@@ -40,19 +40,19 @@ pub(crate) fn expires_at_from_now(expires_in: Option<u64>) -> DateTime<Utc> {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OAuthConfig {
-    pub auth_url:     String,
-    pub token_url:    String,
-    pub client_id:    String,
-    pub scopes:       Vec<String>,
+    pub auth_url: String,
+    pub token_url: String,
+    pub client_id: String,
+    pub scopes: Vec<String>,
     pub redirect_uri: Option<String>,
-    pub use_pkce:     bool,
+    pub use_pkce: bool,
 }
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum ApiKeyHeader {
     Bearer(String),
     Custom {
-        name:  String,
+        name: String,
         value: String,
     },
     /// No static header: the request is authenticated by AWS SigV4 signing,
@@ -92,19 +92,19 @@ mod tests {
 
     fn fixture(expires_at: DateTime<Utc>) -> OAuthCredential {
         OAuthCredential {
-            tokens:     OAuthTokens {
+            tokens: OAuthTokens {
                 access_token: "access".to_string(),
                 refresh_token: Some("refresh".to_string()),
                 expires_at,
                 id_token: None,
             },
-            config:     OAuthConfig {
-                auth_url:     "https://auth.openai.com".to_string(),
-                token_url:    "https://auth.openai.com/oauth/token".to_string(),
-                client_id:    "client".to_string(),
-                scopes:       vec!["openid".to_string()],
+            config: OAuthConfig {
+                auth_url: "https://auth.openai.com".to_string(),
+                token_url: "https://auth.openai.com/oauth/token".to_string(),
+                client_id: "client".to_string(),
+                scopes: vec!["openid".to_string()],
                 redirect_uri: Some("https://auth.openai.com/deviceauth/callback".to_string()),
-                use_pkce:     true,
+                use_pkce: true,
             },
             account_id: Some("acct_123".to_string()),
         }

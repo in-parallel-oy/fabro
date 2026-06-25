@@ -24,20 +24,20 @@ enum ContentBlockKind {
 
 /// Accumulated state across SSE events during streaming.
 pub(super) struct SseAccumulator {
-    id:                String,
-    model:             String,
+    id: String,
+    model: String,
     /// Configured provider name stamped into the final `Response.provider`.
-    provider:          String,
+    provider: String,
     /// When true, synthetic-tool events are rewritten to text events.
-    json_schema_mode:  bool,
-    content_parts:     Vec<ContentPart>,
-    usage:             TokenCounts,
-    finish_reason:     FinishReason,
-    current_block:     Option<ContentBlockKind>,
-    current_text:      String,
-    current_thinking:  String,
+    json_schema_mode: bool,
+    content_parts: Vec<ContentPart>,
+    usage: TokenCounts,
+    finish_reason: FinishReason,
+    current_block: Option<ContentBlockKind>,
+    current_text: String,
+    current_thinking: String,
     current_tool_args: String,
-    rate_limit:        Option<RateLimitInfo>,
+    rate_limit: Option<RateLimitInfo>,
 }
 
 impl SseAccumulator {
@@ -64,22 +64,22 @@ impl SseAccumulator {
 
     fn take_response(&mut self) -> Response {
         Response {
-            id:            std::mem::take(&mut self.id),
-            model:         std::mem::take(&mut self.model),
-            provider:      self.provider.clone(),
-            message:       Message {
-                role:         Role::Assistant,
-                content:      std::mem::take(&mut self.content_parts),
-                name:         None,
+            id: std::mem::take(&mut self.id),
+            model: std::mem::take(&mut self.model),
+            provider: self.provider.clone(),
+            message: Message {
+                role: Role::Assistant,
+                content: std::mem::take(&mut self.content_parts),
+                name: None,
                 tool_call_id: None,
             },
             finish_reason: std::mem::replace(&mut self.finish_reason, FinishReason::Stop),
-            usage:         std::mem::take(&mut self.usage),
-            raw:           None,
-            warnings:      vec![],
-            rate_limit:    self.rate_limit.take(),
-            cost_usd:      None,
-            cost_source:   None,
+            usage: std::mem::take(&mut self.usage),
+            raw: None,
+            warnings: vec![],
+            rate_limit: self.rate_limit.take(),
+            cost_usd: None,
+            cost_source: None,
         }
     }
 
@@ -152,7 +152,7 @@ impl SseAccumulator {
                     .unwrap_or("")
                     .to_string();
                 self.current_block = Some(ContentBlockKind::ToolUse {
-                    id:   id.clone(),
+                    id: id.clone(),
                     name: name.clone(),
                 });
                 self.current_tool_args.clear();
@@ -190,7 +190,7 @@ impl SseAccumulator {
                 self.current_text.push_str(text);
 
                 vec![StreamEvent::TextDelta {
-                    delta:   text.to_string(),
+                    delta: text.to_string(),
                     text_id: Some(block_text_id(data)),
                 }]
             }
@@ -270,9 +270,9 @@ impl SseAccumulator {
                     .and_then(serde_json::Value::as_str)
                     .map(String::from);
                 self.content_parts.push(ContentPart::Thinking(ThinkingData {
-                    text:      thinking_text,
+                    text: thinking_text,
                     signature: stop_signature.or(signature),
-                    redacted:  false,
+                    redacted: false,
                 }));
                 vec![StreamEvent::ReasoningEnd]
             }
@@ -297,8 +297,8 @@ impl SseAccumulator {
         let response = self.take_response();
         vec![StreamEvent::Finish {
             finish_reason: response.finish_reason.clone(),
-            usage:         response.usage.clone(),
-            response:      Box::new(response),
+            usage: response.usage.clone(),
+            response: Box::new(response),
         }]
     }
 }
@@ -468,16 +468,16 @@ mod tests {
     fn stream_token_counts_leaves_reasoning_zero_and_output_full() {
         let mut acc = new_accumulator("anthropic", false);
         acc.content_parts.push(ContentPart::Thinking(ThinkingData {
-            text:      "summary text".to_string(),
+            text: "summary text".to_string(),
             signature: Some(String::new()),
-            redacted:  false,
+            redacted: false,
         }));
         acc.content_parts.push(ContentPart::text("answer"));
         acc.usage = TokenCounts {
-            input_tokens:       50,
-            output_tokens:      1200,
-            reasoning_tokens:   0,
-            cache_read_tokens:  9000,
+            input_tokens: 50,
+            output_tokens: 1200,
+            reasoning_tokens: 0,
+            cache_read_tokens: 9000,
             cache_write_tokens: 1000,
         };
 
@@ -513,7 +513,7 @@ mod tests {
         let err = acc
             .on_event(RawEvent {
                 event: Some("error"),
-                data:  &raw,
+                data: &raw,
             })
             .unwrap_err();
 
@@ -545,7 +545,7 @@ mod tests {
         let err = acc
             .on_event(RawEvent {
                 event: Some("error"),
-                data:  &raw,
+                data: &raw,
             })
             .unwrap_err();
 
@@ -571,7 +571,7 @@ mod tests {
         let events = acc
             .on_event(RawEvent {
                 event: Some("some_future_event"),
-                data:  &raw,
+                data: &raw,
             })
             .unwrap();
 
@@ -613,26 +613,26 @@ mod tests {
     #[test]
     fn convert_stream_event_converts_finish_reason() {
         let response = Box::new(Response {
-            id:            "test".to_string(),
-            model:         "claude".to_string(),
-            provider:      "anthropic".to_string(),
-            message:       Message {
-                role:         Role::Assistant,
-                content:      vec![ContentPart::ToolCall(ToolCall::new(
+            id: "test".to_string(),
+            model: "claude".to_string(),
+            provider: "anthropic".to_string(),
+            message: Message {
+                role: Role::Assistant,
+                content: vec![ContentPart::ToolCall(ToolCall::new(
                     "id1",
                     SYNTHETIC_TOOL_NAME,
                     serde_json::json!({"data": "value"}),
                 ))],
-                name:         None,
+                name: None,
                 tool_call_id: None,
             },
             finish_reason: FinishReason::ToolCalls,
-            usage:         TokenCounts::default(),
-            raw:           None,
-            warnings:      vec![],
-            rate_limit:    None,
-            cost_usd:      None,
-            cost_source:   None,
+            usage: TokenCounts::default(),
+            raw: None,
+            warnings: vec![],
+            rate_limit: None,
+            cost_usd: None,
+            cost_source: None,
         });
         let event = StreamEvent::Finish {
             finish_reason: FinishReason::ToolCalls,

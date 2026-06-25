@@ -6,10 +6,10 @@ use agent_client_protocol_tokio::AcpAgent;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AcpProcessSpec {
-    name:    Option<String>,
+    name: Option<String>,
     program: PathBuf,
-    args:    Vec<String>,
-    env:     HashMap<String, String>,
+    args: Vec<String>,
+    env: HashMap<String, String>,
 }
 
 impl AcpProcessSpec {

@@ -12,8 +12,8 @@ pub enum SubmitError {
 
 #[derive(Default)]
 struct ControlInterviewerState {
-    pending:             HashMap<String, oneshot::Sender<AnswerSubmission>>,
-    queued:              HashMap<String, AnswerSubmission>,
+    pending: HashMap<String, oneshot::Sender<AnswerSubmission>>,
+    queued: HashMap<String, AnswerSubmission>,
     terminal_submission: Option<AnswerSubmission>,
 }
 

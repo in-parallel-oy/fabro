@@ -14,7 +14,7 @@ impl std::error::Error for Cause {}
 #[derive(Debug)]
 struct Outer {
     message: &'static str,
-    source:  Cause,
+    source: Cause,
 }
 
 impl std::fmt::Display for Outer {
@@ -33,7 +33,7 @@ impl std::error::Error for Outer {
 fn collect_causes_walks_error_source_chain() {
     let error = Outer {
         message: "outer failure",
-        source:  Cause("inner failure"),
+        source: Cause("inner failure"),
     };
 
     assert_eq!(collect_causes(&error), vec!["inner failure"]);
@@ -41,10 +41,10 @@ fn collect_causes_walks_error_source_chain() {
 
 #[test]
 fn render_with_causes_adds_indented_caused_by_lines() {
-    let rendered = render_with_causes("operation failed", &[
-        "first cause".to_string(),
-        "second cause".to_string(),
-    ]);
+    let rendered = render_with_causes(
+        "operation failed",
+        &["first cause".to_string(), "second cause".to_string()],
+    );
 
     assert_eq!(
         rendered,

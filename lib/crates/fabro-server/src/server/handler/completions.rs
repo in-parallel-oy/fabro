@@ -61,9 +61,9 @@ async fn create_completion(
             req.tools
                 .into_iter()
                 .map(|t| ToolDefinition {
-                    name:        t.name,
+                    name: t.name,
                     description: t.description,
-                    parameters:  t.parameters,
+                    parameters: t.parameters,
                 })
                 .collect(),
         )
@@ -173,7 +173,7 @@ async fn create_completion(
                         message: response.message,
                         stop_reason,
                         usage: CompletionUsage {
-                            input_tokens:  response.usage.input_tokens,
+                            input_tokens: response.usage.input_tokens,
                             output_tokens: response.usage.output_tokens,
                         },
                         output,
@@ -195,7 +195,7 @@ async fn create_completion(
                         message: response.message,
                         stop_reason,
                         usage: CompletionUsage {
-                            input_tokens:  response.usage.input_tokens,
+                            input_tokens: response.usage.input_tokens,
                             output_tokens: response.usage.output_tokens,
                         },
                         output: None,

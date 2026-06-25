@@ -37,12 +37,12 @@ pub fn daytona_config_from_environment(
             .dockerfile
             .as_ref()
             .map(|dockerfile| DaytonaSnapshotSettings {
-                cpu:        settings.resources.cpu,
-                memory:     settings
+                cpu: settings.resources.cpu,
+                memory: settings
                     .resources
                     .memory
                     .map(|size| size_to_gb_i32(size.as_bytes())),
-                disk:       settings
+                disk: settings
                     .resources
                     .disk
                     .map(|size| size_to_gb_i32(size.as_bytes())),
@@ -243,7 +243,10 @@ mod tests {
                 "FABRO_GCLOUD_MACHINE_TYPE".to_string(),
                 "e2-standard-4".to_string(),
             ),
-            ("FABRO_GCLOUD_SA_KEY_JSON".to_string(), "{\"k\":1}".to_string()),
+            (
+                "FABRO_GCLOUD_SA_KEY_JSON".to_string(),
+                "{\"k\":1}".to_string(),
+            ),
         ]);
 
         let (config, sa_key_json) =

@@ -19,55 +19,55 @@ const WORKER_TOKEN_TTL_SECS: u64 = 72 * 60 * 60;
 
 #[derive(Clone)]
 pub(crate) struct TestGithubJwtSubject {
-    pub(crate) idp_issuer:  String,
+    pub(crate) idp_issuer: String,
     pub(crate) idp_subject: String,
-    pub(crate) login:       String,
-    pub(crate) name:        String,
-    pub(crate) email:       String,
-    pub(crate) avatar_url:  String,
-    pub(crate) user_url:    String,
+    pub(crate) login: String,
+    pub(crate) name: String,
+    pub(crate) email: String,
+    pub(crate) avatar_url: String,
+    pub(crate) user_url: String,
 }
 
 impl TestGithubJwtSubject {
     pub(crate) fn octocat() -> Self {
         Self {
-            idp_issuer:  "https://github.com".to_string(),
+            idp_issuer: "https://github.com".to_string(),
             idp_subject: "12345".to_string(),
-            login:       "octocat".to_string(),
-            name:        "The Octocat".to_string(),
-            email:       "octocat@example.com".to_string(),
-            avatar_url:  "https://example.com/octocat.png".to_string(),
-            user_url:    "https://github.com/octocat".to_string(),
+            login: "octocat".to_string(),
+            name: "The Octocat".to_string(),
+            email: "octocat@example.com".to_string(),
+            avatar_url: "https://example.com/octocat.png".to_string(),
+            user_url: "https://github.com/octocat".to_string(),
         }
     }
 }
 
 #[derive(serde::Serialize)]
 struct TestJwtClaims {
-    iss:         String,
-    aud:         String,
-    sub:         String,
-    exp:         u64,
-    iat:         u64,
-    jti:         String,
-    idp_issuer:  String,
+    iss: String,
+    aud: String,
+    sub: String,
+    exp: u64,
+    iat: u64,
+    jti: String,
+    idp_issuer: String,
     idp_subject: String,
-    login:       String,
-    name:        String,
-    email:       String,
-    avatar_url:  String,
-    user_url:    String,
+    login: String,
+    name: String,
+    email: String,
+    avatar_url: String,
+    user_url: String,
     auth_method: AuthMethod,
 }
 
 #[derive(serde::Serialize)]
 struct WorkerTokenClaims {
-    iss:    String,
-    iat:    u64,
-    exp:    u64,
+    iss: String,
+    iat: u64,
+    exp: u64,
     run_id: String,
-    scope:  String,
-    jti:    String,
+    scope: String,
+    jti: String,
 }
 
 pub(crate) fn issue_test_github_jwt(issuer: &str) -> String {
@@ -154,12 +154,12 @@ pub(crate) fn issue_test_worker_jwt(storage_dir: &Path, run_id: &str) -> String 
         .try_into()
         .expect("current timestamp should be positive");
     let claims = WorkerTokenClaims {
-        iss:    WORKER_TOKEN_ISSUER.to_string(),
-        iat:    now,
-        exp:    now + WORKER_TOKEN_TTL_SECS,
+        iss: WORKER_TOKEN_ISSUER.to_string(),
+        iat: now,
+        exp: now + WORKER_TOKEN_TTL_SECS,
         run_id: run_id.to_string(),
-        scope:  WORKER_TOKEN_SCOPE.to_string(),
-        jti:    format!("{:032x}", rand::random::<u128>()),
+        scope: WORKER_TOKEN_SCOPE.to_string(),
+        jti: format!("{:032x}", rand::random::<u128>()),
     };
 
     jsonwebtoken::encode(

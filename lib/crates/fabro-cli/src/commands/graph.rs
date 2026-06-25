@@ -57,8 +57,8 @@ pub(crate) async fn run(
     } else {
         client
             .render_workflow_graph(types::RenderWorkflowGraphRequest {
-                manifest:  built.manifest,
-                format:    Some(types::RenderWorkflowGraphFormat::Svg),
+                manifest: built.manifest,
+                format: Some(types::RenderWorkflowGraphFormat::Svg),
                 direction: args.direction.map(|direction| match direction {
                     GraphDirection::Lr => types::RenderWorkflowGraphDirection::Lr,
                     GraphDirection::Tb => types::RenderWorkflowGraphDirection::Tb,

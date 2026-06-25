@@ -298,8 +298,8 @@ const WORKER_CONTROL_APPLIED_ID_DEDUPE_CAPACITY: usize = 2048;
 
 #[derive(Default)]
 struct AppliedWorkerControlDeliveryIds {
-    last:   Option<String>,
-    order:  VecDeque<String>,
+    last: Option<String>,
+    order: VecDeque<String>,
     recent: HashSet<String>,
 }
 
@@ -329,9 +329,9 @@ impl AppliedWorkerControlDeliveryIds {
 
 struct WorkerControlManagerHandle {
     first_connection: Option<oneshot::Receiver<Result<()>>>,
-    fatal:            Option<oneshot::Receiver<anyhow::Error>>,
-    done:             CancellationToken,
-    task:             JoinHandle<()>,
+    fatal: Option<oneshot::Receiver<anyhow::Error>>,
+    done: CancellationToken,
+    task: JoinHandle<()>,
 }
 
 impl WorkerControlManagerHandle {
@@ -362,7 +362,7 @@ impl WorkerControlManagerHandle {
 
 #[derive(Debug)]
 struct WorkerControlStreamConnectRequest {
-    request:          WebSocketRequest<()>,
+    request: WebSocketRequest<()>,
     unix_socket_path: Option<PathBuf>,
 }
 
@@ -863,8 +863,8 @@ fn build_artifact_uploader(
 }
 
 struct HttpArtifactUploader {
-    run_id:       RunId,
-    client:       server_client::Client,
+    run_id: RunId,
+    client: server_client::Client,
     worker_token: String,
 }
 
@@ -913,7 +913,7 @@ impl StageArtifactUploader for HttpArtifactUploader {
 struct HttpRunStore {
     run_id: RunId,
     client: server_client::Client,
-    state:  Arc<Mutex<RunProjection>>,
+    state: Arc<Mutex<RunProjection>>,
     events: Arc<Mutex<Option<Vec<EventEnvelope>>>>,
 }
 
@@ -1379,12 +1379,12 @@ mod tests {
         );
         assert_eq!(
             worker_title_phase_for_event(&EventBody::InterviewStarted(InterviewStartedProps {
-                question_id:     "q-1".to_string(),
-                question:        "Approve?".to_string(),
-                stage:           "gate".to_string(),
-                question_type:   "yes_no".to_string(),
-                options:         Vec::new(),
-                allow_freeform:  false,
+                question_id: "q-1".to_string(),
+                question: "Approve?".to_string(),
+                stage: "gate".to_string(),
+                question_type: "yes_no".to_string(),
+                options: Vec::new(),
+                allow_freeform: false,
                 timeout_seconds: None,
                 context_display: None,
             })),
@@ -1393,51 +1393,51 @@ mod tests {
         assert_eq!(
             worker_title_phase_for_event(&EventBody::InterviewCompleted(InterviewCompletedProps {
                 question_id: "q-1".to_string(),
-                question:    "Approve?".to_string(),
-                answer:      "yes".to_string(),
+                question: "Approve?".to_string(),
+                answer: "yes".to_string(),
                 duration_ms: 10,
             })),
             Some(WorkerTitlePhase::Running)
         );
         assert_eq!(
             worker_title_phase_for_event(&EventBody::RunCompleted(RunCompletedProps {
-                timing:               fabro_types::RunTiming::wall_only(10),
-                artifact_count:       0,
-                status:               "succeeded".to_string(),
-                reason:               SuccessReason::Completed,
-                total_usd_micros:     None,
+                timing: fabro_types::RunTiming::wall_only(10),
+                artifact_count: 0,
+                status: "succeeded".to_string(),
+                reason: SuccessReason::Completed,
+                total_usd_micros: None,
                 final_git_commit_sha: None,
-                final_patch:          None,
-                diff_summary:         None,
-                billing:              None,
+                final_patch: None,
+                diff_summary: None,
+                billing: None,
             })),
             Some(WorkerTitlePhase::Succeeded)
         );
         assert_eq!(
             worker_title_phase_for_event(&EventBody::RunFailed(RunFailedProps {
-                failure:              RunFailure {
+                failure: RunFailure {
                     reason: FailureReason::Cancelled,
                     detail: FailureDetail::new("cancelled", FailureCategory::Canceled),
                 },
-                timing:               fabro_types::RunTiming::wall_only(10),
+                timing: fabro_types::RunTiming::wall_only(10),
                 final_git_commit_sha: None,
-                final_patch:          None,
-                diff_summary:         None,
-                billing:              None,
+                final_patch: None,
+                diff_summary: None,
+                billing: None,
             })),
             Some(WorkerTitlePhase::Cancelled)
         );
         assert_eq!(
             worker_title_phase_for_event(&EventBody::RunFailed(RunFailedProps {
-                failure:              RunFailure {
+                failure: RunFailure {
                     reason: FailureReason::Terminated,
                     detail: FailureDetail::new("boom", FailureCategory::Deterministic),
                 },
-                timing:               fabro_types::RunTiming::wall_only(10),
+                timing: fabro_types::RunTiming::wall_only(10),
                 final_git_commit_sha: None,
-                final_patch:          None,
-                diff_summary:         None,
-                billing:              None,
+                final_patch: None,
+                diff_summary: None,
+                billing: None,
             })),
             Some(WorkerTitlePhase::Failed)
         );
@@ -1597,7 +1597,7 @@ mod tests {
         let hub = test_steering_hub();
         let mut applied_ids = AppliedWorkerControlDeliveryIds::default();
         let frame = fabro_interview::WorkerControlDeliveryFrame {
-            id:       "local:1".to_string(),
+            id: "local:1".to_string(),
             envelope: WorkerControlEnvelope::pause_run(),
         };
 
