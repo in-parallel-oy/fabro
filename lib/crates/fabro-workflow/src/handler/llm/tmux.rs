@@ -47,6 +47,7 @@ use crate::error::Error;
 use crate::event::{Emitter, Event, StageScope};
 use crate::handler::NodeTimeoutPolicy;
 use crate::steering_hub::SteeringHub;
+use crate::workflow_agent_session;
 
 /// Poll cadence for marker reads while gating/awaiting a turn.
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
@@ -79,14 +80,28 @@ impl TmuxConversationReuseKey {
 }
 
 /// Per-session attention marker written by Overseer at
-/// `<worktree>/.overseer/<session>.json`. Only `state` and `seq` gate fabro;
-/// `session`/`at` are advisory and tolerated-if-absent.
+/// `<worktree>/.overseer/<session>.json`. `state` and `seq` gate fabro; `session`
+/// rejects stale marker files that belong to a different live handle.
 #[derive(Debug, Clone, Deserialize)]
 struct AttentionMarker {
     #[serde(default)]
     state: String,
     #[serde(default)]
     seq: u64,
+    #[serde(default)]
+    session: String,
+}
+
+impl AttentionMarker {
+    fn matches_session(&self, expected: &str) -> bool {
+        self.session.is_empty() || self.session == expected
+    }
+}
+
+enum MarkerRead {
+    Ready(AttentionMarker),
+    Missing,
+    StaleSession,
 }
 
 /// Interactive tmux backend. Mirrors the ACP builder shape so `initialize.rs`
@@ -165,16 +180,26 @@ fn resolve_worktree(sandbox: &Arc<dyn Sandbox>) -> String {
 
 /// Best-effort read of the attention marker. A missing / unparseable marker
 /// returns `None` (treated as "no gating signal available").
-async fn read_marker(sandbox: &Arc<dyn Sandbox>, marker_path: &str) -> Option<AttentionMarker> {
+async fn read_marker(
+    sandbox: &Arc<dyn Sandbox>,
+    marker_path: &str,
+    session: &str,
+) -> MarkerRead {
     let cmd = format!("cat {} 2>/dev/null", shell_quote(marker_path));
-    let result = sandbox
-        .exec_command(&cmd, 5_000, None, None, None)
-        .await
-        .ok()?;
+    let Ok(result) = sandbox.exec_command(&cmd, 5_000, None, None, None).await else {
+        return MarkerRead::Missing;
+    };
     if !result.is_success() {
-        return None;
+        return MarkerRead::Missing;
     }
-    serde_json::from_str::<AttentionMarker>(result.stdout.trim()).ok()
+    let Ok(marker) = serde_json::from_str::<AttentionMarker>(result.stdout.trim()) else {
+        return MarkerRead::Missing;
+    };
+    if marker.matches_session(session) {
+        MarkerRead::Ready(marker)
+    } else {
+        MarkerRead::StaleSession
+    }
 }
 
 /// Sleep one poll interval or fail fast on cancellation.
@@ -329,22 +354,29 @@ impl TmuxBackend {
     ) -> Result<u64, Error> {
         let start = Instant::now();
         loop {
-            match read_marker(sandbox, marker_path).await {
-                Some(marker) if marker.state == "waiting" => return Ok(marker.seq),
+            match read_marker(sandbox, marker_path, session).await {
+                MarkerRead::Ready(marker) if marker.state == "waiting" => return Ok(marker.seq),
                 // No marker yet — typically the first turn: a freshly-launched REPL hasn't
                 // emitted a hook event (the marker is written on `Stop`/`PreToolUse`, none
                 // of which has fired). Don't paste into a still-booting TUI (the keystrokes
                 // are dropped and the turn hangs forever). Wait for the pane to settle, then
                 // proceed against seq 0.
-                None => {
+                MarkerRead::Missing => {
                     self.await_pane_settled(sandbox, session, emitter, cancel_token)
                         .await?;
                     return Ok(0);
                 }
-                Some(marker) => {
+                MarkerRead::Ready(marker) => {
                     if deadline_passed(start, deadline) {
                         // Soft cap; submit against the last-known seq anyway.
                         return Ok(marker.seq);
+                    }
+                }
+                MarkerRead::StaleSession => {
+                    if deadline_passed(start, deadline) {
+                        return Err(Error::handler(format!(
+                            "tmux marker for session \"{session}\" has stale provenance"
+                        )));
                     }
                 }
             }
@@ -393,6 +425,7 @@ impl TmuxBackend {
     async fn await_turn_complete(
         &self,
         sandbox: &Arc<dyn Sandbox>,
+        session: &str,
         marker_path: &str,
         seq_before: u64,
         emitter: &Arc<Emitter>,
@@ -401,7 +434,7 @@ impl TmuxBackend {
     ) -> Result<(), Error> {
         let start = Instant::now();
         loop {
-            if let Some(marker) = read_marker(sandbox, marker_path).await {
+            if let MarkerRead::Ready(marker) = read_marker(sandbox, marker_path, session).await {
                 if marker.seq > seq_before && marker.state == "waiting" {
                     return Ok(());
                 }
@@ -494,7 +527,8 @@ impl CodergenBackend for TmuxBackend {
         let sandbox = request.sandbox;
         let launch_start = Instant::now();
         let stage_scope = StageScope::for_handler(context, &node.id);
-        let session_id = format!("tmux-{}", uuid::Uuid::new_v4());
+        let session_id =
+            workflow_agent_session::session_id_for_scope(&context.run_id(), &stage_scope, "tmux");
         let conversation_key = TmuxConversationReuseKey::from_request(&request);
         let cancel_token = request.cancel_token;
 
@@ -553,6 +587,7 @@ impl CodergenBackend for TmuxBackend {
         // 7. Await the marker advancing past seq_before.
         self.await_turn_complete(
             sandbox,
+            &session,
             &marker_path,
             seq_before,
             emitter,
@@ -721,5 +756,21 @@ mod tests {
         let request = request_for(&node, &context, &emitter, &sandbox, Some("  "));
 
         assert_eq!(TmuxConversationReuseKey::from_request(&request), None);
+    }
+
+    #[test]
+    fn marker_session_rejects_stale_marker_identity() {
+        let marker: AttentionMarker =
+            serde_json::from_str(r#"{"state":"waiting","seq":1,"session":"selected"}"#)
+                .unwrap();
+        assert!(marker.matches_session("selected"));
+        assert!(!marker.matches_session("other"));
+    }
+
+    #[test]
+    fn marker_session_tolerates_legacy_marker_without_session() {
+        let marker: AttentionMarker =
+            serde_json::from_str(r#"{"state":"waiting","seq":1}"#).unwrap();
+        assert!(marker.matches_session("selected"));
     }
 }
