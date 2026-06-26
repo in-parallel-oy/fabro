@@ -785,6 +785,7 @@ pub enum EnvironmentProvider {
     Local,
     Docker,
     Daytona,
+    Gcloud,
 }
 
 impl EnvironmentProvider {
@@ -795,7 +796,7 @@ impl EnvironmentProvider {
 
     #[must_use]
     pub fn is_clone_based(self) -> bool {
-        matches!(self, Self::Docker | Self::Daytona)
+        matches!(self, Self::Docker | Self::Daytona | Self::Gcloud)
     }
 }
 
@@ -805,6 +806,7 @@ impl From<EnvironmentProvider> for crate::SandboxProviderKind {
             EnvironmentProvider::Local => Self::Local,
             EnvironmentProvider::Docker => Self::Docker,
             EnvironmentProvider::Daytona => Self::Daytona,
+            EnvironmentProvider::Gcloud => Self::Gcloud,
         }
     }
 }
