@@ -6,9 +6,13 @@
 //!   * **Host-key pinning.** The VM's host key is fetched out-of-band from the
 //!     Compute `guest-attributes` endpoint *after* the insert op is DONE and
 //!     written into a per-session `known_hosts`. We connect with
-//!     [`KnownHosts::Add`] against that pre-pinned file — **never**
-//!     [`KnownHosts::Accept`], which would trust-on-first-use a key we never
-//!     verified.
+//!     [`KnownHosts::Strict`] (`StrictHostKeyChecking=yes`) against that
+//!     pre-pinned file: the presented key **must** match the pin or the
+//!     connection is rejected (fail closed). We never use [`KnownHosts::Add`]
+//!     (`accept-new`, which only verifies hosts *already* present and would
+//!     trust an unknown host) or [`KnownHosts::Accept`] (TOFU). Because the pin
+//!     is always pre-written before connecting, `Strict` never needs to add a
+//!     key — it only ever verifies.
 //!   * **Ephemeral key handling.** The per-run private key is materialized into
 //!     a `0600` file under a **tmpfs** dir (`/dev/shm`, or an operator-supplied
 //!     `FABRO_GCLOUD_SSH_SECRET_DIR` tmpfs mount) for the lifetime of the
@@ -84,7 +88,7 @@ impl OpensshRunner {
         let mut builder = SessionBuilder::default();
         builder
             .user(params.user.clone())
-            .known_hosts_check(KnownHosts::Add)
+            .known_hosts_check(KnownHosts::Strict)
             .user_known_hosts_file(&known_hosts_path)
             .keyfile(&key_path)
             .connect_timeout(params.connect_timeout);
