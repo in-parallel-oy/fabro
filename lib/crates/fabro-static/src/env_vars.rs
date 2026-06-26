@@ -5,6 +5,12 @@
 pub struct EnvVars;
 
 impl EnvVars {
+    /// Prefix of the gcloud sandbox provider's operator config (project, zone,
+    /// image, subnetwork, machine type, egress policy, …). The worker resolves
+    /// this when it provisions the per-run sandbox VM, so the names must survive
+    /// the worker's `env_clear()` allowlist (see `spawn_env`).
+    pub const FABRO_GCLOUD_PREFIX: &'static str = "FABRO_GCLOUD_";
+
     // Fabro core
     /// Worker-only channel carrying the per-run ACP credential block as a JSON
     /// `InjectedAcpCredentials`. The control plane sets it on the worker

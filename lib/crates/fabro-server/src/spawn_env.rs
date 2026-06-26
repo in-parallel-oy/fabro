@@ -47,8 +47,18 @@ const WORKER_ENV_ALLOWLIST: &[&str] = &[
 
 const RENDER_GRAPH_ENV_ALLOWLIST: &[&str] = &[EnvVars::PATH, EnvVars::HOME, EnvVars::TMPDIR];
 
+// Name prefixes forwarded to the worker wholesale (beyond the exact-match
+// allowlist). The gcloud sandbox provider's operator config is resolved *in the
+// worker* when it provisions the per-run VM (`gcloud_config_from_environment`),
+// but `env_clear()` above wipes the inherited process env — so without this the
+// provider dead-ends with "FABRO_GCLOUD_* is not configured". Unlike third-party
+// LLM secrets (which reach the worker through the server vault), these are the
+// provider's own substrate wiring, so prefix-forwarding is the correct boundary.
+const WORKER_ENV_PREFIX_ALLOWLIST: &[&str] = &[EnvVars::FABRO_GCLOUD_PREFIX];
+
 pub(crate) fn apply_worker_env(cmd: &mut Command) {
     apply_allowlist(cmd, WORKER_ENV_ALLOWLIST, &process_env_var_os);
+    forward_prefixed(cmd, WORKER_ENV_PREFIX_ALLOWLIST, &process_env_vars_os);
 }
 
 pub(crate) fn apply_render_graph_env(cmd: &mut Command) {
@@ -63,11 +73,35 @@ fn process_env_var_os(name: &str) -> Option<OsString> {
     std::env::var_os(name)
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "Subprocess env prefix-allowlist intentionally copies a narrow process-env subset."
+)]
+fn process_env_vars_os() -> Vec<(OsString, OsString)> {
+    std::env::vars_os().collect()
+}
+
 fn apply_allowlist(cmd: &mut Command, keys: &[&str], lookup: &dyn Fn(&str) -> Option<OsString>) {
     cmd.env_clear();
     for key in keys {
         if let Some(value) = lookup(key) {
             cmd.env(key, value);
+        }
+    }
+}
+
+// Forward every env entry whose name starts with one of `prefixes`. Runs after
+// `apply_allowlist` (which `env_clear`s), so it only adds — never overrides the
+// exact-match allowlist.
+fn forward_prefixed(
+    cmd: &mut Command,
+    prefixes: &[&str],
+    env: &dyn Fn() -> Vec<(OsString, OsString)>,
+) {
+    for (key, value) in env() {
+        let Some(name) = key.to_str() else { continue };
+        if prefixes.iter().any(|prefix| name.starts_with(prefix)) {
+            cmd.env(&key, &value);
         }
     }
 }
@@ -78,7 +112,10 @@ mod tests {
     use std::ffi::OsString;
     use std::path::Path;
 
-    use super::{RENDER_GRAPH_ENV_ALLOWLIST, WORKER_ENV_ALLOWLIST, apply_allowlist};
+    use super::{
+        RENDER_GRAPH_ENV_ALLOWLIST, WORKER_ENV_ALLOWLIST, WORKER_ENV_PREFIX_ALLOWLIST,
+        apply_allowlist, forward_prefixed,
+    };
 
     fn env_command() -> tokio::process::Command {
         assert!(Path::new("/usr/bin/env").exists());
@@ -213,5 +250,41 @@ mod tests {
             Some("off")
         );
         assert!(!actual.contains_key("SESSION_SECRET"));
+    }
+
+    #[tokio::test]
+    async fn worker_prefix_allowlist_forwards_gcloud_config() {
+        // The gcloud provider config is resolved in the worker; it must survive
+        // the `env_clear()` allowlist via the prefix forward, while unrelated
+        // keys (even those sharing the FABRO_ namespace) stay blocked.
+        let env = vec![
+            (OsString::from("FABRO_GCLOUD_PROJECT"), OsString::from("proj")),
+            (OsString::from("FABRO_GCLOUD_ZONE"), OsString::from("z1")),
+            (
+                OsString::from("FABRO_GCLOUD_SUBNETWORK"),
+                OsString::from("subnet"),
+            ),
+            (OsString::from("SESSION_SECRET"), OsString::from("leak")),
+            (OsString::from("FABRO_DEV_TOKEN"), OsString::from("garbage")),
+        ];
+        let mut cmd = env_command();
+        apply_allowlist(&mut cmd, WORKER_ENV_ALLOWLIST, &|_| None);
+        forward_prefixed(&mut cmd, WORKER_ENV_PREFIX_ALLOWLIST, &|| env.clone());
+
+        let actual = env_output(cmd).await;
+
+        assert_eq!(
+            actual.get("FABRO_GCLOUD_PROJECT").map(String::as_str),
+            Some("proj")
+        );
+        assert_eq!(actual.get("FABRO_GCLOUD_ZONE").map(String::as_str), Some("z1"));
+        assert_eq!(
+            actual.get("FABRO_GCLOUD_SUBNETWORK").map(String::as_str),
+            Some("subnet")
+        );
+        assert!(!actual.contains_key("SESSION_SECRET"));
+        // FABRO_DEV_TOKEN is not under the forwarded prefix and was not in the
+        // exact allowlist lookup, so it must not leak through.
+        assert!(!actual.contains_key("FABRO_DEV_TOKEN"));
     }
 }
