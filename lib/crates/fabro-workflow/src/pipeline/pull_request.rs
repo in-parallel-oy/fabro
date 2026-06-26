@@ -468,6 +468,7 @@ pub struct OpenPullRequestRequest<'a> {
     pub catalog: Arc<Catalog>,
     pub conclusion: Option<&'a Conclusion>,
     pub run_state: Option<&'a RunProjection>,
+    pub preview_comment: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -547,6 +548,19 @@ pub async fn maybe_open_pull_request(
         }
     }
 
+    if let Some(comment) = req.preview_comment {
+        if let Err(e) =
+            github_app::create_issue_comment(&req.github, &owner, &repo, created.number, comment)
+                .await
+        {
+            warn!(
+                pr_number = created.number,
+                error = %e,
+                "Failed to post preview comment"
+            );
+        }
+    }
+
     let link = PullRequestLink {
         owner,
         repo,
@@ -559,6 +573,54 @@ pub async fn maybe_open_pull_request(
         base_branch: req.base_branch.to_string(),
         head_branch: req.head_branch.to_string(),
     }))
+}
+
+/// Build a preview reminder comment for a run, if a preview hint is configured.
+///
+/// Returns a markdown reminder (telling the reviewer to open an IAP tunnel to
+/// this run's sandbox VM and browse its service port) when
+/// `FABRO_RUN_PREVIEW_HINT` is set and non-empty, otherwise `None`.
+///
+// ponytail: Phase 1 (IAP-only) — no public URL exists. The comment just reminds
+// the reviewer to tunnel in; it hardcodes no instance/zone/project (those are
+// deployment specifics the operator puts in FABRO_RUN_PREVIEW_HINT, e.g. the
+// exact `gcloud compute start-iap-tunnel ...` line or a runbook link). Phase 2
+// swaps this for a clickable https link once the LB/cert/DNS land in
+// narayan-infra. Inert until an operator sets FABRO_RUN_PREVIEW_HINT.
+pub fn run_preview_comment(run_id: &str) -> Option<String> {
+    preview_comment_for_hint(
+        run_id,
+        std::env::var("FABRO_RUN_PREVIEW_HINT").ok().as_deref(),
+    )
+}
+
+/// Pure helper for [`run_preview_comment`]: trims the hint and treats an
+/// empty/whitespace-only value the same as unset.
+fn preview_comment_for_hint(run_id: &str, hint: Option<&str>) -> Option<String> {
+    let hint = hint?.trim();
+    (!hint.is_empty()).then(|| {
+        format!(
+            "🔎 **Preview this run** — start an IAP tunnel to this run's sandbox VM \
+             (labeled `sh_fabro_run_id={run_id}`), then open its service port locally.\n\n{hint}"
+        )
+    })
+}
+
+#[cfg(test)]
+mod preview_comment_tests {
+    use super::preview_comment_for_hint;
+
+    #[test]
+    fn hint_gating() {
+        assert_eq!(preview_comment_for_hint("run-1", None), None);
+        assert_eq!(preview_comment_for_hint("run-1", Some("")), None);
+        assert_eq!(preview_comment_for_hint("run-1", Some("   ")), None);
+        let comment = preview_comment_for_hint("run-1", Some(" see go/preview "))
+            .expect("hint set => comment");
+        assert!(comment.contains("sh_fabro_run_id=run-1"));
+        assert!(comment.contains("see go/preview"));
+        assert!(!comment.contains("   ")); // hint trimmed
+    }
 }
 
 /// PULL_REQUEST phase: optionally create a pull request after finalize.
@@ -600,6 +662,9 @@ pub async fn pull_request(concluded: Concluded, options: &PullRequestOptions) ->
                         None
                     };
 
+                    let run_id = run_options.run_id.to_string();
+                    let preview_comment = run_preview_comment(&run_id);
+
                     match maybe_open_pull_request(OpenPullRequestRequest {
                         github: github_app::GitHubContext::new(
                             creds,
@@ -618,6 +683,7 @@ pub async fn pull_request(concluded: Concluded, options: &PullRequestOptions) ->
                         catalog: Arc::clone(&services.catalog),
                         conclusion: Some(&conclusion),
                         run_state: None,
+                        preview_comment: preview_comment.as_deref(),
                     })
                     .await
                     {
@@ -1574,6 +1640,7 @@ mod tests {
             catalog: test_catalog(),
             conclusion: None,
             run_state: None,
+            preview_comment: None,
         })
         .await;
         assert!(result.is_ok());
@@ -2025,6 +2092,7 @@ mod tests {
             catalog: harness.catalog.clone(),
             conclusion: None,
             run_state: None,
+            preview_comment: None,
         })
         .await
         .expect("PR creation should succeed");
@@ -2062,6 +2130,7 @@ mod tests {
             catalog: harness.catalog.clone(),
             conclusion: None,
             run_state: None,
+            preview_comment: None,
         })
         .await
         .expect("PR creation should succeed");

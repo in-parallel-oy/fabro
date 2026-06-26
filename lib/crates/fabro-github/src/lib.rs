@@ -751,6 +751,71 @@ pub async fn create_pull_request_with_client(
     })
 }
 
+/// Post a comment on an issue or pull request.
+///
+/// PR comments use the issues-comments endpoint; `pull_requests: write` is
+/// sufficient for the bot identity, so no extra permission is requested.
+pub async fn create_issue_comment(
+    ctx: &GitHubContext<'_>,
+    owner: &str,
+    repo: &str,
+    issue_number: u64,
+    body: &str,
+) -> anyhow::Result<()> {
+    let client = ctx.http_client()?;
+    create_issue_comment_with_client(&client, ctx, owner, repo, issue_number, body).await
+}
+
+pub async fn create_issue_comment_with_client(
+    client: &impl HttpClient,
+    ctx: &GitHubContext<'_>,
+    owner: &str,
+    repo: &str,
+    issue_number: u64,
+    body: &str,
+) -> anyhow::Result<()> {
+    let token = ctx
+        .creds
+        .resolve_bearer_token(
+            client,
+            owner,
+            repo,
+            ctx.base_url,
+            serde_json::json!({ "pull_requests": "write" }),
+        )
+        .await?;
+
+    tracing::info!(owner, repo, issue_number, "Creating issue comment");
+
+    let comment_body = serde_json::json!({ "body": body });
+    let url = format!(
+        "{}/repos/{owner}/{repo}/issues/{issue_number}/comments",
+        ctx.base_url
+    );
+    let auth = format!("Bearer {token}");
+    let resp = HttpClient::request(
+        client,
+        HttpMethod::Post,
+        &url,
+        &github_headers(&auth),
+        Some(&comment_body),
+    )
+    .await
+    .context("Failed to create issue comment")?;
+
+    match resp.status {
+        201 => Ok(()),
+        401 | 403 => bail!(
+            "Authentication failed creating issue comment ({})",
+            resp.status
+        ),
+        status => bail!(
+            "Unexpected status {status} creating issue comment: {}",
+            resp.text()
+        ),
+    }
+}
+
 fn merge_method_as_graphql_value(method: MergeStrategy) -> &'static str {
     match method {
         MergeStrategy::Merge => "MERGE",
@@ -2058,6 +2123,32 @@ mod tests {
         .await;
 
         assert!(result.unwrap());
+    }
+
+    #[tokio::test]
+    async fn create_issue_comment_posts_to_comments_endpoint() {
+        let mock = MockHttpClient::new()
+            .on(
+                HttpMethod::Post,
+                "/repos/owner/repo/issues/42/comments",
+                201,
+                r#"{"id": 1}"#,
+            )
+            .with_req_header("Authorization", "Bearer ghu_test")
+            .with_req_body(r#"{"body":"hello"}"#);
+
+        let creds = GitHubCredentials::Pat("ghu_test".to_string());
+        let result = create_issue_comment_with_client(
+            &mock,
+            &GitHubContext::new(&creds, ""),
+            "owner",
+            "repo",
+            42,
+            "hello",
+        )
+        .await;
+
+        assert!(result.is_ok());
     }
 
     // -----------------------------------------------------------------------

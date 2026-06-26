@@ -322,6 +322,8 @@ async fn create_run_pull_request(
     let catalog = state.catalog();
 
     let run_store_handle = run_store.clone().into();
+    let run_id = run_state.spec.run_id.to_string();
+    let preview_comment = pull_request::run_preview_comment(&run_id);
     let request = pull_request::OpenPullRequestRequest {
         github,
         origin_url: &inputs.normalized_origin,
@@ -337,6 +339,7 @@ async fn create_run_pull_request(
         catalog,
         conclusion: Some(inputs.conclusion),
         run_state: Some(&run_state),
+        preview_comment: preview_comment.as_deref(),
     };
     let created_pull_request = match pull_request::maybe_open_pull_request(request).await {
         Ok(Some(created)) => created,
