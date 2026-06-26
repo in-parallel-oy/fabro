@@ -243,6 +243,6 @@ fn validate_provider_capabilities(
                 });
             }
         }
-        EnvironmentProvider::Daytona => {}
+        EnvironmentProvider::Daytona | EnvironmentProvider::Gcloud => {}
     }
 }

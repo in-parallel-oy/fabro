@@ -717,6 +717,11 @@ fn environment_capability_warnings(resolved_run: &RunNamespace) -> Vec<String> {
                 warnings.push("daytona provider ignores cwd".to_string());
             }
         }
+        EnvironmentProvider::Gcloud => {
+            if environment.cwd.is_some() {
+                warnings.push("gcloud provider ignores cwd".to_string());
+            }
+        }
     }
     warnings
 }

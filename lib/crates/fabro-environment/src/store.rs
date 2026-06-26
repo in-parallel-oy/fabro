@@ -74,6 +74,13 @@ preserve = false
 stop_on_terminal = true
 "#;
 
+const GCLOUD_DEFAULT_ENVIRONMENT_TOML: &str = r#"provider = "gcloud"
+
+[lifecycle]
+preserve = false
+stop_on_terminal = true
+"#;
+
 #[derive(Debug)]
 pub struct EnvironmentStore {
     dir: PathBuf,
@@ -292,6 +299,7 @@ pub fn seed_default_environment(
     let content = match provider {
         EnvironmentProvider::Docker => DEFAULT_ENVIRONMENT_TOML,
         EnvironmentProvider::Daytona => DAYTONA_DEFAULT_ENVIRONMENT_TOML,
+        EnvironmentProvider::Gcloud => GCLOUD_DEFAULT_ENVIRONMENT_TOML,
         EnvironmentProvider::Local => LOCAL_ENVIRONMENT_TOML,
     };
     let path = dir.join(format!("{DEFAULT_ENVIRONMENT_ID}.toml"));
