@@ -20,6 +20,7 @@ ARG TARGETARCH
 RUN apk add --no-cache \
       ca-certificates \
       git \
+      openssh-client \
       su-exec \
       tini \
  && addgroup -S -g 1000 fabro \
