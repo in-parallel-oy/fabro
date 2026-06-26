@@ -47,6 +47,14 @@ pub struct GcloudSettings {
     /// Raw `FABRO_GCLOUD_MAX_RUN_DURATION_SECS` (optional positive integer).
     /// Parsed in [`GcloudConfig::resolve`]; sets a GCE-side hard TTL on the VM.
     pub max_run_duration_secs: Option<String>,
+    /// Raw `FABRO_GCLOUD_SKIP_EGRESS_GUARD` (truthy flag). When set, the VM
+    /// image is the authoritative fail-closed egress guard (e.g. the narayan
+    /// golden image's nftables + dnsmasq + squid), so the provider must **not**
+    /// render its own in-VM iptables fragment — in particular the blanket
+    /// `169.254.169.254` DROP, which would sever the image's dnsmasq DNS floor
+    /// (`169.254.169.254:53`) and kill all allowlisted egress. Parsed in
+    /// [`GcloudConfig::resolve`].
+    pub skip_egress_guard: Option<String>,
 }
 
 impl GcloudSettings {
@@ -67,6 +75,7 @@ impl GcloudSettings {
             sa_key_json: lookup("FABRO_GCLOUD_SA_KEY_JSON"),
             provisioning_model: lookup("FABRO_GCLOUD_PROVISIONING_MODEL"),
             max_run_duration_secs: lookup("FABRO_GCLOUD_MAX_RUN_DURATION_SECS"),
+            skip_egress_guard: lookup("FABRO_GCLOUD_SKIP_EGRESS_GUARD"),
         }
     }
 
@@ -95,6 +104,9 @@ pub struct GcloudConfig {
     pub working_dir: String,
     pub egress_tag: Option<String>,
     pub egress: EgressPolicy,
+    /// When true the VM image owns egress (fail-closed) and the provider renders
+    /// **no** in-VM iptables fragment. Resolved from `FABRO_GCLOUD_SKIP_EGRESS_GUARD`.
+    pub skip_egress_guard: bool,
     /// Compute `scheduling.provisioningModel`: `STANDARD` (default) or `SPOT`.
     pub provisioning_model: String,
     /// GCE-side hard TTL in seconds (`scheduling.maxRunDuration`). `None` leaves
@@ -166,12 +178,27 @@ impl GcloudConfig {
             }
         };
 
+        // Truthy flag: the VM image is the authoritative egress guard, so the
+        // provider renders no in-VM iptables. Accepts 1/true/yes/on (trimmed,
+        // case-insensitive); anything else (incl. unset/blank) is false.
+        let skip_egress_guard = matches!(
+            settings
+                .skip_egress_guard
+                .as_deref()
+                .map(str::trim)
+                .map(str::to_ascii_lowercase)
+                .as_deref(),
+            Some("1" | "true" | "yes" | "on")
+        );
+
         // A restrictive egress policy relies on TWO layers (VPC firewall scoped
         // by the network tag + host iptables). With no `FABRO_GCLOUD_EGRESS_TAG`
         // the firewall layer is silently absent and only the in-VM iptables drop
         // applies — surface that so an operator doesn't believe they have
-        // network isolation they don't actually have.
-        if settings.egress_tag.is_none()
+        // network isolation they don't actually have. Suppressed when the image
+        // owns egress, where the provider intentionally renders no iptables.
+        if !skip_egress_guard
+            && settings.egress_tag.is_none()
             && matches!(egress, EgressPolicy::Block | EgressPolicy::AllowList(_))
         {
             tracing::warn!(
@@ -201,6 +228,7 @@ impl GcloudConfig {
                 .unwrap_or_else(|| DEFAULT_WORKING_DIR.to_string()),
             egress_tag: settings.egress_tag.clone(),
             egress,
+            skip_egress_guard,
             provisioning_model,
             max_run_duration_secs,
             operation_timeout: Duration::from_secs(180),
@@ -296,6 +324,32 @@ mod tests {
         settings.provisioning_model = Some("PREEMPTIBLE".to_string());
         let err = GcloudConfig::resolve(&settings, EgressPolicy::Block).unwrap_err();
         assert!(err.to_string().contains("FABRO_GCLOUD_PROVISIONING_MODEL"));
+    }
+
+    #[test]
+    fn skip_egress_guard_defaults_to_false() {
+        let config = GcloudConfig::resolve(&full_settings(), EgressPolicy::Block).unwrap();
+        assert!(!config.skip_egress_guard);
+    }
+
+    #[test]
+    fn skip_egress_guard_parses_truthy_values() {
+        for raw in ["1", "true", " TRUE ", "yes", "on"] {
+            let mut settings = full_settings();
+            settings.skip_egress_guard = Some(raw.to_string());
+            let config = GcloudConfig::resolve(&settings, EgressPolicy::Block).unwrap();
+            assert!(config.skip_egress_guard, "expected {raw:?} to be truthy");
+        }
+    }
+
+    #[test]
+    fn skip_egress_guard_rejects_non_truthy_values() {
+        for raw in ["0", "false", "no", "off", "", "  "] {
+            let mut settings = full_settings();
+            settings.skip_egress_guard = Some(raw.to_string());
+            let config = GcloudConfig::resolve(&settings, EgressPolicy::Block).unwrap();
+            assert!(!config.skip_egress_guard, "expected {raw:?} to be falsey");
+        }
     }
 
     #[test]

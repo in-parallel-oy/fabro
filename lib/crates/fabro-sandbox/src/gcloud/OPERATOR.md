@@ -25,7 +25,9 @@ cap blast radius to fleet VMs. Do **not** grant `roles/compute.instanceAdmin.v1`
 
 Host-key pinning fetches the VM's freshly-generated SSH host key from the
 Compute **guest attributes** endpoint after the insert operation is `DONE`, then
-connects with `KnownHosts::Add` (never `Accept`). The provider reads it via
+connects with `KnownHosts::Strict` (`StrictHostKeyChecking=yes`) against the
+pre-pinned key — a mismatch is rejected (fail closed), never `Add`/`accept-new`
+or `Accept`/TOFU. The provider reads it via
 `getGuestAttributes`. If the SA lacks `compute.instances.getGuestAttributes`,
 the endpoint returns **403** and `initialize()` fails fast with a diagnostic
 naming the missing permission — it does **not** hang until the poll timeout, and
