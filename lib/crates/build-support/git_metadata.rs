@@ -44,6 +44,22 @@ pub fn cargo_profile() -> String {
     std::env::var("PROFILE").unwrap_or_default()
 }
 
+/// True when the working tree at `package_dir` has uncommitted changes, so a
+/// build from it is not reproducible from HEAD alone. Gitignored files are
+/// excluded by git; any other tracked or untracked change counts.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "Build tooling probes git synchronously for the dirty flag."
+)]
+pub fn is_dirty(package_dir: &Path) -> bool {
+    Command::new("git")
+        .current_dir(package_dir)
+        .args(["status", "--porcelain"])
+        .output()
+        .map(|output| output.status.success() && !output.stdout.is_empty())
+        .unwrap_or(false)
+}
+
 #[expect(
     clippy::disallowed_methods,
     reason = "Build scripts run outside Tokio and need synchronous git probes for embedded build metadata."

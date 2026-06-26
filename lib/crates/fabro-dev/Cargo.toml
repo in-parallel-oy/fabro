@@ -31,6 +31,7 @@ anyhow.workspace = true
 chrono.workspace = true
 clap.workspace = true
 csv = "1"
+fabro-build-support = { path = "../build-support" }
 fabro-config = { path = "../fabro-config" }
 fabro-options-metadata.workspace = true
 quick-xml = "0.36"

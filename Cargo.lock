@@ -2494,6 +2494,7 @@ dependencies = [
  "chrono",
  "clap",
  "csv",
+ "fabro-build-support",
  "fabro-config",
  "fabro-options-metadata",
  "quick-xml 0.36.2",

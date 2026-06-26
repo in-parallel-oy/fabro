@@ -1,5 +1,5 @@
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, ValueEnum};
@@ -75,11 +75,12 @@ struct DockerBuildPlan {
     reason = "dev docker-build command reports progress and dry-run commands directly"
 )]
 pub(crate) fn docker_build(args: DockerBuildArgs) -> Result<()> {
+    let workspace_root = workspace_root();
     let plan = DockerBuildPlan {
         arch: args.arch.map_or_else(DockerArch::detect, Ok)?,
         compile_only: args.compile_only,
-        tag: args.tag,
-        workspace_root: workspace_root(),
+        tag: resolve_image_tag(&args.tag, &workspace_root),
+        workspace_root,
     };
 
     if args.dry_run {
@@ -90,6 +91,41 @@ pub(crate) fn docker_build(args: DockerBuildArgs) -> Result<()> {
     }
 
     plan.run()
+}
+
+/// Resolve the image reference. When `tag` carries no explicit `:tag` (or
+/// `@digest`) — i.e. it is just a name/repo — append `:<version>-<short-sha>`
+/// (plus `-dirty` for an uncommitted tree) so the pushed tag always reflects the
+/// actual build instead of a hand-typed version that can drift from the binary
+/// it wraps. An explicit tag is respected as-is.
+fn resolve_image_tag(tag: &str, workspace_root: &Path) -> String {
+    if reference_has_explicit_tag(tag) {
+        return tag.to_string();
+    }
+    let version = env!("CARGO_PKG_VERSION");
+    let metadata = fabro_build_support::collect_from(workspace_root);
+    let sha = if metadata.short_sha.is_empty() {
+        "unknown"
+    } else {
+        metadata.short_sha.as_str()
+    };
+    let dirty = if fabro_build_support::is_dirty(workspace_root) {
+        "-dirty"
+    } else {
+        ""
+    };
+    format!("{tag}:{version}-{sha}{dirty}")
+}
+
+/// True when a Docker reference already carries an explicit `:tag` or `@digest`.
+/// A tag, if present, follows the final path segment, so a registry host `:port`
+/// (which only appears before a `/`) is not mistaken for a tag.
+fn reference_has_explicit_tag(reference: &str) -> bool {
+    if reference.contains('@') {
+        return true;
+    }
+    let last_segment = reference.rsplit('/').next().unwrap_or(reference);
+    last_segment.contains(':')
 }
 
 impl DockerBuildPlan {
@@ -238,4 +274,28 @@ fn build_script(target: &str, zig_arch: &str) -> String {
          rustup target add {target}; \
          cargo zigbuild --locked --release -p fabro-cli --target {target}"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::reference_has_explicit_tag;
+
+    #[test]
+    fn explicit_tag_detection() {
+        // Bare names/repos carry no tag -> the derivation appends version+sha.
+        assert!(!reference_has_explicit_tag("in-parallel-oy/fabro"));
+        assert!(!reference_has_explicit_tag("fabro-server"));
+        assert!(!reference_has_explicit_tag(
+            "europe-west3-docker.pkg.dev/proj/repo/fabro-server"
+        ));
+        // A registry host port must NOT be mistaken for a tag.
+        assert!(!reference_has_explicit_tag("localhost:5000/fabro"));
+        // Explicit tags and digests are respected verbatim.
+        assert!(reference_has_explicit_tag("fabro:1.2.3"));
+        assert!(reference_has_explicit_tag(
+            "europe-west3-docker.pkg.dev/proj/repo/fabro-server:v1"
+        ));
+        assert!(reference_has_explicit_tag("localhost:5000/fabro:dev"));
+        assert!(reference_has_explicit_tag("repo/fabro@sha256:abc"));
+    }
 }
