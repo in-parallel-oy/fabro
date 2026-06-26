@@ -157,24 +157,43 @@ impl GcloudSandbox {
     }
 
     /// Render the VM startup script: publish host keys to guest attributes for
-    /// pinning, then apply the egress iptables policy.
+    /// pinning, then (unless the image owns egress) apply the egress iptables
+    /// policy.
+    ///
+    /// When `skip_egress_guard` is set the provider emits **only** the host-key
+    /// publish bits and renders no iptables: the VM image is the authoritative
+    /// fail-closed egress guard (e.g. the narayan golden image's nftables +
+    /// dnsmasq + squid). Rendering the provider's blanket `169.254.169.254` DROP
+    /// here would sever that image's dnsmasq DNS floor (`169.254.169.254:53`),
+    /// breaking host resolution for the squid allowlist and killing all run
+    /// egress.
     fn startup_script(&self) -> String {
-        let egress = self.config.egress.iptables_script();
-        let egress_b64 = STANDARD.encode(egress.as_bytes());
-        format!(
-            "#!/usr/bin/env bash\n\
+        let mut script = "#!/usr/bin/env bash\n\
              set -euo pipefail\n\
              # Publish host keys to guest attributes so the control plane can pin them.\n\
              for kt in ssh-ed25519 ssh-rsa ecdsa-sha2-nistp256; do\n\
-             f=$(ls /etc/ssh/ssh_host_*_key.pub 2>/dev/null | grep -i \"${{kt#ssh-}}\" | head -n1 || true)\n\
+             f=$(ls /etc/ssh/ssh_host_*_key.pub 2>/dev/null | grep -i \"${kt#ssh-}\" | head -n1 || true)\n\
              [ -n \"$f\" ] || continue\n\
              val=$(cat \"$f\")\n\
              curl -s -X PUT --data \"$val\" -H \"Metadata-Flavor: Google\" \\\n\
              \"http://169.254.169.254/computeMetadata/v1/instance/guest-attributes/hostkeys/$kt\" || true\n\
-             done\n\
-             # Apply egress policy (defence in depth alongside the VPC firewall tag).\n\
-             echo {egress_b64} | base64 -d | bash || true\n"
-        )
+             done\n"
+            .to_string();
+
+        if self.config.skip_egress_guard {
+            script.push_str(
+                "# Egress is image-managed (FABRO_GCLOUD_SKIP_EGRESS_GUARD); provider renders no iptables.\n",
+            );
+        } else {
+            let egress_b64 = STANDARD.encode(self.config.egress.iptables_script().as_bytes());
+            let _ = write!(
+                script,
+                "# Apply egress policy (defence in depth alongside the VPC firewall tag).\n\
+                 echo {egress_b64} | base64 -d | bash || true\n"
+            );
+        }
+
+        script
     }
 
     async fn poll_host_key(&self, name: &str) -> crate::Result<String> {
@@ -834,12 +853,17 @@ mod tests {
     use crate::gcloud::config::GcloudSettings;
 
     fn sandbox() -> GcloudSandbox {
+        sandbox_with_skip_egress(false)
+    }
+
+    fn sandbox_with_skip_egress(skip: bool) -> GcloudSandbox {
         let settings = GcloudSettings {
             project: Some("proj".to_string()),
             zone: Some("us-central1-a".to_string()),
             subnetwork: Some("default".to_string()),
             vm_image: Some("img".to_string()),
             machine_type: Some("e2-standard-4".to_string()),
+            skip_egress_guard: skip.then(|| "true".to_string()),
             ..Default::default()
         };
         let config = GcloudConfig::resolve(&settings, EgressPolicy::Block).unwrap();
@@ -862,6 +886,23 @@ mod tests {
         let script = sb.startup_script();
         assert!(script.contains("guest-attributes/hostkeys/"));
         assert!(script.contains("base64 -d | bash"));
+        // Default path renders the provider's egress fragment.
+        assert!(script.contains("Apply egress policy"));
+        // The host-key brace-substitution must survive as a literal shell expansion.
+        assert!(script.contains("${kt#ssh-}"));
+    }
+
+    #[test]
+    fn startup_script_skips_egress_when_image_managed() {
+        let sb = sandbox_with_skip_egress(true);
+        let script = sb.startup_script();
+        // Host-key publishing still happens (pinning depends on it).
+        assert!(script.contains("guest-attributes/hostkeys/"));
+        // But the provider renders NO iptables fragment: no metadata-IP DROP that
+        // would sever the image's dnsmasq DNS floor.
+        assert!(!script.contains("169.254.169.254 -j DROP"));
+        assert!(!script.contains("Apply egress policy"));
+        assert!(script.contains("image-managed"));
     }
 
     #[test]
